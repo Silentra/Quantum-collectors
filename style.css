@@ -1,0 +1,1804 @@
+/* SciCards - Core Styles */
+
+* { box-sizing: border-box; }
+body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
+
+/* Screen Management */
+.screen { display: none !important; }
+.screen.active { display: flex !important; }
+
+/* Tab System */
+.tab-btn {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #94a3b8;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  white-space: nowrap;
+  background: none;
+  border-top: none; border-left: none; border-right: none;
+  cursor: pointer;
+}
+.tab-btn:hover { color: #e2e8f0; }
+.tab-btn.active { color: #818cf8; border-bottom-color: #818cf8; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Admin Sub-Tabs */
+.admin-tab-btn {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #94a3b8;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.admin-tab-btn:hover { background: #334155; }
+.admin-tab-btn.active { background: #4f46e5; border-color: #4f46e5; color: white; }
+.admin-tab-content { display: none; }
+.admin-tab-content.active { display: block; }
+
+/* Admin Inputs */
+.admin-input {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: white;
+  font-size: 0.875rem;
+}
+.admin-input:focus { outline: none; border-color: #6366f1; }
+
+/* ===================== CARD STYLES ===================== */
+
+/*
+ * Unified card system: both collection grid cards and the detail modal
+ * share the same card-detail-* internal structure.
+ * .sci-card = collection/pack grid shell (smaller, clickable)
+ * .card-detail-frame = modal shell (larger, standalone)
+ * Inner elements (card-detail-inner/header/art/divider/body) are shared.
+ */
+
+/* Collection grid card shell */
+.sci-card {
+  position: relative;
+  background: #0c1220;
+  border: 2.5px solid #334155;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  aspect-ratio: 5/7;
+}
+.sci-card:hover { transform: translateY(-3px); }
+
+/* Rarity border colors */
+.sci-card.rarity-common   { border-color: #4b5563; }
+.sci-card.rarity-uncommon { border-color: #22c55e; }
+.sci-card.rarity-rare     { border-color: #3b82f6; }
+.sci-card.rarity-epic     { border-color: #a855f7; }
+.sci-card.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245,158,11,0.15); }
+
+/* Rarity hover glow */
+.sci-card.rarity-uncommon:hover { box-shadow: 0 4px 16px rgba(34,197,94,0.15); }
+.sci-card.rarity-rare:hover     { box-shadow: 0 4px 16px rgba(59,130,246,0.15); }
+.sci-card.rarity-epic:hover     { box-shadow: 0 4px 16px rgba(168,85,247,0.2); }
+.sci-card.rarity-legendary:hover { box-shadow: 0 4px 20px rgba(245,158,11,0.3); }
+
+/* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
+ * Applied when a card's ID appears in getLockedCardIds(player.projects).
+ * State is fully derived — never stored on the card, vanishes when project
+ * leaves ACTIVE state. Card remains viewable/clickable. */
+
+/* Subtle dim + grayscale — card is "busy" not "disabled" */
+.sci-card.sci-card--locked {
+  opacity: 0.62;
+  filter: grayscale(35%);
+}
+
+/* Preserve hover interactivity (card is still viewable) */
+.sci-card.sci-card--locked:hover {
+  opacity: 0.80;
+  filter: grayscale(20%);
+  transform: translateY(-2px);
+}
+
+/* Small top-right corner badge */
+.sci-card-locked-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 10;
+  font-size: 0.65rem;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 4px;
+  padding: 1px 4px;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+  backdrop-filter: blur(2px);
+}
+
+/* ===================== UNDISCOVERED CARDS — grayscale/locked state ===================== */
+
+/* Full grayscale + reduced opacity — card not yet owned */
+.sci-card.sci-card--undiscovered {
+  filter: grayscale(100%);
+  opacity: 0.45;
+}
+
+/* Slight brighten on hover — card is still viewable/identifiable */
+.sci-card.sci-card--undiscovered:hover {
+  filter: grayscale(85%);
+  opacity: 0.60;
+  transform: translateY(-2px);
+}
+
+/* Suppress rarity glow on undiscovered legendary cards */
+.sci-card.sci-card--undiscovered.rarity-legendary {
+  box-shadow: none;
+}
+
+/* "Undiscovered" overlay tag — bottom-left, subtle */
+.sci-card-undiscovered-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  z-index: 10;
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.20);
+  border-radius: 3px;
+  padding: 1px 4px;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+  backdrop-filter: blur(2px);
+}
+
+/* ===================== RESEARCH PROJECTS — TWO-COLUMN TAB LAYOUT ===================== */
+
+/* Main two-column layout for the Research Projects tab */
+.rp-tab-layout {
+  display: flex;
+  flex-direction: row;
+  gap: 1.25rem;
+  align-items: start;
+  width: 100%;
+}
+
+/* On narrow screens collapse to single column */
+@media (max-width: 720px) {
+  .rp-tab-layout {
+    flex-direction: column;
+  }
+  .rp-cards-panel {
+    order: -1; /* show above projects list on mobile */
+    width: 100%;
+    min-width: 0;
+    position: static;
+  }
+}
+
+/* LEFT column — projects list area: constrained width, doesn't stretch excessively */
+.rp-tab-main {
+  flex: 0 0 auto;
+  width: clamp(320px, 38%, 500px);
+  min-width: 0;
+}
+
+/* RIGHT column — Available Cards panel: grows to fill remaining width */
+.rp-cards-panel {
+  flex: 1 1 0;
+  min-width: 240px;
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  position: sticky;
+  top: 1rem;
+}
+
+.rp-cards-panel-header {
+  padding: 0.55rem 0.85rem;
+  background: #0c1220;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rp-cards-panel-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+}
+
+.rp-cards-panel-body {
+  padding: 0.6rem 0.7rem;
+  max-height: 70vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+/* Status line inside cards panel */
+.rp-cp-status {
+  font-size: 0.68rem;
+  color: #64748b;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #1e293b;
+}
+.rp-cp-available { color: #4ade80; font-weight: 600; }
+.rp-cp-locked    { color: #f87171; font-weight: 600; }
+
+/* Section inside cards panel (Scientists / Concepts) */
+.rp-cp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.rp-cp-section-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #334155;
+}
+
+.rp-cp-empty {
+  font-size: 0.68rem;
+  color: #334155;
+  font-style: italic;
+}
+
+/* Grid inside the cards panel — same style as assignment grid but tighter */
+.rp-cp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+  gap: 0.3rem;
+}
+
+/* Cards in panel are read-only — no pointer cursor */
+.rp-cards-panel .rp-mini-card {
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Unavailable (locked/in-use) mini cards in the panel */
+.rp-mini-card--unavailable {
+  opacity: 0.38;
+  filter: grayscale(70%);
+}
+
+/* ===================== ASSIGNMENT PANEL — FILTER CONTROLS ===================== */
+
+/* Filter pill row */
+.rp-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+}
+
+/* Individual filter pill */
+.rp-filter-btn {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 999px;
+  border: 1px solid #334155;
+  background: #1e293b;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  white-space: nowrap;
+}
+
+.rp-filter-btn:hover {
+  background: #273548;
+  color: #94a3b8;
+  border-color: #475569;
+}
+
+.rp-filter-btn--active {
+  background: #1e3a5f;
+  color: #93c5fd;
+  border-color: #3b82f6;
+}
+
+/* ===================== PHASE 4D-1 — RESEARCH PROJECTS PANEL ===================== */
+
+/* Project card */
+.rp-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-left: 4px solid #334155;
+  border-radius: 0.6rem;
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Header row: title + state badge */
+.rp-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.rp-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  line-height: 1.3;
+}
+
+/* State badges */
+.rp-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+}
+.rp-badge--available { background: #1e293b; color: #94a3b8; border-color: #334155; }
+.rp-badge--active    { background: #1e3a5f; color: #60a5fa; border-color: #3b82f6; }
+.rp-badge--complete  { background: #14532d; color: #4ade80; border-color: #22c55e; }
+.rp-badge--claimed   { background: #1e1b4b; color: #a5b4fc; border-color: #6366f1; }
+
+/* Meta row: rarity + duration */
+.rp-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+}
+
+.rp-rarity {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.rp-duration {
+  color: #64748b;
+}
+
+/* Projected success label */
+.rp-success-label {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+.rp-success-label span {
+  color: #93c5fd;
+  font-weight: 600;
+}
+
+/* Timer / status line */
+.rp-timer {
+  font-size: 0.75rem;
+  color: #60a5fa;
+}
+.rp-timer--done    { color: #4ade80; }
+.rp-timer--claimed { color: #94a3b8; }
+
+/* ===================== POLISH — CONCEPT EFFECT LABELS & FLAVOR TEXT ===================== */
+
+/* Compact effect label shown on collection cards (FIX 4) */
+.concept-effect-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #a78bfa;
+  text-align: center;
+  padding: 1px 4px;
+  margin: 1px 0 2px;
+  opacity: 0.85;
+}
+
+/* Slightly larger in the modal header (FIX 5) */
+.concept-effect-label--modal {
+  font-size: 0.65rem;
+  color: #c4b5fd;
+  text-align: center;
+  margin-bottom: 2px;
+}
+
+/* Flavor text block below modal card (FIX 5) */
+.concept-flavor-text {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #1e1b2e;
+  border: 1px solid #4c1d95;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #c4b5fd;
+  font-style: italic;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* ===================== PHASE 4D-2 — PROJECT ASSIGNMENT PANEL ===================== */
+
+/* "Start Project" action button on available cards */
+.rp-btn-start {
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  align-self: flex-start;
+}
+.rp-btn-start:hover { background: #4338ca; }
+
+/* Full assignment panel that replaces the project list */
+.rp-assign-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Back navigation row */
+.rp-assign-back {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rp-assign-back-btn {
+  background: none;
+  border: 1px solid #334155;
+  color: #94a3b8;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.rp-assign-back-btn:hover { border-color: #64748b; color: #e2e8f0; }
+
+/* Two-column layout: details | card picker */
+.rp-assign-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .rp-assign-layout { grid-template-columns: 1fr; }
+}
+
+/* Left — project details */
+.rp-assign-details {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.6rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.rp-assign-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.rp-assign-stat {
+  font-size: 0.78rem;
+  color: #64748b;
+  display: flex;
+  justify-content: space-between;
+}
+.rp-assign-stat span { color: #cbd5e1; font-weight: 500; }
+
+/* Preview box */
+.rp-preview-box {
+  margin-top: 0.5rem;
+  background: #0c1a2e;
+  border: 1px solid #1e3a5f;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.rp-preview-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
+}
+.rp-preview-chance {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #93c5fd;
+}
+.rp-preview-rp {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+.rp-preview-rp span { color: #86efac; font-weight: 600; }
+
+/* Project status bar (Phase 6A-1B — compact pacing telemetry) */
+.rp-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+  padding: 0.35rem 0.6rem;
+  margin-bottom: 0.5rem;
+  background: rgba(51,65,85,0.3);
+  border: 1px solid #334155;
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  line-height: 1.4;
+}
+.rp-status-bar strong {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+.rp-status-sep {
+  color: #475569;
+  user-select: none;
+}
+.rp-status-admin {
+  margin-left: auto;
+  font-size: 0.65rem;
+  color: #60a5fa;
+  font-family: 'Courier New', Courier, monospace;
+  opacity: 0.8;
+}
+
+/* ── Weekly Reward Pack widget (inside .rp-status-bar) ── */
+.rp-weekly-widget {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(168,85,247,0.07);
+  border: 1px solid rgba(168,85,247,0.22);
+  border-radius: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+.rp-weekly-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.rp-weekly-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #c4b5fd;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.rp-weekly-pack-name {
+  font-size: 0.7rem;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+.rp-weekly-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rp-weekly-progress-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rp-weekly-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #a855f7, #7c3aed);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.rp-weekly-progress-label {
+  font-size: 0.68rem;
+  color: #a78bfa;
+  white-space: nowrap;
+  min-width: 5rem;
+  text-align: right;
+}
+.rp-weekly-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.rp-weekly-refresh-label {
+  font-size: 0.65rem;
+  color: #64748b;
+}
+.rp-weekly-claim-btn {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.3rem;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+}
+.rp-weekly-claim-btn--ready {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  color: #fff;
+}
+.rp-weekly-claim-btn--ready:hover {
+  background: linear-gradient(135deg, #b46ef8, #8b5cf6);
+}
+.rp-weekly-claim-btn--claimed {
+  background: rgba(34,197,94,0.15);
+  color: #86efac;
+  cursor: default;
+}
+.rp-weekly-claim-btn--locked {
+  background: rgba(255,255,255,0.05);
+  color: #475569;
+  cursor: default;
+}
+
+/* Admin telemetry panel (Phase 5C — persistent admin only) */
+.rp-admin-telemetry {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  background: rgba(59,130,246,0.08);
+  border: 1px dashed rgba(59,130,246,0.3);
+  border-radius: 0.4rem;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+.rp-telemetry-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #60a5fa;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.25rem;
+}
+.rp-telemetry-row {
+  display: flex;
+  justify-content: space-between;
+  color: #94a3b8;
+}
+.rp-telemetry-row span:last-child {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+/* Validation error */
+.rp-assign-error {
+  font-size: 0.75rem;
+  color: #f87171;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.25);
+  border-radius: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  display: none;
+}
+.rp-assign-error.visible { display: block; }
+
+/* Start button (submit) */
+.rp-btn-activate {
+  margin-top: 0.5rem;
+  padding: 0.55rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+  border-radius: 0.45rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+}
+.rp-btn-activate:hover:not(:disabled) { background: #15803d; }
+.rp-btn-activate:disabled { background: #1e293b; color: #475569; cursor: not-allowed; }
+
+/* Right — card picker */
+.rp-assign-picker {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.6rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.rp-picker-section-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #475569;
+  font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+
+/* Selected card slots row */
+.rp-slots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.rp-slot {
+  background: #1e293b;
+  border: 1px dashed #334155;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.7rem;
+  color: #475569;
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rp-slot.filled {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #93c5fd;
+  cursor: pointer;
+}
+.rp-slot.filled:hover { background: #172a45; }
+
+/* Card selection grid inside picker */
+.rp-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+  gap: 0.4rem;
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* Mini card for selection */
+.rp-mini-card {
+  background: #0c1220;
+  border: 2px solid #1e293b;
+  border-radius: 0.45rem;
+  padding: 0.35rem 0.3rem 0.3rem;
+  cursor: pointer;
+  transition: border-color 0.12s, opacity 0.12s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  text-align: center;
+  position: relative;
+  user-select: none;
+}
+.rp-mini-card.rarity-common   { border-color: #374151; }
+.rp-mini-card.rarity-uncommon { border-color: #15803d; }
+.rp-mini-card.rarity-rare     { border-color: #1d4ed8; }
+.rp-mini-card.rarity-epic     { border-color: #7e22ce; }
+.rp-mini-card.rarity-legendary { border-color: #b45309; }
+.rp-mini-card:hover { filter: brightness(1.15); }
+
+.rp-mini-card.selected {
+  outline: 2px solid #818cf8;
+  outline-offset: 1px;
+  background: #1e1b4b;
+}
+.rp-mini-card.locked-card {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(60%);
+}
+.rp-mini-card.locked-card:hover { filter: grayscale(60%); }
+
+.rp-mini-name {
+  font-size: 0.58rem;
+  color: #cbd5e1;
+  line-height: 1.2;
+  word-break: break-word;
+  max-width: 68px;
+}
+.rp-mini-rarity {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.rp-mini-rarity.rarity-common   { color: #6b7280; }
+.rp-mini-rarity.rarity-uncommon { color: #22c55e; }
+.rp-mini-rarity.rarity-rare     { color: #60a5fa; }
+.rp-mini-rarity.rarity-epic     { color: #c084fc; }
+.rp-mini-rarity.rarity-legendary { color: #fbbf24; }
+
+.rp-mini-img {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 0.25rem;
+  background: #1e293b;
+}
+.rp-mini-emoji {
+  font-size: 1.25rem;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1e293b;
+  border-radius: 0.25rem;
+}
+
+/* Concept role label shown inside mini cards during project assignment */
+.rp-mini-concept-role {
+  font-size: 0.48rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #a78bfa;
+  text-align: center;
+  line-height: 1.2;
+  word-break: break-word;
+  max-width: 68px;
+  opacity: 0.9;
+}
+
+/* Duplicate concept type — another card with same role already assigned */
+.rp-mini-card.duplicate-concept {
+  opacity: 0.35;
+  cursor: not-allowed;
+  filter: grayscale(50%);
+}
+.rp-mini-card.duplicate-concept:hover { filter: grayscale(50%); }
+
+/* ===================== REPORT PANEL (Phase 4D-3) ===================== */
+
+.rp-btn-report {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding: 0.35rem 0.85rem;
+  background: #1e3a5f;
+  color: #93c5fd;
+  border: 1px solid #2563eb;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.rp-btn-report:hover { background: #1d4ed8; border-color: #60a5fa; color: #eff6ff; }
+
+.rp-report-panel {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 560px;
+}
+.rp-report-panel--claimed { opacity: 0.75; }
+
+.rp-report-card {
+  background: #0f172a;
+  border-radius: 0.5rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.rp-report-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+.rp-report-rarity {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.rp-report-section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #475569;
+  margin-top: 0.25rem;
+}
+.rp-report-outcome {
+  font-size: 0.95rem;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.375rem;
+  display: inline-block;
+}
+.rp-outcome--success { background: #052e16; color: #4ade80; border: 1px solid #166534; }
+.rp-outcome--failure { background: #2d0a0a; color: #f87171; border: 1px solid #7f1d1d; }
+
+.rp-report-breakthrough {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fbbf24;
+  background: #1c1108;
+  border: 1px solid #92400e;
+  border-radius: 0.375rem;
+  padding: 0.3rem 0.65rem;
+  display: inline-block;
+}
+
+.rp-report-rewards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.rp-report-reward-row {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  padding: 0.3rem 0.6rem;
+  background: #1e293b;
+  border-radius: 0.25rem;
+}
+.rp-reward-rp { color: #86efac; font-weight: 600; }
+.rp-reward-card { color: #c084fc; font-weight: 600; }
+
+.rp-report-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.rp-report-card-name {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.25rem;
+  padding: 0.2rem 0.5rem;
+}
+
+.rp-report-actions {
+  margin-top: 0.25rem;
+}
+.rp-btn-claim {
+  padding: 0.5rem 1.25rem;
+  background: #14532d;
+  color: #4ade80;
+  border: 1px solid #166534;
+  border-radius: 0.375rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.rp-btn-claim:hover { background: #166534; }
+
+.rp-report-claimed-note {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-style: italic;
+  padding: 0.35rem 0;
+}
+
+/* ===================== COLLECTION GRID LAYOUT ===================== */
+
+/* Rarity-grouped collection grid container */
+.collection-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Each rarity group */
+.collection-rarity-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Rarity section label */
+.collection-rarity-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  width: fit-content;
+  opacity: 0.85;
+}
+.rarity-label-legendary { color: #f59e0b; border-bottom: 2px solid rgba(245,158,11,0.4); }
+.rarity-label-epic      { color: #a855f7; border-bottom: 2px solid rgba(168,85,247,0.4); }
+.rarity-label-rare      { color: #3b82f6; border-bottom: 2px solid rgba(59,130,246,0.4); }
+.rarity-label-uncommon  { color: #22c55e; border-bottom: 2px solid rgba(34,197,94,0.4); }
+.rarity-label-common    { color: #9ca3af; border-bottom: 2px solid rgba(75,85,99,0.4); }
+
+/* Card grid within each rarity row — max 5 per row, cards capped at ~172px */
+.collection-rarity-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 172px));
+  gap: 0.625rem;
+  justify-content: center;
+}
+@media (min-width: 640px) {
+  .collection-rarity-row { grid-template-columns: repeat(4, minmax(0, 172px)); }
+}
+@media (min-width: 768px) {
+  .collection-rarity-row { grid-template-columns: repeat(5, minmax(0, 172px)); }
+}
+
+/* Scale-down overrides for card-detail-* classes when inside .sci-card (grid cards) */
+.sci-card .card-detail-inner { margin: 3px; border-radius: 0.35rem; }
+.sci-card .card-detail-header { padding: 0.25rem 0.35rem; }
+.sci-card .card-detail-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sci-card .sci-card-rarity-badge {
+  font-size: 0.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.1rem 0.25rem;
+  border-radius: 0.2rem;
+  flex-shrink: 0;
+  margin-left: 0.2rem;
+}
+.sci-card .card-detail-body { padding: 0.3rem 0.35rem 0.35rem; }
+.sci-card .card-detail-field { font-size: 0.6rem; margin-bottom: 0.1rem; }
+.sci-card .card-detail-keyfact { font-size: 0.6rem; line-height: 1.35; }
+
+/* Line-clamp for keyFact in grid cards (not modal) */
+.card-detail-keyfact.grid-clamp {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* Quantity badge */
+.sci-card-qty {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  z-index: 5;
+  min-width: 1rem;
+  text-align: center;
+}
+
+/* Rarity badge colors */
+.rarity-badge, .sci-card-rarity-badge {
+  display: inline-block;
+}
+.rarity-badge.common, .sci-card-rarity-badge.common     { background: #374151; color: #9ca3af; }
+.rarity-badge.uncommon, .sci-card-rarity-badge.uncommon  { background: #052e16; color: #22c55e; }
+.rarity-badge.rare, .sci-card-rarity-badge.rare          { background: #1e3a5f; color: #3b82f6; }
+.rarity-badge.epic, .sci-card-rarity-badge.epic          { background: #3b0764; color: #a855f7; }
+.rarity-badge.legendary, .sci-card-rarity-badge.legendary { background: #451a03; color: #f59e0b; }
+
+.rarity-badge {
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ===================== AURA SYSTEM ===================== */
+
+/* Aura overlay — a pseudo-element on the card */
+.sci-card[data-aura-tier="0"] { /* no aura */ }
+
+/* --- TIER 1: Subtle border glow --- */
+.sci-card[data-aura-tier="1"] { position: relative; }
+.sci-card[data-aura-tier="1"]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.65rem;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* --- TIER 2: Stronger glow + animated shimmer --- */
+.sci-card[data-aura-tier="2"] { position: relative; }
+.sci-card[data-aura-tier="2"]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.65rem;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* --- TIER 3: Full aura with animated shimmer --- */
+.sci-card[data-aura-tier="3"] { position: relative; }
+.sci-card[data-aura-tier="3"]::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 0.7rem;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.8;
+  animation: auraShimmer 3s ease-in-out infinite;
+}
+.sci-card[data-aura-tier="3"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.6rem;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.08;
+  animation: auraInnerPulse 4s ease-in-out infinite;
+}
+
+/* Aura Type Colors */
+/* Holographic — rainbow shifting */
+.sci-card.aura-holographic[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(236,72,153,0.3), rgba(59,130,246,0.3), rgba(34,197,94,0.3));
+  box-shadow: 0 0 8px rgba(168,85,247,0.2);
+}
+.sci-card.aura-holographic[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(236,72,153,0.4), rgba(59,130,246,0.4), rgba(34,197,94,0.4));
+  box-shadow: 0 0 14px rgba(168,85,247,0.3);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-holographic[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(236,72,153,0.5), rgba(59,130,246,0.5), rgba(34,197,94,0.5), rgba(245,158,11,0.5));
+  box-shadow: 0 0 20px rgba(168,85,247,0.4);
+}
+.sci-card.aura-holographic[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(236,72,153,0.1), rgba(59,130,246,0.1), rgba(34,197,94,0.1));
+}
+
+/* Prismatic — white/diamond sparkle */
+.sci-card.aura-prismatic[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(200,220,255,0.2));
+  box-shadow: 0 0 8px rgba(200,220,255,0.2);
+}
+.sci-card.aura-prismatic[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(200,220,255,0.3));
+  box-shadow: 0 0 14px rgba(200,220,255,0.3);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-prismatic[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.35), rgba(200,220,255,0.4), rgba(180,200,255,0.3));
+  box-shadow: 0 0 20px rgba(200,220,255,0.4);
+}
+.sci-card.aura-prismatic[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(200,220,255,0.08));
+}
+
+/* Shadow — dark purple/black */
+.sci-card.aura-shadow[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(88,28,135,0.3), rgba(30,20,60,0.4));
+  box-shadow: 0 0 8px rgba(88,28,135,0.3);
+}
+.sci-card.aura-shadow[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(88,28,135,0.4), rgba(30,20,60,0.5));
+  box-shadow: 0 0 14px rgba(88,28,135,0.4);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-shadow[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(88,28,135,0.5), rgba(30,20,60,0.6), rgba(147,51,234,0.3));
+  box-shadow: 0 0 20px rgba(88,28,135,0.5);
+}
+.sci-card.aura-shadow[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(88,28,135,0.1), rgba(30,20,60,0.08));
+}
+
+/* Radiant — golden/warm */
+.sci-card.aura-radiant[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.2));
+  box-shadow: 0 0 8px rgba(245,158,11,0.2);
+}
+.sci-card.aura-radiant[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(245,158,11,0.35), rgba(251,191,36,0.3));
+  box-shadow: 0 0 14px rgba(245,158,11,0.3);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-radiant[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(245,158,11,0.45), rgba(251,191,36,0.4), rgba(252,211,77,0.3));
+  box-shadow: 0 0 20px rgba(245,158,11,0.4);
+}
+.sci-card.aura-radiant[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(251,191,36,0.08));
+}
+
+/* Cosmic — deep blue/starfield */
+.sci-card.aura-cosmic[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(30,58,138,0.3), rgba(88,28,135,0.2));
+  box-shadow: 0 0 8px rgba(30,58,138,0.25);
+}
+.sci-card.aura-cosmic[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(30,58,138,0.4), rgba(88,28,135,0.3), rgba(59,130,246,0.2));
+  box-shadow: 0 0 14px rgba(30,58,138,0.35);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-cosmic[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(30,58,138,0.5), rgba(88,28,135,0.4), rgba(59,130,246,0.3));
+  box-shadow: 0 0 20px rgba(30,58,138,0.5);
+}
+.sci-card.aura-cosmic[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(30,58,138,0.1), rgba(88,28,135,0.08));
+}
+
+/* Aura tier indicator dots */
+.sci-card-aura-dots {
+  position: absolute;
+  bottom: 0.3rem;
+  right: 0.3rem;
+  display: flex;
+  gap: 2px;
+  z-index: 5;
+}
+.sci-card-aura-dots .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.5);
+}
+.sci-card-aura-dots .dot.filled {
+  background: currentColor;
+}
+
+/* Aura dot colors by type */
+.aura-holographic .sci-card-aura-dots { color: #c084fc; }
+.aura-prismatic   .sci-card-aura-dots { color: #e0e7ff; }
+.aura-shadow      .sci-card-aura-dots { color: #a855f7; }
+.aura-radiant     .sci-card-aura-dots { color: #fbbf24; }
+.aura-cosmic      .sci-card-aura-dots { color: #60a5fa; }
+
+/* Animations */
+@keyframes auraShimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+@keyframes auraInnerPulse {
+  0%, 100% { opacity: 0.05; }
+  50% { opacity: 0.12; }
+}
+
+/* ===================== CARD DETAIL MODAL (ENLARGED CARD) ===================== */
+
+.card-detail-frame {
+  background: #0c1220;
+  border: 3px solid #334155;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  max-width: 240px;
+  margin: 0 auto;
+  position: relative;
+  aspect-ratio: 5/7;
+  display: flex;
+  flex-direction: column;
+}
+.card-detail-frame.rarity-common   { border-color: #4b5563; }
+.card-detail-frame.rarity-uncommon { border-color: #22c55e; }
+.card-detail-frame.rarity-rare     { border-color: #3b82f6; }
+.card-detail-frame.rarity-epic     { border-color: #a855f7; }
+.card-detail-frame.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.2); }
+
+.card-detail-inner {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  margin: 4px;
+  border-radius: 0.4rem;
+  overflow: hidden;
+  background: #111827;
+  min-height: 0;
+}
+
+.card-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.45rem 0.6rem;
+  background: rgba(0,0,0,0.5);
+  flex-shrink: 0;
+}
+.card-detail-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  flex: 1;
+  min-width: 0;
+}
+.card-detail-art {
+  width: 100%;
+  flex: 1 1 55%;
+  background: #0a0f1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+}
+.card-detail-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Detail card divider */
+.card-detail-divider {
+  height: 2px;
+  flex-shrink: 0;
+  background: linear-gradient(90deg, transparent, rgba(148,163,184,0.25), rgba(148,163,184,0.45), rgba(148,163,184,0.25), transparent);
+}
+.rarity-common .card-detail-divider   { background: linear-gradient(90deg, transparent, rgba(75,85,99,0.3), rgba(75,85,99,0.5), rgba(75,85,99,0.3), transparent); }
+.rarity-uncommon .card-detail-divider { background: linear-gradient(90deg, transparent, rgba(34,197,94,0.25), rgba(34,197,94,0.5), rgba(34,197,94,0.25), transparent); }
+.rarity-rare .card-detail-divider     { background: linear-gradient(90deg, transparent, rgba(59,130,246,0.25), rgba(59,130,246,0.5), rgba(59,130,246,0.25), transparent); }
+.rarity-epic .card-detail-divider     { background: linear-gradient(90deg, transparent, rgba(168,85,247,0.25), rgba(168,85,247,0.5), rgba(168,85,247,0.25), transparent); }
+.rarity-legendary .card-detail-divider { background: linear-gradient(90deg, transparent, rgba(245,158,11,0.3), rgba(245,158,11,0.6), rgba(245,158,11,0.3), transparent); }
+
+.card-detail-body {
+  padding: 0.6rem;
+  flex-shrink: 0;
+  /* Same starfield cosmic texture as grid cards */
+  background:
+    radial-gradient(0.7px 0.7px at 15% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
+    radial-gradient(0.7px 0.7px at 42% 55%, rgba(255,255,255,0.25) 0%, transparent 100%),
+    radial-gradient(0.5px 0.5px at 73% 15%, rgba(255,255,255,0.3) 0%, transparent 100%),
+    radial-gradient(0.8px 0.8px at 88% 72%, rgba(200,220,255,0.35) 0%, transparent 100%),
+    radial-gradient(0.5px 0.5px at 30% 80%, rgba(200,210,255,0.2) 0%, transparent 100%),
+    radial-gradient(0.6px 0.6px at 60% 35%, rgba(180,200,255,0.25) 0%, transparent 100%),
+    radial-gradient(0.5px 0.5px at 5% 60%, rgba(255,255,255,0.2) 0%, transparent 100%),
+    radial-gradient(0.7px 0.7px at 95% 40%, rgba(200,200,255,0.3) 0%, transparent 100%),
+    radial-gradient(0.5px 0.5px at 50% 90%, rgba(180,190,255,0.25) 0%, transparent 100%),
+    radial-gradient(0.4px 0.4px at 22% 45%, rgba(255,255,255,0.15) 0%, transparent 100%),
+    linear-gradient(160deg, #0d1424 0%, #101b30 40%, #0e1628 70%, #0c1220 100%);
+}
+.card-detail-field {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.card-detail-keyfact {
+  font-size: 0.75rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+}
+.card-detail-aura-info {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(148,163,184,0.15);
+  font-size: 0.65rem;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.card-detail-aura-tier-bar {
+  display: flex;
+  gap: 3px;
+}
+.card-detail-aura-tier-bar .pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #334155;
+}
+.card-detail-aura-tier-bar .pip.filled {
+  background: currentColor;
+}
+
+/* ===================== LEGACY STYLES (ADMIN USES) ===================== */
+
+.card-item {
+  background: #1e293b;
+  border: 2px solid #334155;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.card-item:hover { transform: translateY(-2px); border-color: #475569; }
+.card-item.rarity-common { border-color: #4b5563; }
+.card-item.rarity-uncommon { border-color: #22c55e; }
+.card-item.rarity-rare { border-color: #3b82f6; }
+.card-item.rarity-epic { border-color: #a855f7; }
+.card-item.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245,158,11,0.2); }
+
+.card-image {
+  width: 100%;
+  aspect-ratio: 3/4;
+  background: #0f172a;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+.card-image img { width: 100%; height: 100%; object-fit: cover; }
+
+.card-name { font-weight: 600; font-size: 0.8rem; line-height: 1.2; }
+.card-meta { font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem; }
+
+/* ===================== PACK OPENING SYSTEM ===================== */
+
+/* Card wrapper for 3D flip */
+.pack-card-wrapper {
+  perspective: 600px;
+  opacity: 0;
+  transform: scale(0.85);
+  transition: opacity 0.35s ease-out, transform 0.35s ease-out;
+}
+.pack-card-wrapper.phase-in {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* The flipper container */
+.pack-card-flipper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 5/7;
+  transition: transform 0.4s ease-in-out;
+  transform-style: preserve-3d;
+}
+.pack-card-flipper.flipped {
+  transform: rotateY(180deg);
+}
+
+/* Front (face) and Back share sizing */
+.pack-card-front, .pack-card-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  border-radius: 0.6rem;
+  overflow: hidden;
+}
+
+/* Front = the actual card content (hidden initially, revealed on flip) */
+.pack-card-front {
+  transform: rotateY(180deg);
+}
+.pack-card-front .sci-card {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  border-radius: 0.6rem;
+}
+
+/* Back = face-down card */
+.pack-card-back {
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  border: 2.5px solid #334155;
+  border-radius: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.pack-card-back::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(148,163,184,0.15);
+  border-radius: 0.4rem;
+  pointer-events: none;
+}
+.pack-card-back::after {
+  content: '⚛️';
+  font-size: 1.6rem;
+  opacity: 0.3;
+}
+
+/* Rarity glow on face-down cards (rare, epic, legendary) */
+.pack-card-wrapper.rarity-glow-rare .pack-card-back {
+  border-color: #3b82f6;
+  box-shadow: 0 0 10px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.1);
+  animation: rarityPulseBlue 2s ease-in-out infinite;
+}
+.pack-card-wrapper.rarity-glow-epic .pack-card-back {
+  border-color: #a855f7;
+  box-shadow: 0 0 12px rgba(168,85,247,0.35), 0 0 24px rgba(168,85,247,0.12);
+  animation: rarityPulsePurple 2s ease-in-out infinite;
+}
+.pack-card-wrapper.rarity-glow-legendary .pack-card-back {
+  border-color: #f59e0b;
+  box-shadow: 0 0 14px rgba(245,158,11,0.4), 0 0 28px rgba(245,158,11,0.15);
+  animation: rarityPulseGold 1.8s ease-in-out infinite;
+}
+
+@keyframes rarityPulseBlue {
+  0%, 100% { box-shadow: 0 0 10px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.1); }
+  50% { box-shadow: 0 0 16px rgba(59,130,246,0.45), 0 0 30px rgba(59,130,246,0.18); }
+}
+@keyframes rarityPulsePurple {
+  0%, 100% { box-shadow: 0 0 12px rgba(168,85,247,0.35), 0 0 24px rgba(168,85,247,0.12); }
+  50% { box-shadow: 0 0 20px rgba(168,85,247,0.5), 0 0 36px rgba(168,85,247,0.2); }
+}
+@keyframes rarityPulseGold {
+  0%, 100% { box-shadow: 0 0 14px rgba(245,158,11,0.4), 0 0 28px rgba(245,158,11,0.15); }
+  50% { box-shadow: 0 0 22px rgba(245,158,11,0.55), 0 0 40px rgba(245,158,11,0.22); }
+}
+
+/* ===================== FIREWORKS / PARTICLES ===================== */
+
+.pack-particles-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+  z-index: 50;
+}
+
+.pack-particle {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: particleBurst 0.875s ease-out forwards;
+  box-shadow: 0 0 4px currentColor;
+}
+
+/* Legendary particles persist slightly longer */
+.pack-particle--legendary {
+  animation-duration: 1s;
+  box-shadow: 0 0 6px currentColor;
+}
+
+@keyframes particleBurst {
+  0% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+  60% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--px), var(--py)) scale(0.2);
+  }
+}
+
+/* Legendary-only energy flash */
+.legendary-reveal-flash {
+  position: absolute;
+  inset: -12px;
+  border-radius: 12px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(251,191,36,0.45) 0%, rgba(245,158,11,0.15) 50%, transparent 75%);
+  animation: legendaryFlash 0.4s ease-out forwards;
+  z-index: 49;
+}
+
+@keyframes legendaryFlash {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.3);
+  }
+}
+
+/* Toast — bottom-left to avoid Edit Game / Create Game controls */
+.toast {
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  animation: toastSlideIn 0.3s ease-out;
+  max-width: 340px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  pointer-events: auto;
+}
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(-100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.toast-success { background: #052e16; border: 1px solid #22c55e; color: #86efac; }
+.toast-error { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+.toast-info { background: #1e1b4b; border: 1px solid #6366f1; color: #c7d2fe; }
+/* Last-copy warning badge (inline) */
+.trade-last-copy-warn {
+  display: inline-block;
+  background: #78350f;
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+/* Project-locked badge (inline) */
+.trade-locked-badge {
+  display: inline-block;
+  background: #7f1d1d;
+  color: #fca5a5;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-left: 0.25rem;
+  vertical-align: middle;
+}
+
+/* Stat Card */
+.stat-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+  padding: 1rem;
+}
+.stat-card .stat-value { font-size: 1.5rem; font-weight: 700; }
+.stat-card .stat-label { font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem; }
+
+/* Progress Bar */
+.progress-bar {
+  height: 0.5rem;
+  background: #0f172a;
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 0.25rem;
+  transition: width 0.3s ease;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+/* Quantity Badge (legacy) */
+.quantity-badge {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  background: rgba(0,0,0,0.7);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  min-width: 1.2rem;
+  text-align: center;
+}
+
+/* ─── Trading: Rarity text colors ─────────────────────────────── */
+.rarity-text-common    { color: #9ca3af; }
+.rarity-text-uncommon  { color: #22c55e; }
+.rarity-text-rare      { color: #3b82f6; }
+.rarity-text-epic      { color: #a855f7; }
+.rarity-text-legendary { color: #f59e0b; }
+
+/* ─── Trade Confirmation Modal (sandbox-safe confirm() replacement) ── */
+.trade-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+  animation: tradeModalFadeIn 0.15s ease-out;
+}
+@keyframes tradeModalFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.trade-confirm-modal {
+  background: #1e293b;
+  border: 1px solid #475569;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  animation: tradeModalSlideIn 0.15s ease-out;
+}
+@keyframes tradeModalSlideIn {
+  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.trade-confirm-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+.trade-confirm-message {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  line-height: 1.55;
+  margin-bottom: 0.75rem;
+  word-break: break-word;
+}
+.trade-confirm-warning {
+  background: #78350f;
+  border: 1px solid #92400e;
+  color: #fbbf24;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.375rem;
+  margin-bottom: 0.75rem;
+  text-align: center;
+}
+.trade-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.trade-confirm-btn {
+  flex: 1;
+  padding: 0.55rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, opacity 0.15s;
+}
+.trade-confirm-btn:active { opacity: 0.85; }
+.trade-confirm-btn-cancel {
+  background: #334155;
+  color: #94a3b8;
+}
+.trade-confirm-btn-cancel:hover { background: #475569; color: #e2e8f0; }
+.trade-confirm-btn-confirm {
+  background: #16a34a;
+  color: #ffffff;
+}
+.trade-confirm-btn-confirm:hover { background: #15803d; }

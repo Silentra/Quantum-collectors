@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="/api/games/1ccb198e-07ff-4921-880c-26b3d619182d/files/__e/9d50ceae-c94b-48be-bff3-d741213f859a/">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SciCards - Physics & Science Card Game</title>
+  <!-- Firebase SDK (compat mode — App + RTDB only, no Firebase Auth) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' },
+            surface: { 50:'#f8fafc',100:'#f1f5f9',200:'#e2e8f0',300:'#cbd5e1',400:'#94a3b8',500:'#64748b',600:'#475569',700:'#334155',800:'#1e293b',900:'#0f172a',950:'#020617' },
+            rarity: { common:'#9ca3af', uncommon:'#22c55e', rare:'#3b82f6', epic:'#a855f7', legendary:'#f59e0b' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-surface-950 text-white min-h-screen">
+  <div id="app" class="flex flex-col min-h-screen">
+    <!-- Loading Screen -->
+    <div id="screen-loading" class="screen active items-center justify-center min-h-screen">
+      <div class="text-center">
+        <div class="text-4xl font-bold text-primary-400 mb-4">⚛️ SciCards</div>
+        <div class="text-surface-400">Loading...</div>
+        <div class="mt-4 w-48 h-1 bg-surface-800 rounded mx-auto overflow-hidden">
+          <div class="h-full bg-primary-500 rounded animate-pulse" style="width:60%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Login Screen -->
+    <div id="screen-login" class="screen items-center justify-center min-h-screen p-4">
+      <div class="w-full max-w-md">
+        <div class="text-center mb-8">
+          <div class="text-5xl mb-2">⚛️</div>
+          <h1 class="text-3xl font-bold text-primary-400">SciCards</h1>
+          <p class="text-surface-400 mt-1">Physics & Science Card Game</p>
+        </div>
+        <div id="login-box" class="bg-surface-900 rounded-xl p-6 border border-surface-700">
+          <div id="login-message" class="hidden mb-4 p-3 rounded-lg text-sm"></div>
+
+          <div id="login-form">
+            <h2 class="text-lg font-semibold mb-4">Sign In</h2>
+            <input id="login-username" type="text" placeholder="Username"
+              class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
+            <input id="login-password" type="password" placeholder="Password"
+              class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
+            <button id="btn-login" class="w-full bg-primary-600 hover:bg-primary-500 text-white font-semibold py-3 rounded-lg transition">
+              Sign In
+            </button>
+            <div class="text-center mt-4">
+              <button id="btn-show-register" class="text-primary-400 hover:text-primary-300 text-sm">
+                New student? Register here
+              </button>
+            </div>
+            <div class="text-center mt-2">
+              <button id="btn-show-admin-login" class="text-surface-500 hover:text-surface-400 text-xs">
+                Admin Login
+              </button>
+            </div>
+          </div>
+
+          <div id="register-form" class="hidden">
+            <h2 class="text-lg font-semibold mb-4">Register</h2>
+            <input id="register-username" type="text" placeholder="Choose a username"
+              class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
+            <input id="register-password" type="password" placeholder="Choose a password"
+              class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
+            <input id="register-access-code" type="text" placeholder="Access code"
+              class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
+            <button id="btn-register" class="w-full bg-green-600 hover:bg-green-500 text-white font-semibold py-3 rounded-lg transition">
+              Register
+            </button>
+            <div class="text-center mt-4">
+              <button id="btn-show-login" class="text-primary-400 hover:text-primary-300 text-sm">
+                Already have an account? Sign in
+              </button>
+            </div>
+          </div>
+
+          <div id="admin-login-form" class="hidden">
+            <h2 class="text-lg font-semibold mb-4">Admin Login</h2>
+            <input id="admin-password" type="password" placeholder="Admin password"
+              class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
+            <button id="btn-admin-login" class="w-full bg-amber-600 hover:bg-amber-500 text-white font-semibold py-3 rounded-lg transition">
+              Admin Login
+            </button>
+            <div class="text-center mt-4">
+              <button id="btn-back-login" class="text-primary-400 hover:text-primary-300 text-sm">
+                Back to student login
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="game-closed-notice" class="hidden mt-4 bg-red-900/30 border border-red-700 rounded-lg p-4 text-center text-red-300 text-sm">
+          The game is currently closed. Please try again later.
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Game Screen -->
+    <div id="screen-game" class="screen flex-col min-h-screen">
+      <!-- Top Nav -->
+      <nav class="bg-surface-900 border-b border-surface-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">⚛️</span>
+          <span class="font-bold text-primary-400">SciCards</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <span id="nav-username" class="text-sm text-surface-300"></span>
+          <span id="nav-group-badge" class="text-xs bg-surface-700 px-2 py-1 rounded hidden"></span>
+          <button id="btn-logout" class="text-surface-400 hover:text-white text-sm px-3 py-1 rounded border border-surface-600 hover:border-surface-500 transition">
+            Logout
+          </button>
+        </div>
+      </nav>
+
+      <!-- Tab Nav -->
+      <div class="bg-surface-900/50 border-b border-surface-800 px-2 flex gap-1 overflow-x-auto flex-shrink-0" id="tab-nav">
+        <button class="tab-btn active" data-tab="collection">📚 Collection</button>
+        <button class="tab-btn" data-tab="packs">🎴 Packs</button>
+        <button class="tab-btn" data-tab="research-projects">🔬 Research Projects</button>
+        <button class="tab-btn" data-tab="trading">🤝 Trading</button>
+        <button class="tab-btn" data-tab="profile">👤 Profile</button>
+        <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
+        <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">⚙️ Admin</button>
+      </div>
+
+      <!-- Tab Content -->
+      <div class="flex-1 overflow-y-auto">
+        <!-- Collection Tab -->
+        <div id="tab-collection" class="tab-content active p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <h2 class="text-xl font-bold">My Collection</h2>
+            <div class="flex gap-2 flex-wrap">
+              <select id="filter-rarity" class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm">
+                <option value="all">All Rarities</option>
+                <option value="common">Common</option>
+                <option value="uncommon">Uncommon</option>
+                <option value="rare">Rare</option>
+                <option value="epic">Epic</option>
+                <option value="legendary">Legendary</option>
+              </select>
+              <select id="filter-type" class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm">
+                <option value="all">All Types</option>
+                <option value="scientist">Scientists</option>
+                <option value="concept">Concepts</option>
+              </select>
+              <input id="filter-search" type="text" placeholder="Search..."
+                class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm w-36">
+            </div>
+          </div>
+          <div id="collection-stats" class="flex gap-4 mb-4 text-sm text-surface-400 flex-wrap"></div>
+          <div id="collection-grid" class="collection-grid-container">
+          </div>
+          <div id="collection-empty" class="hidden text-center py-16 text-surface-500">
+            <div class="text-4xl mb-3">📭</div>
+            <p>Your collection is empty. Open some packs to get started!</p>
+          </div>
+        </div>
+
+        <!-- Packs Tab -->
+        <div id="tab-packs" class="tab-content p-4">
+          <h2 class="text-xl font-bold mb-4">Open Packs</h2>
+          <div id="packs-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          </div>
+          <div id="packs-empty" class="hidden text-center py-16 text-surface-500">
+            <div class="text-4xl mb-3">📦</div>
+            <p>No packs available right now.</p>
+          </div>
+        </div>
+
+        <!-- Research Projects Tab -->
+        <div id="tab-research-projects" class="tab-content p-4">
+          <!-- Two-column layout: left = projects, right = card availability panel -->
+          <div class="rp-tab-layout">
+            <!-- LEFT column: header + project list -->
+            <div class="rp-tab-main">
+              <h2 class="text-xl font-bold mb-1">Research Projects</h2>
+              <p class="text-surface-500 text-sm mb-4">View your active and completed research projects.</p>
+              <div id="research-projects-list" class="space-y-3"></div>
+              <div id="research-projects-empty" class="hidden text-center py-16 text-surface-500">
+                <div class="text-4xl mb-3">🔭</div>
+                <p>No Research Projects available.</p>
+              </div>
+            </div>
+            <!-- RIGHT column: available cards panel (informational only) -->
+            <aside class="rp-cards-panel" id="rp-cards-panel">
+              <div class="rp-cards-panel-header">
+                <span class="rp-cards-panel-title">Available Cards</span>
+              </div>
+              <div class="rp-cards-panel-body" id="rp-cards-panel-body">
+                <!-- populated by renderResearchProjects() -->
+              </div>
+            </aside>
+          </div>
+        </div>
+
+        <!-- Trading Tab -->
+        <div id="tab-trading" class="tab-content p-4">
+          <div class="max-w-2xl mx-auto">
+            <h2 class="text-xl font-bold mb-4">Trading</h2>
+            <p class="text-surface-500 text-sm mb-4">Trade cards 1-for-1 with players in your group. Equal rarity required.</p>
+            <div id="trading-content" class="space-y-3"></div>
+          </div>
+        </div>
+
+        <!-- Profile Tab -->
+        <div id="tab-profile" class="tab-content p-4">
+          <div class="max-w-2xl mx-auto">
+            <h2 class="text-xl font-bold mb-4">My Profile</h2>
+            <div class="bg-surface-900 rounded-xl p-6 border border-surface-700 mb-4">
+              <div class="flex items-center gap-4 mb-4">
+                <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center text-2xl">👤</div>
+                <div>
+                  <div id="profile-username" class="text-xl font-bold"></div>
+                  <div id="profile-group" class="text-sm text-surface-400"></div>
+                </div>
+              </div>
+              <div id="profile-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+            </div>
+            <div class="bg-surface-900 rounded-xl p-6 border border-surface-700">
+              <h3 class="font-semibold mb-3">Collection Progress</h3>
+              <div id="profile-progress" class="space-y-3"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leaderboard Tab -->
+        <div id="tab-leaderboard" class="tab-content p-4">
+          <div class="max-w-2xl mx-auto">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-xl font-bold">Leaderboard</h2>
+              <span id="lb-scope-label" class="hidden text-xs bg-surface-700 text-surface-300 px-2.5 py-1 rounded-full"></span>
+            </div>
+
+            <!-- Category tabs -->
+            <div id="lb-category-tabs" class="flex flex-wrap gap-2 mb-4"></div>
+
+            <!-- Season selector (only shown for Seasonal RP) -->
+            <div id="lb-season-wrapper" class="hidden mb-4">
+              <label class="text-xs text-surface-400 block mb-1">Season</label>
+              <select id="lb-season-select" class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white w-full sm:w-auto min-w-[220px]"></select>
+            </div>
+
+            <!-- Snapshot selector (LB-5 — non-seasonal categories, only shown when history exists) -->
+            <div id="lb-snapshot-wrapper" class="hidden mb-4">
+              <label class="text-xs text-surface-400 block mb-1">📸 History</label>
+              <select id="lb-snapshot-select" class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white w-full sm:w-auto min-w-[220px]"></select>
+            </div>
+
+            <!-- Table -->
+            <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+              <div class="px-4 py-3 border-b border-surface-700">
+                <h3 id="lb-table-title" class="font-semibold text-sm text-surface-200">Overall RP</h3>
+              </div>
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b border-surface-800">
+                    <th class="px-3 py-2 text-left text-xs text-surface-500 font-medium w-12">Rank</th>
+                    <th class="px-3 py-2 text-left text-xs text-surface-500 font-medium">Player</th>
+                    <th class="px-3 py-2 text-right text-xs text-surface-500 font-medium">Score</th>
+                  </tr>
+                </thead>
+                <tbody id="lb-table-body" class="divide-y divide-surface-800"></tbody>
+              </table>
+              <div id="lb-empty" class="hidden text-center py-10 text-surface-500 text-sm"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Tab -->
+        <div id="tab-admin" class="tab-content p-4">
+          <div class="max-w-5xl mx-auto">
+            <h2 class="text-xl font-bold mb-4">Admin Dashboard</h2>
+
+            <!-- Admin Sub-Tabs -->
+            <div class="flex gap-2 mb-4 flex-wrap">
+              <button class="admin-tab-btn active" data-admin-tab="overview">Overview</button>
+              <button class="admin-tab-btn" data-admin-tab="players">Players</button>
+              <button class="admin-tab-btn" data-admin-tab="cards">Cards</button>
+              <button class="admin-tab-btn" data-admin-tab="packs-admin">Packs</button>
+              <button class="admin-tab-btn" data-admin-tab="groups">Groups</button>
+              <button class="admin-tab-btn" data-admin-tab="access">Access</button>
+              <button class="admin-tab-btn" data-admin-tab="config">Config</button>
+              <button class="admin-tab-btn" data-admin-tab="balance">Balance</button>
+              <button class="admin-tab-btn" data-admin-tab="trading-controls">Trading</button>
+              <button class="admin-tab-btn" data-admin-tab="seasons">🏆 Leaderboards</button>
+            </div>
+
+            <!-- Admin Overview -->
+            <div id="admin-overview" class="admin-tab-content active">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6" id="admin-stats-grid"></div>
+              <div class="bg-surface-900 rounded-xl p-6 border border-surface-700">
+                <h3 class="font-semibold mb-3">Quick Actions</h3>
+                <div class="flex flex-wrap gap-3">
+                  <button id="btn-toggle-game" class="px-4 py-2 rounded-lg font-medium text-sm transition"></button>
+                  <button id="btn-toggle-registration" class="px-4 py-2 rounded-lg font-medium text-sm transition"></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Admin Players -->
+            <div id="admin-players" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+                <div class="p-4 border-b border-surface-700 flex flex-wrap items-center gap-3">
+                  <h3 class="font-semibold mr-auto">Players</h3>
+                  <input id="admin-player-search" type="text" placeholder="Search players..."
+                    class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm">
+                  <select id="admin-player-filter-group" class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm">
+                    <option value="">All Groups</option>
+                  </select>
+                  <select id="admin-player-filter-subgroup" class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm" disabled>
+                    <option value="">All Subgroups</option>
+                  </select>
+                </div>
+                <div id="admin-players-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto"></div>
+              </div>
+
+              <!-- Player Detail Modal -->
+              <div id="player-detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div class="bg-surface-900 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-surface-700">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 id="player-detail-name" class="text-xl font-bold"></h3>
+                    <button id="btn-close-player-detail" class="text-surface-400 hover:text-white text-2xl">&times;</button>
+                  </div>
+                  <div id="player-detail-content"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Admin Cards -->
+            <div id="admin-cards" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
+                <h3 class="font-semibold mb-4">Add New Card</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input id="new-card-name" type="text" placeholder="Card name" class="admin-input">
+                  <select id="new-card-rarity" class="admin-input">
+                    <option value="common">Common</option>
+                    <option value="uncommon">Uncommon</option>
+                    <option value="rare">Rare</option>
+                    <option value="epic">Epic</option>
+                    <option value="legendary">Legendary</option>
+                  </select>
+                  <select id="new-card-type" class="admin-input">
+                    <option value="scientist">Scientist</option>
+                    <option value="concept">Concept</option>
+                  </select>
+                  <select id="new-card-conceptType" class="admin-input hidden">
+                    <option value="researchBoost">Research Amplifier</option>
+                    <option value="difficultyReduction">Complexity Reducer</option>
+                    <option value="synergyBoost">Synergy Booster</option>
+                    <option value="breakthrough">Breakthrough Catalyst</option>
+                    <option value="risk">Risk Enhancer</option>
+                  </select>
+                  <input id="new-card-field" type="text" placeholder="Field / Category (e.g. Physics)" class="admin-input">
+                  <input id="new-card-imageUrl" type="text" placeholder="Image URL (optional)" class="admin-input">
+                  <!-- Phase 1D: auraType selector removed — aura is now a permanent default visual for all cards -->
+                  <textarea id="new-card-keyFact" placeholder="Key Fact — the main educational content for this card" class="admin-input sm:col-span-2" rows="3"></textarea>
+                  <!-- Legacy fields kept for backward compat -->
+                  <input id="new-card-effect" type="text" placeholder="Effect (legacy metadata, optional)" class="admin-input">
+                  <div class="flex items-center gap-2">
+                    <label class="text-xs text-surface-400">Enabled</label>
+                    <select id="new-card-enabled" class="admin-input flex-1">
+                      <option value="true">Yes</option>
+                      <option value="false">No</option>
+                    </select>
+                  </div>
+                </div>
+                <!-- Image Preview (create form) -->
+                <div id="new-card-image-preview" class="mt-3 hidden">
+                  <div class="w-20 h-24 bg-surface-800 rounded-lg overflow-hidden border border-surface-600">
+                    <img id="new-card-preview-img" class="w-full h-full object-cover" alt="Preview">
+                  </div>
+                </div>
+                <button id="btn-add-card" class="mt-3 bg-green-600 hover:bg-green-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                  Add Card
+                </button>
+              </div>
+              <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+                <div class="p-4 border-b border-surface-700 flex flex-wrap items-center justify-between gap-3">
+                  <h3 class="font-semibold">Card Database (<span id="card-count">0</span> cards)</h3>
+                  <div class="flex gap-2">
+                    <select id="admin-card-filter-rarity" class="bg-surface-800 border border-surface-600 rounded-lg px-2 py-1 text-xs">
+                      <option value="all">All Rarities</option>
+                      <option value="common">Common</option>
+                      <option value="uncommon">Uncommon</option>
+                      <option value="rare">Rare</option>
+                      <option value="epic">Epic</option>
+                      <option value="legendary">Legendary</option>
+                    </select>
+                    <input id="admin-card-search" type="text" placeholder="Search cards..." class="bg-surface-800 border border-surface-600 rounded-lg px-2 py-1 text-xs w-32">
+                  </div>
+                </div>
+                <div id="admin-cards-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto"></div>
+              </div>
+
+              <!-- Edit Card Modal -->
+              <div id="edit-card-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div class="bg-surface-900 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto border border-surface-700">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold">Edit Card</h3>
+                    <button id="btn-close-edit-card" class="text-surface-400 hover:text-white text-2xl">&times;</button>
+                  </div>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Card Name</label>
+                      <input id="edit-card-name" type="text" class="admin-input w-full">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs text-surface-400 block mb-1">Rarity</label>
+                        <select id="edit-card-rarity" class="admin-input w-full">
+                          <option value="common">Common</option>
+                          <option value="uncommon">Uncommon</option>
+                          <option value="rare">Rare</option>
+                          <option value="epic">Epic</option>
+                          <option value="legendary">Legendary</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="text-xs text-surface-400 block mb-1">Type</label>
+                        <select id="edit-card-type" class="admin-input w-full">
+                          <option value="scientist">Scientist</option>
+                          <option value="concept">Concept</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div id="edit-card-conceptType-row" class="hidden">
+                      <label class="text-xs text-surface-400 block mb-1">Concept Type</label>
+                      <select id="edit-card-conceptType" class="admin-input w-full">
+                        <option value="researchBoost">Research Amplifier</option>
+                        <option value="difficultyReduction">Complexity Reducer</option>
+                        <option value="synergyBoost">Synergy Booster</option>
+                        <option value="breakthrough">Breakthrough Catalyst</option>
+                        <option value="risk">Risk Enhancer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Field / Category</label>
+                      <input id="edit-card-field" type="text" class="admin-input w-full">
+                    </div>
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Image URL</label>
+                      <input id="edit-card-imageUrl" type="text" class="admin-input w-full" placeholder="https://...">
+                    </div>
+                    <!-- Image preview in edit modal -->
+                    <div id="edit-card-image-preview" class="hidden">
+                      <div class="w-24 h-28 bg-surface-800 rounded-lg overflow-hidden border border-surface-600">
+                        <img id="edit-card-preview-img" class="w-full h-full object-cover" alt="Preview">
+                      </div>
+                    </div>
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Key Fact</label>
+                      <textarea id="edit-card-keyFact" class="admin-input w-full" rows="4" placeholder="Main educational content for this card..."></textarea>
+                    </div>
+                    <!-- Flavor/lore text — concept cards only, presentational -->
+                    <div id="edit-card-flavorText-row" class="hidden">
+                      <label class="text-xs text-surface-400 block mb-1">Flavor / Lore Text <span class="text-surface-600">(concept cards — shown in collection view)</span></label>
+                      <textarea id="edit-card-flavorText" class="admin-input w-full" rows="2" placeholder="Optional lore text shown below the card in collection…"></textarea>
+                    </div>
+                    <!-- Phase 1D: Aura Type selector removed — aura is now always default_prismatic for all cards -->
+                    <div class="grid grid-cols-2 gap-3">
+                      <div>
+                        <label class="text-xs text-surface-400 block mb-1">Enabled</label>
+                        <select id="edit-card-enabled" class="admin-input w-full">
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="text-xs text-surface-400 block mb-1">Effect (legacy)</label>
+                        <input id="edit-card-effect" type="text" class="admin-input w-full">
+                      </div>
+                    </div>
+                  </div>
+                  <input id="edit-card-id" type="hidden">
+                  <button id="btn-save-edit-card" class="mt-4 w-full bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm">
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Admin Packs -->
+            <div id="admin-packs-admin" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
+                <h3 class="font-semibold mb-4">Create Pack Type</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <input id="new-pack-name" type="text" placeholder="Pack name" class="admin-input">
+                  <input id="new-pack-cards-per" type="number" placeholder="Cards per pack" value="5" class="admin-input">
+                  <input id="new-pack-common" type="number" step="any" placeholder="Common %" value="50" class="admin-input">
+                  <input id="new-pack-uncommon" type="number" step="any" placeholder="Uncommon %" value="25" class="admin-input">
+                  <input id="new-pack-rare" type="number" step="any" placeholder="Rare %" value="15" class="admin-input">
+                  <input id="new-pack-epic" type="number" step="any" placeholder="Epic %" value="8" class="admin-input">
+                  <input id="new-pack-legendary" type="number" step="any" placeholder="Legendary %" value="2" class="admin-input">
+                </div>
+                <button id="btn-create-pack" class="mt-3 bg-green-600 hover:bg-green-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                  Create Pack
+                </button>
+              </div>
+              <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+                <div class="p-4 border-b border-surface-700"><h3 class="font-semibold">Pack Types</h3></div>
+                <div id="admin-packs-list" class="divide-y divide-surface-700"></div>
+              </div>
+
+              <!-- Edit Pack Modal -->
+              <div id="edit-pack-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div class="bg-surface-900 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto border border-surface-700">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-bold">Edit Pack</h3>
+                    <button id="btn-close-edit-pack" class="text-surface-400 hover:text-white text-2xl">&times;</button>
+                  </div>
+                  <div class="space-y-3">
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Pack Name</label>
+                      <input id="edit-pack-name" type="text" class="admin-input w-full">
+                    </div>
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Cards Per Pack</label>
+                      <input id="edit-pack-cards-per" type="number" min="1" class="admin-input w-full">
+                    </div>
+                    <div>
+                      <label class="text-xs text-surface-400 block mb-1">Enabled</label>
+                      <select id="edit-pack-enabled" class="admin-input w-full">
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </div>
+                    <div class="border-t border-surface-700 pt-3">
+                      <h4 class="text-sm font-semibold mb-2 text-primary-400">Rarity Odds (%)</h4>
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Common</label>
+                          <input id="edit-pack-common" type="number" min="0" step="any" class="admin-input w-full">
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Uncommon</label>
+                          <input id="edit-pack-uncommon" type="number" min="0" step="any" class="admin-input w-full">
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Rare</label>
+                          <input id="edit-pack-rare" type="number" min="0" step="any" class="admin-input w-full">
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Epic</label>
+                          <input id="edit-pack-epic" type="number" min="0" step="any" class="admin-input w-full">
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Legendary</label>
+                          <input id="edit-pack-legendary" type="number" min="0" step="any" class="admin-input w-full">
+                        </div>
+                      </div>
+                    </div>
+                    <div id="edit-pack-odds-total" class="text-xs text-surface-500 text-right"></div>
+                  </div>
+                  <input id="edit-pack-id" type="hidden">
+                  <button id="btn-save-edit-pack" class="mt-4 w-full bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm">
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Admin Groups -->
+            <div id="admin-groups" class="admin-tab-content">
+              <!-- Create Group -->
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
+                <h3 class="font-semibold mb-4">Create Group</h3>
+                <div class="flex gap-3 flex-wrap">
+                  <input id="new-group-name" type="text" placeholder="Group name (e.g. Biology)" class="admin-input flex-1 min-w-[160px]">
+                  <button id="btn-create-group" class="bg-green-600 hover:bg-green-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                    Create Group
+                  </button>
+                </div>
+              </div>
+              <!-- Groups List -->
+              <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+                <div class="p-4 border-b border-surface-700"><h3 class="font-semibold">Groups</h3></div>
+                <div id="admin-groups-list" class="divide-y divide-surface-700"></div>
+              </div>
+              <!-- Edit Group Modal -->
+              <div id="group-edit-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+                <div class="bg-surface-900 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto border border-surface-700">
+                  <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-bold">Edit Group</h3>
+                    <button id="btn-close-group-edit" class="text-surface-400 hover:text-white text-2xl">&times;</button>
+                  </div>
+                  <input type="hidden" id="group-edit-id">
+                  <!-- Rename Group -->
+                  <div class="mb-5">
+                    <label class="block text-sm font-medium mb-1 text-surface-300">Group Name</label>
+                    <div class="flex gap-2">
+                      <input id="group-edit-name" type="text" class="admin-input flex-1" placeholder="Group name">
+                      <button id="btn-group-rename" class="bg-primary-600 hover:bg-primary-500 px-3 py-1.5 rounded text-sm font-medium">Rename</button>
+                    </div>
+                  </div>
+                  <!-- Subgroups -->
+                  <div class="mb-4">
+                    <h4 class="text-sm font-semibold mb-2 text-surface-300">Subgroups</h4>
+                    <div id="group-edit-subgroups-list" class="space-y-2 mb-3 min-h-[32px]"></div>
+                    <div class="flex gap-2">
+                      <input id="group-edit-new-subgroup" type="text" class="admin-input flex-1" placeholder="New subgroup name (e.g. Period 1)">
+                      <button id="btn-add-subgroup" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded text-sm font-medium">Add</button>
+                    </div>
+                  </div>
+                  <!-- Danger -->
+                  <div class="mt-6 pt-4 border-t border-surface-700">
+                    <button id="btn-group-delete" class="bg-red-700 hover:bg-red-600 px-4 py-2 rounded-lg text-sm font-medium w-full">
+                      Delete Group
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Admin Access -->
+            <div id="admin-access" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
+                <h3 class="font-semibold mb-4">Generate Access Codes</h3>
+                <div class="flex gap-3 flex-wrap">
+                  <input id="access-code-count" type="number" value="10" min="1" max="100" class="admin-input w-24">
+                  <select id="access-code-group" class="admin-input">
+                    <option value="">No group</option>
+                  </select>
+                  <button id="btn-gen-codes" class="bg-green-600 hover:bg-green-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                    Generate Codes
+                  </button>
+                </div>
+              </div>
+              <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+                <div class="p-4 border-b border-surface-700 flex items-center justify-between">
+                  <h3 class="font-semibold">Access Codes</h3>
+                  <button id="btn-copy-codes" class="text-primary-400 hover:text-primary-300 text-sm">Copy Unused</button>
+                </div>
+                <div id="admin-access-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto"></div>
+              </div>
+            </div>
+
+            <!-- Admin Config -->
+            <div id="admin-config" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+                <h3 class="font-semibold mb-4">Live Config</h3>
+                <div id="config-editor" class="space-y-4"></div>
+                <button id="btn-save-config" class="mt-4 bg-primary-600 hover:bg-primary-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                  Save Config
+                </button>
+              </div>
+            </div>
+
+            <!-- Admin Balance -->
+            <div id="admin-balance" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-semibold">Research Balance</h3>
+                  <div class="flex gap-2">
+                    <button id="btn-reset-balance" class="bg-amber-700 hover:bg-amber-600 px-4 py-2 rounded-lg font-medium text-xs transition">
+                      Reset to Defaults
+                    </button>
+                    <button id="btn-save-balance" class="bg-primary-600 hover:bg-primary-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                      Save Balance
+                    </button>
+                  </div>
+                </div>
+                <div id="balance-editor" class="space-y-5"></div>
+              </div>
+            </div>
+
+            <!-- Admin Trading Controls (Phase T-8) -->
+            <div id="admin-trading-controls" class="admin-tab-content">
+              <div class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+                <div class="flex items-center justify-between mb-4">
+                  <h3 class="font-semibold">Trading Controls</h3>
+                  <button id="btn-save-trading-controls" class="bg-primary-600 hover:bg-primary-500 px-6 py-2 rounded-lg font-medium text-sm transition">
+                    Save Trading Settings
+                  </button>
+                </div>
+                <div id="trading-controls-editor" class="space-y-5"></div>
+              </div>
+            </div>
+
+            <!-- Admin Seasons (LB-3) -->
+            <div id="admin-seasons" class="admin-tab-content">
+              <!-- Populated dynamically by leaderboard-admin.js -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pack Opening Modal (global — must live outside tab-packs so it shows from any tab) -->
+  <div id="pack-opening-overlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <div class="bg-surface-900 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto border border-surface-700">
+      <h3 id="pack-opening-title" class="text-xl font-bold text-center mb-4"></h3>
+      <div id="pack-opening-cards" class="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-4"></div>
+      <button id="btn-close-pack" class="w-full bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition">
+        Collect Cards
+      </button>
+    </div>
+  </div>
+
+  <!-- Card Detail Modal (global) -->
+  <div id="card-detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+    <div class="bg-surface-900 rounded-2xl p-5 max-w-xs w-full border border-surface-700">
+      <div id="card-detail-content"></div>
+      <button id="btn-close-card-detail" class="w-full mt-4 bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition">
+        Close
+      </button>
+    </div>
+  </div>
+
+  <!-- Confirm Modal (global) -->
+  <div id="confirm-modal" class="hidden fixed inset-0 bg-black/80 z-[110] flex items-center justify-center p-4">
+    <div class="bg-surface-900 rounded-2xl p-6 max-w-sm w-full border border-surface-700 text-center">
+      <div id="confirm-icon" class="text-4xl mb-3">⚠️</div>
+      <h3 id="confirm-title" class="text-lg font-bold mb-2">Are you sure?</h3>
+      <p id="confirm-message" class="text-sm text-surface-400 mb-6"></p>
+      <div class="flex gap-3">
+        <button id="btn-confirm-cancel" class="flex-1 bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition text-sm">
+          Cancel
+        </button>
+        <button id="btn-confirm-ok" class="flex-1 bg-red-600 hover:bg-red-500 py-3 rounded-lg font-semibold transition text-sm">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed bottom-4 left-4 z-[100] flex flex-col gap-2"></div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
