@@ -31,9 +31,9 @@ js/
   seasonal.js        - PLACEHOLDER
   player-schema.js   - Phase 2A/2B expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profileVisibility)
   shop-state.js      - Phase 2B pure shop persistence schema helpers: shop state, current rotation, slot, discount structures
-  shop-generation.js - Future weighted shop generation engine placeholder (no generation logic yet)
-  shop-validation.js - Future shop validation placeholder (no validation logic yet)
-  shop-mutations.js  - Future shop mutation placeholder (no gameplay/Firebase mutation logic yet)
+  shop-generation.js - Phase 3 pure weighted shop generation engine: ownership filtering, slot planning, scoped reroll helpers
+  shop-validation.js - Phase 3 pure shop validation guards for RP-only rerolls and state-only freezing
+  shop-mutations.js  - Phase 3 shop lifecycle mutations: refresh, RP-only rerolls, state-only freezing
 ```
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
@@ -326,6 +326,68 @@ js/
   - `shop-validation.js` remains a placeholder for future guards and does not enforce purchase/reroll/freeze behavior.
   - `shop-mutations.js` remains a placeholder for future atomic shop actions and does not write runtime shop gameplay state.
 - **Implementation status**: persistent shop rotation structure and idempotent migration are in place. The live app still has no player-facing shop rendering, purchase flow, reroll flow, consumable routing, refresh timer, or weighted shop generation.
+
+### Phase 2C — Shop Runtime Generation Foundations
+- **Generation-only phase** — adds safe runtime shop rotation generation foundations while still excluding purchases, RP deduction, consumable execution, paid rerolls, freeze-token consumption, discount execution, finalized UI rollout, admin balancing, and unrelated gameplay refactors.
+- **Pure generation engine** (`shop-generation.js`):
+  - `buildEligiblePool(player, config, options)` reads `ITEM_DEFINITIONS`, keeps enabled positive-weight items, excludes explicit item IDs, and removes owned cosmetics when `allowOwnedCosmeticsInShop` is false.
+  - `filterOwnedCosmetics(pool, ownedCosmetics, config)` is a pure helper for cosmetic ownership filtering. Non-cosmetic items pass through unchanged.
+  - `weightedSelectWithoutReplacement(pool, count, rng)` performs weighted selection with no duplicate `itemId`s and accepts an injected RNG for deterministic tests/smoke checks.
+  - `applySlotConstraints(pool, config, options)` clamps impossible slot constraints and enforces minimum utility/cosmetic slots plus `maximumPackAndCardSlots` as a cap.
+  - `generateShopRotation(player, config, options)` returns a full `createShopRotationState()` object with generated `slots`, `generatedAt`, `refreshAt`, and `generationVersion` metadata.
+- **Frozen-slot preservation**: full rotation generation carries forward slots where `frozen === true`, `purchased !== true`, and `itemId` exists. Preserved item IDs are excluded from newly generated slots. Phase 2C does not consume freeze tokens or implement freeze toggling.
+- **Runtime persistence helper** (`shop-mutations.js → ensureShopRotation(username, options)`):
+  - Reads the fresh player snapshot from `database.js`.
+  - Returns an existing active rotation without writing unless `force: true`.
+  - Persists only `players/{username}/shop/currentRotation` when a new rotation is generated.
+  - Resets `players/{username}/shopUsage` to `DEFAULT_SHOP_USAGE` only when a new full rotation is written.
+  - Leaves `players/{username}/shop/rerollResetAt` untouched. Reroll reset behavior remains persistence-only metadata until reroll systems exist.
+- **Firebase mutation boundary**: generation persistence is intentionally narrow and cache-first through existing `db.set()` helpers. It does not write currencies, items, cosmetics, purchase history, or gameplay rewards.
+- **Rollback safety**: Phase 2C does not change schema defaults or migration behavior. Removing calls to `ensureShopRotation()` stops runtime generation while leaving Phase 2B persistence fields valid.
+- **Implementation status**: runtime rotation generation foundations are available to future UI/refresh phases, but the live app still has no player-facing shop rendering, purchase flow, reroll execution, consumable routing, or discount execution.
+
+### Phase 3 — Shop Runtime Behavior
+- **Runtime behavior phase** — implements weighted generation, scoped reroll execution, state-only freeze execution, ownership filtering, and pull-based refresh behavior. Still excludes final UI rollout, HTML restructuring, admin balancing tools, monetization systems, premium currencies, animations/effects, broad architectural rewrites, purchases, token consumption, discount execution, and consumable routing.
+- **Pure generation engine** (`shop-generation.js`):
+  - Existing Phase 2C generation remains pure: no Firebase, no rendering, no currency mutation.
+  - `REROLL_SCOPES` defines supported reroll scopes: `all`, `cosmetic`, `aura`, `border`, `utility`, `pack`.
+  - `itemMatchesRerollScope()` centralizes category/scope matching so mutation code does not own generation rules.
+  - `getShopRotationSlots()` normalizes array and Firebase object-shaped slot collections.
+  - `getRotationItemIds()` and `buildScopedEligiblePool()` exclude active rotation item IDs except the slot being replaced, preserving duplicate prevention during rerolls.
+  - `generateReplacementShopSlot()` creates a replacement slot through `createShopSlot()` and preserves deterministic RNG injection for smoke tests.
+- **Pure validation guards** (`shop-validation.js`):
+  - `canRerollSlot(player, slotIndex, scope, config)` checks slot existence, purchased/frozen immutability, scope validity, scope match, and RP affordability.
+  - `canRerollRotation(player, scope, config)` validates full/scope rerolls and returns eligible non-purchased, non-frozen slot indexes.
+  - `canFreezeSlot(player, slotIndex, config)` checks slot existence, purchased immutability, already-frozen state, and `maxFrozenSlots`.
+  - Validation remains side-effect free and performs no DB writes.
+- **Runtime mutation layer** (`shop-mutations.js`):
+  - `ensureShopRotation(username, options)` remains the pull-based lifecycle entry point and refreshes expired or forced rotations.
+  - `refreshShopRotation(username, options)` forces the same safe full-refresh path.
+  - `rerollShopSlot(username, slotIndex, options)` performs RP-only single-slot rerolls. It deducts `currencies.currentResearchPoints`, increments `shopUsage.rerollsUsedThisRotation`, and writes updated slots only after validation and replacement generation succeed.
+  - `rerollShopRotation(username, options)` performs one configured-cost RP reroll across eligible non-purchased, non-frozen slots for the requested scope.
+  - `freezeShopSlot(username, slotIndex, options)` is state-only: it sets `frozen: true` and increments `shopUsage.frozenSlotsUsedThisRotation`. It does not consume `items.freeze_token`.
+  - `shop.rerollResetAt` remains untouched; reroll reset behavior is still undefined for future phases.
+- **Persistence paths touched by Phase 3**:
+  - `players/{username}/shop/currentRotation`
+  - `players/{username}/shop/currentRotation/slots`
+  - `players/{username}/shopUsage`
+  - `players/{username}/shopUsage/rerollsUsedThisRotation`
+  - `players/{username}/shopUsage/frozenSlotsUsedThisRotation`
+  - `players/{username}/currencies/currentResearchPoints`
+- **Persistence paths intentionally untouched**:
+  - `players/{username}/items`
+  - `players/{username}/purchaseHistory`
+  - `players/{username}/cosmetics/owned`
+  - `players/{username}/shop/rerollResetAt`
+  - `players/{username}/inventory`, packs, cards, or gameplay rewards
+- **Refresh behavior**:
+  - Refresh remains pull-based. Phase 3 adds no timers, intervals, global refresh loops, or new realtime listeners.
+  - Expired or forced refreshes preserve eligible frozen/unpurchased slots, regenerate remaining slots, update rotation metadata, and reset `shopUsage`.
+- **Scalability notes**:
+  - Shop mutations read scoped player subtrees (`shop`, `currencies`, `shopUsage`, `cosmetics`) instead of the full player object where practical.
+  - Writes remain scoped to shop, usage, and RP paths; Phase 3 does not write whole player records.
+  - Existing `database.js` still initializes and listens at the Firebase root (`ref('/')`), which is the primary bandwidth concern for future scalability. Phase 3 documents this but does not redesign the DB layer.
+  - Cache-first, fire-and-forget writes can race across simultaneous sessions. Phase 3 preserves rollback-safe scoped writes and leaves transaction/server-authoritative behavior for a future scalability pass.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration
