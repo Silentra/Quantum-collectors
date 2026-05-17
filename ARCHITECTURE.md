@@ -301,7 +301,7 @@ js/
 - **normalizePurchaseHistory(raw)**: utility to normalize and cap a raw purchaseHistory value (array or Firebase object → capped array).
 - **Integration points**: `auth.js` imports `getPhase2ADefaults` (createPlayerRecord) + `normalizePlayerSchema` (login + initAuth). `main.js` imports `migrateAllPlayersPhase2A` (startup step 4f).
 - **No files modified**: ui.cleaned.js, profile-ui.js, shop-ui.js, project-*.js, quest-config.js, cards.js — none touched.
-
+- Last verified stable deployment, new commit to note success
 ### Firebase Integration
 - Firebase SDK loaded via CDN (compat builds: App + Database only) in index.html `<head>`
 - firebase-config.js: edit the `firebaseConfig` object with your project credentials
