@@ -1,7 +1,7 @@
 /**
  * shop-mutations.js
  * =================
- * Future atomic shop state mutation layer.
+ * Phase 2C shop state mutation/lifecycle layer.
  *
  * Architectural decisions (finalized):
  * - Atomic mutation strategy: every mutation is a discrete, isolated operation.
@@ -18,14 +18,160 @@
  *   The consumable item is deducted from the player's inventory only AFTER
  *   Firebase persistence confirms success, preventing loss on network failure.
  *
- * Dependencies (future):
+ * Dependencies:
  *   - js/shop-validation.js  (canPurchaseItem, canRerollSlot, etc.)
  *   - js/shop-state.js       (state shape helpers)
- *   - js/shop-config.js      (reroll costs, frozen slot limits)
+ *   - js/shop-config.js      (refresh cadence, generation version)
+ *   - js/shop-generation.js  (generateShopRotation)
  *
- * Phase 2B note: persistent shop state exists for future phases, but this
- * module still performs NO mutation implementation, Firebase, gameplay, or rendering.
+ * Phase 3 note: refresh, RP-only reroll, and state-only freeze mutations live
+ * here. This module still performs NO purchase execution, consumable token
+ * consumption, discount execution, gameplay rewards, UI rendering, or reroll
+ * reset behavior.
  */
+
+import * as db from './database.js';
+import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
+import {
+  REROLL_SCOPES,
+  generateReplacementShopSlot,
+  generateShopRotation,
+  getShopRotationSlots,
+} from './shop-generation.js';
+import { DEFAULT_SHOP_USAGE } from './player-schema.js';
+import {
+  canFreezeSlot,
+  canRerollRotation,
+  canRerollSlot,
+} from './shop-validation.js';
+
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function normalizeSlots(rawSlots) {
+  if (Array.isArray(rawSlots)) return rawSlots;
+  if (isObject(rawSlots)) return Object.values(rawSlots);
+  return [];
+}
+
+function normalizeConfig(config = DEFAULT_SHOP_CONFIG) {
+  return {
+    ...DEFAULT_SHOP_CONFIG,
+    ...(isObject(config) ? config : {}),
+    rerollCosts: {
+      ...DEFAULT_SHOP_CONFIG.rerollCosts,
+      ...(isObject(config?.rerollCosts) ? config.rerollCosts : {}),
+    },
+  };
+}
+
+function getShopPlayerSnapshot(username) {
+  const shop = db.get(`players/${username}/shop`);
+  const currencies = db.get(`players/${username}/currencies`);
+  const shopUsage = db.get(`players/${username}/shopUsage`);
+  const cosmetics = db.get(`players/${username}/cosmetics`);
+
+  if (!shop && !currencies && !shopUsage && !cosmetics) return null;
+
+  return {
+    shop: isObject(shop) ? shop : {},
+    currencies: isObject(currencies) ? currencies : {},
+    shopUsage: isObject(shopUsage) ? shopUsage : {},
+    cosmetics: isObject(cosmetics) ? cosmetics : {},
+  };
+}
+
+function getCurrentRotation(player) {
+  return isObject(player?.shop?.currentRotation) ? player.shop.currentRotation : null;
+}
+
+function hasActiveRotation(player, config, now) {
+  const rotation = getCurrentRotation(player);
+  if (!rotation) return false;
+
+  const slots = normalizeSlots(rotation.slots);
+  const refreshAt = Number(rotation.refreshAt || 0);
+  const expectedVersion = config.generationVersion ?? DEFAULT_SHOP_CONFIG.generationVersion;
+
+  return slots.length > 0 &&
+    refreshAt > now &&
+    rotation.generationVersion === expectedVersion;
+}
+
+// ---------------------------------------------------------------------------
+// ensureShopRotation
+// ---------------------------------------------------------------------------
+/**
+ * Ensures a player has a current generated shop rotation.
+ *
+ * Phase 2C scope:
+ * - Generates and persists full rotations only.
+ * - Preserves eligible frozen slots through generateShopRotation().
+ * - Resets rotation-scoped usage only when a new full rotation is written.
+ * - Does NOT update or derive rerollResetAt behavior.
+ *
+ * @param {string} username
+ * @param {Object} [options]
+ * @param {boolean} [options.force=false] Force generation even if current rotation is active.
+ * @param {Object} [options.config] Optional shop config override.
+ * @param {number} [options.now] Optional timestamp for deterministic generation.
+ * @param {Function} [options.rng] Optional RNG for deterministic selection.
+ * @returns {Object}
+ */
+export function ensureShopRotation(username, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) {
+    return { success: false, reason: 'player_not_found' };
+  }
+
+  const config = normalizeConfig(options.config);
+  const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+
+  if (!options.force && hasActiveRotation(player, config, now)) {
+    return {
+      success: true,
+      generated: false,
+      rotation: getCurrentRotation(player),
+    };
+  }
+
+  const rotation = generateShopRotation(player, config, {
+    now,
+    rng: options.rng,
+    currentRotation: getCurrentRotation(player),
+  });
+
+  db.set(`players/${username}/shop/currentRotation`, rotation);
+  db.set(`players/${username}/shopUsage`, { ...DEFAULT_SHOP_USAGE });
+
+  return {
+    success: true,
+    generated: true,
+    rotation,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// refreshShopRotation
+// ---------------------------------------------------------------------------
+/**
+ * Forces a full shop refresh using the same safe lifecycle as ensureShopRotation.
+ *
+ * @param {string} username
+ * @param {Object} [options]
+ * @returns {Object}
+ */
+export function refreshShopRotation(username, options = {}) {
+  return ensureShopRotation(username, {
+    ...options,
+    force: true,
+  });
+}
 
 // ---------------------------------------------------------------------------
 // purchaseShopItem
@@ -54,20 +200,144 @@ export function purchaseShopItem() {
 /**
  * Rerolls a single shop slot with a new random item.
  *
- * Future flow:
+ * Phase 3 flow:
  * 1. canRerollSlot() validation.
- * 2. Deduct reroll cost (RP or consumable).
+ * 2. Deduct configured RP reroll cost.
  * 3. Generate a replacement item (via shop-generation).
  * 4. Update slot in shop state.
  * 5. Persist to Firebase.
- * 6. Consume the consumable only after persistence succeeds.
- * 7. Trigger rerender.
+ * 6. Return mutation result for future UI rerender.
  *
- * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
+ * @returns {Object}
  */
-export function rerollShopSlot() {
-  // TODO: Phase 2+ — implement reroll mutation
-  return { success: false, reason: 'not_implemented' };
+export function rerollShopSlot(username, slotIndex, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const scope = options.scope || REROLL_SCOPES.ALL;
+  const config = normalizeConfig(options.config);
+  const validation = canRerollSlot(player, slotIndex, scope, config);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(player);
+  const slots = getShopRotationSlots(currentRotation);
+  const replacement = generateReplacementShopSlot(player, currentRotation, Number(slotIndex), scope, config, {
+    rng: options.rng,
+  });
+
+  if (!replacement) {
+    return { success: false, reason: 'no_eligible_replacement' };
+  }
+
+  const nextSlots = [...slots];
+  nextSlots[Number(slotIndex)] = replacement;
+  const currentRp = Number(player.currencies?.currentResearchPoints || 0);
+  const nextRp = currentRp - validation.cost;
+  const rerollsUsed = Number(player.shopUsage?.rerollsUsedThisRotation || 0) + 1;
+
+  db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
+  db.set(`players/${username}/currencies/currentResearchPoints`, nextRp);
+  db.set(`players/${username}/shopUsage/rerollsUsedThisRotation`, rerollsUsed);
+
+  return {
+    success: true,
+    scope,
+    cost: validation.cost,
+    slotIndex: Number(slotIndex),
+    slot: replacement,
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// rerollShopRotation
+// ---------------------------------------------------------------------------
+/**
+ * Rerolls every eligible non-purchased, non-frozen slot for a scope.
+ * Phase 3 deducts RP only; it does not consume reroll tokens.
+ *
+ * @param {string} username
+ * @param {Object} [options]
+ * @returns {Object}
+ */
+export function rerollShopRotation(username, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const scope = options.scope || REROLL_SCOPES.ALL;
+  const config = normalizeConfig(options.config);
+  const validation = canRerollRotation(player, scope, config);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(player);
+  const slots = getShopRotationSlots(currentRotation);
+  const nextSlots = [...slots];
+  let replacedCount = 0;
+
+  for (const index of validation.eligibleSlotIndexes) {
+    const currentSlot = nextSlots[index];
+    if (currentSlot?.purchased === true || currentSlot?.frozen === true) continue;
+
+    const replacement = generateReplacementShopSlot(
+      {
+        ...player,
+        shop: {
+          ...player.shop,
+          currentRotation: {
+            ...currentRotation,
+            slots: nextSlots,
+          },
+        },
+      },
+      { ...currentRotation, slots: nextSlots },
+      index,
+      scope,
+      config,
+      { rng: options.rng }
+    );
+
+    if (!replacement) continue;
+    nextSlots[index] = replacement;
+    replacedCount += 1;
+  }
+
+  if (replacedCount === 0) {
+    return { success: false, reason: 'no_eligible_replacement' };
+  }
+
+  const currentRp = Number(player.currencies?.currentResearchPoints || 0);
+  const nextRp = currentRp - validation.cost;
+  const rerollsUsed = Number(player.shopUsage?.rerollsUsedThisRotation || 0) + 1;
+
+  db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
+  db.set(`players/${username}/currencies/currentResearchPoints`, nextRp);
+  db.set(`players/${username}/shopUsage/rerollsUsedThisRotation`, rerollsUsed);
+
+  return {
+    success: true,
+    scope,
+    cost: validation.cost,
+    replacedCount,
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -76,18 +346,50 @@ export function rerollShopSlot() {
 /**
  * Freezes a shop slot so it persists across rotations.
  *
- * Future flow:
+ * Phase 3 flow:
  * 1. canFreezeSlot() validation (respects maxFrozenSlots from config).
- * 2. Toggle frozen flag on the slot.
+ * 2. Set frozen flag on the slot.
  * 3. Persist to Firebase.
- * 4. Consume the consumable only after persistence succeeds.
- * 5. Trigger rerender.
+ * 4. Return mutation result for future UI rerender.
  *
- * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
+ * @returns {Object}
  */
-export function freezeShopSlot() {
-  // TODO: Phase 2+ — implement freeze mutation
-  return { success: false, reason: 'not_implemented' };
+export function freezeShopSlot(username, slotIndex, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const config = normalizeConfig(options.config);
+  const validation = canFreezeSlot(player, slotIndex, config);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(player);
+  const slots = getShopRotationSlots(currentRotation);
+  const index = Number(slotIndex);
+  const nextSlots = [...slots];
+  nextSlots[index] = {
+    ...nextSlots[index],
+    frozen: true,
+  };
+  const frozenSlotsUsed = Number(player.shopUsage?.frozenSlotsUsedThisRotation || 0) + 1;
+
+  db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
+  db.set(`players/${username}/shopUsage/frozenSlotsUsedThisRotation`, frozenSlotsUsed);
+
+  return {
+    success: true,
+    slotIndex: index,
+    slot: nextSlots[index],
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
