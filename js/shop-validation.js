@@ -23,7 +23,8 @@
  *   - js/shop-config.js  (reroll costs, maxFrozenSlots)
  *   - js/shop-state.js   (shop state shape)
  *
- * NO validation logic, Firebase, rendering, or gameplay in this file.
+ * Phase 2B note: persistent slot flags may exist on player records, but this
+ * module still performs NO validation logic, Firebase, rendering, or gameplay.
  */
 
 // ---------------------------------------------------------------------------

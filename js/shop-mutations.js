@@ -23,7 +23,8 @@
  *   - js/shop-state.js       (state shape helpers)
  *   - js/shop-config.js      (reroll costs, frozen slot limits)
  *
- * NO mutation implementation, Firebase, gameplay, or rendering in this file.
+ * Phase 2B note: persistent shop state exists for future phases, but this
+ * module still performs NO mutation implementation, Firebase, gameplay, or rendering.
  */
 
 // ---------------------------------------------------------------------------

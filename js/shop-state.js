@@ -1,6 +1,6 @@
 /**
  * shop-state.js
- * Phase 1A — Pure shop state/schema helpers.
+ * Phase 1A / 2B — Pure shop state/schema helpers.
  * NO gameplay logic. NO Firebase. NO rendering. NO mutation logic.
  * Helper/schema layer only.
  */
@@ -8,23 +8,37 @@
 // ── Conceptual cap for purchase history entries ─────────────────────────────
 export const PURCHASE_HISTORY_MAX = 10;
 
+// ── Persistence metadata defaults ───────────────────────────────────────────
+export const SHOP_GENERATION_VERSION = 1;
+
 // ── Schema Helpers ──────────────────────────────────────────────────────────
 
 /**
- * Create an empty player shop state object.
- * Represents the per-player shop status for one rotation cycle.
+ * Create an empty persisted player shop state object.
+ * Phase 2B stores structure only; no refresh, reroll, or generation behavior.
  *
  * @returns {Object} Empty shop state with default field values.
  */
 export function createEmptyShopState() {
   return {
-    slots: [],                    // Array<ShopSlot> — populated by generation layer
-    rerollsUsedThisRotation: 0,   // Number of rerolls consumed this cycle
-    currentRotation: 0,           // Monotonically increasing rotation counter
-    refreshAt: null,              // ISO timestamp — when the next auto-refresh occurs
-    generatedAt: null,            // ISO timestamp — when this rotation was generated
-    generationVersion: null,      // Matches shop-config generationVersion at creation time
-    purchaseHistory: [],          // Array<PurchaseHistoryEntry> — capped at PURCHASE_HISTORY_MAX
+    currentRotation: createShopRotationState(),
+    rerollResetAt: 0,             // Timestamp metadata only; no reset execution in Phase 2B
+  };
+}
+
+/**
+ * Create an empty persisted shop rotation container.
+ *
+ * @param {Object} [overrides] — Optional field overrides.
+ * @returns {Object} Rotation state with schema-compliant defaults.
+ */
+export function createShopRotationState(overrides = {}) {
+  return {
+    slots: [],                    // Array<ShopSlot> — populated by future generation layer
+    generatedAt: 0,               // Timestamp metadata only
+    refreshAt: 0,                 // Timestamp metadata only
+    generationVersion: SHOP_GENERATION_VERSION,
+    ...overrides,
   };
 }
 
@@ -41,9 +55,10 @@ export function createShopSlot(overrides = {}) {
     itemId: null,                 // References an ITEM_DEFINITIONS key
     basePrice: 0,                 // Original price before discounts
     currentPrice: 0,              // Price after any discounts applied
-    frozen: false,                // Whether this slot persists through next rotation
-    purchased: false,             // Whether the player has bought this slot
-    discountApplied: null,        // null or DiscountApplied object (see below)
+    currency: 'rp',               // Stored currency identifier; no deduction logic here
+    frozen: false,                // Persisted state only; no freeze behavior here
+    purchased: false,             // Persisted state only; no purchase behavior here
+    discountApplied: null,        // null or DiscountApplied structure (see below)
     ...overrides,
   };
 }
@@ -59,7 +74,7 @@ export function createDiscountApplied(overrides = {}) {
     sourceItemId: null,           // The consumable item that caused this discount
     percent: 0,                   // Percentage discount (0–100)
     reductionAmount: 0,           // Flat currency reduction after percentage
-    appliedAt: null,              // ISO timestamp of when the discount was applied
+    appliedAt: 0,                 // Timestamp metadata only
     ...overrides,
   };
 }

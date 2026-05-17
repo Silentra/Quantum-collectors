@@ -29,12 +29,16 @@ js/
   quests.js          - Research Projects module entry: loads quest-config on init, re-exports power helper, placeholder lifecycle
   achievements.js    - PLACEHOLDER
   seasonal.js        - PLACEHOLDER
-  player-schema.js   - Phase 2A expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, purchaseHistory, profileCustomization, profileVisibility)
+  player-schema.js   - Phase 2A/2B expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profileVisibility)
+  shop-state.js      - Phase 2B pure shop persistence schema helpers: shop state, current rotation, slot, discount structures
+  shop-generation.js - Future weighted shop generation engine placeholder (no generation logic yet)
+  shop-validation.js - Future shop validation placeholder (no validation logic yet)
+  shop-mutations.js  - Future shop mutation placeholder (no gameplay/Firebase mutation logic yet)
 ```
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
 - `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**
-- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation}**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
+- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
 - `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?
 - `/cards/{cardId}` - id, name, rarity, type, field, effect, image, flavor, created, **imageUrl, keyFact, auraType, enabled**, conceptType (concept cards only)
@@ -291,17 +295,39 @@ js/
   - `cosmetics` — `{ owned: { profile_banner_default: true }, equipped: { aura: 'default_prismatic', border: null, title: null, profileBanner: 'profile_banner_default' } }`. `default_prismatic` is the **cosmetic** aura — completely separate from the gameplay aura multiplier system. No project/card systems modified.
   - `items` — consumable inventory: `{ reroll_token, cosmetic_reroll_token, aura_reroll_token, border_reroll_token, discount_chip, freeze_token, research_proposal }`. All default 0, stackable. No usage logic.
   - `shopUsage` — `{ rerollsUsedThisRotation: 0, frozenSlotsUsedThisRotation: 0 }`. Rotation-scoped tracking. No shop generation added.
+  - `shop` — Phase 2B persistent rotation storage. See Phase 2B section below. No runtime shop behavior added.
   - `purchaseHistory` — `[]` capped at 10 entries (rolling). Schema: `{ itemId, purchasedAt, pricePaid, currency, source }`. No analytics/admin UI.
   - `profileCustomization` — `{ featuredCards: [], featuredAchievements: [] }`.
   - `profileVisibility` — `{ isProfileHidden: false, isCollectionHidden: false }`.
-- **Frozen defaults**: `DEFAULT_CURRENCIES`, `DEFAULT_COSMETICS`, `DEFAULT_ITEMS`, `DEFAULT_SHOP_USAGE`, `DEFAULT_PROFILE_CUSTOMIZATION`, `DEFAULT_PROFILE_VISIBILITY`, `PURCHASE_HISTORY_MAX` — all exported, frozen.
-- **getPhase2ADefaults()**: returns a fresh copy of all defaults; used by `createPlayerRecord()` in auth.js for new accounts.
-- **normalizePlayerSchema(username)**: safe backfill for a single player — never overwrites existing valid data. Handles Firebase array→object conversion for `purchaseHistory`, `featuredCards`, `featuredAchievements`. Called on login, session restore, and bulk migration.
-- **migrateAllPlayersPhase2A()**: startup bulk migration called from main.js step 4f. Iterates all players, calls `normalizePlayerSchema()` for each. Idempotent.
+- **Frozen defaults**: `DEFAULT_CURRENCIES`, `DEFAULT_COSMETICS`, `DEFAULT_ITEMS`, `DEFAULT_SHOP_USAGE`, `DEFAULT_SHOP`, `DEFAULT_PROFILE_CUSTOMIZATION`, `DEFAULT_PROFILE_VISIBILITY`, `PURCHASE_HISTORY_MAX` — all exported, frozen.
+- **getPhase2ADefaults()**: returns a fresh copy of all Phase 2A/2B defaults; used by `createPlayerRecord()` in auth.js for new accounts. Name preserved for import stability.
+- **normalizePlayerSchema(username)**: safe backfill for a single player — never overwrites existing valid data. Handles Firebase array→object conversion for `shop.currentRotation.slots`, `purchaseHistory`, `featuredCards`, `featuredAchievements`. Called on login, session restore, and bulk migration.
+- **migrateAllPlayersPhase2A()**: startup bulk migration called from main.js step 4f. Iterates all players, calls `normalizePlayerSchema()` for each. Idempotent. Name preserved for startup/import stability while now covering Phase 2B shop persistence fields.
 - **normalizePurchaseHistory(raw)**: utility to normalize and cap a raw purchaseHistory value (array or Firebase object → capped array).
 - **Integration points**: `auth.js` imports `getPhase2ADefaults` (createPlayerRecord) + `normalizePlayerSchema` (login + initAuth). `main.js` imports `migrateAllPlayersPhase2A` (startup step 4f).
-- **No files modified**: ui.cleaned.js, profile-ui.js, shop-ui.js, project-*.js, quest-config.js, cards.js — none touched.
-- Last verified stable deployment, new commit to note success
+- **No Phase 2B files modified**: ui.js, index.html, style.css, profile-ui.js, shop-ui.js, project-*.js, quest-config.js, cards.js — none touched.
+
+### Phase 2B — Shop Rotation Persistence Schema
+- **Persistence-only phase** — no shop gameplay, no purchases, no rerolls, no consumable usage, no weighted generation, no rendering, no timers, no refresh execution, and no runtime shop Firebase mutation flows.
+- **Player DB structure**:
+  - `shop.currentRotation.slots` — array of persisted slot schema objects. Empty by default; future generation will populate it.
+  - `shop.currentRotation.generatedAt` — timestamp metadata only. Default `0`; no timer or refresh execution.
+  - `shop.currentRotation.refreshAt` — timestamp metadata only. Default `0`; no scheduling.
+  - `shop.currentRotation.generationVersion` — metadata for future regeneration safety. Default `1`; no regeneration behavior.
+  - `shop.rerollResetAt` — timestamp metadata only. Default `0`; no reroll reset execution.
+- **Slot schema** (`shop-state.js → createShopSlot()`): `{ id, itemId, basePrice, currentPrice, currency, frozen, purchased, discountApplied }`. `currency` defaults to `'rp'`; `frozen` and `purchased` are stored flags only.
+- **Discount schema** (`shop-state.js → createDiscountApplied()`): `{ sourceItemId, percent, reductionAmount, appliedAt }`. Structure only; no discount logic or stacking enforcement.
+- **Shop state helpers** (`shop-state.js`): `createEmptyShopState()`, `createShopRotationState()`, `createShopSlot()`, `createDiscountApplied()`, and `SHOP_GENERATION_VERSION`. This module remains pure: no DB reads/writes, no rendering, no generation, no mutations.
+- **Migration behavior** (`player-schema.js`): `normalizePlayerSchema(username)` initializes missing `shop` state and patches missing nested fields without overwriting valid existing values. Existing slot arrays are preserved with missing slot fields backfilled. Firebase array-like objects are normalized with `Object.values()`. Legacy top-level shop fields (`slots`, `generatedAt`, `refreshAt`, `generationVersion`) are used only to seed missing `shop.currentRotation`; they are not executed as behavior.
+- **Subsystem boundaries**:
+  - `shop-state.js` owns schema constructors only.
+  - `player-schema.js` owns new-player defaults and existing-player normalization only.
+  - `shop-generation.js` remains a placeholder for future weighted generation and does not populate slots.
+  - `shop-validation.js` remains a placeholder for future guards and does not enforce purchase/reroll/freeze behavior.
+  - `shop-mutations.js` remains a placeholder for future atomic shop actions and does not write runtime shop gameplay state.
+- **Implementation status**: persistent shop rotation structure and idempotent migration are in place. The live app still has no player-facing shop rendering, purchase flow, reroll flow, consumable routing, refresh timer, or weighted shop generation.
+
+Last verified stable deployment, new commit to note success
 ### Firebase Integration
 - Firebase SDK loaded via CDN (compat builds: App + Database only) in index.html `<head>`
 - firebase-config.js: edit the `firebaseConfig` object with your project credentials

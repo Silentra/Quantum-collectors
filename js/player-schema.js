@@ -1,5 +1,5 @@
 /**
- * Player Schema Expansion — Phase 2A
+ * Player Schema Expansion — Phase 2A + Phase 2B
  *
  * Persistence-only module. Defines default schema shapes for new player
  * subsystems and provides normalization helpers that safely backfill
@@ -12,12 +12,20 @@
  *   - cosmetics        (owned + equipped)
  *   - items            (consumable inventory)
  *   - shopUsage        (rotation-scoped tracking)
+ *   - shop             (persistent rotation storage)
  *   - purchaseHistory  (capped rolling log)
  *   - profileCustomization (featured cards/achievements)
  *   - profileVisibility    (hidden flags)
  */
 
 import * as db from './database.js';
+import {
+  SHOP_GENERATION_VERSION,
+  createEmptyShopState,
+  createShopRotationState,
+  createShopSlot,
+  createDiscountApplied,
+} from './shop-state.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default schema shapes (frozen — canonical source of truth)
@@ -56,6 +64,17 @@ export const DEFAULT_ITEMS = Object.freeze({
 export const DEFAULT_SHOP_USAGE = Object.freeze({
   rerollsUsedThisRotation: 0,
   frozenSlotsUsedThisRotation: 0,
+});
+
+/** Persistent shop rotation storage defaults (Phase 2B) */
+export const DEFAULT_SHOP = Object.freeze({
+  currentRotation: Object.freeze({
+    slots: Object.freeze([]),
+    generatedAt: 0,
+    refreshAt: 0,
+    generationVersion: SHOP_GENERATION_VERSION,
+  }),
+  rerollResetAt: 0,
 });
 
 /** Profile customization defaults */
@@ -99,12 +118,63 @@ function mergeDefaults(existing, defaults) {
   return result;
 }
 
+function isObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function valuesDiffer(a, b) {
+  return JSON.stringify(a) !== JSON.stringify(b);
+}
+
+function normalizeDiscountApplied(raw) {
+  if (raw === null || raw === undefined) return null;
+  if (!isObject(raw)) return createDiscountApplied();
+  return {
+    ...createDiscountApplied(),
+    ...raw,
+    sourceItemId: raw.sourceItemId ?? null,
+    percent: raw.percent ?? 0,
+    reductionAmount: raw.reductionAmount ?? 0,
+    appliedAt: raw.appliedAt ?? 0,
+  };
+}
+
+function normalizeShopSlot(raw) {
+  if (!isObject(raw)) return createShopSlot();
+  return {
+    ...createShopSlot(),
+    ...raw,
+    id: raw.id ?? null,
+    itemId: raw.itemId ?? null,
+    basePrice: raw.basePrice ?? 0,
+    currentPrice: raw.currentPrice ?? 0,
+    currency: raw.currency ?? 'rp',
+    frozen: raw.frozen ?? false,
+    purchased: raw.purchased ?? false,
+    discountApplied: normalizeDiscountApplied(raw.discountApplied),
+  };
+}
+
+function normalizeShopSlots(rawSlots) {
+  if (Array.isArray(rawSlots)) {
+    return rawSlots.map(normalizeShopSlot);
+  }
+  if (isObject(rawSlots)) {
+    return Object.values(rawSlots).map(normalizeShopSlot);
+  }
+  return [];
+}
+
+function createPlayerShopDefaults() {
+  return createEmptyShopState();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema builder — for new player records
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Return a fresh copy of all Phase 2A schema fields with their defaults.
+ * Return a fresh copy of all Phase 2A/2B schema fields with their defaults.
  * Used by createPlayerRecord() to embed in the initial write.
  * @returns {object}
  */
@@ -117,6 +187,7 @@ export function getPhase2ADefaults() {
     },
     items: { ...DEFAULT_ITEMS },
     shopUsage: { ...DEFAULT_SHOP_USAGE },
+    shop: createPlayerShopDefaults(),
     purchaseHistory: [],
     profileCustomization: {
       featuredCards: [],
@@ -131,7 +202,7 @@ export function getPhase2ADefaults() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Ensure a single player record has all Phase 2A schema fields.
+ * Ensure a single player record has all Phase 2A/2B schema fields.
  * Never overwrites existing valid data.
  * Safe to call multiple times (idempotent).
  *
@@ -220,6 +291,49 @@ export function normalizePlayerSchema(username) {
     }
   }
 
+  // ── shop (persistent rotation storage) ──────────────────────────────────
+  if (!player.shop || typeof player.shop !== 'object' || Array.isArray(player.shop)) {
+    db.set(`players/${username}/shop`, createPlayerShopDefaults());
+    patched = true;
+  } else {
+    const shop = player.shop;
+
+    if (!shop.currentRotation || typeof shop.currentRotation !== 'object' || Array.isArray(shop.currentRotation)) {
+      db.set(`players/${username}/shop/currentRotation`, createShopRotationState({
+        slots: normalizeShopSlots(shop.slots),
+        generatedAt: shop.generatedAt ?? 0,
+        refreshAt: shop.refreshAt ?? 0,
+        generationVersion: shop.generationVersion ?? SHOP_GENERATION_VERSION,
+      }));
+      patched = true;
+    } else {
+      const rotation = shop.currentRotation;
+
+      const normalizedSlots = normalizeShopSlots(rotation.slots);
+      if (!Array.isArray(rotation.slots) || valuesDiffer(rotation.slots, normalizedSlots)) {
+        db.set(`players/${username}/shop/currentRotation/slots`, normalizedSlots);
+        patched = true;
+      }
+      if (rotation.generatedAt === undefined || rotation.generatedAt === null) {
+        db.set(`players/${username}/shop/currentRotation/generatedAt`, 0);
+        patched = true;
+      }
+      if (rotation.refreshAt === undefined || rotation.refreshAt === null) {
+        db.set(`players/${username}/shop/currentRotation/refreshAt`, 0);
+        patched = true;
+      }
+      if (rotation.generationVersion === undefined || rotation.generationVersion === null) {
+        db.set(`players/${username}/shop/currentRotation/generationVersion`, SHOP_GENERATION_VERSION);
+        patched = true;
+      }
+    }
+
+    if (shop.rerollResetAt === undefined || shop.rerollResetAt === null) {
+      db.set(`players/${username}/shop/rerollResetAt`, 0);
+      patched = true;
+    }
+  }
+
   // ── purchaseHistory ─────────────────────────────────────────────────────
   if (!Array.isArray(player.purchaseHistory)) {
     // Firebase may store arrays as objects — normalize safely
@@ -275,7 +389,7 @@ export function normalizePlayerSchema(username) {
   }
 
   if (patched) {
-    console.log(`[PlayerSchema] Phase 2A fields initialized: ${username}`);
+    console.log(`[PlayerSchema] Phase 2A/2B fields initialized: ${username}`);
   }
   return patched;
 }
@@ -285,7 +399,7 @@ export function normalizePlayerSchema(username) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Migrate all existing players to include Phase 2A schema fields.
+ * Migrate all existing players to include Phase 2A/2B schema fields.
  * Safe to call multiple times — skips players already up to date.
  * Called once at startup from main.js.
  */
@@ -300,9 +414,9 @@ export function migrateAllPlayersPhase2A() {
   }
 
   if (count > 0) {
-    console.log(`[PlayerSchema] Phase 2A migration complete — ${count} player(s) updated`);
+    console.log(`[PlayerSchema] Phase 2A/2B migration complete — ${count} player(s) updated`);
   } else {
-    console.log('[PlayerSchema] Phase 2A migration complete — all players up to date');
+    console.log('[PlayerSchema] Phase 2A/2B migration complete — all players up to date');
   }
   return count;
 }

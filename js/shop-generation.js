@@ -16,7 +16,9 @@
  *   - js/shop-config.js       (DEFAULT_SHOP_CONFIG slot constraints)
  *   - js/shop-state.js        (createShopSlot)
  *
- * NO generation logic, randomness, Firebase, rendering, or mutation logic in this file.
+ * Phase 2B note: persistent rotation structure exists in shop-state/player-schema,
+ * but this module still performs NO generation logic, randomness, Firebase,
+ * rendering, or mutation logic.
  */
 
 // ---------------------------------------------------------------------------
