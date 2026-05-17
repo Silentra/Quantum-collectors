@@ -32,13 +32,14 @@ js/
   player-schema.js   - Phase 2A/2B expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profileVisibility)
   shop-state.js      - Phase 2B pure shop persistence schema helpers: shop state, current rotation, slot, discount structures
   shop-generation.js - Phase 3 pure weighted shop generation engine: ownership filtering, slot planning, scoped reroll helpers
-  shop-validation.js - Phase 3 pure shop validation guards for RP-only rerolls and state-only freezing
-  shop-mutations.js  - Phase 3 shop lifecycle mutations: refresh, RP-only rerolls, state-only freezing
+  shop-validation.js - Shop validation guards: rerolls, freezing, consumables, discounts, project proposal eligibility
+  shop-mutations.js  - Shop lifecycle mutations: refresh, rerolls, freezing, discounts, freeze allowance, project proposals
+  shop-consumables.js - BehaviorType-routed consumable execution layer; no item-specific gameplay logic
 ```
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
 - `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**
-- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
+- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
 - `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?
 - `/cards/{cardId}` - id, name, rarity, type, field, effect, image, flavor, created, **imageUrl, keyFact, auraType, enabled**, conceptType (concept cards only)
@@ -388,6 +389,33 @@ js/
   - Writes remain scoped to shop, usage, and RP paths; Phase 3 does not write whole player records.
   - Existing `database.js` still initializes and listens at the Firebase root (`ref('/')`), which is the primary bandwidth concern for future scalability. Phase 3 documents this but does not redesign the DB layer.
   - Cache-first, fire-and-forget writes can race across simultaneous sessions. Phase 3 preserves rollback-safe scoped writes and leaves transaction/server-authoritative behavior for a future scalability pass.
+
+### Shop Consumable Execution Layer
+- **Behavior-routed consumables** (`shop-consumables.js`):
+  - `useConsumable(username, consumableItemId, context, options)` looks up `ITEM_DEFINITIONS[consumableItemId]`, validates ownership/behavior through `canUseConsumable()`, routes by `behaviorType`, and decrements `players/{username}/items/{consumableItemId}` only after the routed mutation returns success.
+  - `executeBehavior()` routes actual definition behavior values: `reroll_shop`, `apply_discount`, `freeze_slot`, and `grant_research`. Consumables do not contain gameplay logic and do not branch on specific item IDs for behavior.
+  - Inventory quantities are preserved as stable item keys and set to `0` rather than removing schema-default item fields.
+- **Token rerolls**:
+  - Reroll Token, Cosmetic Reroll Token, Aura Reroll Token, and Border Reroll Token all route through `rerollShopSlotWithToken()` and reuse `generateReplacementShopSlot()`.
+  - Token rerolls are payment mode `token`: no `currencies.currentResearchPoints` deduction. They still reject purchased/frozen slots and fail without consuming the token if no scoped replacement exists.
+  - Cosmetic/aura/border token scopes force replacement category through shared reroll scopes; they do not require the current slot to already match that category.
+- **Discount Chip**:
+  - Routes through `applyDiscountToSlot()`.
+  - `canApplyDiscount()` rejects purchased slots, already-discounted slots, invalid discount percent, and invalid slot prices.
+  - Successful application persists `currentPrice` and `discountApplied{sourceItemId,percent,reductionAmount,appliedAt}` on the slot. Future purchase logic should trust persisted slot price/discount metadata rather than recalculating from live config.
+- **Freeze Token**:
+  - Routes through `grantFreezeAllowance()`.
+  - It grants one additional freeze allowance for the current rotation via `shopUsage.extraFreezeAllowanceThisRotation`.
+  - It does NOT directly freeze a slot. The actual slot freeze action remains `freezeShopSlot()`.
+  - Full shop refresh resets `extraFreezeAllowanceThisRotation` with the rest of `DEFAULT_SHOP_USAGE`.
+- **Research Proposal**:
+  - Existing `behaviorType: 'grant_research'` routes to `generateAdditionalProject()` without item-ID specific logic.
+  - The mutation reuses `project-pool.js → generateAvailableProjects({ totalRP, slots: 1, createdAt })` and respects the normal AVAILABLE + ACTIVE project cap.
+  - It appends one AVAILABLE project to `players/{username}/projects`, leaves `lastProjectRefreshAt` unchanged, and does not assign cards, evaluate outcomes, resolve projects, grant rewards, or mutate RP.
+- **Persistence boundaries**:
+  - Allowed writes: item quantity decrement, `shop/currentRotation/slots`, `shopUsage/extraFreezeAllowanceThisRotation`, and `projects` for Research Proposal.
+  - No full player rewrites, no new realtime listeners, no all-player scans, no `shop.rerollResetAt` writes, no purchase execution, no UI/admin rollout, and no premium currency behavior.
+  - Current `database.js` remains cache-first and Firebase writes remain fire-and-forget; remote acknowledgement is not added in this layer.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration

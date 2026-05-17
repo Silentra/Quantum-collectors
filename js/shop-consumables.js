@@ -1,7 +1,7 @@
 /**
  * shop-consumables.js
  * ====================
- * Future consumable behavior router.
+ * Consumable behavior router.
  *
  * IMPORTANT ARCHITECTURAL RULE:
  * Consumables NEVER contain core logic directly.
@@ -16,22 +16,46 @@
  * lives in their respective modules (shop-mutations, shop-generation, etc.).
  * This file only maps behaviorType → handler.
  *
- * Supported behavior routes (finalized):
- * - shop_reroll      → rerolls the entire shop rotation (all non-purchased, non-frozen slots)
- * - cosmetic_reroll   → rerolls a specific cosmetic slot with a new cosmetic
- * - aura_reroll       → rerolls a specific slot to produce an aura-type cosmetic
- * - border_reroll     → rerolls a specific slot to produce a border-type cosmetic
- * - freeze_slot       → freezes a slot so it persists across the next rotation refresh
- * - discount_slot     → applies a percentage discount to a specific slot's price
- * - generate_project  → generates an additional project for the player
+ * Supported behavior routes:
+ * - reroll_shop    → rerolls one slot using behaviorConfig.scope
+ * - apply_discount → applies a persistent discount to one slot
+ * - freeze_slot    → grants one extra freeze allowance for this rotation
+ * - grant_research → generates one cap-respecting AVAILABLE research project
  *
- * Dependencies (future):
+ * Dependencies:
  *   - js/shop-validation.js   (canUseConsumable)
- *   - js/shop-mutations.js    (rerollShopSlot, freezeShopSlot, applyDiscountToSlot, generateAdditionalProject)
+ *   - js/shop-mutations.js    (routed mutation pipelines)
  *   - js/shop-definitions.js  (ITEM_DEFINITIONS for behaviorType lookup)
  *
- * NO actual consumable execution, gameplay logic, Firebase, or rendering in this file.
+ * NO core gameplay logic, generation algorithms, Firebase listeners, or rendering in this file.
  */
+
+import * as db from './database.js';
+import { ITEM_DEFINITIONS } from './shop-definitions.js';
+import {
+  applyDiscountToSlot,
+  generateAdditionalProject,
+  grantFreezeAllowance,
+  rerollShopSlotWithToken,
+} from './shop-mutations.js';
+import { canUseConsumable } from './shop-validation.js';
+
+function getConsumablePlayerSnapshot(username) {
+  const items = db.get(`players/${username}/items`);
+  if (!items || typeof items !== 'object' || Array.isArray(items)) {
+    return { items: {} };
+  }
+  return { items };
+}
+
+function getConsumableQuantity(username, itemId) {
+  return Math.max(0, Math.floor(Number(db.get(`players/${username}/items/${itemId}`) || 0)));
+}
+
+function consumeOneConsumable(username, itemId) {
+  const currentQuantity = getConsumableQuantity(username, itemId);
+  db.set(`players/${username}/items/${itemId}`, Math.max(0, currentQuantity - 1));
+}
 
 // ---------------------------------------------------------------------------
 // useConsumable
@@ -39,20 +63,46 @@
 /**
  * Entry point for using a consumable item.
  *
- * Future behavior:
+ * Behavior:
  * 1. Look up the consumable's behaviorType from ITEM_DEFINITIONS.
  * 2. Call canUseConsumable() validation.
  * 3. Route to executeBehavior() with the resolved behavior type and context.
- * 4. Return the result (success/failure + details).
+ * 4. Consume exactly one item only after routed mutation success.
+ * 5. Return the result (success/failure + details).
  *
- * Consumable is only deducted from inventory if the routed mutation
- * succeeds and persists (handled by the mutation layer, not here).
+ * @param {string} username
+ * @param {string} consumableItemId
+ * @param {Object} [context]
+ * @param {Object} [options]
+ * @returns {Object}
  *
- * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
  */
-export function useConsumable() {
-  // TODO: Phase 2+ — implement consumable usage entry point
-  return { success: false, reason: 'not_implemented' };
+export function useConsumable(username, consumableItemId, context = {}, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const definition = ITEM_DEFINITIONS[consumableItemId];
+  const player = getConsumablePlayerSnapshot(username);
+  const validation = canUseConsumable(player, definition, context);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const mutationResult = executeBehavior(username, definition, context, options);
+  if (!mutationResult.success) {
+    return mutationResult;
+  }
+
+  consumeOneConsumable(username, definition.id);
+
+  return {
+    ...mutationResult,
+    consumableItemId: definition.id,
+    behaviorType: definition.behaviorType,
+    consumed: true,
+    remainingQuantity: getConsumableQuantity(username, definition.id),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -61,21 +111,51 @@ export function useConsumable() {
 /**
  * Routes a consumable's behaviorType to the correct mutation handler.
  *
- * Future routing map:
- *   'shop_reroll'      → shop-mutations.rerollShopSlot (all eligible slots)
- *   'cosmetic_reroll'  → shop-mutations.rerollShopSlot (single slot, cosmetic filter)
- *   'aura_reroll'      → shop-mutations.rerollShopSlot (single slot, aura-only filter)
- *   'border_reroll'    → shop-mutations.rerollShopSlot (single slot, border-only filter)
- *   'freeze_slot'      → shop-mutations.freezeShopSlot
- *   'discount_slot'    → shop-mutations.applyDiscountToSlot
- *   'generate_project' → shop-mutations.generateAdditionalProject
+ * Routing map:
+ *   'reroll_shop'    → shop-mutations.rerollShopSlotWithToken
+ *   'apply_discount' → shop-mutations.applyDiscountToSlot
+ *   'freeze_slot'    → shop-mutations.grantFreezeAllowance
+ *   'grant_research' → shop-mutations.generateAdditionalProject
  *
  * This function does NOT contain any core logic itself.
  * It is purely a dispatch/routing layer.
  *
- * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
+ * @param {string} username
+ * @param {Object} itemDefinition
+ * @param {Object} [context]
+ * @param {Object} [options]
+ * @returns {Object}
  */
-export function executeBehavior() {
-  // TODO: Phase 2+ — implement behavior routing dispatch
-  return { success: false, reason: 'not_implemented' };
+export function executeBehavior(username, itemDefinition, context = {}, options = {}) {
+  const behaviorConfig = itemDefinition?.behaviorConfig || {};
+
+  switch (itemDefinition?.behaviorType) {
+    case 'reroll_shop':
+      return rerollShopSlotWithToken(username, context.slotIndex, {
+        ...options,
+        scope: behaviorConfig.scope,
+      });
+
+    case 'apply_discount':
+      return applyDiscountToSlot(username, context.slotIndex, {
+        ...options,
+        ...behaviorConfig,
+        sourceItemId: itemDefinition.id,
+      });
+
+    case 'freeze_slot':
+      return grantFreezeAllowance(username, {
+        ...options,
+        ...behaviorConfig,
+      });
+
+    case 'grant_research':
+      return generateAdditionalProject(username, {
+        ...options,
+        ...behaviorConfig,
+      });
+
+    default:
+      return { success: false, reason: 'unsupported_behavior' };
+  }
 }

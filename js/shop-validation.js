@@ -28,12 +28,21 @@
  */
 
 import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
-import { ITEM_DEFINITIONS } from './shop-definitions.js';
+import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { PROJECT_STATES } from './project-state.js';
+import { getAvailableProjectSlots } from './project-refresh.js';
 import {
   REROLL_SCOPES,
   getShopRotationSlots,
   itemMatchesRerollScope,
 } from './shop-generation.js';
+
+const SUPPORTED_CONSUMABLE_BEHAVIORS = Object.freeze([
+  'reroll_shop',
+  'apply_discount',
+  'freeze_slot',
+  'grant_research',
+]);
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -75,6 +84,27 @@ function countFrozenSlots(slots) {
   return slots.filter(slot => slot?.frozen === true).length;
 }
 
+function getExtraFreezeAllowance(player) {
+  return Math.max(0, Math.floor(Number(player?.shopUsage?.extraFreezeAllowanceThisRotation || 0)));
+}
+
+function countCapProjects(projects = []) {
+  if (!Array.isArray(projects)) return 0;
+  return projects.filter(project =>
+    project?.state === PROJECT_STATES.AVAILABLE ||
+    project?.state === PROJECT_STATES.ACTIVE
+  ).length;
+}
+
+function getConsumableQuantity(player, itemId) {
+  return Math.max(0, Math.floor(Number(player?.items?.[itemId] || 0)));
+}
+
+function hasSlotIndex(context = {}) {
+  const index = Number(context.slotIndex);
+  return Number.isInteger(index) && index >= 0;
+}
+
 // ---------------------------------------------------------------------------
 // canPurchaseItem
 // ---------------------------------------------------------------------------
@@ -109,7 +139,7 @@ export function canPurchaseItem() {
  *
  * @returns {Object}
  */
-export function canRerollSlot(player, slotIndex, scope = REROLL_SCOPES.ALL, config = DEFAULT_SHOP_CONFIG) {
+export function canRerollSlot(player, slotIndex, scope = REROLL_SCOPES.ALL, config = DEFAULT_SHOP_CONFIG, options = {}) {
   const effectiveConfig = normalizeConfig(config);
   if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
   if (!isValidScope(scope, effectiveConfig)) return { allowed: false, reason: 'invalid_reroll_scope' };
@@ -126,16 +156,18 @@ export function canRerollSlot(player, slotIndex, scope = REROLL_SCOPES.ALL, conf
   if (slot?.frozen === true) return { allowed: false, reason: 'slot_frozen' };
 
   const item = getSlotItem(slot);
-  if (scope !== REROLL_SCOPES.ALL && !itemMatchesRerollScope(item, scope)) {
+  const requireCurrentSlotScope = options.requireCurrentSlotScope !== false;
+  if (requireCurrentSlotScope && scope !== REROLL_SCOPES.ALL && !itemMatchesRerollScope(item, scope)) {
     return { allowed: false, reason: 'slot_scope_mismatch' };
   }
 
   const cost = getRerollCost(scope, effectiveConfig);
-  if (getCurrentResearchPoints(player) < cost) {
+  const paymentMode = options.paymentMode || 'rp';
+  if (paymentMode !== 'token' && getCurrentResearchPoints(player) < cost) {
     return { allowed: false, reason: 'insufficient_rp', cost };
   }
 
-  return { allowed: true, reason: null, cost, scope };
+  return { allowed: true, reason: null, cost: paymentMode === 'token' ? 0 : cost, scope, paymentMode };
 }
 
 // ---------------------------------------------------------------------------
@@ -207,12 +239,47 @@ export function canFreezeSlot(player, slotIndex, config = DEFAULT_SHOP_CONFIG) {
   if (slot?.purchased === true) return { allowed: false, reason: 'slot_purchased' };
   if (slot?.frozen === true) return { allowed: false, reason: 'slot_already_frozen' };
 
-  const maxFrozenSlots = Math.max(0, Math.floor(Number(effectiveConfig.maxFrozenSlots || 0)));
+  const maxFrozenSlots = Math.max(0, Math.floor(Number(effectiveConfig.maxFrozenSlots || 0))) +
+    getExtraFreezeAllowance(player);
   if (countFrozenSlots(slots) >= maxFrozenSlots) {
     return { allowed: false, reason: 'max_frozen_slots_reached', maxFrozenSlots };
   }
 
   return { allowed: true, reason: null, maxFrozenSlots };
+}
+
+// ---------------------------------------------------------------------------
+// canGrantFreezeAllowance
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether a consumable can add one current-rotation freeze allowance.
+ *
+ * @param {Object} player
+ * @param {Object} config
+ * @returns {Object}
+ */
+export function canGrantFreezeAllowance(player, config = DEFAULT_SHOP_CONFIG) {
+  const effectiveConfig = normalizeConfig(config);
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+
+  const slots = getShopRotationSlots(getRotation(player));
+  if (slots.length === 0) return { allowed: false, reason: 'missing_shop_rotation' };
+
+  const baseMaxFrozenSlots = Math.max(0, Math.floor(Number(effectiveConfig.maxFrozenSlots || 0)));
+  const extraAllowance = getExtraFreezeAllowance(player);
+  const freezableSlots = slots.filter(slot => slot?.purchased !== true).length;
+
+  if (baseMaxFrozenSlots + extraAllowance >= freezableSlots) {
+    return { allowed: false, reason: 'no_freeze_capacity_available', maxFrozenSlots: baseMaxFrozenSlots + extraAllowance };
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    extraAllowance,
+    nextExtraAllowance: extraAllowance + 1,
+    maxFrozenSlots: baseMaxFrozenSlots + extraAllowance + 1,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -229,9 +296,64 @@ export function canFreezeSlot(player, slotIndex, config = DEFAULT_SHOP_CONFIG) {
  *
  * @returns {Object} Placeholder — returns { allowed: false, reason: 'not_implemented' }.
  */
-export function canApplyDiscount() {
-  // TODO: Phase 2+ — implement discount validation
-  return { allowed: false, reason: 'not_implemented' };
+export function canApplyDiscount(player, slotIndex, discountConfig = {}) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+
+  const slots = getShopRotationSlots(getRotation(player));
+  const index = Number(slotIndex);
+  if (!Number.isInteger(index) || index < 0 || index >= slots.length) {
+    return { allowed: false, reason: 'invalid_slot_index' };
+  }
+
+  const slot = slots[index];
+  if (slot?.purchased === true) return { allowed: false, reason: 'slot_purchased' };
+  if (slot?.discountApplied !== null && slot?.discountApplied !== undefined) {
+    return { allowed: false, reason: 'discount_already_applied' };
+  }
+
+  const percent = Number(discountConfig.percent);
+  if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+    return { allowed: false, reason: 'invalid_discount_percent' };
+  }
+
+  const currentPrice = Number(slot?.currentPrice ?? slot?.basePrice ?? 0);
+  if (!Number.isFinite(currentPrice) || currentPrice <= 0) {
+    return { allowed: false, reason: 'invalid_slot_price' };
+  }
+
+  const reductionAmount = Math.min(currentPrice, Math.ceil(currentPrice * (percent / 100)));
+  const nextPrice = Math.max(0, currentPrice - reductionAmount);
+
+  return {
+    allowed: true,
+    reason: null,
+    percent,
+    currentPrice,
+    reductionAmount,
+    nextPrice,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// canGenerateAdditionalProject
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether a research proposal can add one AVAILABLE project.
+ *
+ * @param {Object} player
+ * @returns {Object}
+ */
+export function canGenerateAdditionalProject(player) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!Array.isArray(player.projects)) return { allowed: false, reason: 'invalid_projects' };
+
+  const activeProjectCount = countCapProjects(player.projects);
+  const openSlots = getAvailableProjectSlots(activeProjectCount);
+  if (openSlots <= 0) {
+    return { allowed: false, reason: 'project_cap_full', activeProjectCount };
+  }
+
+  return { allowed: true, reason: null, activeProjectCount, openSlots };
 }
 
 // ---------------------------------------------------------------------------
@@ -248,7 +370,33 @@ export function canApplyDiscount() {
  *
  * @returns {Object} Placeholder — returns { allowed: false, reason: 'not_implemented' }.
  */
-export function canUseConsumable() {
-  // TODO: Phase 2+ — implement consumable usage validation
-  return { allowed: false, reason: 'not_implemented' };
+export function canUseConsumable(player, itemDefinition, context = {}) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!isObject(itemDefinition) || !itemDefinition.id) {
+    return { allowed: false, reason: 'invalid_consumable' };
+  }
+  if (itemDefinition.enabled === false) {
+    return { allowed: false, reason: 'consumable_disabled' };
+  }
+  if (itemDefinition.type !== ITEM_TYPES.CONSUMABLE) {
+    return { allowed: false, reason: 'item_not_consumable' };
+  }
+  if (!SUPPORTED_CONSUMABLE_BEHAVIORS.includes(itemDefinition.behaviorType)) {
+    return { allowed: false, reason: 'unsupported_behavior' };
+  }
+  if (getConsumableQuantity(player, itemDefinition.id) <= 0) {
+    return { allowed: false, reason: 'missing_consumable' };
+  }
+
+  if ((itemDefinition.behaviorType === 'reroll_shop' || itemDefinition.behaviorType === 'apply_discount') &&
+      !hasSlotIndex(context)) {
+    return { allowed: false, reason: 'missing_slot_index' };
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    behaviorType: itemDefinition.behaviorType,
+    behaviorConfig: itemDefinition.behaviorConfig || {},
+  };
 }

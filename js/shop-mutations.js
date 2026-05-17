@@ -38,9 +38,14 @@ import {
   generateShopRotation,
   getShopRotationSlots,
 } from './shop-generation.js';
+import { createDiscountApplied } from './shop-state.js';
 import { DEFAULT_SHOP_USAGE } from './player-schema.js';
+import { generateAvailableProjects } from './project-pool.js';
 import {
+  canApplyDiscount,
   canFreezeSlot,
+  canGenerateAdditionalProject,
+  canGrantFreezeAllowance,
   canRerollRotation,
   canRerollSlot,
 } from './shop-validation.js';
@@ -84,6 +89,18 @@ function getShopPlayerSnapshot(username) {
 
 function getCurrentRotation(player) {
   return isObject(player?.shop?.currentRotation) ? player.shop.currentRotation : null;
+}
+
+function getProjectPlayerSnapshot(username) {
+  const projects = db.get(`players/${username}/projects`);
+  const totalResearchPoints = db.get(`players/${username}/totalResearchPoints`);
+
+  if (!Array.isArray(projects) && totalResearchPoints === null) return null;
+
+  return {
+    projects: Array.isArray(projects) ? projects : [],
+    totalResearchPoints: Number(totalResearchPoints || 0),
+  };
 }
 
 function hasActiveRotation(player, config, now) {
@@ -259,6 +276,67 @@ export function rerollShopSlot(username, slotIndex, options = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// rerollShopSlotWithToken
+// ---------------------------------------------------------------------------
+/**
+ * Rerolls one slot using a consumable token payment mode.
+ * No RP is deducted; consumable inventory is handled by shop-consumables.js.
+ *
+ * @param {string} username
+ * @param {number} slotIndex
+ * @param {Object} [options]
+ * @returns {Object}
+ */
+export function rerollShopSlotWithToken(username, slotIndex, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const scope = options.scope || REROLL_SCOPES.ALL;
+  const config = normalizeConfig(options.config);
+  const validation = canRerollSlot(player, slotIndex, scope, config, {
+    paymentMode: 'token',
+    requireCurrentSlotScope: false,
+  });
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(player);
+  const slots = getShopRotationSlots(currentRotation);
+  const replacement = generateReplacementShopSlot(player, currentRotation, Number(slotIndex), scope, config, {
+    rng: options.rng,
+  });
+
+  if (!replacement) {
+    return { success: false, reason: 'no_eligible_replacement' };
+  }
+
+  const nextSlots = [...slots];
+  nextSlots[Number(slotIndex)] = replacement;
+  const rerollsUsed = Number(player.shopUsage?.rerollsUsedThisRotation || 0) + 1;
+
+  db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
+  db.set(`players/${username}/shopUsage/rerollsUsedThisRotation`, rerollsUsed);
+
+  return {
+    success: true,
+    scope,
+    paymentMode: 'token',
+    cost: 0,
+    slotIndex: Number(slotIndex),
+    slot: replacement,
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // rerollShopRotation
 // ---------------------------------------------------------------------------
 /**
@@ -408,9 +486,86 @@ export function freezeShopSlot(username, slotIndex, options = {}) {
  *
  * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
  */
-export function applyDiscountToSlot() {
-  // TODO: Phase 2+ — implement discount mutation
-  return { success: false, reason: 'not_implemented' };
+export function applyDiscountToSlot(username, slotIndex, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canApplyDiscount(player, slotIndex, options);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(player);
+  const slots = getShopRotationSlots(currentRotation);
+  const index = Number(slotIndex);
+  const nextSlots = [...slots];
+  const discountApplied = createDiscountApplied({
+    sourceItemId: options.sourceItemId || null,
+    percent: validation.percent,
+    reductionAmount: validation.reductionAmount,
+    appliedAt: Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now(),
+  });
+
+  nextSlots[index] = {
+    ...nextSlots[index],
+    currentPrice: validation.nextPrice,
+    discountApplied,
+  };
+
+  db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
+
+  return {
+    success: true,
+    slotIndex: index,
+    discountApplied,
+    reductionAmount: validation.reductionAmount,
+    currentPrice: validation.nextPrice,
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// grantFreezeAllowance
+// ---------------------------------------------------------------------------
+/**
+ * Grants one extra freeze allowance for the current rotation.
+ * This does NOT freeze a slot; freezeShopSlot() remains the slot mutation.
+ *
+ * @param {string} username
+ * @param {Object} [options]
+ * @returns {Object}
+ */
+export function grantFreezeAllowance(username, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const config = normalizeConfig(options.config);
+  const validation = canGrantFreezeAllowance(player, config);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  db.set(
+    `players/${username}/shopUsage/extraFreezeAllowanceThisRotation`,
+    validation.nextExtraAllowance
+  );
+
+  return {
+    success: true,
+    extraFreezeAllowanceThisRotation: validation.nextExtraAllowance,
+    maxFrozenSlots: validation.maxFrozenSlots,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -429,7 +584,36 @@ export function applyDiscountToSlot() {
  *
  * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
  */
-export function generateAdditionalProject() {
-  // TODO: Phase 2+ — implement additional project generation mutation
-  return { success: false, reason: 'not_implemented' };
+export function generateAdditionalProject(username, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProjectPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canGenerateAdditionalProject(player);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const createdAt = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+  const [project] = generateAvailableProjects({
+    totalRP: player.totalResearchPoints,
+    slots: 1,
+    createdAt,
+  });
+
+  if (!project) {
+    return { success: false, reason: 'project_generation_failed' };
+  }
+
+  const projects = [...player.projects, project];
+  db.set(`players/${username}/projects`, projects);
+
+  return {
+    success: true,
+    project,
+    projects,
+  };
 }

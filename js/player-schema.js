@@ -64,6 +64,7 @@ export const DEFAULT_ITEMS = Object.freeze({
 export const DEFAULT_SHOP_USAGE = Object.freeze({
   rerollsUsedThisRotation: 0,
   frozenSlotsUsedThisRotation: 0,
+  extraFreezeAllowanceThisRotation: 0,
 });
 
 /** Persistent shop rotation storage defaults (Phase 2B) */
