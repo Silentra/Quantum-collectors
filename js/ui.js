@@ -19,6 +19,13 @@ import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from '
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
 import { renderAdminSeasons } from './leaderboard-admin.js';
 import { renderTrading, cleanupTrading } from './trade-ui.js';
+import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { renderShopAdminPanel } from './shop-admin.js';
+import {
+  adminCompleteActiveProject,
+  adminGrantResearchPoints,
+  adminGrantShopItem,
+} from './admin-player-tools.js';
 
 // Project UI subsystem (extracted — Phase 1 refactor)
 import {
@@ -744,6 +751,7 @@ function renderAdminSubTab(tab) {
     case 'access': renderAdminAccess(); break;
     case 'config': renderAdminConfig(); break;
     case 'balance': renderAdminBalance(); break;
+    case 'shop-admin': renderShopAdminPanel(); break;
     case 'trading-controls': renderAdminTradingControls(); break;
     case 'seasons': renderAdminSeasons(); break;
   }
@@ -871,6 +879,85 @@ function renderAdminPlayers() {
   });
 }
 
+function _formatAdminLabel(value) {
+  if (!value || typeof value !== 'string') return 'Unknown';
+  return value.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
+
+function _renderShopItemOptions(type) {
+  return Object.values(ITEM_DEFINITIONS)
+    .filter(definition => definition.type === type)
+    .map(definition => {
+      const category = _formatAdminLabel(definition.category);
+      return `<option value="${definition.id}">${definition.name || definition.id} (${category})</option>`;
+    })
+    .join('');
+}
+
+function _renderAdminRuntimeSnapshot(p) {
+  const items = p.items || {};
+  const ownedCosmetics = p.cosmetics?.owned || {};
+  const profile = p.profile || {};
+  const slots = Array.isArray(p.shop?.currentRotation?.slots)
+    ? p.shop.currentRotation.slots
+    : [];
+  const consumables = Object.entries(items)
+    .filter(([, qty]) => Number(qty) > 0)
+    .map(([itemId, qty]) => {
+      const def = ITEM_DEFINITIONS[itemId];
+      return `<div class="flex justify-between"><span>${def?.name || itemId}</span><span>${qty}</span></div>`;
+    })
+    .join('');
+  const cosmeticsOwned = Object.entries(ownedCosmetics)
+    .filter(([, owned]) => owned === true)
+    .map(([itemId]) => {
+      const def = ITEM_DEFINITIONS[itemId];
+      return `<div>${def?.name || itemId} <span class="text-surface-500">(${_formatAdminLabel(def?.category)})</span></div>`;
+    })
+    .join('');
+  const shopSnapshot = slots.slice(0, 12).map((slot, index) => {
+    const def = ITEM_DEFINITIONS[slot?.itemId];
+    const flags = [
+      slot?.purchased ? 'purchased' : '',
+      slot?.frozen ? 'frozen' : '',
+      slot?.discountApplied ? 'discount' : '',
+    ].filter(Boolean).join(', ') || 'open';
+    return `<div class="flex justify-between gap-2"><span>#${index + 1} ${def?.name || slot?.itemId || 'Unknown'}</span><span class="text-surface-500">${flags}</span></div>`;
+  }).join('');
+
+  return `
+    <div class="bg-surface-800 rounded-lg p-4">
+      <h4 class="font-semibold text-sm mb-2">Shop / Economy Snapshot <span class="text-xs text-surface-500 font-normal">(read only)</span></h4>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div class="bg-surface-900 rounded p-3">
+          <div class="font-semibold mb-2 text-primary-400">RP Balances</div>
+          <div class="flex justify-between"><span>Lifetime RP</span><span>${typeof p.totalResearchPoints === 'number' ? p.totalResearchPoints : 0}</span></div>
+          <div class="flex justify-between"><span>Spendable RP</span><span>${typeof p.currencies?.currentResearchPoints === 'number' ? p.currencies.currentResearchPoints : 0}</span></div>
+        </div>
+        <div class="bg-surface-900 rounded p-3">
+          <div class="font-semibold mb-2 text-primary-400">Equipped Profile</div>
+          <div>Aura: ${profile.equippedAura || 'None'}</div>
+          <div>Border: ${profile.equippedBorder || 'None'}</div>
+          <div>Banner: ${profile.equippedBanner || 'None'}</div>
+          <div>Title: ${profile.equippedTitle || 'None'}</div>
+        </div>
+        <div class="bg-surface-900 rounded p-3">
+          <div class="font-semibold mb-2 text-primary-400">Consumables</div>
+          <div class="space-y-1">${consumables || '<div class="text-surface-500">None owned</div>'}</div>
+        </div>
+        <div class="bg-surface-900 rounded p-3">
+          <div class="font-semibold mb-2 text-primary-400">Owned Cosmetics</div>
+          <div class="space-y-1">${cosmeticsOwned || '<div class="text-surface-500">None owned</div>'}</div>
+        </div>
+        <div class="bg-surface-900 rounded p-3 sm:col-span-2">
+          <div class="font-semibold mb-2 text-primary-400">Current Shop Snapshot</div>
+          <div class="space-y-1">${shopSnapshot || '<div class="text-surface-500">No current rotation</div>'}</div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function showPlayerDetail(username) {
   const p = player.getPlayer(username);
   if (!p) return;
@@ -929,6 +1016,41 @@ function showPlayerDetail(username) {
         </div>
       </div>
 
+      <!-- Shop / Economy Admin Tools -->
+      <div class="bg-surface-800 rounded-lg p-4">
+        <h4 class="font-semibold text-sm mb-2">Shop / Economy Tools</h4>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Give Research Points</label>
+            <div class="flex gap-2">
+              <input id="pd-rp-amount" type="number" value="50" min="1" class="admin-input flex-1">
+              <button id="pd-give-rp" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm">Give RP</button>
+            </div>
+            <p class="text-xs text-surface-500 mt-1">Uses the research helper so lifetime and spendable RP stay aligned.</p>
+          </div>
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Give Consumable</label>
+            <div class="flex gap-2">
+              <select id="pd-consumable-select" class="admin-input flex-1">
+                ${_renderShopItemOptions(ITEM_TYPES.CONSUMABLE)}
+              </select>
+              <input id="pd-consumable-qty" type="number" value="1" min="1" class="admin-input w-16">
+              <button id="pd-give-consumable" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm">Give</button>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Give Cosmetic Ownership</label>
+            <div class="flex gap-2">
+              <select id="pd-cosmetic-select" class="admin-input flex-1">
+                ${_renderShopItemOptions(ITEM_TYPES.COSMETIC)}
+              </select>
+              <button id="pd-give-cosmetic" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm">Unlock</button>
+            </div>
+            <p class="text-xs text-surface-500 mt-1">Unlocks ownership only; equipped profile state is not changed.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Admin Status -->
       <div class="bg-surface-800 rounded-lg p-4">
         <h4 class="font-semibold text-sm mb-2">Admin Status</h4>
@@ -976,6 +1098,8 @@ function showPlayerDetail(username) {
           Delete Player
         </button>
       </div>
+
+      ${_renderAdminRuntimeSnapshot(p)}
 
       <!-- Inventory -->
       <div class="bg-surface-800 rounded-lg p-4">
@@ -1050,6 +1174,40 @@ function showPlayerDetail(username) {
     const qty = parseInt(content.querySelector('#pd-pack-qty').value) || 1;
     player.addPack(username, packId, qty);
     toast.success(`Gave ${qty} pack(s) to ${username}`);
+    showPlayerDetail(username);
+  });
+
+  content.querySelector('#pd-give-rp')?.addEventListener('click', () => {
+    const amount = parseInt(content.querySelector('#pd-rp-amount')?.value, 10) || 0;
+    const result = adminGrantResearchPoints(username, amount);
+    if (!result.success) {
+      toast.error('Could not grant RP');
+      return;
+    }
+    toast.success(`Gave ${result.amount} RP to ${username}`);
+    showPlayerDetail(username);
+  });
+
+  content.querySelector('#pd-give-consumable')?.addEventListener('click', () => {
+    const itemId = content.querySelector('#pd-consumable-select')?.value;
+    const qty = parseInt(content.querySelector('#pd-consumable-qty')?.value, 10) || 1;
+    const result = adminGrantShopItem(username, itemId, qty);
+    if (!result.success) {
+      toast.error('Could not grant consumable');
+      return;
+    }
+    toast.success(`Granted ${qty} item(s) to ${username}`);
+    showPlayerDetail(username);
+  });
+
+  content.querySelector('#pd-give-cosmetic')?.addEventListener('click', () => {
+    const itemId = content.querySelector('#pd-cosmetic-select')?.value;
+    const result = adminGrantShopItem(username, itemId, 1);
+    if (!result.success) {
+      toast.error('Could not unlock cosmetic');
+      return;
+    }
+    toast.success(`Cosmetic unlocked for ${username}`);
     showPlayerDetail(username);
   });
 

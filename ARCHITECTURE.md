@@ -36,11 +36,13 @@ js/
   shop-mutations.js  - Canonical shop economy mutation layer: purchases, RP, item stacks, cosmetics, history, refresh/rerolls/freezing, profile identity
   shop-consumables.js - BehaviorType-routed consumable execution layer; no item-specific gameplay logic
   shop-ui.js         - Thin player-facing shop tab renderer; delegates actions to canonical shop mutations
+  shop-admin.js      - Additive admin Shop tools: config and item override UI wrappers
+  admin-player-tools.js - Canonical admin wrappers for RP grants, shop item/cosmetic grants, and project completion shortcuts
   profile-ui.js      - Profile rendering plus lightweight profile identity runtime helpers
 ```
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
-- `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**
+- `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**, **shop{shopRefreshDays,shopSlotCount,rerollCosts,itemOverrides{...}}**
 - `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards[],featuredAchievements[]}**, **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
 - `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?
@@ -491,6 +493,23 @@ js/
 - **Rollback safety**:
   - Removing the Shop tab shell or no-oping `renderShop()` disables the player-facing UI while leaving backend shop, economy, consumable, and identity data untouched.
   - `style.css` additions are scoped to `.shop-*` classes and do not redesign global rendering architecture.
+
+### Admin Shop Tools
+- **Additive admin scope**: Adds a Shop section to the existing admin dashboard and small Manage Player extensions. It does not replace admin navigation, redesign shop economy, alter consumable routing, change profile runtime, add analytics/logging, or introduce new listeners.
+- **Canonical admin wrappers** (`admin-player-tools.js`):
+  - `adminGrantResearchPoints()` delegates to `addResearchPoints()` so lifetime RP and spendable `currencies.currentResearchPoints` increase by the same amount.
+  - `adminGrantShopItem()` routes consumables through `grantConsumable()` and cosmetics through `unlockCosmetic()`. Cosmetic grants only unlock ownership and do not mutate equipped profile state.
+  - `adminCompleteActiveProject()` is the admin-only testing shortcut for active projects. It re-reads fresh player state, forces the selected active project eligible for resolution, calls `resolveCompletedProject()`, calls `claimProjectRewards()`, grants RP through `addResearchPoints()`, preserves seasonal/weekly RP side effects, grants card rewards through existing inventory helpers, and stores the project as claimed to avoid double rewards.
+- **Shop admin section** (`shop-admin.js`):
+  - Renders shop economy controls for refresh cadence, slot counts, reroll costs, frozen slot limits, owned-cosmetic inclusion, and future `weeklyFreeRerolls` metadata.
+  - Renders consumable behaviorConfig override controls for Discount Chip, Freeze Token, and Research Proposal without changing consumable routing logic.
+  - Renders all shop items from item metadata (`type`, `category`, `rarity`) with enable, price, weight, and rarity override controls.
+- **Config paths** (`shop-config.js`):
+  - General shop overrides persist under `config/shop`.
+  - Per-item overrides persist under `config/shop/itemOverrides/{itemId}` and are merged over static `ITEM_DEFINITIONS` by helper functions. Static definitions are not mutated.
+- **Player management visibility**:
+  - The existing Manage Player modal now includes RP/item/cosmetic grant controls and a read-only economy/profile/shop snapshot for owned consumables, owned cosmetics, equipped profile state, RP balances, and current shop slot state.
+  - New controls call admin wrappers rather than writing player economy paths directly from UI.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration

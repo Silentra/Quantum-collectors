@@ -28,6 +28,168 @@
  * NO admin rendering, gameplay logic, Firebase mutations, or ui.cleaned.js refactors in this file.
  */
 
+import * as toast from './toast.js';
+import { ITEM_RARITIES } from './shop-definitions.js';
+import {
+  DEFAULT_SHOP_CONFIG,
+  getShopConfig,
+  getShopItemDefinitions,
+  resetShopConfigOverrides,
+  saveShopConfig,
+  saveShopItemOverride,
+} from './shop-config.js';
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function formatLabel(value) {
+  if (!value || typeof value !== 'string') return 'Unknown';
+  return value.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
+
+function numberValue(id, fallback = 0) {
+  const value = Number(document.getElementById(id)?.value);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function boolValue(id) {
+  return document.getElementById(id)?.value === 'true';
+}
+
+function renderNumberField(id, label, value, options = {}) {
+  return `
+    <label class="block">
+      <span class="text-xs text-surface-400 block mb-1">${escapeHtml(label)}</span>
+      <input id="${escapeHtml(id)}" type="number" step="${escapeHtml(options.step ?? '1')}" min="${escapeHtml(options.min ?? '0')}" value="${escapeHtml(value)}" class="admin-input w-full">
+    </label>
+  `;
+}
+
+function renderSelect(id, label, value, options) {
+  return `
+    <label class="block">
+      <span class="text-xs text-surface-400 block mb-1">${escapeHtml(label)}</span>
+      <select id="${escapeHtml(id)}" class="admin-input w-full">
+        ${options.map(option => `<option value="${escapeHtml(option.value)}" ${String(value) === String(option.value) ? 'selected' : ''}>${escapeHtml(option.label)}</option>`).join('')}
+      </select>
+    </label>
+  `;
+}
+
+function renderShopEconomyConfig(config) {
+  return `
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="font-semibold">Shop Economy Balance</h3>
+          <p class="text-xs text-surface-500 mt-1">Persists admin overrides under config/shop.</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="shop-admin-reset" class="bg-amber-700 hover:bg-amber-600 px-4 py-2 rounded-lg font-medium text-xs transition">Reset Overrides</button>
+          <button id="shop-admin-save-config" class="bg-primary-600 hover:bg-primary-500 px-5 py-2 rounded-lg font-medium text-sm transition">Save Shop Config</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        ${renderNumberField('shop-cfg-refresh-days', 'Shop Refresh Days', config.shopRefreshDays, { step: '0.25' })}
+        ${renderNumberField('shop-cfg-slot-count', 'Shop Slot Count', config.shopSlotCount, { min: '3' })}
+        ${renderNumberField('shop-cfg-min-cosmetics', 'Minimum Cosmetic Slots', config.minimumCosmeticSlots)}
+        ${renderNumberField('shop-cfg-min-utility', 'Minimum Utility Slots', config.minimumUtilitySlots)}
+        ${renderNumberField('shop-cfg-max-pack-card', 'Maximum Pack/Card Slots', config.maximumPackAndCardSlots)}
+        ${renderNumberField('shop-cfg-max-frozen', 'Max Frozen Slots', config.maxFrozenSlots)}
+        ${renderNumberField('shop-cfg-weekly-free-rerolls', 'Weekly Free Rerolls', config.weeklyFreeRerolls ?? 0)}
+        ${renderSelect('shop-cfg-owned-cosmetics', 'Owned Cosmetics Can Appear', config.allowOwnedCosmeticsInShop, [
+          { value: 'false', label: 'No' },
+          { value: 'true', label: 'Yes' },
+        ])}
+      </div>
+      <div class="mt-4">
+        <h4 class="font-semibold text-sm mb-2 text-primary-400">Reroll Costs</h4>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+          ${Object.keys(DEFAULT_SHOP_CONFIG.rerollCosts).map(scope =>
+            renderNumberField(`shop-cfg-reroll-${scope}`, formatLabel(scope), config.rerollCosts?.[scope] ?? 0)
+          ).join('')}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderItemEditor(definitions) {
+  const rows = Object.values(definitions).map(definition => `
+    <tr class="border-t border-surface-800" data-shop-item-id="${escapeHtml(definition.id)}">
+      <td class="py-2 pr-3">
+        <div class="font-medium text-sm">${escapeHtml(definition.name || definition.id)}</div>
+        <div class="text-xs text-surface-500">${escapeHtml(definition.type)} · ${escapeHtml(definition.category)}</div>
+      </td>
+      <td class="py-2 pr-3">
+        <select class="admin-input w-full shop-item-enabled">
+          <option value="true" ${definition.enabled !== false ? 'selected' : ''}>Enabled</option>
+          <option value="false" ${definition.enabled === false ? 'selected' : ''}>Disabled</option>
+        </select>
+      </td>
+      <td class="py-2 pr-3"><input type="number" min="0" class="admin-input w-24 shop-item-price" value="${escapeHtml(definition.price ?? 0)}"></td>
+      <td class="py-2 pr-3"><input type="number" min="0" step="any" class="admin-input w-24 shop-item-weight" value="${escapeHtml(definition.weight ?? 0)}"></td>
+      <td class="py-2 pr-3">
+        <select class="admin-input w-full shop-item-rarity">
+          ${Object.values(ITEM_RARITIES).map(rarity => `<option value="${escapeHtml(rarity)}" ${definition.rarity === rarity ? 'selected' : ''}>${escapeHtml(formatLabel(rarity))}</option>`).join('')}
+        </select>
+      </td>
+      <td class="py-2 text-right">
+        <button class="shop-admin-save-item bg-primary-600 hover:bg-primary-500 px-3 py-1.5 rounded text-xs font-medium">Save</button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+      <div class="mb-4">
+        <h3 class="font-semibold">Item Balance</h3>
+        <p class="text-xs text-surface-500 mt-1">Per-item overrides are stored separately from static item definitions.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs text-surface-500 uppercase">
+            <tr>
+              <th class="pb-2 pr-3">Item</th>
+              <th class="pb-2 pr-3">Enabled</th>
+              <th class="pb-2 pr-3">Price</th>
+              <th class="pb-2 pr-3">Weight</th>
+              <th class="pb-2 pr-3">Rarity</th>
+              <th class="pb-2 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
+function renderConsumableConfig(definitions) {
+  const discount = definitions.discount_chip || {};
+  const freeze = definitions.freeze_token || {};
+  const proposal = definitions.research_proposal || {};
+  return `
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+      <h3 class="font-semibold mb-4">Consumable Balance</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        ${renderNumberField('shop-cons-discount-percent', 'Discount Chip %', discount.behaviorConfig?.percent ?? 25)}
+        ${renderNumberField('shop-cons-discount-max', 'Discount Max Reduction', discount.behaviorConfig?.maxReductionAmount ?? 0)}
+        ${renderNumberField('shop-cons-freeze-allowance', 'Freeze Token Allowance Amount', freeze.behaviorConfig?.allowanceAmount ?? 1)}
+        ${renderNumberField('shop-cons-proposal-amount', 'Research Proposal Amount', proposal.behaviorConfig?.amount ?? 50)}
+      </div>
+      <p class="text-xs text-surface-500 mt-3">These controls persist behaviorConfig overrides only. Runtime behavior changes only where existing backend logic consumes the field.</p>
+      <button id="shop-admin-save-consumables" class="mt-4 bg-primary-600 hover:bg-primary-500 px-5 py-2 rounded-lg font-medium text-sm transition">Save Consumables</button>
+    </section>
+  `;
+}
+
 // ---------------------------------------------------------------------------
 // renderShopAdminPanel
 // ---------------------------------------------------------------------------
@@ -42,7 +204,81 @@
  * @returns {void} Placeholder — no-op.
  */
 export function renderShopAdminPanel() {
-  // TODO: Phase 3+ — implement admin panel rendering
+  const container = document.getElementById('shop-admin-panel');
+  if (!container) return;
+
+  const config = getShopConfig();
+  const definitions = getShopItemDefinitions();
+  container.innerHTML = `
+    ${renderShopEconomyConfig(config)}
+    ${renderConsumableConfig(definitions)}
+    ${renderItemEditor(definitions)}
+  `;
+
+  document.getElementById('shop-admin-save-config')?.addEventListener('click', () => {
+    const rerollCosts = {};
+    for (const scope of Object.keys(DEFAULT_SHOP_CONFIG.rerollCosts)) {
+      rerollCosts[scope] = numberValue(`shop-cfg-reroll-${scope}`, DEFAULT_SHOP_CONFIG.rerollCosts[scope]);
+    }
+    saveShopConfig({
+      shopRefreshDays: numberValue('shop-cfg-refresh-days', DEFAULT_SHOP_CONFIG.shopRefreshDays),
+      shopSlotCount: numberValue('shop-cfg-slot-count', DEFAULT_SHOP_CONFIG.shopSlotCount),
+      minimumCosmeticSlots: numberValue('shop-cfg-min-cosmetics', DEFAULT_SHOP_CONFIG.minimumCosmeticSlots),
+      minimumUtilitySlots: numberValue('shop-cfg-min-utility', DEFAULT_SHOP_CONFIG.minimumUtilitySlots),
+      maximumPackAndCardSlots: numberValue('shop-cfg-max-pack-card', DEFAULT_SHOP_CONFIG.maximumPackAndCardSlots),
+      maxFrozenSlots: numberValue('shop-cfg-max-frozen', DEFAULT_SHOP_CONFIG.maxFrozenSlots),
+      weeklyFreeRerolls: numberValue('shop-cfg-weekly-free-rerolls', 0),
+      allowOwnedCosmeticsInShop: boolValue('shop-cfg-owned-cosmetics'),
+      rerollCosts,
+    });
+    toast.success('Shop config saved');
+    renderShopAdminPanel();
+  });
+
+  document.getElementById('shop-admin-reset')?.addEventListener('click', () => {
+    resetShopConfigOverrides();
+    toast.info('Shop config overrides reset');
+    renderShopAdminPanel();
+  });
+
+  document.getElementById('shop-admin-save-consumables')?.addEventListener('click', () => {
+    saveShopItemOverride('discount_chip', {
+      behaviorConfig: {
+        percent: numberValue('shop-cons-discount-percent', 25),
+        maxReductionAmount: numberValue('shop-cons-discount-max', 0),
+      },
+    });
+    saveShopItemOverride('freeze_token', {
+      behaviorConfig: {
+        allowanceAmount: numberValue('shop-cons-freeze-allowance', 1),
+      },
+    });
+    saveShopItemOverride('research_proposal', {
+      behaviorConfig: {
+        amount: numberValue('shop-cons-proposal-amount', 50),
+      },
+    });
+    toast.success('Consumable overrides saved');
+    renderShopAdminPanel();
+  });
+
+  container.querySelectorAll('.shop-admin-save-item').forEach(button => {
+    button.addEventListener('click', () => {
+      const row = button.closest('[data-shop-item-id]');
+      const itemId = row?.dataset.shopItemId;
+      const result = saveShopItemOverride(itemId, {
+        enabled: row.querySelector('.shop-item-enabled')?.value === 'true',
+        price: Number(row.querySelector('.shop-item-price')?.value || 0),
+        weight: Number(row.querySelector('.shop-item-weight')?.value || 0),
+        rarity: row.querySelector('.shop-item-rarity')?.value,
+      });
+      if (!result.success) {
+        toast.error('Could not save item override');
+        return;
+      }
+      toast.success('Item override saved');
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------

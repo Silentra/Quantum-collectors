@@ -32,6 +32,7 @@ import {
 } from './weekly-research-pack.js';
 import { getProjectRefreshHours, getProjectRefreshIntervalMs, getMaxStoredProjects } from './project-refresh.js';
 import { syncProjects } from './project-sync.js';
+import { adminCompleteActiveProject } from './admin-player-tools.js';
 
 // These are imported from ui.js — kept there per extraction spec
 import { spawnRevealParticles, confirmAction } from './ui.js';
@@ -464,6 +465,23 @@ export function renderResearchProjects() {
     });
   });
 
+  list.querySelectorAll('.rp-btn-admin-complete').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const confirmed = await confirmAction(
+        'Complete this active project immediately and claim its packaged rewards through the normal reward path?',
+        'Complete active project?'
+      );
+      if (!confirmed) return;
+      const result = adminCompleteActiveProject(session.username, btn.dataset.projectId);
+      if (!result.success) {
+        toast.error(`Could not complete project: ${result.reason || 'unknown error'}`);
+        return;
+      }
+      toast.success(`Project completed. ${result.rpEarned || 0} RP granted.`);
+      renderResearchProjects();
+    });
+  });
+
   // Render right-side Available Cards panel
   _renderCardsAvailabilityPanel(projects, session.username);
 }
@@ -644,6 +662,10 @@ function renderProjectCard(project) {
     ? `<button class="rp-btn-report" data-project-id="${id}">📋 View Report</button>`
     : '';
 
+  const adminCompleteBtn = state === PROJECT_STATES.ACTIVE && _isPersistentAdmin()
+    ? `<button class="rp-btn-admin-complete" data-project-id="${id}">Complete Now (Admin)</button>`
+    : '';
+
   return `
     <div class="rp-card" style="border-left-color: ${accentColor}">
       <div class="rp-card-header">
@@ -658,6 +680,7 @@ function renderProjectCard(project) {
       ${statusLine}
       ${startBtn}
       ${reportBtn}
+      ${adminCompleteBtn}
     </div>
   `;
 }
