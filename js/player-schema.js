@@ -87,7 +87,7 @@ export const DEFAULT_PROFILE_CUSTOMIZATION = Object.freeze({
 });
 
 /** Canonical profile identity runtime defaults */
-export const MAX_FEATURED_CARDS = 5;
+export const MAX_FEATURED_CARDS = 3;
 export const MAX_FEATURED_ACHIEVEMENTS = 5;
 
 export const DEFAULT_PROFILE = Object.freeze({

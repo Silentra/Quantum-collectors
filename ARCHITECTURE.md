@@ -494,6 +494,22 @@ js/
   - Removing the Shop tab shell or no-oping `renderShop()` disables the player-facing UI while leaving backend shop, economy, consumable, and identity data untouched.
   - `style.css` additions are scoped to `.shop-*` classes and do not redesign global rendering architecture.
 
+### Profile Inventory + Cosmetic Runtime UI
+- **Player-facing profile scope**: The Profile tab now surfaces existing runtime state for identity, consumables, cosmetics, featured cards, RP balances, and collection progress. It does not add admin tools, public/social profiles, achievement systems, consumable use, monetization, preview animations, new listeners, polling, or backend redesigns.
+- **Rendering ownership** (`profile-ui.js`):
+  - Preserves the existing username/group, stats, and collection-progress behavior while adding dedicated sections for currently equipped identity, read-only consumables, owned cosmetics, featured cards, and an inert achievements placeholder.
+  - Equipped identity renders strictly from `players/{username}/profile/*` via the canonical profile runtime helpers, not from legacy `cosmetics.equipped`.
+  - Consumables render only owned quantities from `players/{username}/items` where quantity is greater than zero. They are read-only in Profile.
+  - Cosmetics render only owned `ITEM_TYPES.COSMETIC` entries from `cosmetics.owned`, grouped dynamically by metadata category. Unknown/future categories are shown under “Other Cosmetics.”
+- **Mutation boundaries**:
+  - Equip/unequip actions call `equipCosmetic()` and `unequipCosmetic()` from `shop-mutations.js`.
+  - Featured-card actions call `featureCard()` and `unfeatureCard()` from `shop-mutations.js`.
+  - Profile UI does not write Firebase paths directly, does not mutate ownership/inventory, and does not duplicate backend validation.
+  - Featured cards are capped at `MAX_FEATURED_CARDS = 3` in `player-schema.js`, so the backend runtime enforces the same cap the UI displays.
+- **State synchronization**:
+  - Profile uses pull-after-mutation rendering: read current player snapshot, call a canonical mutation for user actions, then rerender from persisted runtime state.
+  - No new realtime listeners, all-player scans, root reads, polling loops, or broad synchronization systems are introduced.
+
 ### Admin Shop Tools
 - **Additive admin scope**: Adds a Shop section to the existing admin dashboard and small Manage Player extensions. It does not replace admin navigation, redesign shop economy, alter consumable routing, change profile runtime, add analytics/logging, or introduce new listeners.
 - **Canonical admin wrappers** (`admin-player-tools.js`):

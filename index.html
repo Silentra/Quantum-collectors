@@ -358,9 +358,9 @@
 
         <!-- Profile Tab -->
         <div id="tab-profile" class="tab-content p-4">
-          <div class="max-w-2xl mx-auto">
+          <div class="max-w-6xl mx-auto">
             <h2 class="text-xl font-bold mb-4">My Profile</h2>
-            <div class="bg-surface-900 rounded-xl p-6 border border-surface-700 mb-4">
+            <div class="bg-surface-900 rounded-xl p-6 border border-surface-700 mb-4" id="profile-summary-card">
               <div class="flex items-center gap-4 mb-4">
                 <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center text-2xl">👤</div>
                 <div>
@@ -370,10 +370,15 @@
               </div>
               <div id="profile-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
             </div>
+            <div id="profile-identity" class="mb-4"></div>
+            <div id="profile-inventory" class="mb-4"></div>
+            <div id="profile-cosmetics" class="mb-4"></div>
+            <div id="profile-featured-cards" class="mb-4"></div>
             <div class="bg-surface-900 rounded-xl p-6 border border-surface-700">
               <h3 class="font-semibold mb-3">Collection Progress</h3>
               <div id="profile-progress" class="space-y-3"></div>
             </div>
+            <div id="profile-achievements-placeholder" class="mt-4"></div>
           </div>
         </div>
 
