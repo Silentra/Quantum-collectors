@@ -35,6 +35,7 @@ js/
   shop-validation.js - Shop validation guards: purchases, rerolls, freezing, consumables, discounts, project proposal eligibility, profile identity
   shop-mutations.js  - Canonical shop economy mutation layer: purchases, RP, item stacks, cosmetics, history, refresh/rerolls/freezing, profile identity
   shop-consumables.js - BehaviorType-routed consumable execution layer; no item-specific gameplay logic
+  shop-ui.js         - Thin player-facing shop tab renderer; delegates actions to canonical shop mutations
   profile-ui.js      - Profile rendering plus lightweight profile identity runtime helpers
 ```
 
@@ -467,6 +468,29 @@ js/
 - **Rollback and scalability**:
   - The `profile` object is additive and isolated. Removing Layer 3 callers leaves ownership, economy, inventory, and legacy profile data intact.
   - No new realtime listeners, all-player scans, root reads, derived fanout paths, or broad Firebase rewrites are introduced.
+
+### Layer 4 — Shop UI Layer
+- **Player-facing tab only**: the Shop is a main game tab alongside Collection, Packs, Research Projects, Trading, Profile, and Leaderboard. This layer does not add admin tooling, cosmetic management UI, profile inventory UI, equip UI, monetization, seasonal/event UI, backend rewrites, or Firebase architecture changes.
+- **Tab shell** (`index.html`, `ui.js`):
+  - `index.html` owns the static Shop nav button and `tab-shop` container.
+  - `ui.js` already delegates tab activation to `renderShop()` and `cleanupShop()` and does not own shop gameplay behavior.
+- **Thin rendering layer** (`shop-ui.js`):
+  - `renderShop()` calls `ensureShopRotation(username)` on entry, reads current-player scoped cache paths, and renders the persisted rotation.
+  - Slot cards render defensively from `ITEM_DEFINITIONS` plus persisted slot state. Missing item metadata falls back to safe labels/descriptions and never crashes rendering.
+  - Visual state comes from persisted backend fields: `purchased`, `frozen`, `discountApplied`, `basePrice`, and `currentPrice`.
+  - Purchased slots are grayed out, disabled, and labeled `PURCHASED`; frozen and discounted slots have persistent badges/visuals.
+  - The refresh countdown is UI-only and updates only the countdown text. It does not rerender the shop or execute background refreshes every second.
+- **Mutation boundaries**:
+  - UI actions call canonical runtime APIs only: `purchaseShopItem()`, `rerollShopSlot()`, `rerollShopRotation()`, `freezeShopSlot()`, `refreshShopRotation()`, and `shop-consumables.js → useConsumable()`.
+  - Consumable targeting for reroll/discount items is local transient UI state only and is cleared on cleanup or successful action.
+  - The UI does not call generation helpers, validation helpers, low-level economy helpers, `consumeItem()`, `unlockCosmetic()`, or direct Firebase writes.
+- **State synchronization**:
+  - Shop state uses a pull-after-mutation model: render on tab entry, rerender after mutations/actions, and clean up intervals/target state when leaving the tab.
+  - No new realtime listeners, root scans, all-player scans, derived fanout paths, or heavy polling are introduced.
+  - Reads are current-player scoped cache reads for `shop`, `currencies`, `items`, `cosmetics`, and `shopUsage`.
+- **Rollback safety**:
+  - Removing the Shop tab shell or no-oping `renderShop()` disables the player-facing UI while leaving backend shop, economy, consumable, and identity data untouched.
+  - `style.css` additions are scoped to `.shop-*` classes and do not redesign global rendering architecture.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration
