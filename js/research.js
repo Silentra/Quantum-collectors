@@ -116,8 +116,8 @@ export function getResearchPoints(username) {
 }
 
 /**
- * Add research points to a player's lifetime total.
- * Writes to canonical totalResearchPoints field.
+ * Add research points to a player's lifetime total and spendable shop balance.
+ * Writes to canonical totalResearchPoints and currencies.currentResearchPoints.
  * @param {string} username
  * @param {number} amount - Must be a positive number
  * @returns {number} new total
@@ -126,7 +126,10 @@ export function addResearchPoints(username, amount) {
   if (!username || typeof amount !== 'number' || amount <= 0) return getResearchPoints(username);
   const current = getResearchPoints(username);
   const newTotal = current + amount;
+  const currentSpendable = db.get(`players/${username}/currencies/currentResearchPoints`);
+  const spendableSafe = typeof currentSpendable === 'number' ? currentSpendable : 0;
   db.set(`players/${username}/totalResearchPoints`, newTotal);
+  db.set(`players/${username}/currencies/currentResearchPoints`, spendableSafe + amount);
   return newTotal;
 }
 

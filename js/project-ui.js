@@ -18,7 +18,7 @@ import { getLockedCardIds, PROJECT_STATES } from './project-state.js';
 import { activateProject } from './project-assignment.js';
 import { evaluateProject } from './project-engine.js';
 import { claimProjectRewards } from './project-claiming.js';
-import { addSeasonalResearchPoints, refreshUniqueCardsOwned } from './research.js';
+import { addResearchPoints, addSeasonalResearchPoints, refreshUniqueCardsOwned } from './research.js';
 import { getProjectConfig } from './project-config.js';
 import {
   addWeeklyPackRP,
@@ -819,8 +819,7 @@ function renderProjectReportPanel(container, project, username) {
         const rpEarned = result.rewards.rpEarned ?? 0;
         console.log('[DEBUG CLAIM] rpEarned =', rpEarned);
         if (rpEarned > 0) {
-          const currentRP = typeof freshPlayer.totalResearchPoints === 'number' ? freshPlayer.totalResearchPoints : 0;
-          playerUpdates.totalResearchPoints = currentRP + rpEarned;
+          addResearchPoints(username, rpEarned);
           // LB-1: also write to seasonalResearchPoints (additive, separate from lifetime)
           addSeasonalResearchPoints(username, rpEarned);
           // Weekly pack tracking — additive only, never touches lifetime/seasonal RP
