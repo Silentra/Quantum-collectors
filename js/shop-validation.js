@@ -28,9 +28,10 @@
  */
 
 import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { PROJECT_STATES } from './project-state.js';
 import { getAvailableProjectSlots } from './project-refresh.js';
+import { MAX_FEATURED_ACHIEVEMENTS, MAX_FEATURED_CARDS } from './player-schema.js';
 import {
   REROLL_SCOPES,
   getShopRotationSlots,
@@ -43,6 +44,15 @@ const SUPPORTED_CONSUMABLE_BEHAVIORS = Object.freeze([
   'freeze_slot',
   'grant_research',
 ]);
+
+const COSMETIC_CATEGORY_FIELDS = Object.freeze({
+  [ITEM_CATEGORIES.AURA]: 'equippedAura',
+  [ITEM_CATEGORIES.BORDER]: 'equippedBorder',
+  [ITEM_CATEGORIES.PROFILE_BANNER]: 'equippedBanner',
+  banner: 'equippedBanner',
+  profileBanner: 'equippedBanner',
+  [ITEM_CATEGORIES.TITLE]: 'equippedTitle',
+});
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -105,6 +115,38 @@ function hasSlotIndex(context = {}) {
   return Number.isInteger(index) && index >= 0;
 }
 
+function getOwnedCosmetics(player) {
+  return isObject(player?.cosmetics?.owned) ? player.cosmetics.owned : {};
+}
+
+function getPurchasePrice(slot) {
+  const price = Number(slot?.currentPrice ?? slot?.basePrice);
+  return Number.isFinite(price) && price >= 0 ? price : null;
+}
+
+function getProfile(player) {
+  return isObject(player?.profile) ? player.profile : {};
+}
+
+function normalizeIdArray(raw) {
+  return Array.isArray(raw)
+    ? raw.filter(value => typeof value === 'string' && value.trim())
+    : [];
+}
+
+function getCosmeticProfileField(category) {
+  return COSMETIC_CATEGORY_FIELDS[category] || null;
+}
+
+function isAchievementUnlocked(container, achievementId) {
+  const value = container?.[achievementId];
+  if (value === true) return true;
+  if (isObject(value)) {
+    return value.unlocked === true || value.completed === true || value.earned === true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // canPurchaseItem
 // ---------------------------------------------------------------------------
@@ -119,9 +161,60 @@ function hasSlotIndex(context = {}) {
  *
  * @returns {Object} Placeholder — returns { allowed: false, reason: 'not_implemented' }.
  */
-export function canPurchaseItem() {
-  // TODO: Phase 2+ — implement purchase validation
-  return { allowed: false, reason: 'not_implemented' };
+export function canPurchaseItem(player, slotIndex) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+
+  const slots = getShopRotationSlots(getRotation(player));
+  const index = Number(slotIndex);
+  if (!Number.isInteger(index) || index < 0 || index >= slots.length) {
+    return { allowed: false, reason: 'invalid_slot_index' };
+  }
+
+  const slot = slots[index];
+  if (slot?.purchased === true) return { allowed: false, reason: 'slot_purchased' };
+  if (!slot?.itemId) return { allowed: false, reason: 'missing_item_id' };
+
+  const itemDefinition = ITEM_DEFINITIONS[slot.itemId];
+  if (!itemDefinition || itemDefinition.enabled === false) {
+    return { allowed: false, reason: 'invalid_item_definition' };
+  }
+
+  const currency = slot.currency || 'rp';
+  if (currency !== 'rp') {
+    return { allowed: false, reason: 'unsupported_currency', currency };
+  }
+
+  const price = getPurchasePrice(slot);
+  if (price === null) {
+    return { allowed: false, reason: 'invalid_slot_price' };
+  }
+
+  if (itemDefinition.type === ITEM_TYPES.COSMETIC && getOwnedCosmetics(player)[itemDefinition.id]) {
+    return { allowed: false, reason: 'cosmetic_already_owned' };
+  }
+
+  const supportedTypes = new Set([ITEM_TYPES.COSMETIC, ITEM_TYPES.CONSUMABLE]);
+  if (!supportedTypes.has(itemDefinition.type)) {
+    return { allowed: false, reason: 'unsupported_item_type', itemType: itemDefinition.type };
+  }
+
+  if (itemDefinition.type === ITEM_TYPES.CONSUMABLE && !ITEM_DEFINITIONS[itemDefinition.id]) {
+    return { allowed: false, reason: 'invalid_consumable_grant' };
+  }
+
+  if (getCurrentResearchPoints(player) < price) {
+    return { allowed: false, reason: 'insufficient_rp', price, currency };
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    itemDefinition,
+    price,
+    currency,
+    slot,
+    slotIndex: index,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +447,158 @@ export function canGenerateAdditionalProject(player) {
   }
 
   return { allowed: true, reason: null, activeProjectCount, openSlots };
+}
+
+// ---------------------------------------------------------------------------
+// canEquipCosmetic
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether an owned cosmetic can be equipped into its category slot.
+ *
+ * @param {Object} player
+ * @param {string} cosmeticId
+ * @param {string|null} expectedCategory
+ * @returns {Object}
+ */
+export function canEquipCosmetic(player, cosmeticId, expectedCategory = null) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!cosmeticId || typeof cosmeticId !== 'string') {
+    return { allowed: false, reason: 'invalid_cosmetic_id' };
+  }
+
+  const definition = ITEM_DEFINITIONS[cosmeticId];
+  if (!definition || definition.enabled === false) {
+    return { allowed: false, reason: 'invalid_cosmetic_definition' };
+  }
+  if (definition.type !== ITEM_TYPES.COSMETIC) {
+    return { allowed: false, reason: 'item_not_cosmetic' };
+  }
+
+  const profileField = getCosmeticProfileField(definition.category);
+  if (!profileField) {
+    return { allowed: false, reason: 'unsupported_cosmetic_category', category: definition.category };
+  }
+
+  if (expectedCategory && getCosmeticProfileField(expectedCategory) !== profileField) {
+    return { allowed: false, reason: 'cosmetic_category_mismatch', category: definition.category };
+  }
+
+  if (!getOwnedCosmetics(player)[cosmeticId]) {
+    return { allowed: false, reason: 'cosmetic_not_owned' };
+  }
+
+  return {
+    allowed: true,
+    reason: null,
+    cosmeticId,
+    category: definition.category,
+    profileField,
+    definition,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// canUnequipCosmetic
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether a cosmetic category can be unequipped.
+ *
+ * @param {Object} player
+ * @param {string} category
+ * @returns {Object}
+ */
+export function canUnequipCosmetic(player, category) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  const profileField = getCosmeticProfileField(category);
+  if (!profileField) {
+    return { allowed: false, reason: 'unsupported_cosmetic_category', category };
+  }
+  return { allowed: true, reason: null, category, profileField };
+}
+
+// ---------------------------------------------------------------------------
+// canFeatureCard
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether an owned card can be added to featured profile cards.
+ *
+ * @param {Object} player
+ * @param {string} cardId
+ * @returns {Object}
+ */
+export function canFeatureCard(player, cardId) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!cardId || typeof cardId !== 'string') return { allowed: false, reason: 'invalid_card_id' };
+
+  const quantity = Number(player?.inventory?.[cardId] || 0);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return { allowed: false, reason: 'card_not_owned' };
+  }
+
+  const featuredCards = normalizeIdArray(getProfile(player).featuredCards);
+  if (featuredCards.includes(cardId)) return { allowed: false, reason: 'card_already_featured' };
+  if (featuredCards.length >= MAX_FEATURED_CARDS) {
+    return { allowed: false, reason: 'featured_cards_full', maxFeaturedCards: MAX_FEATURED_CARDS };
+  }
+
+  return { allowed: true, reason: null, cardId, featuredCards };
+}
+
+export function canUnfeatureCard(player, cardId) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!cardId || typeof cardId !== 'string') return { allowed: false, reason: 'invalid_card_id' };
+
+  const featuredCards = normalizeIdArray(getProfile(player).featuredCards);
+  if (!featuredCards.includes(cardId)) return { allowed: false, reason: 'card_not_featured' };
+  return { allowed: true, reason: null, cardId, featuredCards };
+}
+
+// ---------------------------------------------------------------------------
+// canFeatureAchievement
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether an unlocked achievement can be featured.
+ *
+ * @param {Object} player
+ * @param {string} achievementId
+ * @returns {Object}
+ */
+export function canFeatureAchievement(player, achievementId) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!achievementId || typeof achievementId !== 'string') {
+    return { allowed: false, reason: 'invalid_achievement_id' };
+  }
+
+  const unlocked = isAchievementUnlocked(player.achievements, achievementId) ||
+    isAchievementUnlocked(player.badges, achievementId);
+  if (!unlocked) return { allowed: false, reason: 'achievement_not_unlocked' };
+
+  const featuredAchievements = normalizeIdArray(getProfile(player).featuredAchievements);
+  if (featuredAchievements.includes(achievementId)) {
+    return { allowed: false, reason: 'achievement_already_featured' };
+  }
+  if (featuredAchievements.length >= MAX_FEATURED_ACHIEVEMENTS) {
+    return {
+      allowed: false,
+      reason: 'featured_achievements_full',
+      maxFeaturedAchievements: MAX_FEATURED_ACHIEVEMENTS,
+    };
+  }
+
+  return { allowed: true, reason: null, achievementId, featuredAchievements };
+}
+
+export function canUnfeatureAchievement(player, achievementId) {
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+  if (!achievementId || typeof achievementId !== 'string') {
+    return { allowed: false, reason: 'invalid_achievement_id' };
+  }
+
+  const featuredAchievements = normalizeIdArray(getProfile(player).featuredAchievements);
+  if (!featuredAchievements.includes(achievementId)) {
+    return { allowed: false, reason: 'achievement_not_featured' };
+  }
+  return { allowed: true, reason: null, achievementId, featuredAchievements };
 }
 
 // ---------------------------------------------------------------------------

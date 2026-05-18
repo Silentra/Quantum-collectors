@@ -15,6 +15,7 @@
  *   - shop             (persistent rotation storage)
  *   - purchaseHistory  (capped rolling log)
  *   - profileCustomization (featured cards/achievements)
+ *   - profile          (canonical equipped identity + featured selections)
  *   - profileVisibility    (hidden flags)
  */
 
@@ -26,6 +27,7 @@ import {
   createShopSlot,
   createDiscountApplied,
 } from './shop-state.js';
+import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default schema shapes (frozen — canonical source of truth)
@@ -82,6 +84,19 @@ export const DEFAULT_SHOP = Object.freeze({
 export const DEFAULT_PROFILE_CUSTOMIZATION = Object.freeze({
   featuredCards: [],
   featuredAchievements: [],
+});
+
+/** Canonical profile identity runtime defaults */
+export const MAX_FEATURED_CARDS = 5;
+export const MAX_FEATURED_ACHIEVEMENTS = 5;
+
+export const DEFAULT_PROFILE = Object.freeze({
+  equippedAura: null,
+  equippedBorder: null,
+  equippedBanner: null,
+  equippedTitle: null,
+  featuredCards: Object.freeze([]),
+  featuredAchievements: Object.freeze([]),
 });
 
 /** Profile visibility defaults */
@@ -170,6 +185,50 @@ function createPlayerShopDefaults() {
   return createEmptyShopState();
 }
 
+function normalizeIdArray(raw, maxEntries) {
+  const arr = Array.isArray(raw)
+    ? raw
+    : (isObject(raw) ? Object.values(raw) : []);
+  const seen = new Set();
+  const normalized = [];
+  for (const value of arr) {
+    if (typeof value !== 'string' || !value.trim() || seen.has(value)) continue;
+    seen.add(value);
+    normalized.push(value);
+    if (normalized.length >= maxEntries) break;
+  }
+  return normalized;
+}
+
+function isOwnedValidCosmetic(itemId, owned, category) {
+  const definition = ITEM_DEFINITIONS[itemId];
+  return Boolean(
+    itemId &&
+    owned?.[itemId] &&
+    definition &&
+    definition.enabled !== false &&
+    definition.type === ITEM_TYPES.COSMETIC &&
+    definition.category === category
+  );
+}
+
+function createProfileDefaultsFromLegacy(player = {}) {
+  const owned = isObject(player.cosmetics?.owned) ? player.cosmetics.owned : {};
+  const equipped = isObject(player.cosmetics?.equipped) ? player.cosmetics.equipped : {};
+  const customization = isObject(player.profileCustomization) ? player.profileCustomization : {};
+
+  return {
+    equippedAura: isOwnedValidCosmetic(equipped.aura, owned, ITEM_CATEGORIES.AURA) ? equipped.aura : null,
+    equippedBorder: isOwnedValidCosmetic(equipped.border, owned, ITEM_CATEGORIES.BORDER) ? equipped.border : null,
+    equippedBanner: isOwnedValidCosmetic(equipped.profileBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER)
+      ? equipped.profileBanner
+      : null,
+    equippedTitle: isOwnedValidCosmetic(equipped.title, owned, ITEM_CATEGORIES.TITLE) ? equipped.title : null,
+    featuredCards: normalizeIdArray(customization.featuredCards, MAX_FEATURED_CARDS),
+    featuredAchievements: normalizeIdArray(customization.featuredAchievements, MAX_FEATURED_ACHIEVEMENTS),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Schema builder — for new player records
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,6 +250,14 @@ export function getPhase2ADefaults() {
     shop: createPlayerShopDefaults(),
     purchaseHistory: [],
     profileCustomization: {
+      featuredCards: [],
+      featuredAchievements: [],
+    },
+    profile: {
+      equippedAura: null,
+      equippedBorder: null,
+      equippedBanner: null,
+      equippedTitle: null,
       featuredCards: [],
       featuredAchievements: [],
     },
@@ -372,6 +439,55 @@ export function normalizePlayerSchema(username) {
       const raw = player.profileCustomization.featuredAchievements;
       const arr = (raw && typeof raw === 'object') ? Object.values(raw) : [];
       db.set(`players/${username}/profileCustomization/featuredAchievements`, arr);
+      patched = true;
+    }
+  }
+
+  // ── profile (canonical identity runtime) ────────────────────────────────
+  const profileDefaults = createProfileDefaultsFromLegacy(player);
+  if (!player.profile || typeof player.profile !== 'object' || Array.isArray(player.profile)) {
+    db.set(`players/${username}/profile`, profileDefaults);
+    patched = true;
+  } else {
+    const owned = isObject(player.cosmetics?.owned) ? player.cosmetics.owned : {};
+    const equippedFields = {
+      equippedAura: ITEM_CATEGORIES.AURA,
+      equippedBorder: ITEM_CATEGORIES.BORDER,
+      equippedBanner: ITEM_CATEGORIES.PROFILE_BANNER,
+      equippedTitle: ITEM_CATEGORIES.TITLE,
+    };
+
+    for (const [key, category] of Object.entries(equippedFields)) {
+      const value = player.profile[key];
+      if (value === undefined) {
+        db.set(`players/${username}/profile/${key}`, profileDefaults[key] ?? null);
+        patched = true;
+      } else if (value !== null && !isOwnedValidCosmetic(value, owned, category)) {
+        db.set(`players/${username}/profile/${key}`, null);
+        patched = true;
+      }
+    }
+
+    const featuredCards = normalizeIdArray(
+      player.profile.featuredCards === undefined
+        ? profileDefaults.featuredCards
+        : player.profile.featuredCards,
+      MAX_FEATURED_CARDS
+    );
+    if (!Array.isArray(player.profile.featuredCards) || valuesDiffer(player.profile.featuredCards, featuredCards)) {
+      db.set(`players/${username}/profile/featuredCards`, featuredCards);
+      patched = true;
+    }
+
+    const featuredAchievements = normalizeIdArray(
+      player.profile.featuredAchievements === undefined
+        ? profileDefaults.featuredAchievements
+        : player.profile.featuredAchievements,
+      MAX_FEATURED_ACHIEVEMENTS
+    );
+    if (!Array.isArray(player.profile.featuredAchievements) ||
+        valuesDiffer(player.profile.featuredAchievements, featuredAchievements)) {
+      db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
       patched = true;
     }
   }

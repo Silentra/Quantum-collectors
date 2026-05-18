@@ -32,22 +32,34 @@
 
 import * as db from './database.js';
 import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
+import { ITEM_TYPES } from './shop-definitions.js';
 import {
   REROLL_SCOPES,
   generateReplacementShopSlot,
   generateShopRotation,
   getShopRotationSlots,
 } from './shop-generation.js';
-import { createDiscountApplied } from './shop-state.js';
-import { DEFAULT_SHOP_USAGE } from './player-schema.js';
+import { createDiscountApplied, createPurchaseHistoryEntry } from './shop-state.js';
+import {
+  DEFAULT_SHOP_USAGE,
+  PURCHASE_HISTORY_MAX,
+  normalizePurchaseHistory,
+} from './player-schema.js';
 import { generateAvailableProjects } from './project-pool.js';
 import {
   canApplyDiscount,
   canFreezeSlot,
   canGenerateAdditionalProject,
   canGrantFreezeAllowance,
+  canEquipCosmetic,
+  canFeatureAchievement,
+  canFeatureCard,
+  canPurchaseItem,
   canRerollRotation,
   canRerollSlot,
+  canUnequipCosmetic,
+  canUnfeatureAchievement,
+  canUnfeatureCard,
 } from './shop-validation.js';
 
 function isObject(value) {
@@ -91,6 +103,133 @@ function getCurrentRotation(player) {
   return isObject(player?.shop?.currentRotation) ? player.shop.currentRotation : null;
 }
 
+function getEconomySnapshot(username) {
+  const shop = db.get(`players/${username}/shop`);
+  const currentRotation = db.get(`players/${username}/shop/currentRotation`);
+  const currencies = db.get(`players/${username}/currencies`);
+  const cosmetics = db.get(`players/${username}/cosmetics`);
+  const items = db.get(`players/${username}/items`);
+  const purchaseHistory = db.get(`players/${username}/purchaseHistory`);
+
+  if (!shop && !currentRotation && !currencies && !cosmetics && !items && purchaseHistory === null) {
+    return null;
+  }
+
+  return {
+    shop: {
+      ...(isObject(shop) ? shop : {}),
+      ...(isObject(currentRotation) ? { currentRotation } : {}),
+    },
+    currencies: isObject(currencies) ? currencies : {},
+    cosmetics: isObject(cosmetics) ? cosmetics : {},
+    items: isObject(items) ? items : {},
+    purchaseHistory: normalizePurchaseHistory(purchaseHistory),
+  };
+}
+
+function getCurrentItemQuantity(username, itemId) {
+  return Math.max(0, Math.floor(Number(db.get(`players/${username}/items/${itemId}`) || 0)));
+}
+
+function getGrantQuantity(itemDefinition, options = {}) {
+  const configuredQuantity = Number(options.quantity ?? itemDefinition?.grantQuantity ?? itemDefinition?.behaviorConfig?.quantity ?? 1);
+  if (!Number.isFinite(configuredQuantity) || configuredQuantity <= 0) return 1;
+  return Math.floor(configuredQuantity);
+}
+
+function appendPurchaseHistoryEntry(rawHistory, entry) {
+  const history = normalizePurchaseHistory(rawHistory);
+  return [...history, entry].slice(-PURCHASE_HISTORY_MAX);
+}
+
+function persistPurchasePlan(username, writePlan) {
+  for (const [path, value] of writePlan) {
+    db.set(`players/${username}/${path}`, value);
+  }
+}
+
+function buildPurchaseHistoryEntry({ itemDefinition, price, currency, slot, rotation, now }) {
+  return createPurchaseHistoryEntry({
+    itemId: itemDefinition.id,
+    pricePaid: price,
+    currency,
+    purchasedAt: new Date(now).toISOString(),
+    source: 'shop',
+    slotId: slot?.id ?? null,
+    rotationGeneratedAt: rotation?.generatedAt ?? 0,
+  });
+}
+
+function buildGrantWrite(snapshot, itemDefinition, options = {}) {
+  if (itemDefinition.type === ITEM_TYPES.COSMETIC) {
+    return {
+      path: `cosmetics/owned/${itemDefinition.id}`,
+      value: true,
+      quantity: 1,
+    };
+  }
+
+  if (itemDefinition.type === ITEM_TYPES.CONSUMABLE) {
+    const quantity = getGrantQuantity(itemDefinition, options);
+    const currentQuantity = Math.max(0, Math.floor(Number(snapshot.items?.[itemDefinition.id] || 0)));
+    return {
+      path: `items/${itemDefinition.id}`,
+      value: currentQuantity + quantity,
+      quantity,
+    };
+  }
+
+  return null;
+}
+
+export function grantConsumable(username, itemId, quantity = 1) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  if (!itemId || typeof itemId !== 'string') {
+    return { success: false, reason: 'invalid_item_id' };
+  }
+
+  const safeQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+  const currentQuantity = getCurrentItemQuantity(username, itemId);
+  const nextQuantity = currentQuantity + safeQuantity;
+  db.set(`players/${username}/items/${itemId}`, nextQuantity);
+
+  return { success: true, itemId, quantity: safeQuantity, nextQuantity };
+}
+
+export function consumeItem(username, itemId, quantity = 1) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  if (!itemId || typeof itemId !== 'string') {
+    return { success: false, reason: 'invalid_item_id' };
+  }
+
+  const safeQuantity = Math.max(1, Math.floor(Number(quantity) || 1));
+  const currentQuantity = getCurrentItemQuantity(username, itemId);
+  if (currentQuantity < safeQuantity) {
+    return { success: false, reason: 'insufficient_item_quantity', currentQuantity, quantity: safeQuantity };
+  }
+
+  const nextQuantity = currentQuantity - safeQuantity;
+  db.set(`players/${username}/items/${itemId}`, nextQuantity);
+
+  return { success: true, itemId, quantity: safeQuantity, nextQuantity };
+}
+
+export function unlockCosmetic(username, itemId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  if (!itemId || typeof itemId !== 'string') {
+    return { success: false, reason: 'invalid_item_id' };
+  }
+
+  db.set(`players/${username}/cosmetics/owned/${itemId}`, true);
+  return { success: true, itemId };
+}
+
 function getProjectPlayerSnapshot(username) {
   const projects = db.get(`players/${username}/projects`);
   const totalResearchPoints = db.get(`players/${username}/totalResearchPoints`);
@@ -100,6 +239,32 @@ function getProjectPlayerSnapshot(username) {
   return {
     projects: Array.isArray(projects) ? projects : [],
     totalResearchPoints: Number(totalResearchPoints || 0),
+  };
+}
+
+function getProfilePlayerSnapshot(username) {
+  const profile = db.get(`players/${username}/profile`);
+  const cosmetics = db.get(`players/${username}/cosmetics`);
+  const achievements = db.get(`players/${username}/achievements`);
+  const badges = db.get(`players/${username}/badges`);
+
+  if (!profile && !cosmetics && !achievements && !badges) return null;
+
+  return {
+    profile: isObject(profile) ? profile : {},
+    cosmetics: isObject(cosmetics) ? cosmetics : {},
+    achievements: isObject(achievements) ? achievements : {},
+    badges: isObject(badges) ? badges : {},
+  };
+}
+
+function getProfileCardSnapshot(username, cardId) {
+  const snapshot = getProfilePlayerSnapshot(username);
+  if (!snapshot) return null;
+  const quantity = db.get(`players/${username}/inventory/${cardId}`) || 0;
+  return {
+    ...snapshot,
+    inventory: { [cardId]: quantity },
   };
 }
 
@@ -196,19 +361,89 @@ export function refreshShopRotation(username, options = {}) {
 /**
  * Purchases an item from a specific shop slot.
  *
- * Future flow:
+ * Layer 2 flow:
  * 1. canPurchaseItem() validation.
  * 2. Deduct RP from player balance.
  * 3. Add item to player inventory/cosmetics.
  * 4. Mark slot as purchased (locked for rotation).
- * 5. Persist to Firebase.
- * 6. Trigger rerender.
+ * 5. Append capped purchase history.
+ * 6. Persist scoped economy paths.
  *
- * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
+ * @param {string} username
+ * @param {number} slotIndex
+ * @param {Object} [options]
+ * @returns {Object}
  */
-export function purchaseShopItem() {
-  // TODO: Phase 2+ — implement purchase mutation
-  return { success: false, reason: 'not_implemented' };
+export function purchaseShopItem(username, slotIndex, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const snapshot = getEconomySnapshot(username);
+  if (!snapshot) {
+    return { success: false, reason: 'player_not_found' };
+  }
+
+  const validation = canPurchaseItem(snapshot, slotIndex);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(snapshot);
+  const slots = getShopRotationSlots(currentRotation);
+  const nextSlots = [...slots];
+  const purchasedSlot = {
+    ...nextSlots[validation.slotIndex],
+    purchased: true,
+  };
+  nextSlots[validation.slotIndex] = purchasedSlot;
+
+  const grantWrite = buildGrantWrite(snapshot, validation.itemDefinition, options);
+  if (!grantWrite) {
+    return {
+      success: false,
+      reason: 'unsupported_item_type',
+      itemType: validation.itemDefinition.type,
+    };
+  }
+
+  const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+  const nextRp = Number(snapshot.currencies?.currentResearchPoints || 0) - validation.price;
+  const historyEntry = buildPurchaseHistoryEntry({
+    itemDefinition: validation.itemDefinition,
+    price: validation.price,
+    currency: validation.currency,
+    slot: purchasedSlot,
+    rotation: currentRotation,
+    now,
+  });
+  const purchaseHistory = appendPurchaseHistoryEntry(snapshot.purchaseHistory, historyEntry);
+
+  const writePlan = [
+    ['currencies/currentResearchPoints', nextRp],
+    [grantWrite.path, grantWrite.value],
+    ['shop/currentRotation/slots', nextSlots],
+    ['purchaseHistory', purchaseHistory],
+  ];
+
+  persistPurchasePlan(username, writePlan);
+
+  return {
+    success: true,
+    itemId: validation.itemDefinition.id,
+    itemType: validation.itemDefinition.type,
+    pricePaid: validation.price,
+    currency: validation.currency,
+    grantQuantity: grantWrite.quantity,
+    slotIndex: validation.slotIndex,
+    slot: purchasedSlot,
+    purchaseHistory,
+    currentResearchPoints: nextRp,
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -616,4 +851,191 @@ export function generateAdditionalProject(username, options = {}) {
     project,
     projects,
   };
+}
+
+// ---------------------------------------------------------------------------
+// equipCosmetic
+// ---------------------------------------------------------------------------
+/**
+ * Equips an owned cosmetic into its category-specific profile slot.
+ *
+ * @param {string} username
+ * @param {string} cosmeticId
+ * @param {Object} [options]
+ * @returns {Object}
+ */
+export function equipCosmetic(username, cosmeticId, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canEquipCosmetic(player, cosmeticId, options.category || null);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  db.set(`players/${username}/profile/${validation.profileField}`, cosmeticId);
+
+  return {
+    success: true,
+    cosmeticId,
+    category: validation.category,
+    profileField: validation.profileField,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// unequipCosmetic
+// ---------------------------------------------------------------------------
+/**
+ * Clears the equipped cosmetic for a supported profile category.
+ *
+ * @param {string} username
+ * @param {string} category
+ * @returns {Object}
+ */
+export function unequipCosmetic(username, category) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProfilePlayerSnapshot(username) || { profile: {}, cosmetics: {} };
+  const validation = canUnequipCosmetic(player, category);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  db.set(`players/${username}/profile/${validation.profileField}`, null);
+
+  return {
+    success: true,
+    category,
+    profileField: validation.profileField,
+    cosmeticId: null,
+  };
+}
+
+export function featureCard(username, cardId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProfileCardSnapshot(username, cardId);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canFeatureCard(player, cardId);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const featuredCards = [...validation.featuredCards, cardId];
+  db.set(`players/${username}/profile/featuredCards`, featuredCards);
+
+  return { success: true, cardId, featuredCards };
+}
+
+export function unfeatureCard(username, cardId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canUnfeatureCard(player, cardId);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const featuredCards = validation.featuredCards.filter(id => id !== cardId);
+  db.set(`players/${username}/profile/featuredCards`, featuredCards);
+
+  return { success: true, cardId, featuredCards };
+}
+
+export function setFeaturedCards(username, cardIds = []) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  if (!Array.isArray(cardIds)) return { success: false, reason: 'invalid_featured_cards' };
+
+  let featuredCards = [];
+  for (const cardId of cardIds) {
+    const player = {
+      ...(getProfileCardSnapshot(username, cardId) || {}),
+      profile: { featuredCards },
+    };
+    const validation = canFeatureCard(player, cardId);
+    if (!validation.allowed) return { success: false, reason: validation.reason, validation };
+    featuredCards = [...featuredCards, cardId];
+  }
+
+  db.set(`players/${username}/profile/featuredCards`, featuredCards);
+  return { success: true, featuredCards };
+}
+
+export function featureAchievement(username, achievementId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canFeatureAchievement(player, achievementId);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const featuredAchievements = [...validation.featuredAchievements, achievementId];
+  db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
+
+  return { success: true, achievementId, featuredAchievements };
+}
+
+export function unfeatureAchievement(username, achievementId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const validation = canUnfeatureAchievement(player, achievementId);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const featuredAchievements = validation.featuredAchievements.filter(id => id !== achievementId);
+  db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
+
+  return { success: true, achievementId, featuredAchievements };
+}
+
+export function setFeaturedAchievements(username, achievementIds = []) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  if (!Array.isArray(achievementIds)) {
+    return { success: false, reason: 'invalid_featured_achievements' };
+  }
+
+  const basePlayer = getProfilePlayerSnapshot(username);
+  if (!basePlayer) return { success: false, reason: 'player_not_found' };
+
+  let featuredAchievements = [];
+  for (const achievementId of achievementIds) {
+    const validation = canFeatureAchievement(
+      { ...basePlayer, profile: { featuredAchievements } },
+      achievementId
+    );
+    if (!validation.allowed) return { success: false, reason: validation.reason, validation };
+    featuredAchievements = [...featuredAchievements, achievementId];
+  }
+
+  db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
+  return { success: true, featuredAchievements };
 }

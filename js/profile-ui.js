@@ -7,6 +7,52 @@ import * as auth from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
 import * as groups from './groups.js';
+import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+
+function getOwnedCosmetics(playerData) {
+  return playerData?.cosmetics?.owned && typeof playerData.cosmetics.owned === 'object'
+    ? playerData.cosmetics.owned
+    : {};
+}
+
+function resolveEquippedCosmetic(playerData, profileField, category) {
+  const itemId = playerData?.profile?.[profileField] ?? null;
+  const definition = itemId ? ITEM_DEFINITIONS[itemId] : null;
+  if (!definition || definition.enabled === false) return null;
+  if (definition.type !== ITEM_TYPES.COSMETIC || definition.category !== category) return null;
+  if (!getOwnedCosmetics(playerData)[itemId]) return null;
+  return { itemId, definition };
+}
+
+export function getEquippedAura(playerData) {
+  return resolveEquippedCosmetic(playerData, 'equippedAura', ITEM_CATEGORIES.AURA);
+}
+
+export function getEquippedBorder(playerData) {
+  return resolveEquippedCosmetic(playerData, 'equippedBorder', ITEM_CATEGORIES.BORDER);
+}
+
+export function getEquippedBanner(playerData) {
+  return resolveEquippedCosmetic(playerData, 'equippedBanner', ITEM_CATEGORIES.PROFILE_BANNER);
+}
+
+export function getEquippedTitle(playerData) {
+  return resolveEquippedCosmetic(playerData, 'equippedTitle', ITEM_CATEGORIES.TITLE);
+}
+
+export function getProfileIdentityState(playerData) {
+  const profile = playerData?.profile || {};
+  return {
+    aura: getEquippedAura(playerData),
+    border: getEquippedBorder(playerData),
+    banner: getEquippedBanner(playerData),
+    title: getEquippedTitle(playerData),
+    featuredCards: Array.isArray(profile.featuredCards) ? [...profile.featuredCards] : [],
+    featuredAchievements: Array.isArray(profile.featuredAchievements)
+      ? [...profile.featuredAchievements]
+      : [],
+  };
+}
 
 export function renderProfile() {
   const session = auth.getSession();

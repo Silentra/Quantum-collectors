@@ -34,6 +34,7 @@ import * as db from './database.js';
 import { ITEM_DEFINITIONS } from './shop-definitions.js';
 import {
   applyDiscountToSlot,
+  consumeItem,
   generateAdditionalProject,
   grantFreezeAllowance,
   rerollShopSlotWithToken,
@@ -50,11 +51,6 @@ function getConsumablePlayerSnapshot(username) {
 
 function getConsumableQuantity(username, itemId) {
   return Math.max(0, Math.floor(Number(db.get(`players/${username}/items/${itemId}`) || 0)));
-}
-
-function consumeOneConsumable(username, itemId) {
-  const currentQuantity = getConsumableQuantity(username, itemId);
-  db.set(`players/${username}/items/${itemId}`, Math.max(0, currentQuantity - 1));
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +90,15 @@ export function useConsumable(username, consumableItemId, context = {}, options 
     return mutationResult;
   }
 
-  consumeOneConsumable(username, definition.id);
+  const consumeResult = consumeItem(username, definition.id, 1);
+  if (!consumeResult.success) {
+    return {
+      ...mutationResult,
+      success: false,
+      reason: consumeResult.reason,
+      consumeResult,
+    };
+  }
 
   return {
     ...mutationResult,

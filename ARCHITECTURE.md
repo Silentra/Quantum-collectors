@@ -29,17 +29,18 @@ js/
   quests.js          - Research Projects module entry: loads quest-config on init, re-exports power helper, placeholder lifecycle
   achievements.js    - PLACEHOLDER
   seasonal.js        - PLACEHOLDER
-  player-schema.js   - Phase 2A/2B expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profileVisibility)
+  player-schema.js   - Expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profile identity, profileVisibility)
   shop-state.js      - Phase 2B pure shop persistence schema helpers: shop state, current rotation, slot, discount structures
   shop-generation.js - Phase 3 pure weighted shop generation engine: ownership filtering, slot planning, scoped reroll helpers
-  shop-validation.js - Shop validation guards: rerolls, freezing, consumables, discounts, project proposal eligibility
-  shop-mutations.js  - Shop lifecycle mutations: refresh, rerolls, freezing, discounts, freeze allowance, project proposals
+  shop-validation.js - Shop validation guards: purchases, rerolls, freezing, consumables, discounts, project proposal eligibility, profile identity
+  shop-mutations.js  - Canonical shop economy mutation layer: purchases, RP, item stacks, cosmetics, history, refresh/rerolls/freezing, profile identity
   shop-consumables.js - BehaviorType-routed consumable execution layer; no item-specific gameplay logic
+  profile-ui.js      - Profile rendering plus lightweight profile identity runtime helpers
 ```
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
 - `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**
-- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
+- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards[],featuredAchievements[]}**, **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
 - `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?
 - `/cards/{cardId}` - id, name, rarity, type, field, effect, image, flavor, created, **imageUrl, keyFact, auraType, enabled**, conceptType (concept cards only)
@@ -416,6 +417,56 @@ js/
   - Allowed writes: item quantity decrement, `shop/currentRotation/slots`, `shopUsage/extraFreezeAllowanceThisRotation`, and `projects` for Research Proposal.
   - No full player rewrites, no new realtime listeners, no all-player scans, no `shop.rerollResetAt` writes, no purchase execution, no UI/admin rollout, and no premium currency behavior.
   - Current `database.js` remains cache-first and Firebase writes remain fire-and-forget; remote acknowledgement is not added in this layer.
+
+### Layer 2 — Unified Atomic Economy Mutation Layer
+- **Trusted economy path**: shop purchases and reusable economy writes now route through `shop-mutations.js`. Future UI should not directly mutate `currencies`, `cosmetics`, `items`, purchased slot state, or `purchaseHistory`.
+- **Purchase validation** (`shop-validation.js → canPurchaseItem()`):
+  - Checks player snapshot, rotation/slot validity, valid enabled item definition, unpurchased slot state, supported `rp` currency, finite affordable `currentPrice`, duplicate cosmetic ownership, and supported item types.
+  - Supported purchase grants in this layer: `ITEM_TYPES.COSMETIC` and `ITEM_TYPES.CONSUMABLE`. Pack/card shop purchases remain future work and fail closed unless definitions and validation are added later.
+- **Canonical helpers** (`shop-mutations.js`):
+  - `purchaseShopItem(username, slotIndex, options)` is the single purchase execution entry point.
+  - `grantConsumable(username, itemId, quantity)`, `consumeItem(username, itemId, quantity)`, and `unlockCosmetic(username, itemId)` are reusable scoped economy helpers.
+  - Purchase execution computes the full write plan before persistence: RP deduction, grant path, purchased slot flag, and capped purchase history.
+  - `shop-consumables.js` delegates successful consumable decrement to `consumeItem()` instead of writing item quantities itself.
+- **Purchase grants**:
+  - Cosmetic purchases persist `players/{username}/cosmetics/owned/{itemId} = true` and do not auto-equip.
+  - Consumable purchases increment `players/{username}/items/{itemId}` by the grant quantity, default `1`.
+  - Purchased slots are marked `purchased: true`, making them ineligible for reroll, freeze, and discount mutation paths.
+- **Purchase history**:
+  - Uses `createPurchaseHistoryEntry()` and `normalizePurchaseHistory()`.
+  - Stores compact entries with `itemId`, `pricePaid`, `currency`, `purchasedAt`, `source: 'shop'`, `slotId`, and `rotationGeneratedAt`.
+  - Persists only the capped `players/{username}/purchaseHistory` array, preserving `PURCHASE_HISTORY_MAX`.
+- **Scoped persistence**:
+  - Purchase writes are limited to `currencies/currentResearchPoints`, one grant path (`cosmetics/owned/{itemId}` or `items/{itemId}`), `shop/currentRotation/slots`, and `purchaseHistory`.
+  - No full player rewrites, root scans, new listeners, admin writes, premium currencies, purchase analytics fanout, or Firebase architecture redesign.
+- **Atomicity model**:
+  - All validation and write-plan computation happen before local writes.
+  - `database.js` remains cache-first and Firebase writes remain fire-and-forget; true cross-path remote transactions are not introduced in this layer.
+  - Duplicate execution protection is local: each purchase re-reads the slot and rejects `purchased === true`. Simultaneous-session race handling remains a future scalability/server-authoritative concern.
+
+### Layer 3 — Cosmetic Runtime Layer
+- **Runtime identity scope**: Layer 3 turns owned cosmetics into active profile state and featured selections. It does not add final shop/profile UI, cosmetic previews, animations, admin tooling, monetization, achievements gameplay, new listeners, root scans, or database architecture changes.
+- **Schema defaults and normalization** (`player-schema.js`):
+  - Adds additive `profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards,featuredAchievements}` defaults for new players.
+  - Existing players are normalized idempotently. Missing `profile` fields are backfilled without deleting `cosmetics.equipped` or `profileCustomization`.
+  - Legacy equipped values seed profile state only when the referenced item is owned, enabled, `ITEM_TYPES.COSMETIC`, and matches the expected data-driven category.
+  - Featured arrays are normalized to string IDs, preserve order, remove duplicates, and respect `MAX_FEATURED_CARDS` / `MAX_FEATURED_ACHIEVEMENTS`.
+- **Pure validation** (`shop-validation.js`):
+  - `canEquipCosmetic()` validates item definition, enabled state, cosmetic type, supported category, optional category match, and ownership.
+  - `canUnequipCosmetic()` validates supported category and is suitable for idempotent clears.
+  - `canFeatureCard()` / `canUnfeatureCard()` require inventory ownership, duplicate prevention, and cap enforcement.
+  - `canFeatureAchievement()` / `canUnfeatureAchievement()` require an existing unlocked marker from `achievements` or compatible `badges` state, duplicate prevention, and cap enforcement.
+- **Canonical scoped mutations** (`shop-mutations.js`):
+  - `equipCosmetic(username, cosmeticId)` writes only `players/{username}/profile/{equippedField}`.
+  - `unequipCosmetic(username, category)` writes `null` to the mapped equipped field.
+  - `featureCard()`, `unfeatureCard()`, `setFeaturedCards()`, `featureAchievement()`, `unfeatureAchievement()`, and `setFeaturedAchievements()` write only the relevant profile featured array.
+  - Mutations read scoped player paths (`profile`, `cosmetics`, one inventory card path, `achievements`, and `badges` where needed) and never mutate ownership, inventory, shop slots, purchase history, or full player records.
+- **Runtime helpers** (`profile-ui.js`):
+  - `getEquippedAura()`, `getEquippedBorder()`, `getEquippedBanner()`, `getEquippedTitle()`, and `getProfileIdentityState()` expose lightweight state for future UI phases.
+  - Helpers validate active cosmetics against ownership and item metadata before returning them, keeping behavior data-driven by `type` and `category`.
+- **Rollback and scalability**:
+  - The `profile` object is additive and isolated. Removing Layer 3 callers leaves ownership, economy, inventory, and legacy profile data intact.
+  - No new realtime listeners, all-player scans, root reads, derived fanout paths, or broad Firebase rewrites are introduced.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration
