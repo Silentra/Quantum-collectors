@@ -20,7 +20,7 @@
  * rendering, purchase, reroll, discount, or consumable mutation logic.
  */
 
-import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
+import { DEFAULT_SHOP_CONFIG, resolveMaxCardSlots, resolveMaxPackSlots } from './shop-config.js';
 import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { createShopRotationState, createShopSlot } from './shop-state.js';
 
@@ -79,11 +79,23 @@ function isUtilityItem(item) {
   return item?.category === ITEM_CATEGORIES.UTILITY;
 }
 
+function isCardItem(item) {
+  return item?.type === ITEM_TYPES.CARD || item?.category === ITEM_CATEGORIES.CARD;
+}
+
+function isPackItem(item) {
+  return item?.type === ITEM_TYPES.PACK || item?.category === ITEM_CATEGORIES.PACK;
+}
+
 function isPackOrCardItem(item) {
-  return item?.type === ITEM_TYPES.PACK ||
-    item?.type === ITEM_TYPES.CARD ||
-    item?.category === ITEM_CATEGORIES.PACK ||
-    item?.category === ITEM_CATEGORIES.CARD;
+  return isCardItem(item) || isPackItem(item);
+}
+
+function resolveCatalogItem(itemId, catalog) {
+  if (typeof catalog?.getItem === 'function') {
+    return catalog.getItem(itemId);
+  }
+  return ITEM_DEFINITIONS[itemId] || null;
 }
 
 function uniqueByItemId(pool) {
@@ -172,7 +184,10 @@ export function buildScopedEligiblePool(
   const excludedItemIds = getRotationItemIds(currentRotation, {
     replacingIndexes: options.replacingIndexes || [],
   });
-  const pool = buildEligiblePool(player, config, { excludeItemIds: excludedItemIds });
+  const pool = buildEligiblePool(player, config, {
+    excludeItemIds: excludedItemIds,
+    pool: options.pool,
+  });
   return pool.filter(item => itemMatchesRerollScope(item, scope));
 }
 
@@ -191,6 +206,7 @@ export function generateReplacementShopSlot(
   const rng = typeof options.rng === 'function' ? options.rng : Math.random;
   const pool = buildScopedEligiblePool(player, currentRotation, scope, config, {
     replacingIndexes: [slotIndex],
+    pool: options.pool,
   }).filter(item => item.id !== currentSlot.itemId);
   const [item] = weightedSelectWithoutReplacement(pool, 1, rng);
   if (!item) return null;
@@ -221,7 +237,11 @@ export function buildEligiblePool(player = {}, config = DEFAULT_SHOP_CONFIG, opt
     ? options.excludeItemIds
     : new Set(options.excludeItemIds || []);
 
-  let pool = Object.values(ITEM_DEFINITIONS)
+  const sourcePool = Array.isArray(options.pool) && options.pool.length > 0
+    ? options.pool
+    : Object.values(ITEM_DEFINITIONS);
+
+  let pool = sourcePool
     .filter(item => item?.enabled !== false)
     .filter(item => item?.id && !excluded.has(item.id))
     .filter(item => toPositiveNumber(item.weight, 0) > 0)
@@ -313,17 +333,22 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
   const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
   const slotCount = clamp(toNonNegativeInteger(effectiveConfig.shopSlotCount, DEFAULT_SHOP_CONFIG.shopSlotCount), 3, 9);
   const currentRotation = options.currentRotation || player?.shop?.currentRotation;
+  const catalog = options.catalog || null;
   const preservedSlots = getPreservedFrozenSlots(currentRotation, slotCount);
   const preservedItems = preservedSlots
-    .map(slot => ITEM_DEFINITIONS[slot.itemId])
+    .map(slot => resolveCatalogItem(slot.itemId, catalog))
     .filter(Boolean);
   const preservedItemIds = new Set(preservedSlots.map(slot => slot.itemId));
-  const pool = buildEligiblePool(player, effectiveConfig, { excludeItemIds: preservedItemIds });
+  const pool = buildEligiblePool(player, effectiveConfig, {
+    excludeItemIds: preservedItemIds,
+    pool: options.pool || catalog?.pool,
+  });
   const plan = applySlotConstraints(pool, effectiveConfig, {
     availableSlots: Math.max(0, slotCount - preservedSlots.length),
     existingUtilitySlots: preservedItems.filter(isUtilityItem).length,
     existingCosmeticSlots: preservedItems.filter(isCosmeticItem).length,
-    existingPackAndCardSlots: preservedItems.filter(isPackOrCardItem).length,
+    existingCardSlots: preservedItems.filter(isCardItem).length,
+    existingPackSlots: preservedItems.filter(isPackItem).length,
   });
 
   const selected = [];
@@ -342,11 +367,13 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
   selectFrom(isCosmeticItem, plan.cosmeticSlots);
 
   while (selected.length < plan.totalSlots) {
-    const packAndCardSelected = plan.existingPackAndCardSlots + selected.filter(isPackOrCardItem).length;
+    const cardSelected = plan.existingCardSlots + selected.filter(isCardItem).length;
+    const packSelected = plan.existingPackSlots + selected.filter(isPackItem).length;
     const candidates = pool.filter(item => {
       if (selectedIds.has(item.id)) return false;
-      if (!isPackOrCardItem(item)) return true;
-      return packAndCardSelected < plan.maxPackAndCardSlots;
+      if (isCardItem(item)) return cardSelected < plan.maxCardSlots;
+      if (isPackItem(item)) return packSelected < plan.maxPackSlots;
+      return true;
     });
     const [pick] = weightedSelectWithoutReplacement(candidates, 1, rng);
     if (!pick) break;
@@ -405,7 +432,7 @@ export function filterOwnedCosmetics(pool = [], ownedCosmetics = {}, config = DE
  * Enforces slot-type constraints defined in shop-config.
  *
  * Behavior:
- * - Reads minimumCosmeticSlots, minimumUtilitySlots, maximumPackAndCardSlots from config.
+ * - Reads minimumCosmeticSlots, minimumUtilitySlots, maxCardSlots, and maxPackSlots from config.
  * - Partitions the eligible pool into category buckets.
  * - Ensures each bucket meets its minimum before filling remaining slots freely.
  * - Returns a constraint plan object describing how many slots each category receives.
@@ -435,10 +462,13 @@ export function applySlotConstraints(pool = [], config = DEFAULT_SHOP_CONFIG, op
   const uniquePool = uniqueByItemId(pool);
   const utilityAvailable = uniquePool.filter(isUtilityItem).length;
   const cosmeticAvailable = uniquePool.filter(isCosmeticItem).length;
-  const packAndCardAvailable = uniquePool.filter(isPackOrCardItem).length;
+  const cardAvailable = uniquePool.filter(isCardItem).length;
+  const packAvailable = uniquePool.filter(isPackItem).length;
   const existingUtilitySlots = toNonNegativeInteger(options.existingUtilitySlots, 0);
   const existingCosmeticSlots = toNonNegativeInteger(options.existingCosmeticSlots, 0);
-  const existingPackAndCardSlots = toNonNegativeInteger(options.existingPackAndCardSlots, 0);
+  const existingCardSlots = toNonNegativeInteger(options.existingCardSlots, 0);
+  const existingPackSlots = toNonNegativeInteger(options.existingPackSlots, 0);
+  const legacyPackAndCardSlots = toNonNegativeInteger(options.existingPackAndCardSlots, 0);
 
   let remaining = totalSlots;
   const neededUtilitySlots = Math.max(
@@ -463,19 +493,26 @@ export function applySlotConstraints(pool = [], config = DEFAULT_SHOP_CONFIG, op
   );
   remaining -= cosmeticSlots;
 
-  const maxPackAndCardSlots = toNonNegativeInteger(
-    effectiveConfig.maximumPackAndCardSlots,
-    DEFAULT_SHOP_CONFIG.maximumPackAndCardSlots
-  );
+  const maxCardSlots = resolveMaxCardSlots(effectiveConfig);
+  const maxPackSlots = resolveMaxPackSlots(effectiveConfig);
+  const resolvedExistingCardSlots = existingCardSlots || (legacyPackAndCardSlots > 0 ? legacyPackAndCardSlots : 0);
+  const resolvedExistingPackSlots = existingPackSlots || (legacyPackAndCardSlots > 0 ? legacyPackAndCardSlots : 0);
+
   return {
     totalSlots,
-    existingPackAndCardSlots,
+    existingCardSlots: resolvedExistingCardSlots,
+    existingPackSlots: resolvedExistingPackSlots,
     utilitySlots,
     cosmeticSlots,
-    maxPackAndCardSlots: Math.min(
-      totalSlots + existingPackAndCardSlots,
-      packAndCardAvailable + existingPackAndCardSlots,
-      maxPackAndCardSlots
+    maxCardSlots: Math.min(
+      totalSlots + resolvedExistingCardSlots,
+      cardAvailable + resolvedExistingCardSlots,
+      maxCardSlots
+    ),
+    maxPackSlots: Math.min(
+      totalSlots + resolvedExistingPackSlots,
+      packAvailable + resolvedExistingPackSlots,
+      maxPackSlots
     ),
     freeSlots: remaining,
   };

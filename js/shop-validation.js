@@ -27,7 +27,11 @@
  * rendering, or inventory/currency mutation.
  */
 
-import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
+import {
+  DEFAULT_SHOP_CONFIG,
+  getBuiltInRerollCost,
+  resolveBuiltInRerolls,
+} from './shop-config.js';
 import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { PROJECT_STATES } from './project-state.js';
 import { getAvailableProjectSlots } from './project-refresh.js';
@@ -86,8 +90,16 @@ function isValidScope(scope, config) {
   return Object.values(REROLL_SCOPES).includes(scope) && getRerollCost(scope, config) !== null;
 }
 
-function getSlotItem(slot) {
-  return slot?.itemId ? ITEM_DEFINITIONS[slot.itemId] : null;
+function getSlotItem(slot, options = {}) {
+  if (!slot?.itemId) return null;
+  if (typeof options.getItem === 'function') {
+    return options.getItem(slot.itemId);
+  }
+  return ITEM_DEFINITIONS[slot.itemId] || null;
+}
+
+function getBuiltInRerollsUsed(player) {
+  return Math.max(0, Math.floor(Number(player?.shopUsage?.rerollsUsedThisRotation || 0)));
 }
 
 function countFrozenSlots(slots) {
@@ -161,7 +173,7 @@ function isAchievementUnlocked(container, achievementId) {
  *
  * @returns {Object} Placeholder — returns { allowed: false, reason: 'not_implemented' }.
  */
-export function canPurchaseItem(player, slotIndex) {
+export function canPurchaseItem(player, slotIndex, options = {}) {
   if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
 
   const slots = getShopRotationSlots(getRotation(player));
@@ -174,7 +186,7 @@ export function canPurchaseItem(player, slotIndex) {
   if (slot?.purchased === true) return { allowed: false, reason: 'slot_purchased' };
   if (!slot?.itemId) return { allowed: false, reason: 'missing_item_id' };
 
-  const itemDefinition = ITEM_DEFINITIONS[slot.itemId];
+  const itemDefinition = getSlotItem(slot, options);
   if (!itemDefinition || itemDefinition.enabled === false) {
     return { allowed: false, reason: 'invalid_item_definition' };
   }
@@ -193,7 +205,12 @@ export function canPurchaseItem(player, slotIndex) {
     return { allowed: false, reason: 'cosmetic_already_owned' };
   }
 
-  const supportedTypes = new Set([ITEM_TYPES.COSMETIC, ITEM_TYPES.CONSUMABLE]);
+  const supportedTypes = new Set([
+    ITEM_TYPES.COSMETIC,
+    ITEM_TYPES.CONSUMABLE,
+    ITEM_TYPES.CARD,
+    ITEM_TYPES.PACK,
+  ]);
   if (!supportedTypes.has(itemDefinition.type)) {
     return { allowed: false, reason: 'unsupported_item_type', itemType: itemDefinition.type };
   }
@@ -248,19 +265,40 @@ export function canRerollSlot(player, slotIndex, scope = REROLL_SCOPES.ALL, conf
   if (slot?.purchased === true) return { allowed: false, reason: 'slot_purchased' };
   if (slot?.frozen === true) return { allowed: false, reason: 'slot_frozen' };
 
-  const item = getSlotItem(slot);
+  const item = getSlotItem(slot, options);
   const requireCurrentSlotScope = options.requireCurrentSlotScope !== false;
   if (requireCurrentSlotScope && scope !== REROLL_SCOPES.ALL && !itemMatchesRerollScope(item, scope)) {
     return { allowed: false, reason: 'slot_scope_mismatch' };
   }
 
-  const cost = getRerollCost(scope, effectiveConfig);
   const paymentMode = options.paymentMode || 'rp';
-  if (paymentMode !== 'token' && getCurrentResearchPoints(player) < cost) {
+  if (paymentMode === 'token') {
+    return { allowed: true, reason: null, cost: 0, scope, paymentMode };
+  }
+
+  const rerollsUsed = getBuiltInRerollsUsed(player);
+  const builtIn = resolveBuiltInRerolls(effectiveConfig);
+  if (rerollsUsed >= builtIn.total) {
+    return { allowed: false, reason: 'built_in_rerolls_exhausted', rerollsUsed, total: builtIn.total };
+  }
+
+  const cost = getBuiltInRerollCost(effectiveConfig, rerollsUsed);
+  if (cost === null) {
+    const legacyCost = getRerollCost(scope, effectiveConfig);
+    if (legacyCost === null) {
+      return { allowed: false, reason: 'invalid_reroll_cost' };
+    }
+    if (getCurrentResearchPoints(player) < legacyCost) {
+      return { allowed: false, reason: 'insufficient_rp', cost: legacyCost };
+    }
+    return { allowed: true, reason: null, cost: legacyCost, scope, paymentMode };
+  }
+
+  if (getCurrentResearchPoints(player) < cost) {
     return { allowed: false, reason: 'insufficient_rp', cost };
   }
 
-  return { allowed: true, reason: null, cost: paymentMode === 'token' ? 0 : cost, scope, paymentMode };
+  return { allowed: true, reason: null, cost, scope, paymentMode };
 }
 
 // ---------------------------------------------------------------------------
@@ -274,14 +312,14 @@ export function canRerollSlot(player, slotIndex, scope = REROLL_SCOPES.ALL, conf
  * @param {Object} config
  * @returns {Object}
  */
-export function canRerollRotation(player, scope = REROLL_SCOPES.ALL, config = DEFAULT_SHOP_CONFIG) {
+export function canRerollRotation(player, scope = REROLL_SCOPES.ALL, config = DEFAULT_SHOP_CONFIG, options = {}) {
   const effectiveConfig = normalizeConfig(config);
   if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
   if (!isValidScope(scope, effectiveConfig)) return { allowed: false, reason: 'invalid_reroll_scope' };
 
   const slots = getShopRotationSlots(getRotation(player));
   const eligibleSlots = slots
-    .map((slot, index) => ({ slot, index, item: getSlotItem(slot) }))
+    .map((slot, index) => ({ slot, index, item: getSlotItem(slot, options) }))
     .filter(({ slot, item }) => slot?.purchased !== true &&
       slot?.frozen !== true &&
       itemMatchesRerollScope(item, scope));
@@ -290,15 +328,36 @@ export function canRerollRotation(player, scope = REROLL_SCOPES.ALL, config = DE
     return { allowed: false, reason: 'no_eligible_slots' };
   }
 
-  const cost = getRerollCost(scope, effectiveConfig);
-  if (getCurrentResearchPoints(player) < cost) {
-    return { allowed: false, reason: 'insufficient_rp', cost };
+  const paymentMode = options.paymentMode || 'rp';
+  if (paymentMode === 'token') {
+    return {
+      allowed: true,
+      reason: null,
+      cost: 0,
+      scope,
+      eligibleSlotIndexes: eligibleSlots.map(({ index }) => index),
+    };
+  }
+
+  const rerollsUsed = getBuiltInRerollsUsed(player);
+  const builtIn = resolveBuiltInRerolls(effectiveConfig);
+  if (rerollsUsed >= builtIn.total) {
+    return { allowed: false, reason: 'built_in_rerolls_exhausted', rerollsUsed, total: builtIn.total };
+  }
+
+  const cost = getBuiltInRerollCost(effectiveConfig, rerollsUsed);
+  const resolvedCost = cost === null ? getRerollCost(scope, effectiveConfig) : cost;
+  if (resolvedCost === null) {
+    return { allowed: false, reason: 'invalid_reroll_cost' };
+  }
+  if (getCurrentResearchPoints(player) < resolvedCost) {
+    return { allowed: false, reason: 'insufficient_rp', cost: resolvedCost };
   }
 
   return {
     allowed: true,
     reason: null,
-    cost,
+    cost: resolvedCost,
     scope,
     eligibleSlotIndexes: eligibleSlots.map(({ index }) => index),
   };

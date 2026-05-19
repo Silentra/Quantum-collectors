@@ -964,7 +964,7 @@ function showPlayerDetail(username) {
 
   document.getElementById('player-detail-name').textContent = username;
 
-  const allCardsList = cards.getAllCards();
+  const allCardsList = cards.sortCardsByRarityAndName([...cards.getAllCards()]);
   const allPackTypes = packs.getAllPackTypes();
   const allGroupsList = groups.getAllGroups();
   const inv = player.getInventory(username);
@@ -1712,6 +1712,11 @@ function openEditPackModal(packId) {
   document.getElementById('edit-pack-name').value = pack.name || '';
   document.getElementById('edit-pack-cards-per').value = pack.cardsPerPack || 5;
   document.getElementById('edit-pack-enabled').value = pack.enabled ? 'true' : 'false';
+  const shop = pack.shop || {};
+  document.getElementById('edit-pack-shop-enabled').value = shop.enabled === true ? 'true' : 'false';
+  document.getElementById('edit-pack-shop-rarity').value = shop.rarity || 'common';
+  document.getElementById('edit-pack-shop-price').value = shop.price ?? 0;
+  document.getElementById('edit-pack-shop-weight').value = shop.weight ?? 0;
   document.getElementById('edit-pack-common').value = odds.common ?? 50;
   document.getElementById('edit-pack-uncommon').value = odds.uncommon ?? 25;
   document.getElementById('edit-pack-rare').value = odds.rare ?? 15;
@@ -1760,6 +1765,12 @@ function setupEditPackModal() {
       name,
       cardsPerPack: parseInt(document.getElementById('edit-pack-cards-per').value) || 5,
       enabled: document.getElementById('edit-pack-enabled').value === 'true',
+      shop: {
+        enabled: document.getElementById('edit-pack-shop-enabled').value === 'true',
+        rarity: document.getElementById('edit-pack-shop-rarity').value || 'common',
+        price: parseFloat(document.getElementById('edit-pack-shop-price').value) || 0,
+        weight: parseFloat(document.getElementById('edit-pack-shop-weight').value) || 0,
+      },
       odds: {
         common: parseFloat(document.getElementById('edit-pack-common').value) || 0,
         uncommon: parseFloat(document.getElementById('edit-pack-uncommon').value) || 0,

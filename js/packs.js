@@ -24,6 +24,12 @@ export function createPackType({ name, cardsPerPack, odds, enabled }) {
     cardsPerPack: cardsPerPack || 5,
     odds: odds || config.getPackOdds(), // @deprecated fallback — admin UI always provides odds
     enabled: enabled !== false,
+    shop: {
+      enabled: false,
+      price: 0,
+      weight: 0,
+      rarity: 'common',
+    },
     created: Date.now()
   };
   db.set(`packs/${id}`, pack);

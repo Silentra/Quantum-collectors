@@ -685,6 +685,36 @@
                       </select>
                     </div>
                     <div class="border-t border-surface-700 pt-3">
+                      <h4 class="text-sm font-semibold mb-2 text-primary-400">Shop Settings</h4>
+                      <div class="grid grid-cols-2 gap-3">
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Shop Enabled</label>
+                          <select id="edit-pack-shop-enabled" class="admin-input w-full">
+                            <option value="false">No</option>
+                            <option value="true">Yes</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Shop Rarity</label>
+                          <select id="edit-pack-shop-rarity" class="admin-input w-full">
+                            <option value="common">Common</option>
+                            <option value="uncommon">Uncommon</option>
+                            <option value="rare">Rare</option>
+                            <option value="epic">Epic</option>
+                            <option value="legendary">Legendary</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Shop Price (RP)</label>
+                          <input id="edit-pack-shop-price" type="number" min="0" class="admin-input w-full">
+                        </div>
+                        <div>
+                          <label class="text-xs text-surface-400 block mb-1">Shop Weight</label>
+                          <input id="edit-pack-shop-weight" type="number" min="0" step="any" class="admin-input w-full">
+                        </div>
+                      </div>
+                    </div>
+                    <div class="border-t border-surface-700 pt-3">
                       <h4 class="text-sm font-semibold mb-2 text-primary-400">Rarity Odds (%)</h4>
                       <div class="grid grid-cols-2 gap-3">
                         <div>

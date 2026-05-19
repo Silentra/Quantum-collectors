@@ -15,6 +15,8 @@
 import * as auth from './auth.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
+import { buildShopCatalog } from './shop-catalog.js';
+import { getShopConfig } from './shop-config.js';
 import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import {
   ensureShopRotation,
@@ -71,7 +73,8 @@ function formatLabel(value, fallback = 'Unknown') {
 }
 
 function getItemDefinition(itemId) {
-  return ITEM_DEFINITIONS[itemId] || null;
+  if (ITEM_DEFINITIONS[itemId]) return ITEM_DEFINITIONS[itemId];
+  return buildShopCatalog(getShopConfig()).getItem(itemId);
 }
 
 function getSafeItem(slot) {

@@ -31,7 +31,8 @@
  */
 
 import * as db from './database.js';
-import { DEFAULT_SHOP_CONFIG } from './shop-config.js';
+import { DEFAULT_SHOP_CONFIG, getShopConfig } from './shop-config.js';
+import { buildShopCatalog } from './shop-catalog.js';
 import { ITEM_TYPES } from './shop-definitions.js';
 import {
   REROLL_SCOPES,
@@ -109,6 +110,8 @@ function getEconomySnapshot(username) {
   const currencies = db.get(`players/${username}/currencies`);
   const cosmetics = db.get(`players/${username}/cosmetics`);
   const items = db.get(`players/${username}/items`);
+  const inventory = db.get(`players/${username}/inventory`);
+  const playerPacks = db.get(`players/${username}/packs`);
   const purchaseHistory = db.get(`players/${username}/purchaseHistory`);
 
   if (!shop && !currentRotation && !currencies && !cosmetics && !items && purchaseHistory === null) {
@@ -123,8 +126,14 @@ function getEconomySnapshot(username) {
     currencies: isObject(currencies) ? currencies : {},
     cosmetics: isObject(cosmetics) ? cosmetics : {},
     items: isObject(items) ? items : {},
+    inventory: isObject(inventory) ? inventory : {},
+    packs: isObject(playerPacks) ? playerPacks : {},
     purchaseHistory: normalizePurchaseHistory(purchaseHistory),
   };
+}
+
+function getShopCatalogForConfig(config = getShopConfig()) {
+  return buildShopCatalog(config);
 }
 
 function getCurrentItemQuantity(username, itemId) {
@@ -174,6 +183,28 @@ function buildGrantWrite(snapshot, itemDefinition, options = {}) {
     const currentQuantity = Math.max(0, Math.floor(Number(snapshot.items?.[itemDefinition.id] || 0)));
     return {
       path: `items/${itemDefinition.id}`,
+      value: currentQuantity + quantity,
+      quantity,
+    };
+  }
+
+  if (itemDefinition.type === ITEM_TYPES.CARD) {
+    const cardId = itemDefinition.sourceId || itemDefinition.id;
+    const quantity = getGrantQuantity(itemDefinition, options);
+    const currentQuantity = Math.max(0, Math.floor(Number(snapshot.inventory?.[cardId] || 0)));
+    return {
+      path: `inventory/${cardId}`,
+      value: currentQuantity + quantity,
+      quantity,
+    };
+  }
+
+  if (itemDefinition.type === ITEM_TYPES.PACK) {
+    const packId = itemDefinition.sourceId || itemDefinition.id;
+    const quantity = getGrantQuantity(itemDefinition, options);
+    const currentQuantity = Math.max(0, Math.floor(Number(snapshot.packs?.[packId] || 0)));
+    return {
+      path: `packs/${packId}`,
       value: currentQuantity + quantity,
       quantity,
     };
@@ -322,10 +353,13 @@ export function ensureShopRotation(username, options = {}) {
     };
   }
 
+  const catalog = getShopCatalogForConfig(config);
   const rotation = generateShopRotation(player, config, {
     now,
     rng: options.rng,
     currentRotation: getCurrentRotation(player),
+    catalog,
+    pool: catalog.pool,
   });
 
   db.set(`players/${username}/shop/currentRotation`, rotation);
@@ -384,7 +418,9 @@ export function purchaseShopItem(username, slotIndex, options = {}) {
     return { success: false, reason: 'player_not_found' };
   }
 
-  const validation = canPurchaseItem(snapshot, slotIndex);
+  const config = normalizeConfig(options.config || getShopConfig());
+  const catalog = getShopCatalogForConfig(config);
+  const validation = canPurchaseItem(snapshot, slotIndex, { getItem: catalog.getItem });
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };
   }
@@ -471,8 +507,11 @@ export function rerollShopSlot(username, slotIndex, options = {}) {
   if (!player) return { success: false, reason: 'player_not_found' };
 
   const scope = options.scope || REROLL_SCOPES.ALL;
-  const config = normalizeConfig(options.config);
-  const validation = canRerollSlot(player, slotIndex, scope, config);
+  const config = normalizeConfig(options.config || getShopConfig());
+  const catalog = getShopCatalogForConfig(config);
+  const validation = canRerollSlot(player, slotIndex, scope, config, {
+    getItem: catalog.getItem,
+  });
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };
   }
@@ -481,6 +520,7 @@ export function rerollShopSlot(username, slotIndex, options = {}) {
   const slots = getShopRotationSlots(currentRotation);
   const replacement = generateReplacementShopSlot(player, currentRotation, Number(slotIndex), scope, config, {
     rng: options.rng,
+    pool: catalog.pool,
   });
 
   if (!replacement) {
@@ -531,10 +571,12 @@ export function rerollShopSlotWithToken(username, slotIndex, options = {}) {
   if (!player) return { success: false, reason: 'player_not_found' };
 
   const scope = options.scope || REROLL_SCOPES.ALL;
-  const config = normalizeConfig(options.config);
+  const config = normalizeConfig(options.config || getShopConfig());
+  const catalog = getShopCatalogForConfig(config);
   const validation = canRerollSlot(player, slotIndex, scope, config, {
     paymentMode: 'token',
     requireCurrentSlotScope: false,
+    getItem: catalog.getItem,
   });
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };
@@ -544,6 +586,7 @@ export function rerollShopSlotWithToken(username, slotIndex, options = {}) {
   const slots = getShopRotationSlots(currentRotation);
   const replacement = generateReplacementShopSlot(player, currentRotation, Number(slotIndex), scope, config, {
     rng: options.rng,
+    pool: catalog.pool,
   });
 
   if (!replacement) {
@@ -552,10 +595,8 @@ export function rerollShopSlotWithToken(username, slotIndex, options = {}) {
 
   const nextSlots = [...slots];
   nextSlots[Number(slotIndex)] = replacement;
-  const rerollsUsed = Number(player.shopUsage?.rerollsUsedThisRotation || 0) + 1;
 
   db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
-  db.set(`players/${username}/shopUsage/rerollsUsedThisRotation`, rerollsUsed);
 
   return {
     success: true,
@@ -591,8 +632,9 @@ export function rerollShopRotation(username, options = {}) {
   if (!player) return { success: false, reason: 'player_not_found' };
 
   const scope = options.scope || REROLL_SCOPES.ALL;
-  const config = normalizeConfig(options.config);
-  const validation = canRerollRotation(player, scope, config);
+  const config = normalizeConfig(options.config || getShopConfig());
+  const catalog = getShopCatalogForConfig(config);
+  const validation = canRerollRotation(player, scope, config, { getItem: catalog.getItem });
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };
   }
@@ -621,7 +663,7 @@ export function rerollShopRotation(username, options = {}) {
       index,
       scope,
       config,
-      { rng: options.rng }
+      { rng: options.rng, pool: catalog.pool }
     );
 
     if (!replacement) continue;

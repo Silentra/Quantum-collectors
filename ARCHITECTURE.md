@@ -31,6 +31,8 @@ js/
   seasonal.js        - PLACEHOLDER
   player-schema.js   - Expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profile identity, profileVisibility)
   shop-state.js      - Phase 2B pure shop persistence schema helpers: shop state, current rotation, slot, discount structures
+  shop-config.js     - Shop economy defaults, merge helpers, built-in reroll resolution, independent slot-cap fallbacks
+  shop-catalog.js    - Assembles static + rarity-driven card + pack shop entries into one item-like generation pool
   shop-generation.js - Phase 3 pure weighted shop generation engine: ownership filtering, slot planning, scoped reroll helpers
   shop-validation.js - Shop validation guards: purchases, rerolls, freezing, consumables, discounts, project proposal eligibility, profile identity
   shop-mutations.js  - Canonical shop economy mutation layer: purchases, RP, item stacks, cosmetics, history, refresh/rerolls/freezing, profile identity
@@ -526,6 +528,26 @@ js/
 - **Player management visibility**:
   - The existing Manage Player modal now includes RP/item/cosmetic grant controls and a read-only economy/profile/shop snapshot for owned consumables, owned cosmetics, equipped profile state, RP balances, and current shop slot state.
   - New controls call admin wrappers rather than writing player economy paths directly from UI.
+
+### Shop + Admin + UX Clarification Fixes
+- **Catalog assembly** (`shop-catalog.js`):
+  - Merges static shop definitions, rarity-driven synthetic card entries (`shop_card:{cardId}`), and pack shop entries (`shop_pack:{packId}`) into one item-like pool for generation and validation.
+  - Card inclusion is controlled by `config/shop/cardRarityControls` per rarity (`enabled`, `price`, `weight`), not per-card whitelisting.
+  - Pack shop settings live on pack records (`packs/{id}/shop`) and are edited in Packs admin, not Shop admin.
+- **Independent slot caps** (`shop-config.js`, `shop-generation.js`):
+  - Preferred config fields: `maxCardSlots`, `maxPackSlots`.
+  - Legacy fallback: `maximumPackAndCardSlots` when the new fields are absent.
+  - Frozen card/pack slots count against the correct independent cap during refreshes and rerolls.
+- **Built-in rerolls** (`shop-config.js`, `shop-validation.js`, `shop-mutations.js`):
+  - `builtInRerolls.total` (0–3) and sequential `builtInRerolls.costs[]` drive RP-only shop rerolls via `shopUsage.rerollsUsedThisRotation`.
+  - Token rerolls remain independent: no built-in cost, no built-in allowance consumption, and token rerolls do not increment `rerollsUsedThisRotation`.
+  - Legacy `rerollCosts` remains available as a fallback when built-in costs are unavailable.
+- **Purchase grants**:
+  - Card/pack shop purchases grant through the same `purchaseShopItem()` path into `inventory/{cardId}` and `packs/{packId}`.
+- **Projects tab UX** (`project-ui.js`):
+  - Research Proposal can be used from the project status bar through canonical `useConsumable(username, 'research_proposal', {})` with rerender-from-persisted-state only.
+- **Admin card sort** (`ui.js`):
+  - Manage Player Give Card selector uses `cards.sortCardsByRarityAndName()`.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration

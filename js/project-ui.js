@@ -33,6 +33,7 @@ import {
 import { getProjectRefreshHours, getProjectRefreshIntervalMs, getMaxStoredProjects } from './project-refresh.js';
 import { syncProjects } from './project-sync.js';
 import { adminCompleteActiveProject } from './admin-player-tools.js';
+import { useConsumable } from './shop-consumables.js';
 
 // These are imported from ui.js — kept there per extraction spec
 import { spawnRevealParticles, confirmAction } from './ui.js';
@@ -289,6 +290,25 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
     return `${mins}m`;
   }
 
+  function buildResearchProposalWidget() {
+    if (!username || username === '__admin__') return '';
+
+    const quantity = Math.max(0, Math.floor(Number(db.get(`players/${username}/items/research_proposal`) || 0)));
+    const disabled = quantity <= 0;
+
+    return `
+      <div class="rp-proposal-widget">
+        <div class="rp-proposal-copy">
+          <span class="rp-proposal-title">Research Proposal</span>
+          <span class="rp-proposal-qty">Owned: ${quantity}</span>
+        </div>
+        <button id="btn-use-research-proposal" class="rp-proposal-btn" ${disabled ? 'disabled' : ''}>
+          Use Proposal
+        </button>
+      </div>
+    `;
+  }
+
   function buildWeeklyPackWidget() {
     if (!username || username === '__admin__') return '';
 
@@ -344,8 +364,29 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
       <span class="rp-status-sep">·</span>
       <span class="rp-status-item">Next refresh: <strong id="rp-refresh-timer">${formatTimeRemaining()}</strong></span>
       ${adminExtra}
+      ${buildResearchProposalWidget()}
       ${buildWeeklyPackWidget()}
     `;
+
+    const proposalBtn = bar.querySelector('#btn-use-research-proposal');
+    if (proposalBtn) {
+      proposalBtn.addEventListener('click', () => {
+        const result = useConsumable(username, 'research_proposal', {});
+        if (result.success) {
+          toast.success('Research Proposal used.');
+          renderResearchProjects();
+          return;
+        }
+        const reason = result.reason || result.validation?.reason || 'unknown_error';
+        if (reason === 'project_cap_reached') {
+          toast.error('No available project slots for a new proposal.');
+        } else if (reason === 'insufficient_item_quantity') {
+          toast.error('You do not have a Research Proposal.');
+        } else {
+          toast.error('Could not use Research Proposal.');
+        }
+      });
+    }
 
     // Wire claim button after innerHTML rebuild
     const claimBtn = bar.querySelector('#btn-claim-weekly-pack');

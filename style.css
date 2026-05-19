@@ -1164,6 +1164,49 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 }
 
 /* ── Weekly Reward Pack widget (inside .rp-status-bar) ── */
+.rp-proposal-widget {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.4rem 0.6rem;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.22);
+  border-radius: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.rp-proposal-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.rp-proposal-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #93c5fd;
+}
+.rp-proposal-qty {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+.rp-proposal-btn {
+  flex-shrink: 0;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(37, 99, 235, 0.35);
+  color: #dbeafe;
+  border: 1px solid rgba(96, 165, 250, 0.45);
+}
+.rp-proposal-btn:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.55);
+}
+.rp-proposal-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .rp-weekly-widget {
   width: 100%;
   margin-top: 0.25rem;

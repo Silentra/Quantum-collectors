@@ -31,6 +31,7 @@
 import * as toast from './toast.js';
 import { ITEM_RARITIES } from './shop-definitions.js';
 import {
+  ALL_RARITIES,
   DEFAULT_SHOP_CONFIG,
   getShopConfig,
   getShopItemDefinitions,
@@ -100,21 +101,65 @@ function renderShopEconomyConfig(config) {
         ${renderNumberField('shop-cfg-slot-count', 'Shop Slot Count', config.shopSlotCount, { min: '3' })}
         ${renderNumberField('shop-cfg-min-cosmetics', 'Minimum Cosmetic Slots', config.minimumCosmeticSlots)}
         ${renderNumberField('shop-cfg-min-utility', 'Minimum Utility Slots', config.minimumUtilitySlots)}
-        ${renderNumberField('shop-cfg-max-pack-card', 'Maximum Pack/Card Slots', config.maximumPackAndCardSlots)}
+        ${renderNumberField('shop-cfg-max-card-slots', 'Max Card Slots', config.maxCardSlots ?? config.maximumPackAndCardSlots ?? 1)}
+        ${renderNumberField('shop-cfg-max-pack-slots', 'Max Pack Slots', config.maxPackSlots ?? config.maximumPackAndCardSlots ?? 1)}
         ${renderNumberField('shop-cfg-max-frozen', 'Max Frozen Slots', config.maxFrozenSlots)}
-        ${renderNumberField('shop-cfg-weekly-free-rerolls', 'Weekly Free Rerolls', config.weeklyFreeRerolls ?? 0)}
         ${renderSelect('shop-cfg-owned-cosmetics', 'Owned Cosmetics Can Appear', config.allowOwnedCosmeticsInShop, [
           { value: 'false', label: 'No' },
           { value: 'true', label: 'Yes' },
         ])}
       </div>
       <div class="mt-4">
-        <h4 class="font-semibold text-sm mb-2 text-primary-400">Reroll Costs</h4>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
-          ${Object.keys(DEFAULT_SHOP_CONFIG.rerollCosts).map(scope =>
-            renderNumberField(`shop-cfg-reroll-${scope}`, formatLabel(scope), config.rerollCosts?.[scope] ?? 0)
-          ).join('')}
+        <h4 class="font-semibold text-sm mb-2 text-primary-400">Built-In Shop Rerolls</h4>
+        <p class="text-xs text-surface-500 mb-3">RP-only sequential rerolls per rotation. Token rerolls remain independent.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          ${renderNumberField('shop-cfg-builtin-total', 'Total Built-In Rerolls (0-3)', (config.builtInRerolls || DEFAULT_SHOP_CONFIG.builtInRerolls).total ?? 3, { min: '0' })}
+          ${renderNumberField('shop-cfg-builtin-cost-1', 'Reroll 1 Cost (RP)', (config.builtInRerolls || DEFAULT_SHOP_CONFIG.builtInRerolls).costs?.[0] ?? 0)}
+          ${renderNumberField('shop-cfg-builtin-cost-2', 'Reroll 2 Cost (RP)', (config.builtInRerolls || DEFAULT_SHOP_CONFIG.builtInRerolls).costs?.[1] ?? 0)}
+          ${renderNumberField('shop-cfg-builtin-cost-3', 'Reroll 3 Cost (RP)', (config.builtInRerolls || DEFAULT_SHOP_CONFIG.builtInRerolls).costs?.[2] ?? 0)}
         </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderCardRarityControls(config) {
+  const controls = config.cardRarityControls || DEFAULT_SHOP_CONFIG.cardRarityControls;
+  const rows = ALL_RARITIES.map(rarity => {
+    const entry = controls[rarity] || {};
+    return `
+      <tr class="border-t border-surface-800" data-rarity="${escapeHtml(rarity)}">
+        <td class="py-2 pr-3 font-medium text-sm">${escapeHtml(formatLabel(rarity))}</td>
+        <td class="py-2 pr-3">
+          <select class="admin-input w-full shop-rarity-enabled">
+            <option value="true" ${entry.enabled === true ? 'selected' : ''}>Enabled</option>
+            <option value="false" ${entry.enabled !== true ? 'selected' : ''}>Disabled</option>
+          </select>
+        </td>
+        <td class="py-2 pr-3"><input type="number" min="0" class="admin-input w-24 shop-rarity-price" value="${escapeHtml(entry.price ?? 0)}"></td>
+        <td class="py-2 pr-3"><input type="number" min="0" step="any" class="admin-input w-24 shop-rarity-weight" value="${escapeHtml(entry.weight ?? 0)}"></td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-6">
+      <div class="mb-4">
+        <h3 class="font-semibold">Card Shop Rarity Controls</h3>
+        <p class="text-xs text-surface-500 mt-1">Rarity-driven inclusion for all current and future cards of each rarity.</p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs text-surface-500 uppercase">
+            <tr>
+              <th class="pb-2 pr-3">Rarity</th>
+              <th class="pb-2 pr-3">Enabled</th>
+              <th class="pb-2 pr-3">Price (RP)</th>
+              <th class="pb-2 pr-3">Weight</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
       </div>
     </section>
   `;
@@ -211,25 +256,39 @@ export function renderShopAdminPanel() {
   const definitions = getShopItemDefinitions();
   container.innerHTML = `
     ${renderShopEconomyConfig(config)}
+    ${renderCardRarityControls(config)}
     ${renderConsumableConfig(definitions)}
     ${renderItemEditor(definitions)}
   `;
 
   document.getElementById('shop-admin-save-config')?.addEventListener('click', () => {
-    const rerollCosts = {};
-    for (const scope of Object.keys(DEFAULT_SHOP_CONFIG.rerollCosts)) {
-      rerollCosts[scope] = numberValue(`shop-cfg-reroll-${scope}`, DEFAULT_SHOP_CONFIG.rerollCosts[scope]);
+    const cardRarityControls = {};
+    for (const rarity of ALL_RARITIES) {
+      const row = container.querySelector(`[data-rarity="${rarity}"]`);
+      cardRarityControls[rarity] = {
+        enabled: row?.querySelector('.shop-rarity-enabled')?.value === 'true',
+        price: Number(row?.querySelector('.shop-rarity-price')?.value || 0),
+        weight: Number(row?.querySelector('.shop-rarity-weight')?.value || 0),
+      };
     }
     saveShopConfig({
       shopRefreshDays: numberValue('shop-cfg-refresh-days', DEFAULT_SHOP_CONFIG.shopRefreshDays),
       shopSlotCount: numberValue('shop-cfg-slot-count', DEFAULT_SHOP_CONFIG.shopSlotCount),
       minimumCosmeticSlots: numberValue('shop-cfg-min-cosmetics', DEFAULT_SHOP_CONFIG.minimumCosmeticSlots),
       minimumUtilitySlots: numberValue('shop-cfg-min-utility', DEFAULT_SHOP_CONFIG.minimumUtilitySlots),
-      maximumPackAndCardSlots: numberValue('shop-cfg-max-pack-card', DEFAULT_SHOP_CONFIG.maximumPackAndCardSlots),
+      maxCardSlots: numberValue('shop-cfg-max-card-slots', DEFAULT_SHOP_CONFIG.maxCardSlots),
+      maxPackSlots: numberValue('shop-cfg-max-pack-slots', DEFAULT_SHOP_CONFIG.maxPackSlots),
       maxFrozenSlots: numberValue('shop-cfg-max-frozen', DEFAULT_SHOP_CONFIG.maxFrozenSlots),
-      weeklyFreeRerolls: numberValue('shop-cfg-weekly-free-rerolls', 0),
       allowOwnedCosmeticsInShop: boolValue('shop-cfg-owned-cosmetics'),
-      rerollCosts,
+      builtInRerolls: {
+        total: numberValue('shop-cfg-builtin-total', DEFAULT_SHOP_CONFIG.builtInRerolls.total),
+        costs: [
+          numberValue('shop-cfg-builtin-cost-1', DEFAULT_SHOP_CONFIG.builtInRerolls.costs[0]),
+          numberValue('shop-cfg-builtin-cost-2', DEFAULT_SHOP_CONFIG.builtInRerolls.costs[1]),
+          numberValue('shop-cfg-builtin-cost-3', DEFAULT_SHOP_CONFIG.builtInRerolls.costs[2]),
+        ],
+      },
+      cardRarityControls,
     });
     toast.success('Shop config saved');
     renderShopAdminPanel();
