@@ -31,7 +31,7 @@
  */
 
 import * as db from './database.js';
-import { DEFAULT_SHOP_CONFIG, getShopConfig } from './shop-config.js';
+import { DEFAULT_SHOP_CONFIG, getShopConfig, resolveShopRuntimeConfig } from './shop-config.js';
 import { buildShopCatalog } from './shop-catalog.js';
 import { ITEM_TYPES } from './shop-definitions.js';
 import {
@@ -71,17 +71,6 @@ function normalizeSlots(rawSlots) {
   if (Array.isArray(rawSlots)) return rawSlots;
   if (isObject(rawSlots)) return Object.values(rawSlots);
   return [];
-}
-
-function normalizeConfig(config = DEFAULT_SHOP_CONFIG) {
-  return {
-    ...DEFAULT_SHOP_CONFIG,
-    ...(isObject(config) ? config : {}),
-    rerollCosts: {
-      ...DEFAULT_SHOP_CONFIG.rerollCosts,
-      ...(isObject(config?.rerollCosts) ? config.rerollCosts : {}),
-    },
-  };
 }
 
 function getShopPlayerSnapshot(username) {
@@ -342,7 +331,7 @@ export function ensureShopRotation(username, options = {}) {
     return { success: false, reason: 'player_not_found' };
   }
 
-  const config = normalizeConfig(options.config);
+  const config = resolveShopRuntimeConfig(options.config);
   const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
 
   if (!options.force && hasActiveRotation(player, config, now)) {
@@ -418,7 +407,7 @@ export function purchaseShopItem(username, slotIndex, options = {}) {
     return { success: false, reason: 'player_not_found' };
   }
 
-  const config = normalizeConfig(options.config || getShopConfig());
+  const config = resolveShopRuntimeConfig(options.config);
   const catalog = getShopCatalogForConfig(config);
   const validation = canPurchaseItem(snapshot, slotIndex, { getItem: catalog.getItem });
   if (!validation.allowed) {
@@ -507,7 +496,7 @@ export function rerollShopSlot(username, slotIndex, options = {}) {
   if (!player) return { success: false, reason: 'player_not_found' };
 
   const scope = options.scope || REROLL_SCOPES.ALL;
-  const config = normalizeConfig(options.config || getShopConfig());
+  const config = resolveShopRuntimeConfig(options.config);
   const catalog = getShopCatalogForConfig(config);
   const validation = canRerollSlot(player, slotIndex, scope, config, {
     getItem: catalog.getItem,
@@ -571,7 +560,7 @@ export function rerollShopSlotWithToken(username, slotIndex, options = {}) {
   if (!player) return { success: false, reason: 'player_not_found' };
 
   const scope = options.scope || REROLL_SCOPES.ALL;
-  const config = normalizeConfig(options.config || getShopConfig());
+  const config = resolveShopRuntimeConfig(options.config);
   const catalog = getShopCatalogForConfig(config);
   const validation = canRerollSlot(player, slotIndex, scope, config, {
     paymentMode: 'token',
@@ -632,7 +621,7 @@ export function rerollShopRotation(username, options = {}) {
   if (!player) return { success: false, reason: 'player_not_found' };
 
   const scope = options.scope || REROLL_SCOPES.ALL;
-  const config = normalizeConfig(options.config || getShopConfig());
+  const config = resolveShopRuntimeConfig(options.config);
   const catalog = getShopCatalogForConfig(config);
   const validation = canRerollRotation(player, scope, config, { getItem: catalog.getItem });
   if (!validation.allowed) {
@@ -717,7 +706,7 @@ export function freezeShopSlot(username, slotIndex, options = {}) {
   const player = getShopPlayerSnapshot(username);
   if (!player) return { success: false, reason: 'player_not_found' };
 
-  const config = normalizeConfig(options.config);
+  const config = resolveShopRuntimeConfig(options.config);
   const validation = canFreezeSlot(player, slotIndex, config);
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };
@@ -827,7 +816,7 @@ export function grantFreezeAllowance(username, options = {}) {
   const player = getShopPlayerSnapshot(username);
   if (!player) return { success: false, reason: 'player_not_found' };
 
-  const config = normalizeConfig(options.config);
+  const config = resolveShopRuntimeConfig(options.config);
   const validation = canGrantFreezeAllowance(player, config);
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };

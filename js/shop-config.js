@@ -184,6 +184,17 @@ export function getShopConfig() {
   return mergeShopConfig(db.get(SHOP_CONFIG_PATH) || {});
 }
 
+/**
+ * Canonical runtime config for generation and mutations.
+ * Uses persisted admin config unless an explicit override is provided.
+ */
+export function resolveShopRuntimeConfig(configOverride) {
+  if (isObject(configOverride)) {
+    return mergeShopConfig(configOverride);
+  }
+  return getShopConfig();
+}
+
 export function saveShopConfig(configPatch = {}) {
   const current = db.get(SHOP_CONFIG_PATH) || {};
   const next = mergeShopConfig({

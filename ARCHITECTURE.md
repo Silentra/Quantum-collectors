@@ -368,6 +368,7 @@ js/
   - `canFreezeSlot(player, slotIndex, config)` checks slot existence, purchased immutability, already-frozen state, and `maxFrozenSlots`.
   - Validation remains side-effect free and performs no DB writes.
 - **Runtime mutation layer** (`shop-mutations.js`):
+  - All generation and mutation paths resolve config through `shop-config.js → resolveShopRuntimeConfig()` (persisted `config/shop` via `getShopConfig()`, or `mergeShopConfig()` when an override is passed).
   - `ensureShopRotation(username, options)` remains the pull-based lifecycle entry point and refreshes expired or forced rotations.
   - `refreshShopRotation(username, options)` forces the same safe full-refresh path.
   - `rerollShopSlot(username, slotIndex, options)` performs RP-only single-slot rerolls. It deducts `currencies.currentResearchPoints`, increments `shopUsage.rerollsUsedThisRotation`, and writes updated slots only after validation and replacement generation succeed.
