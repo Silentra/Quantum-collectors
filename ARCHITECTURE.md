@@ -360,7 +360,7 @@ js/
   - `REROLL_SCOPES` defines supported reroll scopes: `all`, `cosmetic`, `aura`, `border`, `utility`, `pack`.
   - `itemMatchesRerollScope()` centralizes category/scope matching so mutation code does not own generation rules.
   - `getShopRotationSlots()` normalizes array and Firebase object-shaped slot collections.
-  - `getRotationItemIds()` and `buildScopedEligiblePool()` exclude active rotation item IDs except the slot being replaced, preserving duplicate prevention during rerolls.
+  - `getRotationItemIds()` and `buildScopedEligiblePool()` exclude static and card `itemId`s from other slots during rerolls; synthetic pack ids are not globally excluded so identical packs may repeat.
   - `generateReplacementShopSlot()` creates a replacement slot through `createShopSlot()` and preserves deterministic RNG injection for smoke tests.
 - **Pure validation guards** (`shop-validation.js`):
   - `canRerollSlot(player, slotIndex, scope, config)` checks slot existence, purchased/frozen immutability, scope validity, scope match, and RP affordability.
@@ -538,6 +538,7 @@ js/
   - Preferred config fields: `maxCardSlots`, `maxPackSlots`.
   - Legacy fallback: `maximumPackAndCardSlots` when the new fields are absent.
   - Frozen card/pack slots count against the correct independent cap during refreshes and rerolls.
+  - `maxCardSlots` is also limited by unique card catalog entries (no duplicate `shop_card:{cardId}`). `maxPackSlots` is a slot ceiling only and may repeat the same `shop_pack:{packId}`.
 - **Built-in rerolls** (`shop-config.js`, `shop-validation.js`, `shop-mutations.js`):
   - `builtInRerolls.total` (0–3) and sequential `builtInRerolls.costs[]` drive RP-only shop rerolls via `shopUsage.rerollsUsedThisRotation`.
   - Token rerolls remain independent: no built-in cost, no built-in allowance consumption, and token rerolls do not increment `rerollsUsedThisRotation`.
@@ -547,7 +548,11 @@ js/
 - **Projects tab UX** (`project-ui.js`):
   - Research Proposal can be used from the project status bar through canonical `useConsumable(username, 'research_proposal', {})` with rerender-from-persisted-state only.
 - **Admin card sort** (`ui.js`):
-  - Manage Player Give Card selector uses `cards.sortCardsByRarityAndName()`.
+  - Manage Player Give Card selector and owned inventory list use `cards.sortCardsByRarityAndName()`.
+- **Rotation uniqueness** (`shop-generation.js`):
+  - Mixed weighted generation is preserved; `maxCardSlots` / `maxPackSlots` are ceilings only (0..N by RNG), not bucket-fill targets.
+  - Static consumables/cosmetics and synthetic cards: unique per rotation by `item.id` (no duplicate `shop_card:{cardId}`).
+  - Synthetic packs: the same `shop_pack:{packId}` may occupy multiple slots up to `maxPackSlots`.
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration

@@ -5,11 +5,11 @@
  *
  * Architectural decisions (finalized):
  * - Weighted generation: each item has a weight property influencing selection probability.
- * - Without replacement: once an item is selected for a rotation, it cannot appear again in the same rotation.
+ * - Without replacement: static items and synthetic cards cannot repeat the same item.id in one rotation.
+ * - Synthetic packs may repeat the same shop_pack:{packId} up to maxPackSlots (weighted, not bucket-filled).
  * - Owned cosmetics excluded: cosmetics the player already owns are filtered out before generation.
  * - Configurable slot constraints: shop-config.js defines minimum/maximum slots per category;
- *   generation must respect those boundaries.
- * - No duplicate rotations: the same item cannot occupy multiple slots in a single shop rotation.
+ *   maxCardSlots and maxPackSlots are ceilings only, not guaranteed fill targets.
  *
  * Dependencies:
  *   - js/shop-definitions.js  (ITEM_DEFINITIONS, ITEM_TYPES, ITEM_CATEGORIES)
@@ -20,6 +20,7 @@
  * rendering, purchase, reroll, discount, or consumable mutation logic.
  */
 
+import { SHOP_PACK_PREFIX } from './shop-catalog.js';
 import { DEFAULT_SHOP_CONFIG, resolveMaxCardSlots, resolveMaxPackSlots } from './shop-config.js';
 import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { createShopRotationState, createShopSlot } from './shop-state.js';
@@ -89,6 +90,22 @@ function isPackItem(item) {
 
 function isPackOrCardItem(item) {
   return isCardItem(item) || isPackItem(item);
+}
+
+function isSyntheticPackItemId(itemId) {
+  return typeof itemId === 'string' && itemId.startsWith(SHOP_PACK_PREFIX);
+}
+
+/** Static items and cards dedupe by item.id; packs may repeat in a rotation. */
+function usesRotationItemIdDedupe(itemOrItemId) {
+  if (typeof itemOrItemId === 'string') {
+    return !isSyntheticPackItemId(itemOrItemId);
+  }
+  return !isPackItem(itemOrItemId);
+}
+
+function isBlockedForRotationSelection(item, selectedIds) {
+  return usesRotationItemIdDedupe(item) && selectedIds.has(item.id);
 }
 
 function resolveCatalogItem(itemId, catalog) {
@@ -170,7 +187,7 @@ export function getRotationItemIds(currentRotation, options = {}) {
     getShopRotationSlots(currentRotation)
       .filter((slot, index) => !replacingIndexes.has(index))
       .map(slot => slot?.itemId)
-      .filter(Boolean)
+      .filter(itemId => itemId && usesRotationItemIdDedupe(itemId))
   );
 }
 
@@ -207,8 +224,11 @@ export function generateReplacementShopSlot(
   const pool = buildScopedEligiblePool(player, currentRotation, scope, config, {
     replacingIndexes: [slotIndex],
     pool: options.pool,
-  }).filter(item => item.id !== currentSlot.itemId);
-  const [item] = weightedSelectWithoutReplacement(pool, 1, rng);
+  });
+  const scopedPool = isSyntheticPackItemId(currentSlot.itemId)
+    ? pool
+    : pool.filter(item => item.id !== currentSlot.itemId);
+  const [item] = weightedSelectWithoutReplacement(scopedPool, 1, rng);
   if (!item) return null;
 
   return createSlotFromItem(item, slotIndex);
@@ -317,7 +337,7 @@ export function weightedSelectWithoutReplacement(pool = [], count = 0, rng = Mat
  * - Applies slot constraints from shop-config (min cosmetic slots, min utility slots, etc.).
  * - Uses weightedSelectWithoutReplacement() to fill each constrained bucket.
  * - Assembles final slot array via createShopSlot().
- * - Guarantees no duplicate items across the rotation.
+ * - Mixed weighted fill with per-type slot ceilings; static/cards unique by item.id, packs may repeat.
  *
  * @param {Object} [player]
  * @param {Object} [config]
@@ -338,7 +358,11 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
   const preservedItems = preservedSlots
     .map(slot => resolveCatalogItem(slot.itemId, catalog))
     .filter(Boolean);
-  const preservedItemIds = new Set(preservedSlots.map(slot => slot.itemId));
+  const preservedItemIds = new Set(
+    preservedSlots
+      .map(slot => slot.itemId)
+      .filter(itemId => itemId && usesRotationItemIdDedupe(itemId))
+  );
   const pool = buildEligiblePool(player, effectiveConfig, {
     excludeItemIds: preservedItemIds,
     pool: options.pool || catalog?.pool,
@@ -355,11 +379,13 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
   const selectedIds = new Set(preservedItemIds);
 
   function selectFrom(predicate, count) {
-    const candidates = pool.filter(item => predicate(item) && !selectedIds.has(item.id));
+    const candidates = pool.filter(item => predicate(item) && !isBlockedForRotationSelection(item, selectedIds));
     const picks = weightedSelectWithoutReplacement(candidates, count, rng);
     for (const pick of picks) {
       selected.push(pick);
-      selectedIds.add(pick.id);
+      if (usesRotationItemIdDedupe(pick)) {
+        selectedIds.add(pick.id);
+      }
     }
   }
 
@@ -370,7 +396,7 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
     const cardSelected = plan.existingCardSlots + selected.filter(isCardItem).length;
     const packSelected = plan.existingPackSlots + selected.filter(isPackItem).length;
     const candidates = pool.filter(item => {
-      if (selectedIds.has(item.id)) return false;
+      if (isBlockedForRotationSelection(item, selectedIds)) return false;
       if (isCardItem(item)) return cardSelected < plan.maxCardSlots;
       if (isPackItem(item)) return packSelected < plan.maxPackSlots;
       return true;
@@ -378,7 +404,9 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
     const [pick] = weightedSelectWithoutReplacement(candidates, 1, rng);
     if (!pick) break;
     selected.push(pick);
-    selectedIds.add(pick.id);
+    if (usesRotationItemIdDedupe(pick)) {
+      selectedIds.add(pick.id);
+    }
   }
 
   const slots = [...preservedSlots, ...selected.map((item, index) => (
@@ -509,9 +537,9 @@ export function applySlotConstraints(pool = [], config = DEFAULT_SHOP_CONFIG, op
       cardAvailable + resolvedExistingCardSlots,
       maxCardSlots
     ),
+    // Pack ceiling is slot-count only; identical shop_pack ids may repeat (not limited by packAvailable).
     maxPackSlots: Math.min(
       totalSlots + resolvedExistingPackSlots,
-      packAvailable + resolvedExistingPackSlots,
       maxPackSlots
     ),
     freeSlots: remaining,
