@@ -532,7 +532,7 @@ js/
 ### Shop + Admin + UX Clarification Fixes
 - **Catalog assembly** (`shop-catalog.js`):
   - Merges static shop definitions, rarity-driven synthetic card entries (`shop_card:{cardId}`), and pack shop entries (`shop_pack:{packId}`) into one item-like pool for generation and validation.
-  - Card inclusion is controlled by `config/shop/cardRarityControls` per rarity (`enabled`, `price`, `weight`), not per-card whitelisting.
+  - Card inclusion is controlled by `config/shop/cardRarityControls` per rarity (`enabled`, `price`, `weight`), not per-card whitelisting. Each enabled card of an enabled rarity becomes its own `shop_card:{cardId}` entry; rarity `weight` applies per eligible card in the weighted pool (not as a single grouped rarity pick).
   - Pack shop settings live on pack records (`packs/{id}/shop`) and are edited in Packs admin, not Shop admin.
 - **Independent slot caps** (`shop-config.js`, `shop-generation.js`):
   - Preferred config fields: `maxCardSlots`, `maxPackSlots`.

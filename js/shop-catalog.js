@@ -47,6 +47,12 @@ export function parseShopItemId(itemId) {
   return { kind: 'static', sourceId: itemId };
 }
 
+/**
+ * One synthetic shop entry per enabled card whose rarity is enabled in config.
+ * Rarity controls are global settings applied per eligible card (not per-rarity
+ * grouped selection): e.g. common.weight = 20 gives every enabled common card
+ * weight 20 in the weighted pool as shop_card:{cardId}.
+ */
 function buildCardShopEntries(config) {
   const controls = isObject(config?.cardRarityControls) ? config.cardRarityControls : {};
   const enabledCards = cards.getEnabledCards();

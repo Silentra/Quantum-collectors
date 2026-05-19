@@ -968,6 +968,15 @@ function showPlayerDetail(username) {
   const allPackTypes = packs.getAllPackTypes();
   const allGroupsList = groups.getAllGroups();
   const inv = player.getInventory(username);
+  const sortedInventoryCards = cards.sortCardsByRarityAndName(
+    inv
+      .map(({ cardId, quantity }) => {
+        const card = cards.getCard(cardId);
+        if (!card) return null;
+        return { ...card, quantity };
+      })
+      .filter(Boolean)
+  );
 
   const content = document.getElementById('player-detail-content');
   content.innerHTML = `
@@ -1103,19 +1112,15 @@ function showPlayerDetail(username) {
 
       <!-- Inventory -->
       <div class="bg-surface-800 rounded-lg p-4">
-        <h4 class="font-semibold text-sm mb-2">Inventory (${inv.length} unique cards)</h4>
+        <h4 class="font-semibold text-sm mb-2">Inventory (${sortedInventoryCards.length} unique cards)</h4>
         <div class="max-h-48 overflow-y-auto space-y-1">
-          ${inv.length === 0 ? '<div class="text-surface-500 text-xs">Empty</div>' :
-            inv.map(({ cardId, quantity }) => {
-              const c = cards.getCard(cardId);
-              if (!c) return '';
-              return `
+          ${sortedInventoryCards.length === 0 ? '<div class="text-surface-500 text-xs">Empty</div>' :
+            sortedInventoryCards.map(c => `
                 <div class="flex items-center justify-between text-xs py-1">
-                  <span><span style="color:${cards.RARITY_COLORS[c.rarity]}">●</span> ${c.name} ×${quantity}</span>
-                  <button class="pd-remove-card text-red-400 hover:text-red-300 px-1" data-card-id="${cardId}">✕</button>
+                  <span><span style="color:${cards.RARITY_COLORS[c.rarity]}">●</span> ${c.name} ×${c.quantity}</span>
+                  <button class="pd-remove-card text-red-400 hover:text-red-300 px-1" data-card-id="${c.id}">✕</button>
                 </div>
-              `;
-            }).join('')}
+              `).join('')}
         </div>
       </div>
 
