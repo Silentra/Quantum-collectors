@@ -84,6 +84,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'reroll_shop',
     behaviorConfig: { scope: 'all' },
+    display: { emoji: '🔄' },
   },
 
   cosmetic_reroll_token: {
@@ -98,6 +99,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'reroll_shop',
     behaviorConfig: { scope: 'cosmetic' },
+    display: { emoji: '💄' },
   },
 
   aura_reroll_token: {
@@ -112,6 +114,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'reroll_shop',
     behaviorConfig: { scope: 'aura' },
+    display: { emoji: '✦' },
   },
 
   border_reroll_token: {
@@ -126,6 +129,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'reroll_shop',
     behaviorConfig: { scope: 'border' },
+    display: { emoji: '▣' },
   },
 
   discount_chip: {
@@ -140,6 +144,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'apply_discount',
     behaviorConfig: { percent: 25, targetScope: 'any_slot' },
+    display: { emoji: '🏷' },
   },
 
   freeze_token: {
@@ -154,6 +159,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'freeze_slot',
     behaviorConfig: { duration: 1 }, // persists 1 rotation
+    display: { emoji: '❄' },
   },
 
   research_proposal: {
@@ -168,6 +174,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
     behaviorType: 'grant_research',
     behaviorConfig: { amount: 50 },
+    display: { emoji: '📋' },
   },
 
   // ── Cosmetics — Auras ──────────────────────────────────────────────────
@@ -228,3 +235,43 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
   },
 });
+
+/**
+ * Resolve lightweight display metadata for any shop item definition.
+ * Prefers definition.display (emoji, icon, symbol, cssClass); falls back by type/behavior.
+ * @param {Object|null|undefined} definition
+ * @returns {{ emoji: string, cssClass: string }}
+ */
+export function resolveItemDisplay(definition) {
+  const display = definition?.display;
+  const emojiFromMeta = display?.emoji || display?.icon || display?.symbol;
+  if (typeof emojiFromMeta === 'string' && emojiFromMeta.trim()) {
+    return {
+      emoji: emojiFromMeta.trim(),
+      cssClass: typeof display?.cssClass === 'string' ? display.cssClass.trim() : '',
+    };
+  }
+  if (typeof definition?.iconClass === 'string' && definition.iconClass.trim()) {
+    return { emoji: fallbackEmoji(definition), cssClass: definition.iconClass.trim() };
+  }
+  return { emoji: fallbackEmoji(definition), cssClass: '' };
+}
+
+function fallbackEmoji(definition) {
+  if (!definition) return '•';
+  if (definition.type === ITEM_TYPES.COSMETIC) {
+    if (definition.category === ITEM_CATEGORIES.AURA) return '✦';
+    if (definition.category === ITEM_CATEGORIES.BORDER) return '▣';
+    if (definition.category === ITEM_CATEGORIES.PROFILE_BANNER) return '▰';
+    if (definition.category === ITEM_CATEGORIES.TITLE) return '★';
+    return '◆';
+  }
+  if (definition.behaviorType === 'apply_discount') return '%';
+  if (definition.behaviorType === 'freeze_slot') return '❄';
+  if (definition.behaviorType === 'grant_research') return '⌁';
+  if (definition.behaviorType === 'reroll_shop') return '↻';
+  if (definition.type === ITEM_TYPES.PACK) return '▤';
+  if (definition.type === ITEM_TYPES.CARD) return '▥';
+  if (definition.type === ITEM_TYPES.CONSUMABLE) return '◈';
+  return '•';
+}

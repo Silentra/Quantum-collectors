@@ -8,7 +8,7 @@ import * as player from './player.js';
 import * as cards from './cards.js';
 import * as groups from './groups.js';
 import * as toast from './toast.js';
-import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import {
   equipCosmetic,
   featureCard,
@@ -222,27 +222,29 @@ function renderConsumables(p) {
   if (!container) return;
 
   const entries = getOwnedConsumableEntries(p);
-  const content = entries.length === 0
-    ? '<div class="profile-empty-state">No consumables owned.</div>'
-    : `<div class="profile-item-grid">${entries.map(({ itemId, quantity, definition }) => `
-        <article class="profile-item-card">
-          <div class="profile-card-topline">
-            <span>${escapeHtml(formatLabel(definition.rarity, 'Common'))}</span>
-            <span>${escapeHtml(formatLabel(definition.category, 'Consumable'))}</span>
-          </div>
-          <h4 class="profile-card-title">${escapeHtml(definition.name || itemId)}</h4>
-          <p class="profile-card-description">${escapeHtml(definition.description || 'No description available.')}</p>
-          <div class="profile-card-footer">Quantity: <strong>${escapeHtml(quantity)}</strong></div>
-        </article>
-      `).join('')}</div>`;
+  const chips = entries.length === 0
+    ? '<p class="profile-consumables-empty">None owned</p>'
+    : entries.map(({ itemId, quantity, definition }) => {
+      const visual = resolveItemDisplay(definition);
+      const iconClass = visual.cssClass ? ` ${visual.cssClass}` : '';
+      const title = escapeHtml(definition?.description || definition?.name || itemId);
+      const name = escapeHtml(definition?.name || itemId);
+      return `
+        <div class="profile-consumable-chip${iconClass}" title="${title}">
+          <span class="profile-consumable-icon" aria-hidden="true">${escapeHtml(visual.emoji)}</span>
+          <span class="profile-consumable-label">${name}</span>
+          <span class="profile-consumable-qty">×${escapeHtml(quantity)}</span>
+        </div>
+      `;
+    }).join('');
 
   container.innerHTML = `
-    <section class="profile-panel">
-      <div class="profile-panel-header">
+    <section class="profile-consumables-panel">
+      <header class="profile-consumables-panel-header">
         <h3>Consumables</h3>
-        <span>Read only. Use shop consumables in the Shop tab.</span>
-      </div>
-      ${content}
+        <span class="profile-consumables-hint">Use in Shop</span>
+      </header>
+      <div class="profile-consumables-chips">${chips}</div>
     </section>
   `;
 }

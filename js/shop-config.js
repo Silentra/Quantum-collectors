@@ -27,7 +27,7 @@ function defaultCardRarityControls() {
 
 export const DEFAULT_SHOP_CONFIG = Object.freeze({
 
-  // How many days between automatic shop rotations
+  // Legacy field — automatic shop refresh uses weekly-research-pack.js timing (ignored by generation).
   shopRefreshDays: 3,
 
   // Number of slots in the shop (conceptual range: 3–9)

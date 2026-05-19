@@ -369,6 +369,8 @@ js/
   - Validation remains side-effect free and performs no DB writes.
 - **Runtime mutation layer** (`shop-mutations.js`):
   - All generation and mutation paths resolve config through `shop-config.js → resolveShopRuntimeConfig()` (persisted `config/shop` via `getShopConfig()`, or `mergeShopConfig()` when an override is passed).
+  - **Weekly shop refresh**: automatic rotation expiry and `refreshAt` use `weekly-research-pack.js` timestamp helpers (`getNextWeeklyRefreshTimestamp`, `getLastWeeklyRefreshTimestamp`) with schedule from `config/projectBalance` (`weeklyRefreshDay`, `weeklyRefreshHour`). No separate shop scheduler; `shopRefreshDays` in shop config is legacy/ignored for generation. Pull-based regen on shop tab open via `hasActiveRotation()` only.
+  - **Consumable visuals**: `shop-definitions.js → resolveItemDisplay()` reads per-item `display` metadata with type/behavior fallbacks; used by shop and profile UI.
   - `ensureShopRotation(username, options)` remains the pull-based lifecycle entry point and refreshes expired or forced rotations.
   - `refreshShopRotation(username, options)` forces the same safe full-refresh path.
   - `rerollShopSlot(username, slotIndex, options)` performs RP-only single-slot rerolls. It deducts `currencies.currentResearchPoints`, increments `shopUsage.rerollsUsedThisRotation`, and writes updated slots only after validation and replacement generation succeed.

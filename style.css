@@ -403,6 +403,129 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   text-align: center;
 }
 
+.shop-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(148px, 200px);
+  gap: 1rem;
+  align-items: start;
+}
+
+.shop-layout-main {
+  min-width: 0;
+}
+
+.shop-toolbar-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.shop-toolbar-weekly {
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.shop-consumables-aside {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.85rem;
+  padding: 0.65rem;
+  position: sticky;
+  top: 0.5rem;
+}
+
+.shop-consumables-aside-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.45rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.shop-consumables-aside-header h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.shop-consumables-aside-note,
+.shop-consumables-empty {
+  color: #64748b;
+  font-size: 0.68rem;
+}
+
+.shop-consumables-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.shop-consumable {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.45rem;
+  text-align: left;
+}
+
+.shop-consumable-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  width: 1.25rem;
+  text-align: center;
+}
+
+.shop-consumable-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.shop-consumable-name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shop-consumable-meta {
+  display: block;
+  margin-top: 0;
+  font-size: 0.65rem;
+  color: #94a3b8;
+}
+
+.shop-consumable-action {
+  margin-top: 0;
+  font-size: 0.6rem;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .shop-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .shop-consumables-aside {
+    position: static;
+    order: -1;
+  }
+
+  .shop-consumables-stack {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .shop-consumable {
+    flex: 1 1 calc(50% - 0.35rem);
+    min-width: 8.5rem;
+  }
+}
+
 @media (max-width: 720px) {
   .shop-header,
   .shop-toolbar,
@@ -419,9 +542,118 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   .shop-stat {
     flex: 1 1 0;
   }
+
+  .shop-consumable {
+    flex: 1 1 100%;
+  }
 }
 
 /* ===================== PROFILE INVENTORY + COSMETICS ===================== */
+
+.profile-top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.profile-top-main {
+  min-width: 0;
+}
+
+.profile-consumables-aside {
+  min-width: 0;
+}
+
+.profile-consumables-panel {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.85rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.profile-consumables-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.profile-consumables-panel-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.profile-consumables-hint,
+.profile-consumables-empty {
+  color: #64748b;
+  font-size: 0.68rem;
+  margin: 0;
+}
+
+.profile-consumables-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.profile-consumable-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+.profile-consumable-icon {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  width: 1.1rem;
+  text-align: center;
+}
+
+.profile-consumable-label {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.profile-consumable-qty {
+  flex-shrink: 0;
+  color: #94a3b8;
+  font-size: 0.68rem;
+}
+
+@media (max-width: 768px) {
+  .profile-top-row {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-consumables-aside {
+    order: -1;
+  }
+
+  .profile-consumables-chips {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .profile-consumable-chip {
+    flex: 1 1 calc(50% - 0.35rem);
+    min-width: 7.5rem;
+  }
+}
 
 .profile-panel {
   background: #0f172a;

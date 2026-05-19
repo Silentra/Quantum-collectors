@@ -47,6 +47,7 @@ import {
   normalizePurchaseHistory,
 } from './player-schema.js';
 import { generateAvailableProjects } from './project-pool.js';
+import { getLastWeeklyRefreshTimestamp } from './weekly-research-pack.js';
 import {
   canApplyDiscount,
   canFreezeSlot,
@@ -294,10 +295,14 @@ function hasActiveRotation(player, config, now) {
 
   const slots = normalizeSlots(rotation.slots);
   const refreshAt = Number(rotation.refreshAt || 0);
+  const generatedAt = Number(rotation.generatedAt || 0);
   const expectedVersion = config.generationVersion ?? DEFAULT_SHOP_CONFIG.generationVersion;
+  const lastWeeklyBoundary = getLastWeeklyRefreshTimestamp(now);
+  const isWithinWeeklyCycle = generatedAt >= lastWeeklyBoundary;
 
   return slots.length > 0 &&
     refreshAt > now &&
+    isWithinWeeklyCycle &&
     rotation.generationVersion === expectedVersion;
 }
 

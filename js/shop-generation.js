@@ -24,8 +24,7 @@ import { SHOP_PACK_PREFIX } from './shop-catalog.js';
 import { DEFAULT_SHOP_CONFIG, resolveMaxCardSlots, resolveMaxPackSlots } from './shop-config.js';
 import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { createShopRotationState, createShopSlot } from './shop-state.js';
-
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
+import { getNextWeeklyRefreshTimestamp } from './weekly-research-pack.js';
 
 export const REROLL_SCOPES = Object.freeze({
   ALL: 'all',
@@ -416,7 +415,7 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
   return createShopRotationState({
     slots,
     generatedAt: now,
-    refreshAt: now + toPositiveNumber(effectiveConfig.shopRefreshDays, DEFAULT_SHOP_CONFIG.shopRefreshDays) * MS_PER_DAY,
+    refreshAt: getNextWeeklyRefreshTimestamp(now),
     generationVersion: effectiveConfig.generationVersion ?? DEFAULT_SHOP_CONFIG.generationVersion,
   });
 }

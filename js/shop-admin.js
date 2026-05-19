@@ -97,7 +97,12 @@ function renderShopEconomyConfig(config) {
         </div>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        ${renderNumberField('shop-cfg-refresh-days', 'Shop Refresh Days', config.shopRefreshDays, { step: '0.25' })}
+        <div>
+          <label class="text-xs text-surface-400 block mb-1">Shop Rotation Refresh</label>
+          <p class="text-xs text-surface-300 bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 leading-relaxed">
+            Shop rotations refresh on the <strong>weekly schedule</strong> configured in Admin → Project Balance → Weekly Reward Pack (day and hour). No separate shop timer.
+          </p>
+        </div>
         ${renderNumberField('shop-cfg-slot-count', 'Shop Slot Count', config.shopSlotCount, { min: '3' })}
         ${renderNumberField('shop-cfg-min-cosmetics', 'Minimum Cosmetic Slots', config.minimumCosmeticSlots)}
         ${renderNumberField('shop-cfg-min-utility', 'Minimum Utility Slots', config.minimumUtilitySlots)}
@@ -272,7 +277,6 @@ export function renderShopAdminPanel() {
       };
     }
     saveShopConfig({
-      shopRefreshDays: numberValue('shop-cfg-refresh-days', DEFAULT_SHOP_CONFIG.shopRefreshDays),
       shopSlotCount: numberValue('shop-cfg-slot-count', DEFAULT_SHOP_CONFIG.shopSlotCount),
       minimumCosmeticSlots: numberValue('shop-cfg-min-cosmetics', DEFAULT_SHOP_CONFIG.minimumCosmeticSlots),
       minimumUtilitySlots: numberValue('shop-cfg-min-utility', DEFAULT_SHOP_CONFIG.minimumUtilitySlots),

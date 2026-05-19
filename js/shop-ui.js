@@ -17,7 +17,8 @@ import * as db from './database.js';
 import * as toast from './toast.js';
 import { buildShopCatalog } from './shop-catalog.js';
 import { getShopConfig } from './shop-config.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { ITEM_DEFINITIONS, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
+import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
 import {
   ensureShopRotation,
   freezeShopSlot,
@@ -130,7 +131,7 @@ function formatCountdown(refreshAt) {
   const target = Number(refreshAt || 0);
   if (!Number.isFinite(target) || target <= 0) return 'Refresh timing unavailable';
   const remaining = target - Date.now();
-  if (remaining <= 0) return 'Refresh available on next shop load';
+  if (remaining <= 0) return 'Weekly reset on next shop visit';
   const totalSeconds = Math.ceil(remaining / 1000);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -248,36 +249,14 @@ function renderSlot(slot, index, snapshot) {
 }
 
 function getItemIcon(item) {
-  if (item?.type === ITEM_TYPES.COSMETIC) {
-    if (item.category === 'aura') return '✦';
-    if (item.category === 'border') return '▣';
-    if (item.category === 'profile_banner') return '▰';
-    if (item.category === 'title') return '★';
-    return '◆';
-  }
-  if (item?.behaviorType === 'apply_discount') return '%';
-  if (item?.behaviorType === 'freeze_slot') return '❄';
-  if (item?.behaviorType === 'grant_research') return '⌁';
-  if (item?.behaviorType === 'reroll_shop') return '↻';
-  if (item?.type === ITEM_TYPES.PACK) return '▤';
-  if (item?.type === ITEM_TYPES.CARD) return '▥';
-  return '•';
+  const source = item?.definition || item;
+  return resolveItemDisplay(source).emoji;
 }
 
 function getShopConsumables() {
   return Object.values(ITEM_DEFINITIONS)
     .filter(definition => definition?.type === ITEM_TYPES.CONSUMABLE)
     .filter(definition => SHOP_CONSUMABLE_BEHAVIORS.has(definition.behaviorType));
-}
-
-function getConsumableBehaviorLabel(definition) {
-  if (definition?.behaviorType === 'reroll_shop') {
-    return `${formatLabel(definition?.behaviorConfig?.scope, 'Shop')} Reroll`;
-  }
-  if (definition?.behaviorType === 'apply_discount') return 'Apply Discount';
-  if (definition?.behaviorType === 'freeze_slot') return 'Grant Freeze Allowance';
-  if (definition?.behaviorType === 'grant_research') return 'Research Proposal';
-  return formatLabel(definition?.behaviorType);
 }
 
 function renderTargetButton(index, disabled) {
@@ -317,24 +296,49 @@ function renderConsumables(snapshot) {
     const quantity = getItemQuantity(snapshot, itemId);
     const disabled = quantity <= 0;
     const behaviorType = definition.behaviorType || 'unknown';
-    const actionLabel = TARGET_BEHAVIORS.has(behaviorType) ? 'Select Target' : 'Use';
+    const actionLabel = TARGET_BEHAVIORS.has(behaviorType) ? 'Target' : 'Use';
+    const visual = resolveItemDisplay(definition);
+    const iconClass = visual.cssClass ? ` ${escapeHtml(visual.cssClass)}` : '';
+    const title = escapeHtml(definition.description || definition.name || itemId);
     return `
-      <button class="shop-consumable" data-shop-action="use-consumable" data-item-id="${escapeHtml(itemId)}" ${disabled ? 'disabled' : ''}>
-        <span class="shop-consumable-name">${escapeHtml(definition.name || formatLabel(itemId))}</span>
-        <span class="shop-consumable-meta">${escapeHtml(getConsumableBehaviorLabel(definition))} · Qty ${quantity}</span>
+      <button class="shop-consumable${iconClass}" data-shop-action="use-consumable" data-item-id="${escapeHtml(itemId)}" title="${title}" ${disabled ? 'disabled' : ''}>
+        <span class="shop-consumable-icon" aria-hidden="true">${escapeHtml(visual.emoji)}</span>
+        <span class="shop-consumable-body">
+          <span class="shop-consumable-name">${escapeHtml(definition.name || formatLabel(itemId))}</span>
+          <span class="shop-consumable-meta">×${quantity}</span>
+        </span>
         <span class="shop-consumable-action">${actionLabel}</span>
       </button>
     `;
   }).join('');
 
+  if (!rows) {
+    return `
+      <aside class="shop-consumables-aside">
+        <div class="shop-consumables-aside-header">
+          <h3>Consumables</h3>
+        </div>
+        <p class="shop-consumables-empty">None owned</p>
+      </aside>
+    `;
+  }
+
   return `
-    <section class="shop-panel">
-      <div class="shop-panel-header">
+    <aside class="shop-consumables-aside">
+      <div class="shop-consumables-aside-header">
         <h3>Consumables</h3>
-        <span class="shop-panel-note">Targeting is local and temporary.</span>
+        <span class="shop-consumables-aside-note">Use on slots</span>
       </div>
-      <div class="shop-consumables-grid">${rows}</div>
-    </section>
+      <div class="shop-consumables-stack">${rows}</div>
+    </aside>
+  `;
+}
+
+function renderAdminToolbarActions(slots) {
+  if (!auth.isAdmin()) return '';
+  return `
+      <button class="shop-btn" data-shop-action="reroll-rotation" ${slots.length ? '' : 'disabled'}>Reroll Rotation</button>
+      <button class="shop-btn" data-shop-action="refresh-now">Refresh Now</button>
   `;
 }
 
@@ -357,12 +361,13 @@ function renderShopHtml(snapshot) {
   const rp = getCurrentRp(snapshot);
   const generatedAt = Number(rotation?.generatedAt || 0);
   const generatedLabel = generatedAt > 0 ? new Date(generatedAt).toLocaleString() : 'Unknown';
+  const weeklyLabel = getWeeklyRefreshLabel();
 
   return `
     <div class="shop-header">
       <div>
         <h2>Shop</h2>
-        <p>Spend Research Points and use shop consumables. All actions are validated by the backend runtime.</p>
+        <p>Spend Research Points and use shop consumables. Resets weekly with your reward pack (${escapeHtml(weeklyLabel)}).</p>
       </div>
       <div class="shop-header-stats">
         <div class="shop-stat">
@@ -370,30 +375,35 @@ function renderShopHtml(snapshot) {
           <strong>${escapeHtml(rp)}</strong>
         </div>
         <div class="shop-stat">
-          <span>Refresh In</span>
+          <span>Weekly Reset In</span>
           <strong id="shop-refresh-countdown">${escapeHtml(formatCountdown(rotation?.refreshAt))}</strong>
         </div>
       </div>
     </div>
 
-    <div class="shop-toolbar">
-      <div class="shop-toolbar-meta">Generated: ${escapeHtml(generatedLabel)}</div>
-      <div class="shop-toolbar-actions">
-        <button class="shop-btn" data-shop-action="reroll-rotation" ${slots.length ? '' : 'disabled'}>Reroll Rotation</button>
-        <button class="shop-btn" data-shop-action="refresh-now">Refresh Now</button>
-      </div>
-    </div>
+    <div class="shop-layout">
+      <div class="shop-layout-main">
+        <div class="shop-toolbar">
+          <div class="shop-toolbar-meta">
+            <span>Generated: ${escapeHtml(generatedLabel)}</span>
+            <span class="shop-toolbar-weekly">Resets ${escapeHtml(weeklyLabel)}</span>
+          </div>
+          ${auth.isAdmin() ? `<div class="shop-toolbar-actions shop-toolbar-actions--admin">${renderAdminToolbarActions(slots)}</div>` : ''}
+        </div>
 
-    ${renderTargetBanner()}
-    ${renderConsumables(snapshot)}
+        ${renderTargetBanner()}
 
-    <section class="shop-panel">
-      <div class="shop-panel-header">
+        <section class="shop-panel shop-panel--rotation">
+          <div class="shop-panel-header">
         <h3>Current Rotation</h3>
         <span class="shop-panel-note">${slots.length} slots</span>
       </div>
       ${slots.length ? `<div class="shop-slot-grid">${slots.map((slot, index) => renderSlot(slot, index, snapshot)).join('')}</div>` : renderEmptyState()}
-    </section>
+        </section>
+      </div>
+
+      ${renderConsumables(snapshot)}
+    </div>
   `;
 }
 
@@ -450,6 +460,10 @@ async function handleShopAction(username, action, { slotIndex, itemId }) {
       if (result.success) targetMode = null;
       renderShop();
       return;
+    }
+
+    if (action === 'reroll-rotation' || action === 'refresh-now') {
+      if (!auth.isAdmin()) return;
     }
 
     if (action === 'reroll-rotation') {
