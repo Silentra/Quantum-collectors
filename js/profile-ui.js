@@ -15,7 +15,7 @@ import {
   unequipCosmetic,
   unfeatureCard,
 } from './shop-mutations.js';
-import { renderProfileAchievementsSummary } from './achievements-ui.js';
+import { renderProfileAchievements } from './achievements-ui.js';
 
 const PROFILE_FEATURED_CARD_LIMIT = 3;
 
@@ -455,10 +455,10 @@ export function renderProfile() {
 
   renderProfileSummary(p);
   renderEquippedIdentity(p);
+  renderProfileAchievements();
   renderConsumables(p);
   renderCosmetics(p);
   renderFeaturedCards(p, session.username);
   renderCollectionProgress(session.username);
-  renderProfileAchievementsSummary();
   wireProfileActions(session.username);
 }

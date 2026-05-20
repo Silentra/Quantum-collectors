@@ -1,5 +1,5 @@
 /**
- * achievements-ui.js — Player-facing achievements tab and profile summary.
+ * achievements-ui.js — Profile-embedded achievements panel.
  */
 
 import * as auth from './auth.js';
@@ -12,6 +12,9 @@ import {
 import { claimAchievementReward } from './achievements.js';
 import { isPlayerClaimed, isPlayerUnlocked } from './achievement-engine.js';
 import { ITEM_DEFINITIONS } from './shop-definitions.js';
+
+const DEFAULT_SHOW_COUNT = 5;
+let profileShowLimit = DEFAULT_SHOW_COUNT;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -29,6 +32,11 @@ function getPlayerAchievements(username) {
 function getEntry(playerAchievements, achievementId) {
   const entry = playerAchievements?.[achievementId];
   return entry && typeof entry === 'object' ? entry : {};
+}
+
+function getUnlockedAt(playerAchievements, achievementId) {
+  const entry = getEntry(playerAchievements, achievementId);
+  return Number(entry.unlockedAt) || 0;
 }
 
 function formatRewardSummary(reward) {
@@ -52,7 +60,7 @@ function formatRewardSummary(reward) {
 
 function rewardsSummary(definition) {
   const rewards = Array.isArray(definition?.rewards) ? definition.rewards : [];
-  if (!rewards.length) return 'No rewards';
+  if (!rewards.length) return '';
   return rewards.map(formatRewardSummary).filter(Boolean).join(', ');
 }
 
@@ -65,110 +73,66 @@ function progressPercent(entry) {
   return 0;
 }
 
-function isSecretLocked(definition, unlocked) {
-  return definition.hidden === true && !unlocked;
+/**
+ * Visible achievements: hidden+locked omitted; unlocked first (newest), then locked by sortOrder.
+ */
+function buildOrderedVisibleAchievements(definitions, playerAchievements) {
+  const unlocked = [];
+  const lockedVisible = [];
+
+  for (const def of definitions) {
+    if (!def?.enabled) continue;
+    const unlockedFlag = isPlayerUnlocked(playerAchievements, def.id);
+    if (!unlockedFlag && def.hidden === true) continue;
+    if (unlockedFlag) unlocked.push(def);
+    else lockedVisible.push(def);
+  }
+
+  unlocked.sort((a, b) => getUnlockedAt(playerAchievements, b.id) - getUnlockedAt(playerAchievements, a.id));
+  lockedVisible.sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
+
+  return [...unlocked, ...lockedVisible];
 }
 
-function achievementCardHtml(definition, playerAchievements, username, options = {}) {
+function achievementCardHtml(definition, playerAchievements) {
   const entry = getEntry(playerAchievements, definition.id);
   const unlocked = isPlayerUnlocked(playerAchievements, definition.id);
   const claimed = isPlayerClaimed(playerAchievements, definition.id);
-  const secret = isSecretLocked(definition, unlocked);
-  const compact = options.compact === true;
-
-  const name = secret ? '??? Secret Achievement' : escapeHtml(definition.name);
-  const description = secret ? '' : escapeHtml(definition.description);
-  const icon = secret ? '❓' : escapeHtml(definition.icon?.emoji || '🏆');
-  const rewardText = secret ? '' : escapeHtml(rewardsSummary(definition));
+  const emoji = (definition.icon?.emoji || '').trim() || '🏆';
+  const rewardText = escapeHtml(rewardsSummary(definition));
   const pct = progressPercent(entry);
-  const showProgress = !unlocked && !secret;
   const canClaim = unlocked && !claimed && (definition.rewards?.length > 0);
 
-  const claimBtn = canClaim && !compact
-    ? `<button type="button" class="ach-claim-btn bg-primary-600 hover:bg-primary-500 px-3 py-1.5 rounded text-xs font-medium" data-achievement-id="${escapeHtml(definition.id)}">Claim reward</button>`
+  const claimBtn = canClaim
+    ? `<button type="button" class="ach-claim-btn bg-primary-600 hover:bg-primary-500 px-2 py-1 rounded text-xs font-medium" data-achievement-id="${escapeHtml(definition.id)}">Claim</button>`
     : '';
 
   const statusBadge = claimed
     ? '<span class="ach-badge ach-badge-done">Claimed</span>'
     : unlocked
-      ? '<span class="ach-badge ach-badge-ready">Unlocked</span>'
-      : '<span class="ach-badge ach-badge-progress">In progress</span>';
+      ? (canClaim ? '<span class="ach-badge ach-badge-ready">Claim</span>' : '<span class="ach-badge ach-badge-done">Done</span>')
+      : '<span class="ach-badge ach-badge-progress">Locked</span>';
 
   return `
-    <article class="ach-card${secret ? ' ach-card-secret' : ''}" data-achievement-id="${escapeHtml(definition.id)}">
-      <div class="ach-card-icon" aria-hidden="true">${icon}</div>
+    <article class="ach-card ach-card-compact" data-achievement-id="${escapeHtml(definition.id)}">
+      <div class="ach-card-icon" aria-hidden="true">${escapeHtml(emoji)}</div>
       <div class="ach-card-body">
         <div class="ach-card-head">
-          <h4 class="ach-card-title">${name}</h4>
-          ${compact ? '' : statusBadge}
+          <h4 class="ach-card-title">${escapeHtml(definition.name)}</h4>
+          ${statusBadge}
         </div>
-        ${description ? `<p class="ach-card-desc">${description}</p>` : ''}
-        ${showProgress ? `
+        ${definition.description ? `<p class="ach-card-desc">${escapeHtml(definition.description)}</p>` : ''}
+        ${!unlocked ? `
           <div class="ach-progress-wrap">
             <div class="ach-progress-bar"><div class="ach-progress-fill" style="width:${pct}%"></div></div>
             <span class="ach-progress-label">${pct}%</span>
           </div>
         ` : ''}
-        ${rewardText && !claimed ? `<p class="ach-card-reward">Reward: ${rewardText}</p>` : ''}
+        ${rewardText && !claimed ? `<p class="ach-card-reward">${rewardText}</p>` : ''}
         ${claimBtn}
       </div>
     </article>
   `;
-}
-
-function sectionHtml(title, cardsHtml, emptyMessage) {
-  if (!cardsHtml) {
-    return `
-      <section class="ach-section">
-        <h3 class="ach-section-title">${escapeHtml(title)}</h3>
-        <p class="ach-section-empty">${escapeHtml(emptyMessage)}</p>
-      </section>
-    `;
-  }
-  return `
-    <section class="ach-section">
-      <h3 class="ach-section-title">${escapeHtml(title)}</h3>
-      <div class="ach-card-grid">${cardsHtml}</div>
-    </section>
-  `;
-}
-
-function categorizeAchievements(definitions, playerAchievements) {
-  const ready = [];
-  const inProgress = [];
-  const completed = [];
-
-  for (const def of definitions) {
-    if (!def.enabled) continue;
-    const unlocked = isPlayerUnlocked(playerAchievements, def.id);
-    const claimed = isPlayerClaimed(playerAchievements, def.id);
-    const hasRewards = Array.isArray(def.rewards) && def.rewards.length > 0;
-
-    if (unlocked && hasRewards && !claimed) {
-      ready.push(def);
-    } else if (unlocked && (!hasRewards || claimed)) {
-      completed.push(def);
-    } else {
-      inProgress.push(def);
-    }
-  }
-
-  return { ready, inProgress, completed };
-}
-
-function wireClaimButtons(container, username) {
-  container.querySelectorAll('.ach-claim-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const achievementId = btn.dataset.achievementId;
-      const result = claimAchievementReward(username, achievementId);
-      if (result.success) {
-        toast.success('Reward claimed!');
-        renderAchievements();
-        return;
-      }
-      toast.error(getClaimErrorMessage(result.reason));
-    });
-  });
 }
 
 function getClaimErrorMessage(reason) {
@@ -185,95 +149,90 @@ function getClaimErrorMessage(reason) {
   return messages[reason] || 'Could not claim reward.';
 }
 
-export function renderAchievements() {
-  const container = document.getElementById('achievements-content');
+function wireClaimButtons(container, username) {
+  container.querySelectorAll('.ach-claim-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const result = claimAchievementReward(username, btn.dataset.achievementId);
+      if (result.success) {
+        toast.success('Reward claimed!');
+        renderProfileAchievements();
+        return;
+      }
+      toast.error(getClaimErrorMessage(result.reason));
+    });
+  });
+}
+
+function wireShowMore(container) {
+  container.querySelectorAll('[data-ach-show]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const raw = btn.dataset.achShow;
+      profileShowLimit = raw === 'all' ? Infinity : Number(raw) || DEFAULT_SHOW_COUNT;
+      renderProfileAchievements();
+    });
+  });
+}
+
+export function renderProfileAchievements() {
+  const container = document.getElementById('profile-achievements');
   if (!container) return;
 
   const session = auth.getSession();
   if (!session || session.username === '__admin__') {
-    container.innerHTML = '<p class="text-surface-500 text-sm">Sign in to view achievements.</p>';
+    container.innerHTML = '';
     return;
   }
-
-  const username = session.username;
-
-  if (!isAchievementSystemEnabled()) {
-    container.innerHTML = '<p class="text-surface-500 text-sm">Achievements are temporarily disabled.</p>';
-    return;
-  }
-
-  const definitions = listAchievementDefinitions();
-  const playerAchievements = getPlayerAchievements(username);
-
-  if (!definitions.length) {
-    container.innerHTML = '<p class="text-surface-500 text-sm">No achievements are available yet. Check back soon!</p>';
-    return;
-  }
-
-  const { ready, inProgress, completed } = categorizeAchievements(definitions, playerAchievements);
-
-  const readyHtml = ready.map(d => achievementCardHtml(d, playerAchievements, username)).join('');
-  const progressHtml = inProgress.map(d => achievementCardHtml(d, playerAchievements, username)).join('');
-  const doneHtml = completed.map(d => achievementCardHtml(d, playerAchievements, username)).join('');
-
-  container.innerHTML = [
-    sectionHtml('Ready to claim', readyHtml, 'No rewards waiting — keep playing!'),
-    sectionHtml('In progress', progressHtml, 'All achievements unlocked or completed.'),
-    sectionHtml('Completed', doneHtml, 'No completed achievements yet.'),
-  ].join('');
-
-  wireClaimButtons(container, username);
-}
-
-export function renderProfileAchievementsSummary() {
-  const container = document.getElementById('profile-achievements-placeholder');
-  if (!container) return;
-
-  const session = auth.getSession();
-  if (!session || session.username === '__admin__') return;
 
   if (!isAchievementSystemEnabled()) {
     container.innerHTML = `
-      <section class="profile-panel profile-panel-muted">
-        <div class="profile-panel-header">
-          <h3>Achievements</h3>
-          <span>Disabled</span>
-        </div>
-        <div class="profile-empty-state">Achievements are temporarily unavailable.</div>
+      <section class="profile-achievements-panel profile-panel-muted">
+        <header class="profile-achievements-header"><h3>Achievements</h3></header>
+        <p class="profile-achievements-empty">Achievements are temporarily unavailable.</p>
       </section>
     `;
     return;
   }
 
   const username = session.username;
-  const definitions = listAchievementDefinitions().filter(d => d.enabled);
+  const definitions = listAchievementDefinitions();
   const playerAchievements = getPlayerAchievements(username);
-  const unlockedCount = definitions.filter(d => isPlayerUnlocked(playerAchievements, d.id)).length;
-  const claimable = definitions.filter(d => {
-    const unlocked = isPlayerUnlocked(playerAchievements, d.id);
-    const claimed = isPlayerClaimed(playerAchievements, d.id);
-    return unlocked && !claimed && d.rewards?.length > 0;
-  });
+  const ordered = buildOrderedVisibleAchievements(definitions, playerAchievements);
 
-  const recent = definitions
-    .filter(d => isPlayerUnlocked(playerAchievements, d.id))
-    .slice(0, 3)
-    .map(d => achievementCardHtml(d, playerAchievements, username, { compact: true }))
-    .join('');
+  if (!ordered.length) {
+    container.innerHTML = `
+      <section class="profile-achievements-panel">
+        <header class="profile-achievements-header"><h3>Achievements</h3></header>
+        <p class="profile-achievements-empty">No achievements to show yet.</p>
+      </section>
+    `;
+    return;
+  }
+
+  const limit = profileShowLimit === Infinity ? ordered.length : profileShowLimit;
+  const visible = ordered.slice(0, limit);
+  const cardsHtml = visible.map(d => achievementCardHtml(d, playerAchievements)).join('');
+
+  const showControls = ordered.length > DEFAULT_SHOW_COUNT
+    ? `<div class="ach-show-more" role="group" aria-label="Show more achievements">
+        <button type="button" class="ach-show-btn${profileShowLimit === 5 ? ' active' : ''}" data-ach-show="5">Show 5</button>
+        <button type="button" class="ach-show-btn${profileShowLimit === 10 ? ' active' : ''}" data-ach-show="10">Show 10</button>
+        <button type="button" class="ach-show-btn${profileShowLimit === Infinity ? ' active' : ''}" data-ach-show="all">Show All</button>
+      </div>`
+    : '';
+
+  const unlockedCount = ordered.filter(d => isPlayerUnlocked(playerAchievements, d.id)).length;
 
   container.innerHTML = `
-    <section class="profile-panel">
-      <div class="profile-panel-header">
+    <section class="profile-achievements-panel">
+      <header class="profile-achievements-header">
         <h3>Achievements</h3>
-        <button type="button" class="text-xs text-primary-400 hover:text-primary-300" data-open-achievements-tab>View all</button>
-      </div>
-      <p class="text-sm text-surface-400 mb-3">${unlockedCount} / ${definitions.length} unlocked${claimable.length ? ` · <span class="text-amber-400">${claimable.length} reward(s) ready</span>` : ''}</p>
-      ${recent ? `<div class="ach-profile-preview">${recent}</div>` : '<div class="profile-empty-state">No achievements unlocked yet.</div>'}
+        <span class="profile-achievements-meta">${unlockedCount} unlocked</span>
+      </header>
+      <div class="ach-profile-list">${cardsHtml}</div>
+      ${showControls}
     </section>
   `;
 
-  container.querySelector('[data-open-achievements-tab]')?.addEventListener('click', () => {
-    const tabBtn = document.querySelector('.tab-btn[data-tab="achievements"]');
-    tabBtn?.click();
-  });
+  wireClaimButtons(container, username);
+  wireShowMore(container);
 }

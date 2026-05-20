@@ -144,6 +144,42 @@ export function listAchievementDefinitions() {
     .sort((a, b) => (a.sortOrder - b.sortOrder) || a.name.localeCompare(b.name));
 }
 
+/**
+ * Generate a stable achievement id from title (create only).
+ * @param {string} title
+ * @param {Set<string>|string[]} [existingIds]
+ */
+export function generateAchievementId(title, existingIds = []) {
+  const used = existingIds instanceof Set ? existingIds : new Set(existingIds);
+  const base = String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 48);
+  const slug = base ? `ach_${base}` : 'ach_untitled';
+  let id = slug;
+  let n = 2;
+  while (used.has(id)) {
+    id = `${slug}_${n++}`;
+  }
+  return id;
+}
+
+/**
+ * Persist admin display order for locked visible achievements (sortOrder field).
+ * @param {string[]} orderedIds
+ */
+export function saveAchievementSortOrder(orderedIds = []) {
+  const current = getAchievementConfig();
+  const patch = {};
+  orderedIds.forEach((id, index) => {
+    const def = current.definitions[id];
+    if (def) patch[id] = { ...def, sortOrder: index };
+  });
+  if (!Object.keys(patch).length) return current;
+  return saveAchievementConfig({ definitions: patch });
+}
+
 export function isAchievementSystemEnabled() {
   return getAchievementConfig().meta.enabled !== false;
 }

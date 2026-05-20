@@ -264,7 +264,6 @@
         <button class="tab-btn" data-tab="trading">🤝 Trading</button>
         <button class="tab-btn" data-tab="shop">🛒 Shop</button>
         <button class="tab-btn" data-tab="profile">👤 Profile</button>
-        <button class="tab-btn" data-tab="achievements">🎖️ Achievements</button>
         <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
         <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">⚙️ Admin</button>
       </div>
@@ -361,21 +360,24 @@
         <div id="tab-profile" class="tab-content p-4">
           <div class="max-w-6xl mx-auto">
             <h2 class="text-xl font-bold mb-4">My Profile</h2>
-            <div class="profile-top-row">
+            <div class="profile-upper-row">
               <div class="profile-top-main">
-                <div class="bg-surface-900 rounded-xl p-6 border border-surface-700 mb-4" id="profile-summary-card">
-                  <div class="flex items-center gap-4 mb-4">
-                    <div class="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center text-2xl">👤</div>
+                <div class="bg-surface-900 rounded-xl p-5 border border-surface-700 mb-3" id="profile-summary-card">
+                  <div class="flex items-center gap-3 mb-3">
+                    <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center text-xl">👤</div>
                     <div>
-                      <div id="profile-username" class="text-xl font-bold"></div>
+                      <div id="profile-username" class="text-lg font-bold"></div>
                       <div id="profile-group" class="text-sm text-surface-400"></div>
                     </div>
                   </div>
-                  <div id="profile-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+                  <div id="profile-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
                 </div>
-                <div id="profile-identity" class="mb-4"></div>
+                <div id="profile-identity" class="mb-0"></div>
               </div>
-              <aside id="profile-inventory" class="profile-consumables-aside" aria-label="Consumables"></aside>
+              <div id="profile-achievements" class="profile-achievements-aside" aria-label="Achievements"></div>
+            </div>
+            <div class="profile-inventory-row">
+              <aside id="profile-inventory" class="profile-consumables-below" aria-label="Consumables"></aside>
             </div>
             <div id="profile-cosmetics" class="mb-4"></div>
             <div id="profile-featured-cards" class="mb-4"></div>
@@ -383,16 +385,6 @@
               <h3 class="font-semibold mb-3">Collection Progress</h3>
               <div id="profile-progress" class="space-y-3"></div>
             </div>
-            <div id="profile-achievements-placeholder" class="mt-4"></div>
-          </div>
-        </div>
-
-        <!-- Achievements Tab -->
-        <div id="tab-achievements" class="tab-content p-4">
-          <div class="max-w-4xl mx-auto">
-            <h2 class="text-xl font-bold mb-1">Achievements</h2>
-            <p class="text-surface-500 text-sm mb-4">Complete goals to unlock rewards. Hidden achievements stay secret until earned.</p>
-            <div id="achievements-content" class="achievements-shell space-y-6"></div>
           </div>
         </div>
 

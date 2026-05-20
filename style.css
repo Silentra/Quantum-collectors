@@ -550,16 +550,79 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
 /* ===================== PROFILE INVENTORY + COSMETICS ===================== */
 
-.profile-top-row {
+.profile-upper-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
   gap: 1rem;
   align-items: start;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .profile-top-main {
   min-width: 0;
+}
+
+.profile-achievements-aside {
+  min-width: 0;
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.profile-inventory-row {
+  margin-bottom: 1rem;
+}
+
+.profile-consumables-below {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.profile-achievements-panel {
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+}
+
+.profile-achievements-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.profile-achievements-header h3 {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.profile-achievements-meta {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.profile-achievements-empty {
+  color: #64748b;
+  font-size: 0.72rem;
+  margin: 0;
+}
+
+.ach-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .profile-consumables-aside {
@@ -636,12 +699,17 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 }
 
 @media (max-width: 768px) {
-  .profile-top-row {
+  .profile-upper-row {
     grid-template-columns: 1fr;
   }
 
-  .profile-consumables-aside {
-    order: -1;
+  .profile-achievements-aside {
+    max-height: none;
+    order: 2;
+  }
+
+  .profile-inventory-row {
+    order: 3;
   }
 
   .profile-consumables-chips {
@@ -2678,6 +2746,83 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .trade-confirm-btn-confirm:hover { background: #15803d; }
 
 /* Achievements */
+.ach-card-compact {
+  padding: 0.5rem 0.6rem;
+  gap: 0.5rem;
+}
+.ach-card-compact .ach-card-icon {
+  font-size: 1.25rem;
+  width: 1.75rem;
+}
+.ach-card-compact .ach-card-title {
+  font-size: 0.8rem;
+}
+.ach-card-compact .ach-card-desc {
+  font-size: 0.68rem;
+  margin-bottom: 0.25rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ach-show-more {
+  display: flex;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.ach-show-btn {
+  font-size: 0.65rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 0.35rem;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  cursor: pointer;
+}
+.ach-show-btn:hover,
+.ach-show-btn.active {
+  background: #334155;
+  color: #e2e8f0;
+}
+.ach-admin-sortable {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ach-admin-sort-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  cursor: grab;
+}
+.ach-admin-sort-item.ach-admin-sort-dragging {
+  opacity: 0.6;
+  cursor: grabbing;
+}
+.ach-admin-drag-handle {
+  color: #64748b;
+  font-size: 0.85rem;
+  user-select: none;
+}
+.ach-admin-sort-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+}
+.ach-admin-reward-row .ach-reward-amount.hidden,
+.ach-admin-reward-row .ach-reward-consumable.hidden,
+.ach-admin-reward-row .ach-reward-cosmetic.hidden,
+.ach-admin-reward-row .ach-reward-pack.hidden,
+.ach-admin-reward-row .ach-reward-qty.hidden {
+  display: none;
+}
 .ach-section + .ach-section {
   margin-top: 1.5rem;
 }

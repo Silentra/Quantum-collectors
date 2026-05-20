@@ -34,7 +34,7 @@ js/
   achievement-mutations.js  - Unlock/progress persistence, stat-scoped + login evaluation, claim
   achievement-rewards.js    - Grants via addResearchPoints, grantConsumable, unlockCosmetic, addPack only
   achievement-validation.js - Definition/reward validation, claim guards
-  achievements-ui.js        - Player tab + profile summary (hidden achievements masked until unlock)
+  achievements-ui.js        - Profile-embedded achievements panel (hidden locked omitted; Show 5/10/All)
   achievements-admin.js     - Admin CRUD for achievement definitions
   seasonal.js        - PLACEHOLDER
   player-schema.js   - Expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profile identity, profileVisibility)
@@ -510,7 +510,7 @@ js/
 ### Profile Inventory + Cosmetic Runtime UI
 - **Player-facing profile scope**: The Profile tab now surfaces existing runtime state for identity, consumables, cosmetics, featured cards, RP balances, collection progress, and an achievements summary. It does not add admin tools, public/social profiles, consumable use, monetization, preview animations, new listeners, polling, or backend redesigns.
 - **Rendering ownership** (`profile-ui.js`):
-  - Preserves the existing username/group, stats, and collection-progress behavior while adding dedicated sections for currently equipped identity, read-only consumables, owned cosmetics, featured cards, and achievements summary (`achievements-ui.js` → full tab).
+  - Preserves the existing username/group, stats, and collection-progress behavior while adding dedicated sections for currently equipped identity, read-only consumables, owned cosmetics, featured cards, and achievements panel (`achievements-ui.js` in profile upper-right, consumables below).
   - Equipped identity renders strictly from `players/{username}/profile/*` via the canonical profile runtime helpers, not from legacy `cosmetics.equipped`.
   - Consumables render only owned quantities from `players/{username}/items` where quantity is greater than zero. They are read-only in Profile.
   - Cosmetics render only owned `ITEM_TYPES.COSMETIC` entries from `cosmetics.owned`, grouped dynamically by metadata category. Unknown/future categories are shown under “Other Cosmetics.”
@@ -533,8 +533,8 @@ js/
   - Conditions are simple `{stat, op, value}` with `conditionMode` `all`/`any` — no formulas, nesting, JS eval, or callbacks.
 - **Stat registry** (`achievement-stats.js`): additive counters on `players/{username}/stats/*` and top-level fields (`totalResearchPoints`, `projectsCompleted`, `researchStats/breakthroughs`). High-water stats: `bestProjectSuccessStreak`, `maxCardAuraTier`. Current `projectSuccessStreak` may reset on failure; achievements should target `bestProjectSuccessStreak`, not current streak.
 - **Rewards** (`achievement-rewards.js`): manual claim via `claimAchievementReward()` routes through `addResearchPoints`, `grantConsumable`, `unlockCosmetic` (ownership only — never auto-equip), and `addPack` — no direct inventory/cosmetic/pack writes.
-- **Hidden achievements**: locked hidden entries render as `??? Secret Achievement` with no name, description, icon, or reward until unlocked.
-- **UI**: `achievements-ui.js` (player tab + profile summary); `achievements-admin.js` (admin CRUD).
+- **Hidden achievements**: locked hidden entries are omitted from the player list entirely until unlocked.
+- **UI**: `achievements-ui.js` (profile panel only); `achievements-admin.js` (simplified CRUD, auto IDs on create, drag-and-drop `sortOrder`, reward dropdowns).
 
 ### Admin Shop Tools
 - **Additive admin scope**: Adds a Shop section to the existing admin dashboard and small Manage Player extensions. It does not replace admin navigation, redesign shop economy, alter consumable routing, change profile runtime, add analytics/logging, or introduce new listeners.

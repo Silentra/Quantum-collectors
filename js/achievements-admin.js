@@ -1,21 +1,38 @@
 /**
- * achievements-admin.js — Admin CRUD for achievement definitions.
+ * achievements-admin.js — Simplified admin CRUD for achievement definitions.
  */
 
 import * as toast from './toast.js';
+import * as packs from './packs.js';
 import {
-  CONDITION_MODES,
-  CONDITION_OPS,
   REWARD_TYPES,
   deleteAchievementDefinition,
+  generateAchievementId,
   getAchievementConfig,
   listAchievementDefinitions,
   saveAchievementDefinition,
+  saveAchievementSortOrder,
 } from './achievement-config.js';
 import { listRegisteredStatKeys } from './achievement-stats.js';
 import { validateAchievementDefinition } from './achievement-validation.js';
+import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 
 let editingId = null;
+
+const STAT_LABELS = Object.freeze({
+  totalResearchPoints: 'Total research points',
+  projectsCompleted: 'Projects completed',
+  breakthroughsAchieved: 'Breakthroughs',
+  uniqueCardsOwned: 'Unique cards owned',
+  tradesCompleted: 'Trades completed',
+  packsOpened: 'Packs opened',
+  shopPurchases: 'Shop purchases',
+  cosmeticsUnlocked: 'Cosmetics unlocked',
+  cosmeticsEquipped: 'Cosmetics equipped',
+  uniqueCardsDiscovered: 'Unique cards discovered',
+  maxCardAuraTier: 'Max card aura tier',
+  bestProjectSuccessStreak: 'Best project success streak',
+});
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -25,156 +42,239 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
-function readFormDefinition(root) {
-  const conditions = [];
-  root.querySelectorAll('[data-ach-condition-row]').forEach(row => {
-    conditions.push({
-      stat: row.querySelector('.ach-cond-stat')?.value,
-      op: row.querySelector('.ach-cond-op')?.value,
-      value: Number(row.querySelector('.ach-cond-value')?.value),
-    });
-  });
+function statLabel(key) {
+  return STAT_LABELS[key] || key;
+}
+
+function listConsumableOptions() {
+  return Object.values(ITEM_DEFINITIONS)
+    .filter(d => d.type === ITEM_TYPES.CONSUMABLE && d.enabled !== false)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function listCosmeticOptions() {
+  return Object.values(ITEM_DEFINITIONS)
+    .filter(d => d.type === ITEM_TYPES.COSMETIC && d.enabled !== false && d.achievementEnabled !== false)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function listPackOptions() {
+  return packs.getEnabledPackTypes().sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function nextSortOrder(definitions) {
+  if (!definitions.length) return 0;
+  return Math.max(...definitions.map(d => Number(d.sortOrder) || 0)) + 1;
+}
+
+function readFormDefinition(root, existingDef = null) {
+  const config = getAchievementConfig();
+  const existingIds = new Set(Object.keys(config.definitions));
+  const name = root.querySelector('#ach-admin-name')?.value?.trim() || '';
+
+  const stat = root.querySelector('.ach-cond-stat')?.value;
+  const value = Number(root.querySelector('.ach-cond-value')?.value);
 
   const rewards = [];
   root.querySelectorAll('[data-ach-reward-row]').forEach(row => {
     const type = row.querySelector('.ach-reward-type')?.value;
     const reward = { type };
-    if (type === 'rp') reward.amount = Number(row.querySelector('.ach-reward-amount')?.value);
-    if (type === 'consumable' || type === 'cosmetic') {
-      reward.itemId = row.querySelector('.ach-reward-item')?.value?.trim();
+    if (type === 'rp') {
+      reward.amount = Number(row.querySelector('.ach-reward-amount')?.value);
+    }
+    if (type === 'consumable') {
+      reward.itemId = row.querySelector('.ach-reward-consumable')?.value;
       reward.quantity = Number(row.querySelector('.ach-reward-qty')?.value || 1);
     }
+    if (type === 'cosmetic') {
+      reward.itemId = row.querySelector('.ach-reward-cosmetic')?.value;
+    }
     if (type === 'pack') {
-      reward.packId = row.querySelector('.ach-reward-pack')?.value?.trim();
+      reward.packId = row.querySelector('.ach-reward-pack')?.value;
       reward.quantity = Number(row.querySelector('.ach-reward-qty')?.value || 1);
     }
     rewards.push(reward);
   });
 
+  const emojiRaw = root.querySelector('#ach-admin-emoji')?.value?.trim();
+  const id = editingId || generateAchievementId(name, existingIds);
+
   return {
-    id: root.querySelector('#ach-admin-id')?.value?.trim(),
+    id,
     enabled: root.querySelector('#ach-admin-enabled')?.value === 'true',
     hidden: root.querySelector('#ach-admin-hidden')?.value === 'true',
-    name: root.querySelector('#ach-admin-name')?.value?.trim(),
-    description: root.querySelector('#ach-admin-desc')?.value?.trim(),
-    category: root.querySelector('#ach-admin-category')?.value?.trim() || 'general',
-    sortOrder: Number(root.querySelector('#ach-admin-sort')?.value || 0),
-    rarity: root.querySelector('#ach-admin-rarity')?.value || 'common',
-    conditionMode: root.querySelector('#ach-admin-mode')?.value || 'all',
-    icon: { emoji: root.querySelector('#ach-admin-emoji')?.value?.trim() || '🏆' },
-    conditions,
+    name,
+    description: root.querySelector('#ach-admin-desc')?.value?.trim() || '',
+    category: existingDef?.category ?? 'general',
+    sortOrder: existingDef?.sortOrder ?? nextSortOrder(listAchievementDefinitions()),
+    rarity: existingDef?.rarity ?? 'common',
+    icon: { emoji: emojiRaw || '🏆' },
+    conditions: [{ stat, op: 'gte', value }],
+    conditionMode: 'all',
     rewards,
-    notifyOnUnlock: root.querySelector('#ach-admin-notify')?.value === 'true',
+    notifyOnUnlock: true,
   };
 }
 
 function statOptions(selected) {
   return listRegisteredStatKeys()
-    .map(key => `<option value="${escapeHtml(key)}"${key === selected ? ' selected' : ''}>${escapeHtml(key)}</option>`)
+    .map(key => `<option value="${escapeHtml(key)}"${key === selected ? ' selected' : ''}>${escapeHtml(statLabel(key))}</option>`)
     .join('');
 }
 
-function opOptions(selected) {
-  return CONDITION_OPS
-    .map(op => `<option value="${op}"${op === selected ? ' selected' : ''}>${op}</option>`)
+function consumableOptions(selected) {
+  const opts = listConsumableOptions()
+    .map(d => `<option value="${escapeHtml(d.id)}"${d.id === selected ? ' selected' : ''}>${escapeHtml(d.name)}</option>`)
     .join('');
+  return `<option value="">Select consumable…</option>${opts}`;
 }
 
-function conditionRowHtml(c = {}) {
-  return [
-    '<div class="ach-admin-row" data-ach-condition-row>',
-    `<select class="admin-input ach-cond-stat">${statOptions(c.stat || 'packsOpened')}</select>`,
-    `<select class="admin-input ach-cond-op">${opOptions(c.op || 'gte')}</select>`,
-    `<input class="admin-input ach-cond-value" type="number" value="${escapeHtml(c.value ?? 1)}" />`,
-    '<button type="button" class="ach-admin-remove-row bg-surface-700 px-2 py-1 rounded text-xs">Remove</button>',
-    '</div>',
-  ].join('');
+function cosmeticOptions(selected) {
+  const opts = listCosmeticOptions()
+    .map(d => `<option value="${escapeHtml(d.id)}"${d.id === selected ? ' selected' : ''}>${escapeHtml(d.name)}</option>`)
+    .join('');
+  return `<option value="">Select cosmetic…</option>${opts}`;
+}
+
+function packOptions(selected) {
+  const opts = listPackOptions()
+    .map(p => `<option value="${escapeHtml(p.id)}"${p.id === selected ? ' selected' : ''}>${escapeHtml(p.name)}</option>`)
+    .join('');
+  return `<option value="">Select pack…</option>${opts}`;
 }
 
 function rewardRowHtml(r = {}) {
   const type = r.type || 'rp';
   const types = REWARD_TYPES.map(t => `<option value="${t}"${t === type ? ' selected' : ''}>${t}</option>`).join('');
-  return [
-    '<div class="ach-admin-row" data-ach-reward-row>',
-    `<select class="admin-input ach-reward-type">${types}</select>`,
-    `<input class="admin-input ach-reward-amount" type="number" placeholder="RP" value="${escapeHtml(r.amount ?? '')}" />`,
-    `<input class="admin-input ach-reward-item" placeholder="itemId" value="${escapeHtml(r.itemId ?? '')}" />`,
-    `<input class="admin-input ach-reward-pack" placeholder="packId" value="${escapeHtml(r.packId ?? '')}" />`,
-    `<input class="admin-input ach-reward-qty" type="number" min="1" value="${escapeHtml(r.quantity ?? 1)}" />`,
-    '<button type="button" class="ach-admin-remove-row bg-surface-700 px-2 py-1 rounded text-xs">Remove</button>',
-    '</div>',
-  ].join('');
+  return `
+    <div class="ach-admin-row ach-admin-reward-row" data-ach-reward-row data-reward-type="${escapeHtml(type)}">
+      <select class="admin-input ach-reward-type">${types}</select>
+      <input class="admin-input ach-reward-amount" type="number" min="1" placeholder="RP amount" value="${escapeHtml(r.amount ?? '')}" />
+      <select class="admin-input ach-reward-consumable">${consumableOptions(r.itemId)}</select>
+      <select class="admin-input ach-reward-cosmetic">${cosmeticOptions(r.itemId)}</select>
+      <select class="admin-input ach-reward-pack">${packOptions(r.packId)}</select>
+      <input class="admin-input ach-reward-qty" type="number" min="1" placeholder="Qty" value="${escapeHtml(r.quantity ?? 1)}" />
+      <button type="button" class="ach-admin-remove-row bg-surface-700 px-2 py-1 rounded text-xs">Remove</button>
+    </div>
+  `;
+}
+
+function conditionHtml(c = {}) {
+  return `
+    <div class="ach-admin-condition-block" data-ach-condition-row>
+      <label class="text-xs text-surface-400 block">Reach stat
+        <select class="admin-input ach-cond-stat w-full mt-1">${statOptions(c.stat || 'packsOpened')}</select>
+      </label>
+      <label class="text-xs text-surface-400 block mt-2">Target value
+        <input class="admin-input ach-cond-value w-full mt-1" type="number" min="1" value="${escapeHtml(c.value ?? 1)}" />
+      </label>
+      <p class="text-[10px] text-surface-500 mt-1">Unlocks when stat is greater than or equal to this value.</p>
+    </div>
+  `;
 }
 
 function editorHtml(definition) {
   const def = definition || {
-    id: '',
     enabled: true,
     hidden: false,
     name: '',
     description: '',
-    category: 'general',
-    sortOrder: 0,
-    rarity: 'common',
-    conditionMode: 'all',
     icon: { emoji: '🏆' },
     conditions: [{ stat: 'packsOpened', op: 'gte', value: 1 }],
     rewards: [{ type: 'rp', amount: 25 }],
-    notifyOnUnlock: true,
   };
 
-  const modes = CONDITION_MODES.map(m => `<option value="${m}"${m === def.conditionMode ? ' selected' : ''}>${m}</option>`).join('');
-  const conditions = (def.conditions?.length ? def.conditions : [{ stat: 'packsOpened', op: 'gte', value: 1 }])
-    .map(conditionRowHtml).join('');
+  const primary = def.conditions?.[0] || { stat: 'packsOpened', value: 1 };
   const rewards = (def.rewards?.length ? def.rewards : [{ type: 'rp', amount: 25 }])
     .map(rewardRowHtml).join('');
 
-  return [
-    '<section class="bg-surface-900 rounded-xl border border-surface-700 p-4 space-y-3" id="ach-admin-editor">',
-    `<h4 class="font-semibold">${definition ? 'Edit Achievement' : 'New Achievement'}</h4>`,
-    '<div class="grid grid-cols-1 md:grid-cols-2 gap-3">',
-    `<label class="text-xs text-surface-400">ID<input id="ach-admin-id" class="admin-input w-full" value="${escapeHtml(def.id)}"${definition ? ' readonly' : ''}></label>`,
-    `<label class="text-xs text-surface-400">Name<input id="ach-admin-name" class="admin-input w-full" value="${escapeHtml(def.name)}"></label>`,
-    `<label class="text-xs text-surface-400 md:col-span-2">Description<textarea id="ach-admin-desc" class="admin-input w-full" rows="2">${escapeHtml(def.description)}</textarea></label>`,
-    `<label class="text-xs text-surface-400">Category<input id="ach-admin-category" class="admin-input w-full" value="${escapeHtml(def.category)}"></label>`,
-    `<label class="text-xs text-surface-400">Sort<input id="ach-admin-sort" type="number" class="admin-input w-full" value="${escapeHtml(def.sortOrder)}"></label>`,
-    `<label class="text-xs text-surface-400">Rarity<input id="ach-admin-rarity" class="admin-input w-full" value="${escapeHtml(def.rarity)}"></label>`,
-    `<label class="text-xs text-surface-400">Emoji<input id="ach-admin-emoji" class="admin-input w-full" value="${escapeHtml(def.icon?.emoji || '🏆')}"></label>`,
-    `<label class="text-xs text-surface-400">Enabled<select id="ach-admin-enabled" class="admin-input w-full"><option value="true"${def.enabled ? ' selected' : ''}>Yes</option><option value="false"${!def.enabled ? ' selected' : ''}>No</option></select></label>`,
-    `<label class="text-xs text-surface-400">Hidden<select id="ach-admin-hidden" class="admin-input w-full"><option value="false"${!def.hidden ? ' selected' : ''}>No</option><option value="true"${def.hidden ? ' selected' : ''}>Yes</option></select></label>`,
-    `<label class="text-xs text-surface-400">Mode<select id="ach-admin-mode" class="admin-input w-full">${modes}</select></label>`,
-    `<label class="text-xs text-surface-400">Notify<select id="ach-admin-notify" class="admin-input w-full"><option value="true"${def.notifyOnUnlock ? ' selected' : ''}>Yes</option><option value="false"${!def.notifyOnUnlock ? ' selected' : ''}>No</option></select></label>`,
-    '</div>',
-    '<div><div class="flex justify-between items-center"><span class="text-sm font-medium">Conditions</span><button type="button" id="ach-admin-add-condition" class="text-xs bg-surface-700 px-2 py-1 rounded">Add</button></div>',
-    `<div id="ach-admin-conditions" class="space-y-2 mt-2">${conditions}</div></div>`,
-    '<div><div class="flex justify-between items-center"><span class="text-sm font-medium">Rewards</span><button type="button" id="ach-admin-add-reward" class="text-xs bg-surface-700 px-2 py-1 rounded">Add</button></div>',
-    '<p class="text-[10px] text-surface-500">Cosmetic rewards unlock only — never auto-equip.</p>',
-    `<div id="ach-admin-rewards" class="space-y-2 mt-2">${rewards}</div></div>`,
-    '<div class="flex gap-2">',
-    '<button type="button" id="ach-admin-save" class="bg-primary-600 px-4 py-2 rounded text-sm">Save</button>',
-    definition ? '<button type="button" id="ach-admin-delete" class="bg-red-700 px-4 py-2 rounded text-sm">Delete</button>' : '',
-    '</div>',
-    '</section>',
-  ].join('');
+  return `
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-4 space-y-3" id="ach-admin-editor">
+      <h4 class="font-semibold">${definition ? 'Edit Achievement' : 'New Achievement'}</h4>
+      <div class="grid grid-cols-1 gap-3">
+        <label class="text-xs text-surface-400">Title
+          <input id="ach-admin-name" class="admin-input w-full mt-1" value="${escapeHtml(def.name)}" placeholder="First Trade" />
+        </label>
+        <label class="text-xs text-surface-400">Description
+          <textarea id="ach-admin-desc" class="admin-input w-full mt-1" rows="2" placeholder="Complete your first trade.">${escapeHtml(def.description)}</textarea>
+        </label>
+        <label class="text-xs text-surface-400">Emoji (optional)
+          <input id="ach-admin-emoji" class="admin-input w-full mt-1" value="${escapeHtml(def.icon?.emoji || '')}" placeholder="🏆" />
+        </label>
+        <div class="grid grid-cols-2 gap-3">
+          <label class="text-xs text-surface-400">Enabled
+            <select id="ach-admin-enabled" class="admin-input w-full mt-1">
+              <option value="true"${def.enabled ? ' selected' : ''}>Yes</option>
+              <option value="false"${!def.enabled ? ' selected' : ''}>No</option>
+            </select>
+          </label>
+          <label class="text-xs text-surface-400">Hidden
+            <select id="ach-admin-hidden" class="admin-input w-full mt-1">
+              <option value="false"${!def.hidden ? ' selected' : ''}>No</option>
+              <option value="true"${def.hidden ? ' selected' : ''}>Yes</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div>
+        <span class="text-sm font-medium">Condition</span>
+        ${conditionHtml(primary)}
+      </div>
+      <div>
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sm font-medium">Rewards</span>
+          <button type="button" id="ach-admin-add-reward" class="text-xs bg-surface-700 px-2 py-1 rounded">Add reward</button>
+        </div>
+        <p class="text-[10px] text-surface-500 mb-2">Cosmetic rewards unlock only — never auto-equip.</p>
+        <div id="ach-admin-rewards" class="space-y-2">${rewards}</div>
+      </div>
+      <div class="flex gap-2">
+        <button type="button" id="ach-admin-save" class="bg-primary-600 px-4 py-2 rounded text-sm">Save</button>
+        ${definition ? '<button type="button" id="ach-admin-delete" class="bg-red-700 px-4 py-2 rounded text-sm">Delete</button>' : ''}
+      </div>
+    </section>
+  `;
+}
+
+function updateRewardRowVisibility(row) {
+  const type = row.querySelector('.ach-reward-type')?.value || 'rp';
+  row.dataset.rewardType = type;
+  row.querySelector('.ach-reward-amount')?.classList.toggle('hidden', type !== 'rp');
+  row.querySelector('.ach-reward-consumable')?.classList.toggle('hidden', type !== 'consumable');
+  row.querySelector('.ach-reward-cosmetic')?.classList.toggle('hidden', type !== 'cosmetic');
+  row.querySelector('.ach-reward-pack')?.classList.toggle('hidden', type !== 'pack');
+  const showQty = type === 'consumable' || type === 'pack';
+  row.querySelector('.ach-reward-qty')?.classList.toggle('hidden', !showQty);
 }
 
 function wireEditor(container) {
   const editor = container.querySelector('#ach-admin-editor');
   if (!editor) return;
 
-  editor.querySelector('#ach-admin-add-condition')?.addEventListener('click', () => {
-    editor.querySelector('#ach-admin-conditions')?.insertAdjacentHTML('beforeend', conditionRowHtml());
-  });
+  editor.querySelectorAll('[data-ach-reward-row]').forEach(updateRewardRowVisibility);
+
   editor.querySelector('#ach-admin-add-reward')?.addEventListener('click', () => {
     editor.querySelector('#ach-admin-rewards')?.insertAdjacentHTML('beforeend', rewardRowHtml());
+    const rows = editor.querySelectorAll('[data-ach-reward-row]');
+    updateRewardRowVisibility(rows[rows.length - 1]);
   });
+
+  editor.addEventListener('change', e => {
+    if (e.target?.classList?.contains('ach-reward-type')) {
+      updateRewardRowVisibility(e.target.closest('[data-ach-reward-row]'));
+    }
+  });
+
   editor.addEventListener('click', e => {
     if (e.target?.classList?.contains('ach-admin-remove-row')) {
       e.target.closest('.ach-admin-row')?.remove();
     }
   });
+
   editor.querySelector('#ach-admin-save')?.addEventListener('click', () => {
-    const def = readFormDefinition(editor);
+    const config = getAchievementConfig();
+    const existingDef = editingId ? config.definitions[editingId] : null;
+    const def = readFormDefinition(editor, existingDef);
     const validation = validateAchievementDefinition(def);
     if (!validation.valid) {
       toast.error(`Invalid definition: ${validation.reason}`);
@@ -185,6 +285,7 @@ function wireEditor(container) {
     editingId = def.id;
     renderAchievementsAdminPanel(container);
   });
+
   editor.querySelector('#ach-admin-delete')?.addEventListener('click', () => {
     if (!editingId) return;
     deleteAchievementDefinition(editingId);
@@ -194,48 +295,104 @@ function wireEditor(container) {
   });
 }
 
-function listHtml(definitions) {
-  if (!definitions.length) return '<p class="text-surface-500 text-sm">No achievements defined.</p>';
-  return `<ul class="space-y-2">${definitions.map(d => `
-    <li class="flex justify-between items-center bg-surface-800 border border-surface-700 rounded-lg px-3 py-2">
-      <div>
-        <div class="font-medium text-sm">${escapeHtml(d.name)} <span class="text-surface-500">(${escapeHtml(d.id)})</span></div>
-        <div class="text-xs text-surface-500">${d.enabled ? 'Enabled' : 'Disabled'} · ${d.hidden ? 'Hidden' : 'Visible'} · ${escapeHtml(d.category)}</div>
+function sortableListHtml(definitions) {
+  if (!definitions.length) return '<p class="text-surface-500 text-sm">No achievements yet.</p>';
+  return `
+    <div class="ach-admin-order-block">
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-sm font-medium">Display order</span>
+        <span class="text-[10px] text-surface-500">Drag to reorder locked achievements for players</span>
       </div>
-      <button type="button" class="ach-admin-edit-btn text-xs bg-surface-700 px-2 py-1 rounded" data-id="${escapeHtml(d.id)}">Edit</button>
-    </li>
-  `).join('')}</ul>`;
+      <ul id="ach-admin-sortable-list" class="ach-admin-sortable space-y-1">
+        ${definitions.map(d => `
+          <li class="ach-admin-sort-item" draggable="true" data-id="${escapeHtml(d.id)}">
+            <span class="ach-admin-drag-handle" aria-hidden="true">⋮⋮</span>
+            <span class="ach-admin-sort-name">${escapeHtml(d.name)}</span>
+            <span class="text-[10px] text-surface-500">${d.enabled ? '' : '· off'}${d.hidden ? ' · hidden' : ''}</span>
+            <button type="button" class="ach-admin-edit-btn text-xs bg-surface-700 px-2 py-1 rounded ml-auto" data-id="${escapeHtml(d.id)}" draggable="false">Edit</button>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  `;
+}
+
+function wireSortableList(container) {
+  const list = container.querySelector('#ach-admin-sortable-list');
+  if (!list) return;
+
+  let dragId = null;
+
+  list.querySelectorAll('.ach-admin-sort-item').forEach(item => {
+    item.addEventListener('dragstart', e => {
+      dragId = item.dataset.id;
+      item.classList.add('ach-admin-sort-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    item.addEventListener('dragend', () => {
+      item.classList.remove('ach-admin-sort-dragging');
+      dragId = null;
+    });
+    item.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const over = e.currentTarget;
+      if (!dragId || over.dataset.id === dragId) return;
+      const dragging = list.querySelector(`[data-id="${dragId}"]`);
+      if (!dragging) return;
+      const rect = over.getBoundingClientRect();
+      const before = e.clientY < rect.top + rect.height / 2;
+      if (before) list.insertBefore(dragging, over);
+      else list.insertBefore(dragging, over.nextSibling);
+    });
+    item.addEventListener('drop', e => {
+      e.preventDefault();
+      const orderedIds = [...list.querySelectorAll('.ach-admin-sort-item')].map(li => li.dataset.id);
+      saveAchievementSortOrder(orderedIds);
+      toast.success('Display order saved.');
+    });
+  });
+}
+
+function listHtml(definitions) {
+  return sortableListHtml(definitions);
 }
 
 export function renderAchievementsAdminPanel(container) {
   const target = container || document.getElementById('achievements-admin-panel');
   if (!target) return;
   container = target;
+
   const config = getAchievementConfig();
   const definitions = listAchievementDefinitions();
   const current = editingId ? config.definitions[editingId] : null;
 
-  container.innerHTML = [
-    '<section class="bg-surface-900 rounded-xl border border-surface-700 p-6 space-y-4">',
-    '<div class="flex justify-between items-center">',
-    '<div><h3 class="font-semibold">Achievements</h3>',
-    `<p class="text-xs text-surface-500">System ${config.meta.enabled === false ? 'disabled' : 'enabled'} · ${definitions.length} definition(s)</p></div>`,
-    '<button type="button" id="ach-admin-new" class="bg-primary-600 px-3 py-2 rounded text-sm">New</button>',
-    '</div>',
-    listHtml(definitions),
-    editorHtml(current),
-    '</section>',
-  ].join('');
+  container.innerHTML = `
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-6 space-y-4">
+      <div class="flex justify-between items-center">
+        <div>
+          <h3 class="font-semibold">Achievements</h3>
+          <p class="text-xs text-surface-500">System ${config.meta.enabled === false ? 'disabled' : 'enabled'} · ${definitions.length} definition(s)</p>
+        </div>
+        <button type="button" id="ach-admin-new" class="bg-primary-600 px-3 py-2 rounded text-sm">New</button>
+      </div>
+      ${listHtml(definitions)}
+      ${editorHtml(current)}
+    </section>
+  `;
 
   container.querySelector('#ach-admin-new')?.addEventListener('click', () => {
     editingId = null;
     renderAchievementsAdminPanel(container);
   });
+
   container.querySelectorAll('.ach-admin-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       editingId = btn.dataset.id;
       renderAchievementsAdminPanel(container);
     });
   });
+
+  wireSortableList(container);
   wireEditor(container);
 }

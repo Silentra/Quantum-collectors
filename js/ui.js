@@ -22,7 +22,6 @@ import { renderTrading, cleanupTrading } from './trade-ui.js';
 import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { renderShopAdminPanel } from './shop-admin.js';
 import { renderAchievementsAdminPanel } from './achievements-admin.js';
-import { renderAchievements } from './achievements-ui.js';
 import {
   adminCompleteActiveProject,
   adminGrantResearchPoints,
@@ -109,7 +108,6 @@ function setupTabs() {
       if (tab === 'shop') { renderShop(); }
       else { cleanupShop(); }
       if (tab === 'profile') renderProfile();
-      if (tab === 'achievements') renderAchievements();
       if (tab === 'leaderboard') renderLeaderboard();
       if (tab === 'admin') renderAdmin();
     });
