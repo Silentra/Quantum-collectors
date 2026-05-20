@@ -21,6 +21,8 @@ import { renderAdminSeasons } from './leaderboard-admin.js';
 import { renderTrading, cleanupTrading } from './trade-ui.js';
 import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { renderShopAdminPanel } from './shop-admin.js';
+import { renderAchievementsAdminPanel } from './achievements-admin.js';
+import { renderAchievements } from './achievements-ui.js';
 import {
   adminCompleteActiveProject,
   adminGrantResearchPoints,
@@ -107,6 +109,7 @@ function setupTabs() {
       if (tab === 'shop') { renderShop(); }
       else { cleanupShop(); }
       if (tab === 'profile') renderProfile();
+      if (tab === 'achievements') renderAchievements();
       if (tab === 'leaderboard') renderLeaderboard();
       if (tab === 'admin') renderAdmin();
     });
@@ -752,6 +755,7 @@ function renderAdminSubTab(tab) {
     case 'config': renderAdminConfig(); break;
     case 'balance': renderAdminBalance(); break;
     case 'shop-admin': renderShopAdminPanel(); break;
+    case 'achievements-admin': renderAchievementsAdminPanel(); break;
     case 'trading-controls': renderAdminTradingControls(); break;
     case 'seasons': renderAdminSeasons(); break;
   }

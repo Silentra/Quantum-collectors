@@ -48,6 +48,7 @@ import {
 } from './player-schema.js';
 import { generateAvailableProjects } from './project-pool.js';
 import { getLastWeeklyRefreshTimestamp } from './weekly-research-pack.js';
+import { bumpPlayerStat, STAT_KEYS } from './achievements.js';
 import {
   canApplyDiscount,
   canFreezeSlot,
@@ -247,7 +248,11 @@ export function unlockCosmetic(username, itemId) {
     return { success: false, reason: 'invalid_item_id' };
   }
 
+  const wasOwned = db.get(`players/${username}/cosmetics/owned/${itemId}`) === true;
   db.set(`players/${username}/cosmetics/owned/${itemId}`, true);
+  if (!wasOwned) {
+    bumpPlayerStat(username, STAT_KEYS.COSMETICS_UNLOCKED, 1);
+  }
   return { success: true, itemId };
 }
 
@@ -457,6 +462,7 @@ export function purchaseShopItem(username, slotIndex, options = {}) {
   ];
 
   persistPurchasePlan(username, writePlan);
+  bumpPlayerStat(username, STAT_KEYS.SHOP_PURCHASES, 1);
 
   return {
     success: true,
@@ -914,6 +920,7 @@ export function equipCosmetic(username, cosmeticId, options = {}) {
   }
 
   db.set(`players/${username}/profile/${validation.profileField}`, cosmeticId);
+  bumpPlayerStat(username, STAT_KEYS.COSMETICS_EQUIPPED, 1);
 
   return {
     success: true,

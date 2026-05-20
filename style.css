@@ -2676,3 +2676,118 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   color: #ffffff;
 }
 .trade-confirm-btn-confirm:hover { background: #15803d; }
+
+/* Achievements */
+.ach-section + .ach-section {
+  margin-top: 1.5rem;
+}
+.ach-section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: #e2e8f0;
+}
+.ach-section-empty {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+.ach-card-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.ach-card {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.75rem;
+}
+.ach-card-secret {
+  border-style: dashed;
+  opacity: 0.85;
+}
+.ach-card-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+  flex-shrink: 0;
+  width: 2.25rem;
+  text-align: center;
+}
+.ach-card-body {
+  flex: 1;
+  min-width: 0;
+}
+.ach-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.ach-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.ach-card-desc {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 0.5rem;
+}
+.ach-card-reward {
+  font-size: 0.75rem;
+  color: #fbbf24;
+  margin-bottom: 0.5rem;
+}
+.ach-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.ach-badge-progress { background: #1e3a5f; color: #93c5fd; }
+.ach-badge-ready { background: #422006; color: #fbbf24; }
+.ach-badge-done { background: #14532d; color: #86efac; }
+.ach-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.ach-progress-bar {
+  flex: 1;
+  height: 0.35rem;
+  background: #1e293b;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.ach-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.ach-progress-label {
+  font-size: 0.7rem;
+  color: #64748b;
+  min-width: 2rem;
+  text-align: right;
+}
+.ach-profile-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.ach-profile-preview .ach-card {
+  padding: 0.65rem 0.75rem;
+}
+.ach-admin-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}

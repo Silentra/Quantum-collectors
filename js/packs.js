@@ -12,6 +12,7 @@ import * as db from './database.js';
 import * as config from './config.js';
 import * as cards from './cards.js';
 import * as player from './player.js';
+import { bumpPlayerStat, STAT_KEYS } from './achievements.js';
 
 /**
  * Create a new pack type
@@ -116,8 +117,7 @@ export function openPack(username, packId) {
   // Remove pack from player
   player.removePack(username, packId);
 
-  // Update stats
-  player.incrementStat(username, 'packsOpened');
+  bumpPlayerStat(username, STAT_KEYS.PACKS_OPENED, 1);
 
   // Mark progression
   const prog = db.get(`players/${username}/progression`) || {};

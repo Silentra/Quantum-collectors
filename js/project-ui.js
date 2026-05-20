@@ -34,6 +34,7 @@ import { getProjectRefreshHours, getProjectRefreshIntervalMs, getMaxStoredProjec
 import { syncProjects } from './project-sync.js';
 import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
+import { recordBreakthroughEarned, recordProjectOutcome } from './achievements.js';
 
 // These are imported from ui.js — kept there per extraction spec
 import { spawnRevealParticles, confirmAction } from './ui.js';
@@ -890,18 +891,12 @@ function renderProjectReportPanel(container, project, username) {
           checkAndResetWeeklyCycle(username);
           addWeeklyPackRP(username, rpEarned);
         }
-        // Increment projectsCompleted
-        playerUpdates.projectsCompleted =
-          (freshPlayer.projectsCompleted || 0) + 1;
-
-        // Increment breakthroughs if this was a breakthrough
+        recordProjectOutcome(username, true);
         if (result.rewards?.breakthrough === true) {
-          const currentBreakthroughs = freshPlayer?.researchStats?.breakthroughs ?? 0;
-          playerUpdates.researchStats = {
-            ...(freshPlayer.researchStats ?? {}),
-            breakthroughs: currentBreakthroughs + 1,
-          };
+          recordBreakthroughEarned(username);
         }
+      } else {
+        recordProjectOutcome(username, false);
       }
 
       console.log('[DEBUG CLAIM] playerUpdates =', playerUpdates);

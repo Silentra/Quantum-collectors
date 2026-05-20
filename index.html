@@ -264,6 +264,7 @@
         <button class="tab-btn" data-tab="trading">🤝 Trading</button>
         <button class="tab-btn" data-tab="shop">🛒 Shop</button>
         <button class="tab-btn" data-tab="profile">👤 Profile</button>
+        <button class="tab-btn" data-tab="achievements">🎖️ Achievements</button>
         <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
         <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">⚙️ Admin</button>
       </div>
@@ -386,6 +387,15 @@
           </div>
         </div>
 
+        <!-- Achievements Tab -->
+        <div id="tab-achievements" class="tab-content p-4">
+          <div class="max-w-4xl mx-auto">
+            <h2 class="text-xl font-bold mb-1">Achievements</h2>
+            <p class="text-surface-500 text-sm mb-4">Complete goals to unlock rewards. Hidden achievements stay secret until earned.</p>
+            <div id="achievements-content" class="achievements-shell space-y-6"></div>
+          </div>
+        </div>
+
         <!-- Leaderboard Tab -->
         <div id="tab-leaderboard" class="tab-content p-4">
           <div class="max-w-2xl mx-auto">
@@ -445,6 +455,7 @@
               <button class="admin-tab-btn" data-admin-tab="config">Config</button>
               <button class="admin-tab-btn" data-admin-tab="balance">Balance</button>
               <button class="admin-tab-btn" data-admin-tab="shop-admin">Shop</button>
+              <button class="admin-tab-btn" data-admin-tab="achievements-admin">Achievements</button>
               <button class="admin-tab-btn" data-admin-tab="trading-controls">Trading</button>
               <button class="admin-tab-btn" data-admin-tab="seasons">🏆 Leaderboards</button>
             </div>
@@ -860,6 +871,11 @@
             <!-- Admin Shop -->
             <div id="admin-shop-admin" class="admin-tab-content">
               <div id="shop-admin-panel" class="space-y-5"></div>
+            </div>
+
+            <!-- Admin Achievements -->
+            <div id="admin-achievements-admin" class="admin-tab-content">
+              <div id="achievements-admin-panel"></div>
             </div>
 
             <!-- Admin Trading Controls (Phase T-8) -->

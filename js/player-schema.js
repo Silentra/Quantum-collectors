@@ -28,6 +28,7 @@ import {
   createDiscountApplied,
 } from './shop-state.js';
 import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { ensureAchievementStats } from './achievement-stats.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default schema shapes (frozen — canonical source of truth)
@@ -282,6 +283,8 @@ export function normalizePlayerSchema(username) {
   if (!player) return false;
 
   let patched = false;
+
+  ensureAchievementStats(username);
 
   // ── currencies ──────────────────────────────────────────────────────────
   if (!player.currencies || typeof player.currencies !== 'object') {

@@ -15,6 +15,7 @@ import {
   unequipCosmetic,
   unfeatureCard,
 } from './shop-mutations.js';
+import { renderProfileAchievementsSummary } from './achievements-ui.js';
 
 const PROFILE_FEATURED_CARD_LIMIT = 3;
 
@@ -404,20 +405,6 @@ function renderCollectionProgress(username) {
   document.getElementById('profile-progress').innerHTML = progressHTML;
 }
 
-function renderAchievementsPlaceholder() {
-  const container = document.getElementById('profile-achievements-placeholder');
-  if (!container) return;
-  container.innerHTML = `
-    <section class="profile-panel profile-panel-muted">
-      <div class="profile-panel-header">
-        <h3>Achievements</h3>
-        <span>Coming later</span>
-      </div>
-      <div class="profile-empty-state">Achievement systems are not active yet.</div>
-    </section>
-  `;
-}
-
 function wireProfileActions(username) {
   const containers = [
     document.getElementById('profile-identity'),
@@ -472,6 +459,6 @@ export function renderProfile() {
   renderCosmetics(p);
   renderFeaturedCards(p, session.username);
   renderCollectionProgress(session.username);
-  renderAchievementsPlaceholder();
+  renderProfileAchievementsSummary();
   wireProfileActions(session.username);
 }

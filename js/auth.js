@@ -23,6 +23,7 @@ import { getProjectConfig } from './project-config.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
 import { getPhase2ADefaults, normalizePlayerSchema } from './player-schema.js';
+import { resetLoginAchievementEvaluation, runLoginAchievementEvaluation } from './achievements.js';
 
 const SESSION_KEY = 'scicards_session';
 
@@ -76,6 +77,7 @@ function setSession(session) {
 /** Clear session */
 export function logout() {
   localStorage.removeItem(SESSION_KEY);
+  resetLoginAchievementEvaluation();
 }
 
 /** Check if current session is admin */
@@ -142,6 +144,7 @@ export async function initAuth() {
 
       // Phase 2A — safe backfill of expanded schema fields
       normalizePlayerSchema(session.username);
+      runLoginAchievementEvaluation(session.username);
 
       // Phase 4B — passive backend sync on session restore
       const freshPlayer = db.get(`players/${session.username}`);
@@ -217,6 +220,7 @@ export async function login(username, password) {
 
   // Phase 2A — safe backfill of expanded schema fields
   normalizePlayerSchema(username);
+  runLoginAchievementEvaluation(username);
 
   // Phase 4B — passive backend sync on login
   const loginPlayer = db.get(`players/${username}`);

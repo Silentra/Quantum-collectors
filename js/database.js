@@ -59,6 +59,10 @@ function getDefaultDB() {
         listingsEnabled: true,
         defaultHiddenProfile: false,
         enableDetailedLogs: false
+      },
+      achievements: {
+        meta: { enabled: true, version: 1, updatedAt: 0 },
+        definitions: {},
       }
     },
     players: {},

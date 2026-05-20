@@ -130,6 +130,11 @@ export function addResearchPoints(username, amount) {
   const spendableSafe = typeof currentSpendable === 'number' ? currentSpendable : 0;
   db.set(`players/${username}/totalResearchPoints`, newTotal);
   db.set(`players/${username}/currencies/currentResearchPoints`, spendableSafe + amount);
+
+  import('./achievements.js')
+    .then(mod => mod.notifyStatsChanged(username, ['totalResearchPoints']))
+    .catch(() => {});
+
   return newTotal;
 }
 

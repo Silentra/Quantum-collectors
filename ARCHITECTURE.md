@@ -27,7 +27,15 @@ js/
   trade-ui.js        - Trading tab UI: sub-tabs (Direct Trades / Trade Listings), player picker, card selectors, incoming/outgoing trade panels, listing create/cancel/accept, cooldown display
   quest-config.js    - Research Project config: DEFAULT_QUEST_CONFIG, AURA_SCALING, Firebase mirror (config/quests), cached getter, getCardPowerContribution()
   quests.js          - Research Projects module entry: loads quest-config on init, re-exports power helper, placeholder lifecycle
-  achievements.js    - PLACEHOLDER
+  achievements.js           - Public facade: bumpPlayerStat, record* hooks, login eval, claim; gameplay must never unlock directly
+  achievement-config.js     - Admin definitions at config/achievements (meta kill-switch, CRUD)
+  achievement-stats.js      - Stat registry, additive writes, project streak + best-streak high-water
+  achievement-engine.js     - Pure eval (simple stat/op/value), stat-indexed achievement lookup
+  achievement-mutations.js  - Unlock/progress persistence, stat-scoped + login evaluation, claim
+  achievement-rewards.js    - Grants via addResearchPoints, grantConsumable, unlockCosmetic, addPack only
+  achievement-validation.js - Definition/reward validation, claim guards
+  achievements-ui.js        - Player tab + profile summary (hidden achievements masked until unlock)
+  achievements-admin.js     - Admin CRUD for achievement definitions
   seasonal.js        - PLACEHOLDER
   player-schema.js   - Expanded player persistence schema: defaults, normalization, migration (currencies, cosmetics, items, shopUsage, shop, purchaseHistory, profileCustomization, profile identity, profileVisibility)
   shop-state.js      - Phase 2B pure shop persistence schema helpers: shop state, current rotation, slot, discount structures
@@ -44,7 +52,7 @@ js/
 ```
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
-- `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**, **shop{shopRefreshDays,shopSlotCount,rerollCosts,itemOverrides{...}}**
+- `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**, **shop{shopRefreshDays,shopSlotCount,rerollCosts,itemOverrides{...}}**, **achievements{meta{enabled,version},definitions{id→{enabled,hidden,name,description,category,sortOrder,rarity,icon,conditions[],conditionMode,rewards[],notifyOnUnlock}}}**
 - `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards[],featuredAchievements[]}**, **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
 - `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?
@@ -500,9 +508,9 @@ js/
   - `style.css` additions are scoped to `.shop-*` classes and do not redesign global rendering architecture.
 
 ### Profile Inventory + Cosmetic Runtime UI
-- **Player-facing profile scope**: The Profile tab now surfaces existing runtime state for identity, consumables, cosmetics, featured cards, RP balances, and collection progress. It does not add admin tools, public/social profiles, achievement systems, consumable use, monetization, preview animations, new listeners, polling, or backend redesigns.
+- **Player-facing profile scope**: The Profile tab now surfaces existing runtime state for identity, consumables, cosmetics, featured cards, RP balances, collection progress, and an achievements summary. It does not add admin tools, public/social profiles, consumable use, monetization, preview animations, new listeners, polling, or backend redesigns.
 - **Rendering ownership** (`profile-ui.js`):
-  - Preserves the existing username/group, stats, and collection-progress behavior while adding dedicated sections for currently equipped identity, read-only consumables, owned cosmetics, featured cards, and an inert achievements placeholder.
+  - Preserves the existing username/group, stats, and collection-progress behavior while adding dedicated sections for currently equipped identity, read-only consumables, owned cosmetics, featured cards, and achievements summary (`achievements-ui.js` → full tab).
   - Equipped identity renders strictly from `players/{username}/profile/*` via the canonical profile runtime helpers, not from legacy `cosmetics.equipped`.
   - Consumables render only owned quantities from `players/{username}/items` where quantity is greater than zero. They are read-only in Profile.
   - Cosmetics render only owned `ITEM_TYPES.COSMETIC` entries from `cosmetics.owned`, grouped dynamically by metadata category. Unknown/future categories are shown under “Other Cosmetics.”
@@ -514,6 +522,19 @@ js/
 - **State synchronization**:
   - Profile uses pull-after-mutation rendering: read current player snapshot, call a canonical mutation for user actions, then rerender from persisted runtime state.
   - No new realtime listeners, all-player scans, root reads, polling loops, or broad synchronization systems are introduced.
+
+### Achievement System
+- **Config path**: `config/achievements` — `meta.enabled` kill-switch; `definitions` keyed by achievement id (admin-authored only; no hardcoded gameplay achievements).
+- **Player progress path**: `players/{username}/achievements/{id}` — `{unlocked, unlockedAt, progress, progressValue, targetValue, claimed, claimedAt, lastEvaluatedAt}`.
+- **Gameplay contract**: Gameplay modules call `bumpPlayerStat()`, `recordProjectOutcome()`, `recordCardCollectionGain()`, `recordBreakthroughEarned()`, or `notifyStatsChanged()` from `achievements.js` only. They must never call `unlockAchievement()` or write achievement unlock state directly.
+- **Evaluation model**:
+  - On stat bump: `buildStatIndex()` maps stat keys → achievement ids; only indexed achievements are evaluated (never full-definition scans per bump).
+  - On login/session restore: `evaluateAchievementsOnLogin()` evaluates pending (not-yet-unlocked) definitions once per session (`resetLoginAchievementEvaluation()` on logout).
+  - Conditions are simple `{stat, op, value}` with `conditionMode` `all`/`any` — no formulas, nesting, JS eval, or callbacks.
+- **Stat registry** (`achievement-stats.js`): additive counters on `players/{username}/stats/*` and top-level fields (`totalResearchPoints`, `projectsCompleted`, `researchStats/breakthroughs`). High-water stats: `bestProjectSuccessStreak`, `maxCardAuraTier`. Current `projectSuccessStreak` may reset on failure; achievements should target `bestProjectSuccessStreak`, not current streak.
+- **Rewards** (`achievement-rewards.js`): manual claim via `claimAchievementReward()` routes through `addResearchPoints`, `grantConsumable`, `unlockCosmetic` (ownership only — never auto-equip), and `addPack` — no direct inventory/cosmetic/pack writes.
+- **Hidden achievements**: locked hidden entries render as `??? Secret Achievement` with no name, description, icon, or reward until unlocked.
+- **UI**: `achievements-ui.js` (player tab + profile summary); `achievements-admin.js` (admin CRUD).
 
 ### Admin Shop Tools
 - **Additive admin scope**: Adds a Shop section to the existing admin dashboard and small Manage Player extensions. It does not replace admin navigation, redesign shop economy, alter consumable routing, change profile runtime, add analytics/logging, or introduce new listeners.

@@ -3,6 +3,7 @@
  */
 
 import * as db from './database.js';
+import { recordCardCollectionGain } from './achievements.js';
 
 /**
  * Create a new player profile
@@ -70,12 +71,15 @@ export function getInventory(username) {
  */
 export function addCard(username, cardId, quantity = 1) {
   const current = db.get(`players/${username}/inventory/${cardId}`) || 0;
-  db.set(`players/${username}/inventory/${cardId}`, current + quantity);
+  const next = current + quantity;
+  db.set(`players/${username}/inventory/${cardId}`, next);
 
   // Update stats
   const stats = db.get(`players/${username}/stats`) || {};
   stats.cardsCollected = (stats.cardsCollected || 0) + quantity;
   db.set(`players/${username}/stats`, stats);
+
+  recordCardCollectionGain(username, cardId, current, next);
 }
 
 /**
