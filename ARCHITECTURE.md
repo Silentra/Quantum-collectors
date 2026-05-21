@@ -145,9 +145,10 @@ js/
 - Aura dots shown on card corners when tier > 0; detail modal always shows pip bar + next-tier hint
 - **Gameplay aura scaling** (project-engine.js, quest-config.js, project-config.js) is **unchanged** — `auraLevel` on enriched card objects still drives gameplay math via `config.auraScaling[level]`
 
-### Player-Facing Card Renderer (Phase 3)
+### Player-Facing Card Renderer (Phase 3 + normalization Phase 1)
+- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()`. Collection grid uses this via thin `renderPlayerCard()` in `ui.js`. Pack, breakthrough, and modal still inline until later normalization phases.
 - **Unified card structure**: collection grid, pack opening, and detail modal all share the same `card-detail-*` internal HTML (header → art → divider → body). The modal proportions are the visual reference standard.
-- **Collection grid**: `renderPlayerCard()` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, aura visuals, click behavior). CSS overrides (`.sci-card .card-detail-*`) scale down font sizes and padding for grid context. keyFact text uses `.grid-clamp` class for line-clamping.
+- **Collection grid**: `renderPlayerCard()` → `card-render.js` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, aura visuals, click behavior). CSS overrides (`.sci-card .card-detail-*`) scale down font sizes and padding for grid context. keyFact text uses `.grid-clamp` class for line-clamping.
 - **Pack opening**: same `.sci-card` shell + `card-detail-*` internals with reveal animation
 - **Detail modal**: `.card-detail-frame` shell (5:7 aspect, 240px max-width) + `card-detail-*` internals at full size + aura tier info section
 - **Disabled cards**: filtered out of player collection, pack stats, and profile progress

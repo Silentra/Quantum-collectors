@@ -8,6 +8,7 @@ import * as auth from './auth.js';
 import { resetPlayerPassword } from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
+import { buildCardRenderModel, renderSciCard } from './card-render.js';
 import * as packs from './packs.js';
 import * as groups from './groups.js';
 import * as config from './config.js';
@@ -379,64 +380,14 @@ const CONCEPT_EFFECT_LABELS = cards.CONCEPT_EFFECT_LABELS;
 const CONCEPT_FLAVOR_TEXT = cards.CONCEPT_FLAVOR_TEXT;
 
 function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered = false) {
-  const imageUrl = card.imageUrl || card.image || '';
-  const keyFact = card.keyFact || card.flavor || '';
-  const field = card.field || 'General';
-  // Phase 1D: All cards always render with a visual aura (default_prismatic).
-  // Undiscovered cards get tier 0 (no glow) but still receive the aura class for future profile cosmetics.
-  const visualAura = cards.resolveVisualAura(null); // null = no profile cosmetic override yet
-  const auraTier = isUndiscovered ? 0 : cards.getAuraTier(card.rarity, quantity);
-  const auraClass = auraTier > 0 ? cards.getAuraCSSClass(visualAura) : '';
-  const lockedClass = isLocked ? 'sci-card--locked' : '';
-  const undiscoveredClass = isUndiscovered ? 'sci-card--undiscovered' : '';
-  const emoji = cards.TYPE_EMOJIS[card.type] || '\uD83D\uDD2C';
-
-  // Aura tier dots (shown for all cards when tier > 0)
-  let auraDots = '';
-  if (auraTier > 0) {
-    auraDots = `<div class="sci-card-aura-dots">${
-      [1,2,3].map(i => `<span class="dot ${i <= auraTier ? 'filled' : ''}"></span>`).join('')
-    }</div>`;
-  }
-
-  // Phase 4C: small corner badge shown only when card is on an active project
-  const lockedBadge = isLocked
-    ? `<div class="sci-card-locked-badge" title="On active research project">\uD83D\uDD2C</div>`
-    : '';
-
-  // Undiscovered badge — subtle overlay tag
-  const undiscoveredBadge = isUndiscovered
-    ? `<div class="sci-card-undiscovered-badge">Undiscovered</div>`
-    : '';
-
-  // FIX 4: concept effect label badge (compact, non-intrusive)
-  const conceptEffectLabel = (!isUndiscovered && card.type === 'concept' && card.conceptType)
-    ? `<div class="concept-effect-label">${CONCEPT_EFFECT_LABELS[card.conceptType] || ''}</div>`
-    : '';
-
-  return `
-    <div class="sci-card rarity-${card.rarity} ${auraClass} ${lockedClass} ${undiscoveredClass}" data-card-id="${card.id}" data-qty="${quantity}" data-aura-tier="${auraTier}">
-      ${!isUndiscovered && quantity > 1 ? `<div class="sci-card-qty">\u00D7${quantity}</div>` : ''}
-      ${lockedBadge}
-      ${undiscoveredBadge}
-      <div class="card-detail-inner">
-        <div class="card-detail-header">
-          <span class="card-detail-name">${card.name}</span>
-          <span class="sci-card-rarity-badge ${card.rarity}">${card.rarity}</span>
-        </div>
-        ${conceptEffectLabel}
-        <div class="card-detail-art">
-          ${imageUrl ? `<img src="${imageUrl}" alt="${card.name}">` : `<span style="font-size:2rem;opacity:0.4">${emoji}</span>`}
-        </div>
-        <div class="card-detail-divider"></div>
-        <div class="card-detail-body">
-          <div class="card-detail-field">${field}</div>
-          ${keyFact ? `<div class="card-detail-keyfact grid-clamp">${keyFact}</div>` : ''}
-        </div>
-      </div>
-      ${auraDots}
-    </div>
-  `;
+  const model = buildCardRenderModel(card, {
+    quantity,
+    isLocked,
+    isUndiscovered,
+    profileCosmeticAura: null,
+    clampKeyFact: true,
+  });
+  return renderSciCard(model);
 }
 
 /**
