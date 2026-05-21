@@ -5,7 +5,8 @@
  * Phase 2: detail modal (.card-detail-frame + modal extras)
  * Phase 3: overflow/layering contract (.card-cosmetic-effects host, inner clip, z-index)
  * Phase 4: pack/breakthrough reveal via variant pack-reveal (tier 0, no duplicate aura)
- * Phase A: proportional CSS Grid on .card-detail-inner (geometry only; typography unchanged)
+ * Phase A: proportional CSS Grid on .card-detail-inner (geometry only)
+ * Phase B: container-query typography (clamp + cqw/cqh); geometry unchanged
  *
  * Dependencies: cards.js only (no ui.js / project-ui.js imports).
  */
@@ -108,7 +109,6 @@ export function buildCardRenderModel(card, options = {}) {
     clampKeyFact,
     conceptEffectLabel,
     conceptLabelClass: isModal && conceptEffectLabel ? 'concept-effect-label--modal' : '',
-    artFallbackFontSize: isModal ? '3rem' : '2rem',
     extraBodyHtml: '',
     lockedClass: isPackReveal ? '' : (isLocked ? 'sci-card--locked' : ''),
     undiscoveredClass: isPackReveal ? '' : (isUndiscovered ? 'sci-card--undiscovered' : ''),
@@ -134,7 +134,7 @@ export function renderCardContent(model) {
 
   const artHtml = model.imageUrl
     ? `<img src="${model.imageUrl}" alt="${model.name}">`
-    : `<span style="font-size:${model.artFallbackFontSize};opacity:0.4">${model.emoji}</span>`;
+    : `<span class="card-detail-art-emoji" aria-hidden="true">${model.emoji}</span>`;
 
   const keyFactClass = model.clampKeyFact ? 'card-detail-keyfact grid-clamp' : 'card-detail-keyfact';
   const keyFactHtml = model.keyFact

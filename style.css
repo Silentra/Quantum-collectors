@@ -1438,25 +1438,19 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
 /* ===================== POLISH — CONCEPT EFFECT LABELS & FLAVOR TEXT ===================== */
 
-/* Compact effect label shown on collection cards (FIX 4) */
+/* Concept effect label — typography scaled in Phase B card typography block */
 .concept-effect-label {
-  font-size: 0.6rem;
   font-weight: 600;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: #a78bfa;
   text-align: center;
   padding: 1px 4px;
-  margin: 1px 0 2px;
   opacity: 0.85;
 }
 
-/* Slightly larger in the modal header (FIX 5) */
 .concept-effect-label--modal {
-  font-size: 0.65rem;
   color: #c4b5fd;
-  text-align: center;
-  margin-bottom: 2px;
 }
 
 /* Flavor text block below modal card (FIX 5) */
@@ -2142,33 +2136,22 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   .collection-rarity-row { grid-template-columns: repeat(5, minmax(0, 172px)); }
 }
 
-/* Scale-down overrides for card-detail-* classes when inside .sci-card (grid cards) */
+/* Layout overrides for card-detail-* inside .sci-card (typography: Phase B cq rules below) */
 .sci-card .card-detail-inner {
   border-radius: 0.35rem;
   flex: 1;
   min-height: 0;
 }
-.sci-card .card-detail-header { padding: 0.25rem 0.35rem; }
 .sci-card .card-detail-name {
-  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .sci-card .sci-card-rarity-badge {
-  font-size: 0.5rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 0.1rem 0.25rem;
-  border-radius: 0.2rem;
   flex-shrink: 0;
   margin-left: 0.2rem;
 }
-.sci-card .card-detail-body { padding: 0.3rem 0.35rem 0.35rem; }
-.sci-card .card-detail-field { font-size: 0.6rem; margin-bottom: 0.1rem; }
-.sci-card .card-detail-keyfact { font-size: 0.6rem; line-height: 1.35; }
 
 /* Line-clamp for keyFact in grid cards (not modal) */
 .card-detail-keyfact.grid-clamp {
@@ -2434,12 +2417,9 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .card-detail-frame.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.2); }
 
 .card-detail-header {
-  padding: 0.45rem 0.6rem;
   background: rgba(0,0,0,0.5);
 }
 .card-detail-name {
-  font-size: 0.85rem;
-  font-weight: 700;
   color: #f1f5f9;
   flex: 1;
   min-width: 0;
@@ -2449,6 +2429,97 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   height: 100%;
   object-fit: cover;
   object-position: center top;
+}
+
+/* ===================== PHASE B — CARD TYPOGRAPHY (container queries) ===================== */
+/*
+ * Shells (.sci-card, .card-detail-frame) register container-type: size (Phase A).
+ * Hierarchy: name > keyFact > field / concept > badge / aura meta.
+ * Geometry (grid rows) unchanged.
+ */
+
+@supports (container-type: size) {
+  .sci-card .card-detail-header,
+  .card-detail-frame .card-detail-header {
+    padding: clamp(0.2rem, 2cqw, 0.45rem) clamp(0.25rem, 2.5cqw, 0.6rem);
+  }
+
+  .sci-card .card-detail-body,
+  .card-detail-frame .card-detail-body {
+    padding: clamp(0.22rem, 2.2cqw, 0.6rem) clamp(0.25rem, 2.5cqw, 0.6rem);
+  }
+
+  .sci-card .card-detail-name {
+    font-size: clamp(0.5rem, 7cqw, 0.95rem);
+    font-weight: 600;
+  }
+
+  .card-detail-frame .card-detail-name {
+    font-size: clamp(0.5rem, 7cqw, 0.95rem);
+    font-weight: 700;
+  }
+
+  .sci-card .card-detail-keyfact,
+  .card-detail-frame .card-detail-keyfact {
+    font-size: clamp(0.45rem, 5.5cqw, 0.8rem);
+    line-height: 1.4;
+  }
+
+  .sci-card .card-detail-field,
+  .card-detail-frame .card-detail-field {
+    font-size: clamp(0.4rem, 4.5cqw, 0.68rem);
+    margin-bottom: clamp(0.05rem, 0.8cqw, 0.35rem);
+  }
+
+  .sci-card .sci-card-rarity-badge,
+  .card-detail-frame .sci-card-rarity-badge {
+    font-size: clamp(0.35rem, 3.6cqw, 0.58rem);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: clamp(0.05rem, 0.45cqw, 0.1rem) clamp(0.1rem, 0.9cqw, 0.25rem);
+    border-radius: 0.2rem;
+  }
+
+  .sci-card .concept-effect-label,
+  .card-detail-frame .concept-effect-label {
+    font-size: clamp(0.4rem, 4cqw, 0.65rem);
+  }
+
+  .card-detail-frame .card-detail-aura-info {
+    font-size: clamp(0.4rem, 4.2cqw, 0.65rem);
+  }
+
+  .card-detail-art-emoji {
+    font-size: clamp(1.15rem, 38cqh, 3rem);
+    line-height: 1;
+    opacity: 0.4;
+  }
+
+  .card-detail-frame .card-detail-aura-tier-bar .pip {
+    width: clamp(5px, 1.4cqw, 7px);
+    height: clamp(5px, 1.4cqw, 7px);
+  }
+}
+
+/* Fallback when container queries unavailable (legacy rem parity) */
+@supports not (container-type: size) {
+  .sci-card .card-detail-header { padding: 0.25rem 0.35rem; }
+  .sci-card .card-detail-name { font-size: 0.75rem; font-weight: 600; }
+  .sci-card .sci-card-rarity-badge {
+    font-size: 0.5rem;
+    padding: 0.1rem 0.25rem;
+  }
+  .sci-card .card-detail-body { padding: 0.3rem 0.35rem 0.35rem; }
+  .sci-card .card-detail-field { font-size: 0.6rem; }
+  .sci-card .card-detail-keyfact { font-size: 0.6rem; line-height: 1.35; }
+  .card-detail-frame .card-detail-name { font-size: 0.85rem; }
+  .card-detail-frame .card-detail-keyfact { font-size: 0.75rem; }
+  .card-detail-frame .card-detail-field { font-size: 0.65rem; }
+  .concept-effect-label { font-size: 0.6rem; }
+  .concept-effect-label--modal { font-size: 0.65rem; }
+  .card-detail-art-emoji { font-size: 2rem; opacity: 0.4; }
+  .card-detail-frame .card-detail-art-emoji { font-size: 3rem; }
 }
 
 /* Detail card divider */
@@ -2463,7 +2534,7 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .rarity-legendary .card-detail-divider { background: linear-gradient(90deg, transparent, rgba(245,158,11,0.3), rgba(245,158,11,0.6), rgba(245,158,11,0.3), transparent); }
 
 .card-detail-body {
-  padding: 0.6rem;
+  /* padding via Phase B container-query rules */
   /* Same starfield cosmic texture as grid cards */
   background:
     radial-gradient(0.7px 0.7px at 15% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
@@ -2479,18 +2550,14 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
     linear-gradient(160deg, #0d1424 0%, #101b30 40%, #0e1628 70%, #0c1220 100%);
 }
 .card-detail-field {
-  font-size: 0.65rem;
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
-  margin-bottom: 0.35rem;
   flex-shrink: 0;
 }
 .card-detail-keyfact {
-  font-size: 0.75rem;
   color: #cbd5e1;
-  line-height: 1.45;
   min-height: 0;
   flex: 1 1 auto;
   overflow: hidden;
@@ -2499,7 +2566,6 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   margin-top: 0.5rem;
   padding-top: 0.5rem;
   border-top: 1px solid rgba(148,163,184,0.15);
-  font-size: 0.65rem;
   color: #94a3b8;
   display: flex;
   align-items: center;
