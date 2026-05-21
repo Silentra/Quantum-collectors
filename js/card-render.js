@@ -5,6 +5,7 @@
  * Phase 2: detail modal (.card-detail-frame + modal extras)
  * Phase 3: overflow/layering contract (.card-cosmetic-effects host, inner clip, z-index)
  * Phase 4: pack/breakthrough reveal via variant pack-reveal (tier 0, no duplicate aura)
+ * Phase A: proportional CSS Grid on .card-detail-inner (geometry only; typography unchanged)
  *
  * Dependencies: cards.js only (no ui.js / project-ui.js imports).
  */
@@ -128,7 +129,7 @@ export function renderCardContent(model) {
     ? `concept-effect-label ${model.conceptLabelClass}`
     : 'concept-effect-label';
   const conceptEffectLabelHtml = model.conceptEffectLabel
-    ? `<div class="${conceptLabelClasses}">${model.conceptEffectLabel}</div>`
+    ? `<div class="card-detail-header-meta"><div class="${conceptLabelClasses}">${model.conceptEffectLabel}</div></div>`
     : '';
 
   const artHtml = model.imageUrl
@@ -143,10 +144,12 @@ export function renderCardContent(model) {
   return `
       <div class="card-detail-inner">
         <div class="card-detail-header">
-          <span class="card-detail-name">${model.name}</span>
-          <span class="sci-card-rarity-badge ${model.rarity}">${model.rarity}</span>
+          <div class="card-detail-header-row">
+            <span class="card-detail-name">${model.name}</span>
+            <span class="sci-card-rarity-badge ${model.rarity}">${model.rarity}</span>
+          </div>
+          ${conceptEffectLabelHtml}
         </div>
-        ${conceptEffectLabelHtml}
         <div class="card-detail-art">
           ${artHtml}
         </div>

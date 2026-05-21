@@ -1019,6 +1019,13 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   /* Phase 3: shell allows duplicate-tier aura / future glow bleed; inner clips content */
   --card-bleed: 0px;
   --card-cosmetic-gap: 0px;
+  /* Phase A: geometry tokens (typography scaling deferred to Phase B) */
+  --card-inner-inset: 3px;
+  --card-row-header: 12fr;
+  --card-row-art: 55fr;
+  --card-row-body: 31fr;
+  container-type: size;
+  container-name: card;
   overflow: visible;
   display: flex;
   flex-direction: column;
@@ -1037,9 +1044,69 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 }
 
 /* Phase 3 — content above aura ::after (tier 3 inner pulse, z-index: 1) */
+/* Phase A — proportional grid (header / art / divider / body) */
 .card-detail-inner {
   position: relative;
   z-index: 2;
+  display: grid;
+  grid-template-rows:
+    minmax(0, var(--card-row-header, 12fr))
+    minmax(32px, var(--card-row-art, 55fr))
+    2px
+    minmax(0, var(--card-row-body, 31fr));
+  height: 100%;
+  margin: var(--card-inner-inset, 4px);
+  border-radius: 0.4rem;
+  overflow: hidden;
+  background: #111827;
+  min-height: 0;
+}
+
+.card-detail-header {
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.card-detail-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.card-detail-header-meta {
+  flex-shrink: 0;
+}
+
+.card-detail-header-meta .concept-effect-label {
+  margin: 1px 0 0;
+}
+
+.card-detail-art {
+  grid-row: 2;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #0a0f1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-detail-divider {
+  grid-row: 3;
+}
+
+.card-detail-body {
+  grid-row: 4;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Rarity border colors */
@@ -2077,9 +2144,7 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
 /* Scale-down overrides for card-detail-* classes when inside .sci-card (grid cards) */
 .sci-card .card-detail-inner {
-  margin: 3px;
   border-radius: 0.35rem;
-  overflow: hidden;
   flex: 1;
   min-height: 0;
 }
@@ -2347,6 +2412,12 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   flex-direction: column;
   --card-bleed: 0px;
   --card-cosmetic-gap: 0px;
+  --card-inner-inset: 4px;
+  --card-row-header: 12fr;
+  --card-row-art: 55fr;
+  --card-row-body: 31fr;
+  container-type: size;
+  container-name: card;
 }
 .card-detail-frame .card-cosmetic-effects {
   border-radius: inherit;
@@ -2354,6 +2425,7 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .card-detail-frame .card-detail-inner {
   flex: 1;
   min-height: 0;
+  height: 100%;
 }
 .card-detail-frame.rarity-common   { border-color: #4b5563; }
 .card-detail-frame.rarity-uncommon { border-color: #22c55e; }
@@ -2361,25 +2433,9 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .card-detail-frame.rarity-epic     { border-color: #a855f7; }
 .card-detail-frame.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.2); }
 
-.card-detail-inner {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  margin: 4px;
-  border-radius: 0.4rem;
-  overflow: hidden;
-  background: #111827;
-  min-height: 0;
-  /* position + z-index set in Phase 3 block above */
-}
-
 .card-detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   padding: 0.45rem 0.6rem;
   background: rgba(0,0,0,0.5);
-  flex-shrink: 0;
 }
 .card-detail-name {
   font-size: 0.85rem;
@@ -2388,26 +2444,16 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   flex: 1;
   min-width: 0;
 }
-.card-detail-art {
-  width: 100%;
-  flex: 1 1 55%;
-  background: #0a0f1a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  min-height: 0;
-}
 .card-detail-art img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
 }
 
 /* Detail card divider */
 .card-detail-divider {
   height: 2px;
-  flex-shrink: 0;
   background: linear-gradient(90deg, transparent, rgba(148,163,184,0.25), rgba(148,163,184,0.45), rgba(148,163,184,0.25), transparent);
 }
 .rarity-common .card-detail-divider   { background: linear-gradient(90deg, transparent, rgba(75,85,99,0.3), rgba(75,85,99,0.5), rgba(75,85,99,0.3), transparent); }
@@ -2418,7 +2464,6 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
 .card-detail-body {
   padding: 0.6rem;
-  flex-shrink: 0;
   /* Same starfield cosmic texture as grid cards */
   background:
     radial-gradient(0.7px 0.7px at 15% 20%, rgba(255,255,255,0.35) 0%, transparent 100%),
@@ -2440,11 +2485,15 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   letter-spacing: 0.04em;
   font-weight: 600;
   margin-bottom: 0.35rem;
+  flex-shrink: 0;
 }
 .card-detail-keyfact {
   font-size: 0.75rem;
   color: #cbd5e1;
   line-height: 1.45;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 .card-detail-aura-info {
   margin-top: 0.5rem;
@@ -2455,6 +2504,7 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  flex-shrink: 0;
 }
 .card-detail-aura-tier-bar {
   display: flex;
