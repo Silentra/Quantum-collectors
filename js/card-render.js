@@ -4,7 +4,7 @@
  * Phase 1: collection grid (.sci-card)
  * Phase 2: detail modal (.card-detail-frame + modal extras)
  * Phase 3: overflow/layering contract (.card-cosmetic-effects host, inner clip, z-index)
- * Pack and breakthrough paths still inline until later phases.
+ * Phase 4: pack/breakthrough reveal via variant pack-reveal (tier 0, no duplicate aura)
  *
  * Dependencies: cards.js only (no ui.js / project-ui.js imports).
  */
@@ -39,7 +39,7 @@ const MODAL_AURA_PIP_COLORS = {
  * @property {boolean} [isUndiscovered=false]
  * @property {string|null} [profileCosmeticAura=null] - future profile override for resolveVisualAura
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
- * @property {'collection'|'modal'} [variant='collection'] - layout/context preset
+ * @property {'collection'|'modal'|'pack-reveal'} [variant='collection'] - layout/context preset
  */
 
 /**
@@ -58,20 +58,32 @@ export function buildCardRenderModel(card, options = {}) {
   } = options;
 
   const isModal = variant === 'modal';
-  const clampKeyFact = options.clampKeyFact ?? !isModal;
+  const isPackReveal = variant === 'pack-reveal';
+  const clampKeyFact = options.clampKeyFact ?? (isPackReveal || !isModal);
 
   const imageUrl = card.imageUrl || card.image || '';
   const keyFact = card.keyFact || card.flavor || '';
   const field = card.field || 'General';
   const visualAura = resolveVisualAura(profileCosmeticAura);
   const auraCssKey = AURA_CSS_MAP[visualAura] || 'prismatic';
-  const auraTier = isUndiscovered ? 0 : getAuraTier(card.rarity, quantity);
-  const auraClass = auraTier > 0 ? getAuraCSSClass(visualAura) : '';
+
+  let auraTier;
+  let auraClass;
+  if (isPackReveal) {
+    auraTier = 0;
+    auraClass = '';
+  } else {
+    auraTier = isUndiscovered ? 0 : getAuraTier(card.rarity, quantity);
+    auraClass = auraTier > 0 ? getAuraCSSClass(visualAura) : '';
+  }
+
   const emoji = TYPE_EMOJIS[card.type] || '\uD83D\uDD2C';
 
-  const showConceptLabel = isModal
-    ? (card.type === 'concept' && card.conceptType)
-    : (!isUndiscovered && card.type === 'concept' && card.conceptType);
+  const showConceptLabel = isPackReveal
+    ? false
+    : isModal
+      ? (card.type === 'concept' && card.conceptType)
+      : (!isUndiscovered && card.type === 'concept' && card.conceptType);
   const conceptEffectLabel = showConceptLabel
     ? (CONCEPT_EFFECT_LABELS[card.conceptType] || '')
     : '';
@@ -97,12 +109,12 @@ export function buildCardRenderModel(card, options = {}) {
     conceptLabelClass: isModal && conceptEffectLabel ? 'concept-effect-label--modal' : '',
     artFallbackFontSize: isModal ? '3rem' : '2rem',
     extraBodyHtml: '',
-    lockedClass: isLocked ? 'sci-card--locked' : '',
-    undiscoveredClass: isUndiscovered ? 'sci-card--undiscovered' : '',
-    showQty: !isUndiscovered && quantity > 1,
-    showAuraDots: auraTier > 0,
-    showLockedBadge: isLocked,
-    showUndiscoveredBadge: isUndiscovered,
+    lockedClass: isPackReveal ? '' : (isLocked ? 'sci-card--locked' : ''),
+    undiscoveredClass: isPackReveal ? '' : (isUndiscovered ? 'sci-card--undiscovered' : ''),
+    showQty: !isPackReveal && !isUndiscovered && quantity > 1,
+    showAuraDots: !isPackReveal && auraTier > 0,
+    showLockedBadge: !isPackReveal && isLocked,
+    showUndiscoveredBadge: !isPackReveal && isUndiscovered,
   };
 }
 
@@ -280,4 +292,35 @@ export function renderSciCard(model) {
  */
 export function renderCollectionCard(card, options = {}) {
   return renderSciCard(buildCardRenderModel(card, options));
+}
+
+/**
+ * Pack/breakthrough face card — tier 0 reveal, no duplicate-tier aura visuals.
+ * @param {object} card
+ * @returns {string}
+ */
+export function renderPackRevealSciCard(card) {
+  return renderSciCard(buildCardRenderModel(card, { variant: 'pack-reveal' }));
+}
+
+/**
+ * Full pack flip wrapper (back + front with canonical sci-card).
+ * @param {object} card
+ * @param {number} index
+ * @returns {string}
+ */
+export function renderPackCardWrapper(card, index) {
+  const needsClick = ['rare', 'epic', 'legendary'].includes(card.rarity);
+  const glowClass = needsClick ? `rarity-glow-${card.rarity}` : '';
+
+  return `
+      <div class="pack-card-wrapper ${glowClass}" data-rarity="${card.rarity}" data-index="${index}">
+        <div class="pack-card-flipper">
+          <div class="pack-card-back"></div>
+          <div class="pack-card-front">
+            ${renderPackRevealSciCard(card)}
+          </div>
+        </div>
+      </div>
+    `;
 }

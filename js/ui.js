@@ -8,7 +8,8 @@ import * as auth from './auth.js';
 import { resetPlayerPassword } from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
-import { buildCardRenderModel, renderCardDetailView, renderSciCard } from './card-render.js';
+import { buildCardRenderModel, renderCardDetailView, renderPackCardWrapper, renderSciCard } from './card-render.js';
+import { spawnRevealParticles } from './pack-reveal-effects.js';
 import * as packs from './packs.js';
 import * as groups from './groups.js';
 import * as config from './config.js';
@@ -475,41 +476,9 @@ function openPackUI(packId) {
 
   const cardsContainer = document.getElementById('pack-opening-cards');
 
-  // Build all card HTML — each card wrapped in a flip container
-  cardsContainer.innerHTML = result.cards.map((card, i) => {
-    const imageUrl = card.imageUrl || card.image || '';
-    const keyFact = card.keyFact || card.flavor || '';
-    const field = card.field || 'General';
-    const emoji = cards.TYPE_EMOJIS[card.type] || '\uD83D\uDD2C';
-    const needsClick = ['rare', 'epic', 'legendary'].includes(card.rarity);
-    const glowClass = needsClick ? `rarity-glow-${card.rarity}` : '';
-
-    return `
-      <div class="pack-card-wrapper ${glowClass}" data-rarity="${card.rarity}" data-index="${i}">
-        <div class="pack-card-flipper">
-          <div class="pack-card-back"></div>
-          <div class="pack-card-front">
-            <div class="sci-card rarity-${card.rarity}" data-aura-tier="0">
-              <div class="card-detail-inner">
-                <div class="card-detail-header">
-                  <span class="card-detail-name">${card.name}</span>
-                  <span class="sci-card-rarity-badge ${card.rarity}">${card.rarity}</span>
-                </div>
-                <div class="card-detail-art">
-                  ${imageUrl ? `<img src="${imageUrl}" alt="${card.name}">` : `<span style="font-size:2rem;opacity:0.4">${emoji}</span>`}
-                </div>
-                <div class="card-detail-divider"></div>
-                <div class="card-detail-body">
-                  <div class="card-detail-field">${field}</div>
-                  ${keyFact ? `<div class="card-detail-keyfact grid-clamp">${keyFact}</div>` : ''}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join('');
+  cardsContainer.innerHTML = result.cards
+    .map((card, i) => renderPackCardWrapper(card, i))
+    .join('');
 
   // Show overlay first
   document.getElementById('pack-opening-overlay').classList.remove('hidden');
@@ -552,62 +521,6 @@ function openPackUI(packId) {
   });
 
   renderPacks();
-}
-
-/**
- * Spawn celebratory firework particles around a card element.
- * Epic = ~10 particles, Legendary = ~20 particles + lightning flash.
- */
-export function spawnRevealParticles(wrapperEl, rarity) {
-  const isLegendary = rarity === 'legendary';
-  const count = isLegendary ? 20 : 10;
-  const colors = isLegendary
-    ? ['#f59e0b', '#fbbf24', '#fcd34d', '#f97316', '#fff7ed']
-    : ['#a855f7', '#c084fc', '#d8b4fe', '#7c3aed', '#e9d5ff'];
-
-  // Create a container positioned over the card
-  const container = document.createElement('div');
-  container.className = 'pack-particles-container';
-  wrapperEl.style.position = 'relative';
-  wrapperEl.appendChild(container);
-
-  // Legendary-only: brief lightning/energy flash overlay
-  if (isLegendary) {
-    const flash = document.createElement('div');
-    flash.className = 'legendary-reveal-flash';
-    container.appendChild(flash);
-  }
-
-  const rect = wrapperEl.getBoundingClientRect();
-  const cx = rect.width / 2;
-  const cy = rect.height / 2;
-
-  for (let i = 0; i < count; i++) {
-    const particle = document.createElement('div');
-    particle.className = 'pack-particle' + (isLegendary ? ' pack-particle--legendary' : '');
-    particle.style.background = colors[i % colors.length];
-    particle.style.left = cx + 'px';
-    particle.style.top = cy + 'px';
-
-    // Vary particle sizes for visual richness
-    const size = isLegendary ? (4 + Math.random() * 6) : (4 + Math.random() * 4);
-    particle.style.width = size + 'px';
-    particle.style.height = size + 'px';
-
-    // Random direction — wider spread for legendary
-    const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.9;
-    const dist = isLegendary ? (50 + Math.random() * 70) : (40 + Math.random() * 55);
-    particle.style.setProperty('--px', `${Math.cos(angle) * dist}px`);
-    particle.style.setProperty('--py', `${Math.sin(angle) * dist}px`);
-
-    // Slight stagger so particles don't all fire at once
-    particle.style.animationDelay = (Math.random() * 0.08) + 's';
-
-    container.appendChild(particle);
-  }
-
-  // Clean up after animation (duration + delay headroom)
-  setTimeout(() => container.remove(), isLegendary ? 1200 : 1000);
 }
 
 // ===================== RESEARCH PROJECTS (delegated to project-ui.js) =====================

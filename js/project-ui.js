@@ -36,8 +36,9 @@ import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
 import { recordBreakthroughEarned, recordProjectOutcome } from './achievements.js';
 
-// These are imported from ui.js — kept there per extraction spec
-import { spawnRevealParticles, confirmAction } from './ui.js';
+import { renderPackCardWrapper } from './card-render.js';
+import { spawnRevealParticles } from './pack-reveal-effects.js';
+import { confirmAction } from './ui.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
 
@@ -179,38 +180,9 @@ function showBreakthroughCardReveal(card) {
   const cardsContainer = document.getElementById('pack-opening-cards');
   if (!cardsContainer) return;
 
-  const imageUrl  = card.imageUrl || card.image || '';
-  const keyFact   = card.keyFact  || card.flavor || '';
-  const field     = card.field    || 'General';
-  const emoji     = cards.TYPE_EMOJIS[card.type] || '🔬';
   const needsClick = ['rare', 'epic', 'legendary'].includes(card.rarity);
-  const glowClass  = needsClick ? `rarity-glow-${card.rarity}` : '';
 
-  cardsContainer.innerHTML = `
-    <div class="pack-card-wrapper ${glowClass}" data-rarity="${card.rarity}" data-index="0">
-      <div class="pack-card-flipper">
-        <div class="pack-card-back"></div>
-        <div class="pack-card-front">
-          <div class="sci-card rarity-${card.rarity}" data-aura-tier="0">
-            <div class="card-detail-inner">
-              <div class="card-detail-header">
-                <span class="card-detail-name">${card.name}</span>
-                <span class="sci-card-rarity-badge ${card.rarity}">${card.rarity}</span>
-              </div>
-              <div class="card-detail-art">
-                ${imageUrl ? `<img src="${imageUrl}" alt="${card.name}">` : `<span style="font-size:2rem;opacity:0.4">${emoji}</span>`}
-              </div>
-              <div class="card-detail-divider"></div>
-              <div class="card-detail-body">
-                <div class="card-detail-field">${field}</div>
-                ${keyFact ? `<div class="card-detail-keyfact grid-clamp">${keyFact}</div>` : ''}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
+  cardsContainer.innerHTML = renderPackCardWrapper(card, 0);
 
   overlay.classList.remove('hidden');
 

@@ -146,10 +146,10 @@ js/
 - **Gameplay aura scaling** (project-engine.js, quest-config.js, project-config.js) is **unchanged** — `auraLevel` on enriched card objects still drives gameplay math via `config.auraScaling[level]`
 
 ### Player-Facing Card Renderer (Phase 3 + normalization Phase 1)
-- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal). Inert `.card-cosmetic-effects` host in sci-card/modal shells (Phase 3). **Overflow contract**: `.sci-card` `overflow: visible`; `.card-detail-inner` clips content at `z-index: 2`; duplicate-tier aura `::before`/`::after` stay on shell. CSS vars `--card-bleed`, `--card-cosmetic-gap` (default 0). Pack/breakthrough HTML still inline until Phase 4.
+- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal), `renderPackCardWrapper()` / `variant: 'pack-reveal'` (pack + breakthrough). **FX module**: `js/pack-reveal-effects.js` (`spawnRevealParticles`). Inert `.card-cosmetic-effects` host (Phase 3). **Overflow contract**: `.sci-card` `overflow: visible`; inner clips at `z-index: 2`. Pack reveals: `data-aura-tier="0"`, no duplicate-tier aura class.
 - **Unified card structure**: collection grid, pack opening, and detail modal all share the same `card-detail-*` internal HTML (header → art → divider → body). The modal proportions are the visual reference standard.
 - **Collection grid**: `renderPlayerCard()` → `card-render.js` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, aura visuals, click behavior). CSS overrides (`.sci-card .card-detail-*`) scale down font sizes and padding for grid context. keyFact text uses `.grid-clamp` class for line-clamping.
-- **Pack opening**: same `.sci-card` shell + `card-detail-*` internals with reveal animation
+- **Pack opening**: `renderPackCardWrapper()` — flip shell + canonical `renderPackRevealSciCard()` (`pack-reveal` variant, tier 0)
 - **Detail modal**: `renderCardDetailView()` — `.card-detail-frame` shell (5:7 aspect, 240px max-width) + shared `card-detail-*` internals + modal aura pip bar + concept flavor/ownership blocks outside frame
 - **Disabled cards**: filtered out of player collection, pack stats, and profile progress
 - Admin card list/rendering is unchanged (still uses legacy `.card-item` styles)
