@@ -42,8 +42,41 @@ function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+function truncateText(text, max = 72) {
+  const s = String(text || '').trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, max - 1)}…`;
+}
+
 function statLabel(key) {
   return STAT_LABELS[key] || key;
+}
+
+function confirmDialog(message, title = 'Confirm') {
+  return new Promise(resolve => {
+    const modal = document.getElementById('confirm-modal');
+    if (!modal) {
+      resolve(window.confirm(message));
+      return;
+    }
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-message').textContent = message;
+    modal.classList.remove('hidden');
+
+    const okBtn = document.getElementById('btn-confirm-ok');
+    const cancelBtn = document.getElementById('btn-confirm-cancel');
+
+    function cleanup() {
+      modal.classList.add('hidden');
+      okBtn?.removeEventListener('click', onOk);
+      cancelBtn?.removeEventListener('click', onCancel);
+    }
+    function onOk() { cleanup(); resolve(true); }
+    function onCancel() { cleanup(); resolve(false); }
+
+    okBtn?.addEventListener('click', onOk);
+    cancelBtn?.addEventListener('click', onCancel);
+  });
 }
 
 function listConsumableOptions() {
@@ -174,12 +207,13 @@ function conditionHtml(c = {}) {
 }
 
 function editorHtml(definition) {
+  const isEdit = Boolean(definition);
   const def = definition || {
     enabled: true,
     hidden: false,
     name: '',
     description: '',
-    icon: { emoji: '🏆' },
+    icon: { emoji: '' },
     conditions: [{ stat: 'packsOpened', op: 'gte', value: 1 }],
     rewards: [{ type: 'rp', amount: 25 }],
   };
@@ -190,7 +224,7 @@ function editorHtml(definition) {
 
   return `
     <section class="bg-surface-900 rounded-xl border border-surface-700 p-4 space-y-3" id="ach-admin-editor">
-      <h4 class="font-semibold">${definition ? 'Edit Achievement' : 'New Achievement'}</h4>
+      <h4 class="font-semibold">${isEdit ? 'Edit Achievement' : 'Create New Achievement'}</h4>
       <div class="grid grid-cols-1 gap-3">
         <label class="text-xs text-surface-400">Title
           <input id="ach-admin-name" class="admin-input w-full mt-1" value="${escapeHtml(def.name)}" placeholder="First Trade" />
@@ -228,9 +262,10 @@ function editorHtml(definition) {
         <p class="text-[10px] text-surface-500 mb-2">Cosmetic rewards unlock only — never auto-equip.</p>
         <div id="ach-admin-rewards" class="space-y-2">${rewards}</div>
       </div>
-      <div class="flex gap-2">
+      <div class="flex gap-2 flex-wrap">
         <button type="button" id="ach-admin-save" class="bg-primary-600 px-4 py-2 rounded text-sm">Save</button>
-        ${definition ? '<button type="button" id="ach-admin-delete" class="bg-red-700 px-4 py-2 rounded text-sm">Delete</button>' : ''}
+        ${isEdit ? '<button type="button" id="ach-admin-cancel-edit" class="bg-surface-700 px-4 py-2 rounded text-sm">Cancel edit</button>' : ''}
+        ${isEdit ? '<button type="button" id="ach-admin-delete" class="bg-red-700 px-4 py-2 rounded text-sm">Delete</button>' : ''}
       </div>
     </section>
   `;
@@ -245,6 +280,49 @@ function updateRewardRowVisibility(row) {
   row.querySelector('.ach-reward-pack')?.classList.toggle('hidden', type !== 'pack');
   const showQty = type === 'consumable' || type === 'pack';
   row.querySelector('.ach-reward-qty')?.classList.toggle('hidden', !showQty);
+}
+
+function navigationListHtml(definitions) {
+  if (!definitions.length) return '<p class="text-surface-500 text-sm">No achievements yet. Create one above.</p>';
+  return `
+    <ul class="ach-admin-nav-list space-y-2">
+      ${definitions.map(d => `
+        <li class="ach-admin-nav-item${editingId === d.id ? ' ach-admin-nav-item-active' : ''}">
+          <div class="ach-admin-nav-body">
+            <div class="ach-admin-nav-title">${escapeHtml(d.name)}</div>
+            <div class="ach-admin-nav-desc">${escapeHtml(truncateText(d.description))}</div>
+            <div class="ach-admin-nav-meta">
+              <span class="${d.enabled ? 'text-green-400' : 'text-surface-500'}">${d.enabled ? 'Enabled' : 'Disabled'}</span>
+              <span>·</span>
+              <span class="${d.hidden ? 'text-amber-400' : 'text-surface-400'}">${d.hidden ? 'Hidden' : 'Visible'}</span>
+            </div>
+          </div>
+          <button type="button" class="ach-admin-edit-btn text-xs bg-surface-700 px-2 py-1 rounded" data-id="${escapeHtml(d.id)}">Edit</button>
+        </li>
+      `).join('')}
+    </ul>
+  `;
+}
+
+function lockedOrderListHtml(definitions) {
+  if (!definitions.length) return '';
+  return `
+    <div class="ach-admin-order-block">
+      <div class="mb-2">
+        <span class="text-sm font-medium">Locked achievement display order</span>
+        <p class="text-[10px] text-surface-500 mt-0.5">Drag to reorder how locked (visible) achievements appear for players. Does not affect unlocked or starred order.</p>
+      </div>
+      <ul id="ach-admin-sortable-list" class="ach-admin-sortable space-y-1">
+        ${definitions.map(d => `
+          <li class="ach-admin-sort-item" draggable="true" data-id="${escapeHtml(d.id)}">
+            <span class="ach-admin-drag-handle" aria-hidden="true">⋮⋮</span>
+            <span class="ach-admin-sort-name">${escapeHtml(d.name)}</span>
+            <span class="text-[10px] text-surface-500">${d.hidden ? 'hidden' : 'visible'}</span>
+          </li>
+        `).join('')}
+      </ul>
+    </div>
+  `;
 }
 
 function wireEditor(container) {
@@ -282,39 +360,35 @@ function wireEditor(container) {
     }
     saveAchievementDefinition(def);
     toast.success('Achievement saved.');
-    editingId = def.id;
+    editingId = null;
     renderAchievementsAdminPanel(container);
   });
 
-  editor.querySelector('#ach-admin-delete')?.addEventListener('click', () => {
+  editor.querySelector('#ach-admin-cancel-edit')?.addEventListener('click', () => {
+    editingId = null;
+    renderAchievementsAdminPanel(container);
+  });
+
+  editor.querySelector('#ach-admin-delete')?.addEventListener('click', async () => {
     if (!editingId) return;
-    deleteAchievementDefinition(editingId);
+    const config = getAchievementConfig();
+    const def = config.definitions[editingId];
+    const title = def?.name || editingId;
+    const confirmed = await confirmDialog(
+      `Delete achievement "${title}"?\nThis cannot be undone.`,
+      'Delete achievement?'
+    );
+    if (!confirmed) return;
+
+    const result = deleteAchievementDefinition(editingId);
+    if (!result.success) {
+      toast.error('Could not delete achievement.');
+      return;
+    }
     toast.success('Achievement deleted.');
     editingId = null;
     renderAchievementsAdminPanel(container);
   });
-}
-
-function sortableListHtml(definitions) {
-  if (!definitions.length) return '<p class="text-surface-500 text-sm">No achievements yet.</p>';
-  return `
-    <div class="ach-admin-order-block">
-      <div class="flex justify-between items-center mb-2">
-        <span class="text-sm font-medium">Display order</span>
-        <span class="text-[10px] text-surface-500">Drag to reorder locked achievements for players</span>
-      </div>
-      <ul id="ach-admin-sortable-list" class="ach-admin-sortable space-y-1">
-        ${definitions.map(d => `
-          <li class="ach-admin-sort-item" draggable="true" data-id="${escapeHtml(d.id)}">
-            <span class="ach-admin-drag-handle" aria-hidden="true">⋮⋮</span>
-            <span class="ach-admin-sort-name">${escapeHtml(d.name)}</span>
-            <span class="text-[10px] text-surface-500">${d.enabled ? '' : '· off'}${d.hidden ? ' · hidden' : ''}</span>
-            <button type="button" class="ach-admin-edit-btn text-xs bg-surface-700 px-2 py-1 rounded ml-auto" data-id="${escapeHtml(d.id)}" draggable="false">Edit</button>
-          </li>
-        `).join('')}
-      </ul>
-    </div>
-  `;
 }
 
 function wireSortableList(container) {
@@ -349,13 +423,9 @@ function wireSortableList(container) {
       e.preventDefault();
       const orderedIds = [...list.querySelectorAll('.ach-admin-sort-item')].map(li => li.dataset.id);
       saveAchievementSortOrder(orderedIds);
-      toast.success('Display order saved.');
+      toast.success('Locked display order saved.');
     });
   });
-}
-
-function listHtml(definitions) {
-  return sortableListHtml(definitions);
 }
 
 export function renderAchievementsAdminPanel(container) {
@@ -374,10 +444,14 @@ export function renderAchievementsAdminPanel(container) {
           <h3 class="font-semibold">Achievements</h3>
           <p class="text-xs text-surface-500">System ${config.meta.enabled === false ? 'disabled' : 'enabled'} · ${definitions.length} definition(s)</p>
         </div>
-        <button type="button" id="ach-admin-new" class="bg-primary-600 px-3 py-2 rounded text-sm">New</button>
+        ${editingId ? '<button type="button" id="ach-admin-new" class="bg-surface-700 px-3 py-2 rounded text-sm">Create new</button>' : ''}
       </div>
-      ${listHtml(definitions)}
       ${editorHtml(current)}
+      <div class="ach-admin-list-block">
+        <h4 class="text-sm font-medium mb-2">All achievements</h4>
+        ${navigationListHtml(definitions)}
+      </div>
+      ${lockedOrderListHtml(definitions)}
     </section>
   `;
 

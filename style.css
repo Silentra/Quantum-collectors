@@ -619,7 +619,7 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .ach-profile-list {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -2768,8 +2768,137 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .ach-show-more {
   display: flex;
   gap: 0.35rem;
-  margin-top: 0.5rem;
+  margin-bottom: 0.45rem;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.ach-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #111827;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  font-size: 0.72rem;
+}
+.ach-row-icon {
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  width: 1.1rem;
+  text-align: center;
+  line-height: 1;
+}
+.ach-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.ach-row-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.72rem;
+}
+.ach-row-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.ach-row-progress .ach-progress-bar {
+  flex: 1;
+  height: 0.25rem;
+  min-width: 3rem;
+}
+.ach-row-progress .ach-progress-label {
+  font-size: 0.62rem;
+  min-width: 1.75rem;
+}
+.ach-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+.ach-row-reward {
+  color: #fbbf24;
+  font-size: 0.62rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 8rem;
+}
+.ach-row-status {
+  font-size: 0.62rem;
+  color: #86efac;
+}
+.ach-claim-btn {
+  flex-shrink: 0;
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ach-claim-btn:hover {
+  background: #3b82f6;
+}
+.ach-star-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.1rem;
+}
+.ach-star-btn:hover,
+.ach-star-btn-active {
+  color: #fbbf24;
+}
+.ach-admin-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.ach-admin-nav-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 0.5rem;
+}
+.ach-admin-nav-item-active {
+  border-color: #3b82f6;
+}
+.ach-admin-nav-body {
+  flex: 1;
+  min-width: 0;
+}
+.ach-admin-nav-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.ach-admin-nav-desc {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin-top: 0.2rem;
+}
+.ach-admin-nav-meta {
+  font-size: 0.68rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+  display: flex;
+  gap: 0.35rem;
   flex-wrap: wrap;
 }
 .ach-show-btn {
