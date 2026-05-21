@@ -8,7 +8,7 @@ import * as auth from './auth.js';
 import { resetPlayerPassword } from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
-import { buildCardRenderModel, renderSciCard } from './card-render.js';
+import { buildCardRenderModel, renderCardDetailView, renderSciCard } from './card-render.js';
 import * as packs from './packs.js';
 import * as groups from './groups.js';
 import * as config from './config.js';
@@ -375,17 +375,13 @@ function renderCollection() {
  * Phase 4C: isLocked is derived from ACTIVE ResearchProjects — purely visual,
  * never stored on the card itself. Card remains fully viewable when locked.
  */
-// Concept display maps — imported from cards.js (shared between collection + project rendering)
-const CONCEPT_EFFECT_LABELS = cards.CONCEPT_EFFECT_LABELS;
-const CONCEPT_FLAVOR_TEXT = cards.CONCEPT_FLAVOR_TEXT;
-
 function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered = false) {
   const model = buildCardRenderModel(card, {
     quantity,
     isLocked,
     isUndiscovered,
+    variant: 'collection',
     profileCosmeticAura: null,
-    clampKeyFact: true,
   });
   return renderSciCard(model);
 }
@@ -407,78 +403,11 @@ function showCardDetail(cardId, quantity = 1) {
     }
   }
 
-  const imageUrl = card.imageUrl || card.image || '';
-  const keyFact = card.keyFact || card.flavor || '';
-  const field = card.field || 'General';
-  // Phase 1D: All cards always have a visual aura tier derived from duplicate count
-  const visualAura = cards.resolveVisualAura(null); // null = no profile cosmetic override yet
-  const auraCssKey = cards.AURA_CSS_MAP[visualAura] || 'prismatic';
-  const auraTier = cards.getAuraTier(card.rarity, quantity);
-  const emoji = cards.TYPE_EMOJIS[card.type] || '\uD83D\uDD2C';
-
-  // Build aura info section — always shown for all cards
-  const nextThresholds = cards.AURA_THRESHOLDS[card.rarity] || [];
-  let nextTierInfo = '';
-  if (auraTier < 3 && nextThresholds[auraTier]) {
-    nextTierInfo = `<span class="text-surface-500 text-[0.6rem]">Next tier at ${nextThresholds[auraTier]}\u00D7</span>`;
-  } else if (auraTier >= 3) {
-    nextTierInfo = `<span class="text-amber-400/70 text-[0.6rem]">Max tier!</span>`;
-  }
-
-  // Color for pips depends on resolved visual aura
-  const pipColors = {
-    holographic: '#c084fc', prismatic: '#e0e7ff', shadow: '#a855f7',
-    radiant: '#fbbf24', cosmic: '#60a5fa'
-  };
-  const pipColor = pipColors[auraCssKey] || '#94a3b8';
-
-  const auraHTML = `
-    <div class="card-detail-aura-info">
-      <span>💎 aura</span>
-      <div class="card-detail-aura-tier-bar" style="color:${pipColor}">
-        ${[1,2,3].map(i => `<span class="pip ${i <= auraTier ? 'filled' : ''}"></span>`).join('')}
-      </div>
-      ${nextTierInfo}
-    </div>
-  `;
-
-  // FIX 5: concept effect label + flavor text for concept cards
-  const conceptEffectLabelModal = (card.type === 'concept' && card.conceptType && CONCEPT_EFFECT_LABELS[card.conceptType])
-    ? `<div class="concept-effect-label concept-effect-label--modal">${CONCEPT_EFFECT_LABELS[card.conceptType]}</div>`
-    : '';
-  // flavorText: use card-level override if present; fall back to per-conceptType default
-  const resolvedFlavorText = (card.type === 'concept')
-    ? (card.flavorText || CONCEPT_FLAVOR_TEXT[card.conceptType] || '')
-    : '';
-  const conceptFlavorText = resolvedFlavorText
-    ? `<div class="concept-flavor-text">${resolvedFlavorText}</div>`
-    : '';
-
   const modal = document.getElementById('card-detail-modal');
-  document.getElementById('card-detail-content').innerHTML = `
-    <div class="card-detail-frame rarity-${card.rarity}">
-      <div class="card-detail-inner">
-        <div class="card-detail-header">
-          <span class="card-detail-name">${card.name}</span>
-          <span class="sci-card-rarity-badge ${card.rarity}">${card.rarity}</span>
-        </div>
-        ${conceptEffectLabelModal}
-        <div class="card-detail-art">
-          ${imageUrl ? `<img src="${imageUrl}" alt="${card.name}">` : `<span style="font-size:3rem;opacity:0.4">${emoji}</span>`}
-        </div>
-        <div class="card-detail-divider"></div>
-        <div class="card-detail-body">
-          <div class="card-detail-field">${field}</div>
-          ${keyFact ? `<div class="card-detail-keyfact">${keyFact}</div>` : ''}
-          ${auraHTML}
-        </div>
-      </div>
-    </div>
-    ${conceptFlavorText}
-    <div class="mt-3 text-center text-xs text-surface-500">
-      ${quantity > 1 ? `Owned: \u00D7${quantity}` : ''}
-    </div>
-  `;
+  document.getElementById('card-detail-content').innerHTML = renderCardDetailView(card, {
+    quantity,
+    profileCosmeticAura: null,
+  });
   modal.classList.remove('hidden');
 }
 
