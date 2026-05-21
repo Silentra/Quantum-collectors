@@ -3,6 +3,7 @@
  *
  * Phase 1: collection grid (.sci-card)
  * Phase 2: detail modal (.card-detail-frame + modal extras)
+ * Phase 3: overflow/layering contract (.card-cosmetic-effects host, inner clip, z-index)
  * Pack and breakthrough paths still inline until later phases.
  *
  * Dependencies: cards.js only (no ui.js / project-ui.js imports).
@@ -18,6 +19,9 @@ import {
   getAuraTier,
   resolveVisualAura,
 } from './cards.js';
+
+/** Inert host for future equipped glow/border/shimmer (Phase 3 — no visuals yet). */
+const CARD_COSMETIC_HOST_HTML = '<div class="card-cosmetic-effects" aria-hidden="true"></div>';
 
 /** Pip colors for modal aura tier bar (keyed by AURA_CSS_MAP suffix). */
 const MODAL_AURA_PIP_COLORS = {
@@ -204,6 +208,7 @@ export function renderCardDetailOwnershipLine(quantity) {
 export function renderDetailFrame(model) {
   return `
     <div class="card-detail-frame rarity-${model.rarity}">
+      ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
     </div>
   `;
@@ -260,6 +265,7 @@ export function renderSciCard(model) {
       ${qtyBadge}
       ${lockedBadge}
       ${undiscoveredBadge}
+      ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
       ${auraDots}
     </div>

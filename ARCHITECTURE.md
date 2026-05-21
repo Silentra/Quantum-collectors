@@ -146,7 +146,7 @@ js/
 - **Gameplay aura scaling** (project-engine.js, quest-config.js, project-config.js) is **unchanged** — `auraLevel` on enriched card objects still drives gameplay math via `config.auraScaling[level]`
 
 ### Player-Facing Card Renderer (Phase 3 + normalization Phase 1)
-- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal). Collection via `renderPlayerCard()`; modal via `showCardDetail()` in `ui.js`. Pack and breakthrough still inline until later phases.
+- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal). Inert `.card-cosmetic-effects` host in sci-card/modal shells (Phase 3). **Overflow contract**: `.sci-card` `overflow: visible`; `.card-detail-inner` clips content at `z-index: 2`; duplicate-tier aura `::before`/`::after` stay on shell. CSS vars `--card-bleed`, `--card-cosmetic-gap` (default 0). Pack/breakthrough HTML still inline until Phase 4.
 - **Unified card structure**: collection grid, pack opening, and detail modal all share the same `card-detail-*` internal HTML (header → art → divider → body). The modal proportions are the visual reference standard.
 - **Collection grid**: `renderPlayerCard()` → `card-render.js` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, aura visuals, click behavior). CSS overrides (`.sci-card .card-detail-*`) scale down font sizes and padding for grid context. keyFact text uses `.grid-clamp` class for line-clamping.
 - **Pack opening**: same `.sci-card` shell + `card-detail-*` internals with reveal animation

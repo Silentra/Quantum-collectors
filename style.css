@@ -1016,12 +1016,31 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   border-radius: 0.6rem;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  overflow: hidden;
+  /* Phase 3: shell allows duplicate-tier aura / future glow bleed; inner clips content */
+  --card-bleed: 0px;
+  --card-cosmetic-gap: 0px;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   aspect-ratio: 5/7;
 }
 .sci-card:hover { transform: translateY(-3px); }
+
+/* Phase 3 — inert cosmetic mount (equipped glow/border/shimmer in a later phase) */
+.card-cosmetic-effects {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: visible;
+}
+
+/* Phase 3 — content above aura ::after (tier 3 inner pulse, z-index: 1) */
+.card-detail-inner {
+  position: relative;
+  z-index: 2;
+}
 
 /* Rarity border colors */
 .sci-card.rarity-common   { border-color: #4b5563; }
@@ -2057,7 +2076,13 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 }
 
 /* Scale-down overrides for card-detail-* classes when inside .sci-card (grid cards) */
-.sci-card .card-detail-inner { margin: 3px; border-radius: 0.35rem; }
+.sci-card .card-detail-inner {
+  margin: 3px;
+  border-radius: 0.35rem;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
 .sci-card .card-detail-header { padding: 0.25rem 0.35rem; }
 .sci-card .card-detail-name {
   font-size: 0.75rem;
@@ -2124,6 +2149,11 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 }
 
 /* ===================== AURA SYSTEM ===================== */
+/*
+ * Stacking (Phase 3): ::before z0, ::after z1, .card-cosmetic-effects z0,
+ * .card-detail-inner z2, .sci-card-aura-dots z5, badges z10.
+ * Shell overflow:visible — glow not clipped; inner overflow:hidden clips art/text.
+ */
 
 /* Aura overlay — a pseudo-element on the card */
 .sci-card[data-aura-tier="0"] { /* no aura */ }
@@ -2315,6 +2345,15 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   aspect-ratio: 5/7;
   display: flex;
   flex-direction: column;
+  --card-bleed: 0px;
+  --card-cosmetic-gap: 0px;
+}
+.card-detail-frame .card-cosmetic-effects {
+  border-radius: inherit;
+}
+.card-detail-frame .card-detail-inner {
+  flex: 1;
+  min-height: 0;
 }
 .card-detail-frame.rarity-common   { border-color: #4b5563; }
 .card-detail-frame.rarity-uncommon { border-color: #22c55e; }
@@ -2331,6 +2370,7 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   overflow: hidden;
   background: #111827;
   min-height: 0;
+  /* position + z-index set in Phase 3 block above */
 }
 
 .card-detail-header {
@@ -2500,16 +2540,17 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   border-radius: 0.6rem;
   overflow: hidden;
 }
-
 /* Front = the actual card content (hidden initially, revealed on flip) */
 .pack-card-front {
   transform: rotateY(180deg);
 }
+/* Pack face clips flip bounds; sci-card matches collection overflow contract */
 .pack-card-front .sci-card {
   width: 100%;
   height: 100%;
   aspect-ratio: auto;
   border-radius: 0.6rem;
+  overflow: visible;
 }
 
 /* Back = face-down card */
