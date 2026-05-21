@@ -132,9 +132,10 @@ export function deleteAchievementDefinition(achievementId) {
   if (!current.definitions[achievementId]) {
     return { success: false, reason: 'not_found' };
   }
-  const nextDefinitions = { ...current.definitions };
-  delete nextDefinitions[achievementId];
-  const config = saveAchievementConfig({ definitions: nextDefinitions });
+  const config = saveAchievementConfig({ definitions: { [achievementId]: null } });
+  if (getAchievementConfig().definitions[achievementId]) {
+    return { success: false, reason: 'delete_failed' };
+  }
   return { success: true, config };
 }
 

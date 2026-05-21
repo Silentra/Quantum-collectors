@@ -105,6 +105,11 @@ function progressPercent(entry) {
  * Starred unlocked → normal unlocked (newest) → locked visible (admin sortOrder).
  * Hidden+locked omitted entirely.
  */
+function filterStarredIds(starredIds, definitions) {
+  const validIds = new Set(definitions.map(d => d.id));
+  return starredIds.filter(id => validIds.has(id));
+}
+
 function buildOrderedVisibleAchievements(definitions, playerAchievements, starredIds) {
   const starredSet = new Set(starredIds);
   const starredUnlocked = [];
@@ -153,6 +158,10 @@ function achievementRowHtml(definition, playerAchievements, username, starredIds
     ? `<button type="button" class="ach-star-btn${starred ? ' ach-star-btn-active' : ''}" data-achievement-id="${escapeHtml(definition.id)}" aria-label="${starred ? 'Unstar' : 'Star'} achievement" title="${starred ? 'Unstar' : 'Star'}">${starred ? '★' : '☆'}</button>`
     : '';
 
+  const descLine = definition.description
+    ? `<span class="ach-row-desc">${escapeHtml(definition.description)}</span>`
+    : '';
+
   const progressBlock = !unlocked
     ? `<div class="ach-row-progress">
         <div class="ach-progress-bar"><div class="ach-progress-fill" style="width:${pct}%"></div></div>
@@ -167,6 +176,7 @@ function achievementRowHtml(definition, playerAchievements, username, starredIds
       <span class="ach-row-icon" aria-hidden="true">${escapeHtml(emoji)}</span>
       <div class="ach-row-main">
         <span class="ach-row-title">${escapeHtml(definition.name)}</span>
+        ${descLine}
         ${progressBlock}
       </div>
       ${starBtn}
@@ -259,7 +269,7 @@ export function renderProfileAchievements() {
   const username = session.username;
   const definitions = listAchievementDefinitions();
   const playerAchievements = getPlayerAchievements(username);
-  const starredIds = getStarredAchievementIds(username);
+  const starredIds = filterStarredIds(getStarredAchievementIds(username), definitions);
   const ordered = buildOrderedVisibleAchievements(definitions, playerAchievements, starredIds);
 
   if (!ordered.length) {

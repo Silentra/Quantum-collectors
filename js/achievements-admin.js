@@ -382,7 +382,7 @@ function wireEditor(container) {
 
     const result = deleteAchievementDefinition(editingId);
     if (!result.success) {
-      toast.error('Could not delete achievement.');
+      toast.error(result.reason === 'delete_failed' ? 'Achievement could not be removed. Try again.' : 'Could not delete achievement.');
       return;
     }
     toast.success('Achievement deleted.');

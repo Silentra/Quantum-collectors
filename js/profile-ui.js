@@ -171,10 +171,16 @@ function renderProfileSummary(p) {
   const projectsCompleted = p.projectsCompleted || researchStats.successfulProjects || 0;
   const tradesCompleted = stats.tradesCompleted || 0;
   document.getElementById('profile-stats').innerHTML = `
-    <div class="stat-card"><div class="stat-value">${escapeHtml(totalRP)}</div><div class="stat-label">Lifetime RP</div></div>
-    <div class="stat-card"><div class="stat-value">${escapeHtml(spendableRP)}</div><div class="stat-label">Spendable RP</div></div>
-    <div class="stat-card"><div class="stat-value">${escapeHtml(projectsCompleted)}</div><div class="stat-label">Projects Completed</div></div>
-    <div class="stat-card"><div class="stat-value">${escapeHtml(tradesCompleted)}</div><div class="stat-label">Trades Completed</div></div>
+    <div class="profile-stats-grid">
+      <div class="profile-stats-primary">
+        <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(totalRP)}</div><div class="stat-label">Lifetime RP</div></div>
+        <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(spendableRP)}</div><div class="stat-label">Spendable RP</div></div>
+      </div>
+      <div class="profile-stats-secondary">
+        <div class="stat-card stat-card-compact stat-card-secondary"><div class="stat-value">${escapeHtml(projectsCompleted)}</div><div class="stat-label">Projects Completed</div></div>
+        <div class="stat-card stat-card-compact stat-card-secondary"><div class="stat-value">${escapeHtml(tradesCompleted)}</div><div class="stat-label">Trades Completed</div></div>
+      </div>
+    </div>
   `;
 }
 
