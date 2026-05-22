@@ -895,9 +895,9 @@
 
   <!-- Pack Opening Modal (global — must live outside tab-packs so it shows from any tab) -->
   <div id="pack-opening-overlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-900 rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto border border-surface-700">
+    <div class="pack-opening-panel bg-surface-900 rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto border border-surface-700">
       <h3 id="pack-opening-title" class="text-xl font-bold text-center mb-4"></h3>
-      <div id="pack-opening-cards" class="grid grid-cols-3 sm:grid-cols-4 gap-2.5 mb-4"></div>
+      <div id="pack-opening-cards" class="pack-opening-cards mb-4"></div>
       <button id="btn-close-pack" class="w-full bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition">
         Collect Cards
       </button>
@@ -906,7 +906,7 @@
 
   <!-- Card Detail Modal (global) -->
   <div id="card-detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-900 rounded-2xl p-5 max-w-xs w-full border border-surface-700">
+    <div class="card-detail-modal-panel bg-surface-900 rounded-2xl p-5 w-full border border-surface-700">
       <div id="card-detail-content"></div>
       <button id="btn-close-card-detail" class="w-full mt-4 bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition">
         Close

@@ -163,7 +163,7 @@ export function renderCardContent(model) {
 }
 
 /**
- * Modal-only aura tier pip bar + next-tier hint (inside card-detail-body).
+ * Modal aura tier pip bar + next-tier hint (rendered below card frame in .card-detail-meta).
  * @param {ReturnType<typeof buildCardRenderModel>} model
  * @param {object} card
  * @returns {string}
@@ -190,8 +190,26 @@ export function renderModalAuraInfoHtml(model, card) {
   `;
 }
 
+const CARD_DETAIL_AURA_HELPER_TEXT =
+  'Duplicate cards enhance visual effects and increase research project strength.';
+
 /**
- * Concept flavor block below the modal frame (unchanged placement).
+ * Aura metadata block below the card frame (pips + next-tier hint + helper copy).
+ * @param {ReturnType<typeof buildCardRenderModel>} model
+ * @param {object} card
+ * @returns {string}
+ */
+export function renderModalAuraMetaSection(model, card) {
+  return `
+    <section class="card-detail-meta-section card-detail-meta-aura">
+      ${renderModalAuraInfoHtml(model, card)}
+      <p class="card-detail-aura-helper">${CARD_DETAIL_AURA_HELPER_TEXT}</p>
+    </section>
+  `;
+}
+
+/**
+ * Concept flavor block in modal metadata region (below card frame).
  * @param {object} card
  * @returns {string}
  */
@@ -200,7 +218,7 @@ export function renderConceptFlavorBlock(card) {
     ? (card.flavorText || CONCEPT_FLAVOR_TEXT[card.conceptType] || '')
     : '';
   return resolvedFlavorText
-    ? `<div class="concept-flavor-text">${resolvedFlavorText}</div>`
+    ? `<section class="card-detail-meta-section card-detail-meta-flavor"><div class="concept-flavor-text">${resolvedFlavorText}</div></section>`
     : '';
 }
 
@@ -211,7 +229,7 @@ export function renderConceptFlavorBlock(card) {
  */
 export function renderCardDetailOwnershipLine(quantity) {
   return quantity > 1
-    ? `<div class="mt-3 text-center text-xs text-surface-500">Owned: \u00D7${quantity}</div>`
+    ? `<section class="card-detail-meta-section card-detail-meta-owned"><p class="card-detail-owned-line">Owned: \u00D7${quantity}</p></section>`
     : '';
 }
 
@@ -230,7 +248,24 @@ export function renderDetailFrame(model) {
 }
 
 /**
- * Full #card-detail-content HTML: frame + flavor block + ownership line.
+ * Supplemental metadata below the card asset (aura, flavor, ownership).
+ * @param {object} card
+ * @param {ReturnType<typeof buildCardRenderModel>} model
+ * @param {number} quantity
+ * @returns {string}
+ */
+export function renderCardDetailMeta(card, model, quantity) {
+  return `
+    <div class="card-detail-meta">
+      ${renderModalAuraMetaSection(model, card)}
+      ${renderConceptFlavorBlock(card)}
+      ${renderCardDetailOwnershipLine(quantity)}
+    </div>
+  `;
+}
+
+/**
+ * Full #card-detail-content HTML: clean card asset + metadata stack below.
  * @param {object} card
  * @param {CardRenderOptions} [options]
  * @returns {string}
@@ -242,12 +277,14 @@ export function renderCardDetailView(card, options = {}) {
     variant: 'modal',
     profileCosmeticAura,
   });
-  model.extraBodyHtml = renderModalAuraInfoHtml(model, card);
 
   return `
-    ${renderDetailFrame(model)}
-    ${renderConceptFlavorBlock(card)}
-    ${renderCardDetailOwnershipLine(quantity)}
+    <div class="card-detail-view">
+      <div class="card-detail-asset">
+        ${renderDetailFrame(model)}
+      </div>
+      ${renderCardDetailMeta(card, model, quantity)}
+    </div>
   `;
 }
 

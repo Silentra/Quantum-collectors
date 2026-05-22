@@ -1453,9 +1453,67 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
   color: #c4b5fd;
 }
 
-/* Flavor text block below modal card (FIX 5) */
+/* ===================== CARD DETAIL MODAL — ASSET + METADATA LAYOUT ===================== */
+
+.card-detail-modal-panel {
+  max-width: min(20rem, 100%);
+}
+
+.card-detail-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.card-detail-asset {
+  width: 100%;
+  max-width: 240px;
+  flex-shrink: 0;
+}
+
+.card-detail-meta {
+  width: 100%;
+  max-width: 240px;
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.card-detail-meta-section {
+  width: 100%;
+}
+
+.card-detail-meta-aura .card-detail-aura-info {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.card-detail-aura-helper {
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: #64748b;
+  text-align: center;
+}
+
+.card-detail-meta-flavor .concept-flavor-text {
+  margin-top: 0;
+}
+
+.card-detail-owned-line {
+  margin: 0;
+  text-align: center;
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+/* Flavor text in modal metadata region */
 .concept-flavor-text {
-  margin-top: 8px;
   padding: 8px 12px;
   background: #1e1b2e;
   border: 1px solid #4c1d95;
@@ -2486,8 +2544,8 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
     font-size: clamp(0.4rem, 4cqw, 0.65rem);
   }
 
-  .card-detail-frame .card-detail-aura-info {
-    font-size: clamp(0.4rem, 4.2cqw, 0.65rem);
+  .card-detail-meta .card-detail-aura-info {
+    font-size: 0.7rem;
   }
 
   .card-detail-art-emoji {
@@ -2496,10 +2554,6 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
     opacity: 0.4;
   }
 
-  .card-detail-frame .card-detail-aura-tier-bar .pip {
-    width: clamp(5px, 1.4cqw, 7px);
-    height: clamp(5px, 1.4cqw, 7px);
-  }
 }
 
 /* Fallback when container queries unavailable (legacy rem parity) */
@@ -2623,6 +2677,34 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 .card-meta { font-size: 0.7rem; color: #94a3b8; margin-top: 0.25rem; }
 
 /* ===================== PACK OPENING SYSTEM ===================== */
+
+/* Reveal overlay — larger preferred card size, responsive shrink */
+.pack-opening-panel {
+  max-width: min(64rem, 100%);
+}
+
+.pack-opening-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(9.5rem, 100%), 13.75rem));
+  gap: clamp(0.5rem, 2vw, 1rem);
+  justify-content: center;
+  justify-items: center;
+  width: 100%;
+}
+
+/* Single-card breakthrough / 1-card reveal — centered premium size */
+.pack-opening-cards:has(> .pack-card-wrapper:only-child) {
+  grid-template-columns: minmax(0, min(15rem, 100%));
+}
+
+.pack-opening-cards .pack-card-wrapper {
+  width: 100%;
+  max-width: 13.75rem;
+}
+
+.pack-opening-cards:has(> .pack-card-wrapper:only-child) .pack-card-wrapper {
+  max-width: min(15rem, 100%);
+}
 
 /* Card wrapper for 3D flip */
 .pack-card-wrapper {

@@ -152,7 +152,8 @@ js/
 - **Unified card structure**: collection grid, pack opening, and detail modal all share the same `card-detail-*` internal HTML (header → art → divider → body). The modal proportions are the visual reference standard.
 - **Collection grid**: `renderPlayerCard()` → `card-render.js` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, aura visuals, click behavior). CSS overrides (`.sci-card .card-detail-*`) scale down font sizes and padding for grid context. keyFact text uses `.grid-clamp` class for line-clamping.
 - **Pack opening**: `renderPackCardWrapper()` — flip shell + canonical `renderPackRevealSciCard()` (`pack-reveal` variant, tier 0)
-- **Detail modal**: `renderCardDetailView()` — `.card-detail-frame` shell (5:7 aspect, 240px max-width) + shared `card-detail-*` internals + modal aura pip bar + concept flavor/ownership blocks outside frame
+- **Detail modal**: `renderCardDetailView()` — `.card-detail-asset` (frame only, 240px max) + `.card-detail-meta` below (aura pips, helper text, concept flavor, ownership). Card body excludes supplemental metadata.
+- **Pack/breakthrough reveal**: `.pack-opening-cards` grid prefers ~220px (`13.75rem`) per card, shrinks via `auto-fit` + `minmax` on narrow viewports.
 - **Disabled cards**: filtered out of player collection, pack stats, and profile progress
 - Admin card list/rendering is unchanged (still uses legacy `.card-item` styles)
 
