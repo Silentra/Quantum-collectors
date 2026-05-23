@@ -3,6 +3,48 @@
 * { box-sizing: border-box; }
 body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
+/* ===================== APPLICATION SHELL (S1–S3) ===================== */
+
+/* Viewport-owned game shell: flex height chain, single gameplay scroll region */
+html.app-mode-game {
+  height: 100%;
+  overflow: hidden;
+}
+
+body.app-mode-game {
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+body.app-mode-game #app.app-mode-game {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+body.app-mode-game #screen-game.screen.active {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+#game-shell-chrome {
+  flex-shrink: 0;
+}
+
+#game-content-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overscroll-behavior-y: contain;
+}
+
+.game-shell-backdrop,
+.game-shell-slot-inert {
+  display: none;
+}
+
 /* Screen Management */
 .screen { display: none !important; }
 .screen.active { display: flex !important; }

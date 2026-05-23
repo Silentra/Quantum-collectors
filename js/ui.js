@@ -88,6 +88,11 @@ export function showScreen(screenId) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById(`screen-${screenId}`);
   if (el) el.classList.add('active');
+
+  const isGame = screenId === 'game';
+  document.documentElement.classList.toggle('app-mode-game', isGame);
+  document.body.classList.toggle('app-mode-game', isGame);
+  document.getElementById('app')?.classList.toggle('app-mode-game', isGame);
 }
 
 // Tab management
@@ -101,6 +106,8 @@ function setupTabs() {
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       const el = document.getElementById(`tab-${tab}`);
       if (el) el.classList.add('active');
+      const gameScroll = document.getElementById('game-content-scroll');
+      if (gameScroll) gameScroll.scrollTop = 0;
       if (tab === 'collection') renderCollection();
       if (tab === 'packs') renderPacks();
       if (tab === 'research-projects') { renderResearchProjects(); startProjectHeartbeat(); }

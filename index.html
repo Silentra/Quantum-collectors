@@ -240,36 +240,38 @@
     </div>
 
     <!-- Main Game Screen -->
-    <div id="screen-game" class="screen flex-col min-h-screen">
-      <!-- Top Nav -->
-      <nav class="bg-surface-900 border-b border-surface-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
-        <div class="flex items-center gap-3">
-          <span class="text-xl">⚛️</span>
-          <span class="font-bold text-primary-400">SciCards</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <span id="nav-username" class="text-sm text-surface-300"></span>
-          <span id="nav-group-badge" class="text-xs bg-surface-700 px-2 py-1 rounded hidden"></span>
-          <button id="btn-logout" class="text-surface-400 hover:text-white text-sm px-3 py-1 rounded border border-surface-600 hover:border-surface-500 transition">
-            Logout
-          </button>
-        </div>
-      </nav>
+    <div id="screen-game" class="screen flex-col">
+      <div id="game-shell-backdrop" class="game-shell-backdrop" aria-hidden="true"></div>
 
-      <!-- Tab Nav -->
-      <div class="bg-surface-900/50 border-b border-surface-800 px-2 flex gap-1 overflow-x-auto flex-shrink-0" id="tab-nav">
-        <button class="tab-btn active" data-tab="collection">📚 Collection</button>
-        <button class="tab-btn" data-tab="packs">🎴 Packs</button>
-        <button class="tab-btn" data-tab="research-projects">🔬 Research Projects</button>
-        <button class="tab-btn" data-tab="trading">🤝 Trading</button>
-        <button class="tab-btn" data-tab="shop">🛒 Shop</button>
-        <button class="tab-btn" data-tab="profile">👤 Profile</button>
-        <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
-        <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">⚙️ Admin</button>
+      <div id="game-shell-chrome">
+        <header id="game-header" class="bg-surface-900 border-b border-surface-700 px-4 py-3 flex items-center justify-between flex-shrink-0">
+          <div class="flex items-center gap-3">
+            <span class="text-xl">⚛️</span>
+            <span class="font-bold text-primary-400">SciCards</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="nav-player-title" class="game-shell-slot-inert" aria-hidden="true"></span>
+            <span id="nav-username" class="text-sm text-surface-300"></span>
+            <span id="nav-group-badge" class="text-xs bg-surface-700 px-2 py-1 rounded hidden"></span>
+            <button id="btn-logout" class="text-surface-400 hover:text-white text-sm px-3 py-1 rounded border border-surface-600 hover:border-surface-500 transition">
+              Logout
+            </button>
+          </div>
+        </header>
+
+        <div class="bg-surface-900/50 border-b border-surface-800 px-2 flex gap-1 overflow-x-auto flex-shrink-0" id="tab-nav">
+          <button class="tab-btn active" data-tab="collection">📚 Collection</button>
+          <button class="tab-btn" data-tab="packs">🎴 Packs</button>
+          <button class="tab-btn" data-tab="research-projects">🔬 Research Projects</button>
+          <button class="tab-btn" data-tab="trading">🤝 Trading</button>
+          <button class="tab-btn" data-tab="shop">🛒 Shop</button>
+          <button class="tab-btn" data-tab="profile">👤 Profile</button>
+          <button class="tab-btn" data-tab="leaderboard">🏆 Leaderboard</button>
+          <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">⚙️ Admin</button>
+        </div>
       </div>
 
-      <!-- Tab Content -->
-      <div class="flex-1 overflow-y-auto">
+      <main id="game-content-scroll" class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         <!-- Collection Tab -->
         <div id="tab-collection" class="tab-content active p-4">
           <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
@@ -889,7 +891,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   </div>
 
