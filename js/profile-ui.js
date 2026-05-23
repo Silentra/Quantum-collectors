@@ -5,7 +5,7 @@
 
 import * as auth from './auth.js';
 import * as player from './player.js';
-import { applyShellTheme } from './shell-theme.js';
+import { applyShellTheme, IDENTITY_ACCENT_IDS, normalizeIdentityAccent } from './shell-theme.js';
 import * as cards from './cards.js';
 import * as groups from './groups.js';
 import * as toast from './toast.js';
@@ -13,6 +13,7 @@ import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES, resolveItemDisplay } fro
 import {
   equipCosmetic,
   featureCard,
+  setIdentityAccent,
   unequipCosmetic,
   unfeatureCard,
 } from './shop-mutations.js';
@@ -182,6 +183,38 @@ function renderProfileSummary(p) {
         <div class="stat-card stat-card-compact stat-card-secondary"><div class="stat-value">${escapeHtml(tradesCompleted)}</div><div class="stat-label">Trades Completed</div></div>
       </div>
     </div>
+  `;
+}
+
+function renderIdentityAccent(p) {
+  const container = document.getElementById('profile-identity-accent');
+  if (!container) return;
+
+  const current = normalizeIdentityAccent(p?.profile?.identityAccent);
+  const swatches = IDENTITY_ACCENT_IDS.map(accentId => {
+    const label = formatLabel(accentId, 'Default');
+    const selected = accentId === current ? ' is-selected' : '';
+    return `
+      <button type="button"
+        class="profile-accent-swatch${selected}"
+        data-profile-action="set-identity-accent"
+        data-accent-id="${escapeHtml(accentId)}"
+        data-accent="${escapeHtml(accentId)}"
+        title="${escapeHtml(label)}"
+        aria-label="${escapeHtml(label)}"
+        aria-pressed="${accentId === current ? 'true' : 'false'}">
+      </button>
+    `;
+  }).join('');
+
+  container.innerHTML = `
+    <section class="profile-panel">
+      <div class="profile-panel-header">
+        <h3>Identity Accent</h3>
+        <span>Profile utility — colors your name and title in the header</span>
+      </div>
+      <div class="profile-accent-grid">${swatches}</div>
+    </section>
   `;
 }
 
@@ -415,6 +448,7 @@ function renderCollectionProgress(username) {
 function wireProfileActions(username) {
   const containers = [
     document.getElementById('profile-identity'),
+    document.getElementById('profile-identity-accent'),
     document.getElementById('profile-cosmetics'),
     document.getElementById('profile-featured-cards'),
   ].filter(Boolean);
@@ -445,6 +479,9 @@ function handleProfileAction(username, button) {
   } else if (action === 'unfeature-card') {
     result = unfeatureCard(username, button.dataset.cardId);
     if (result.success) toast.success('Card removed from featured cards.');
+  } else if (action === 'set-identity-accent') {
+    result = setIdentityAccent(username, button.dataset.accentId);
+    if (result.success) toast.success('Identity accent updated.');
   }
 
   if (result && !result.success) {
@@ -452,7 +489,7 @@ function handleProfileAction(username, button) {
     return;
   }
 
-  if (result?.success && (action === 'equip-cosmetic' || action === 'unequip-cosmetic')) {
+  if (result?.success && (action === 'equip-cosmetic' || action === 'unequip-cosmetic' || action === 'set-identity-accent')) {
     applyShellTheme(player.getPlayer(username));
   }
   renderProfile();
@@ -467,6 +504,7 @@ export function renderProfile() {
 
   renderProfileSummary(p);
   renderEquippedIdentity(p);
+  renderIdentityAccent(p);
   renderProfileAchievements();
   renderConsumables(p);
   renderCosmetics(p);

@@ -17,7 +17,7 @@ js/
   packs.js           - Pack types, weighted rarity rolling, pack opening
   groups.js          - Group/subgroup hierarchy
   ui.js              - All DOM rendering, event wiring, screen management
-  shell-theme.js     - Application shell theme hooks (data-* attrs, title mount); no cosmetic visuals
+  shell-theme.js     - Application shell theme hooks (data-* attrs, title mount, identity accent); no cosmetic visuals
   toast.js           - Toast notification utility
   research.js        - Research Points (RP) infrastructure: schema, migration, helpers, leaderboard queries
   trading.js         - Phase T-1 validation helpers (pure) + Phase T-2 direct trade lifecycle (create/accept/decline/cancel/getPending) + T-4 migration
@@ -468,7 +468,7 @@ js/
 ### Layer 3 — Cosmetic Runtime Layer
 - **Runtime identity scope**: Layer 3 turns owned cosmetics into active profile state and featured selections. It does not add final shop/profile UI, cosmetic previews, animations, admin tooling, monetization, achievements gameplay, new listeners, root scans, or database architecture changes.
 - **Schema defaults and normalization** (`player-schema.js`):
-  - Adds additive `profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards,featuredAchievements}` defaults for new players.
+  - Adds additive `profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,identityAccent,featuredCards,featuredAchievements}` defaults for new players.
   - Existing players are normalized idempotently. Missing `profile` fields are backfilled without deleting `cosmetics.equipped` or `profileCustomization`.
   - Legacy equipped values seed profile state only when the referenced item is owned, enabled, `ITEM_TYPES.COSMETIC`, and matches the expected data-driven category.
   - Featured arrays are normalized to string IDs, preserve order, remove duplicates, and respect `MAX_FEATURED_CARDS` / `MAX_FEATURED_ACHIEVEMENTS`.
@@ -595,7 +595,9 @@ html/body.app-mode-game          (viewport lock — game screen only)
     └── #screen-game              (theme hook owner: data-banner, data-background, data-theme)
         ├── #game-shell-backdrop  (visual-only, non-scrolling, pointer-events: none)
         ├── #game-shell-chrome    (mirrors theme hooks; shared chrome surface prep)
-        │   ├── #game-header      (brand + identity + #nav-player-title mount + logout)
+        │   ├── #game-header      (brand + identity flow + title overlay + logout)
+        │   │   ├── .game-header-main (flow row)
+        │   │   └── #nav-player-title (absolute overlay; non-flow)
         │   └── #tab-nav          (navigation only — structurally separate from header)
         └── #game-content-scroll  (sole authoritative gameplay vertical scroll)
 ```
@@ -663,6 +665,7 @@ Players may mix categories freely (e.g. cosmic banner + blueprint background + s
 | `data-banner` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.equippedBanner` |
 | `data-background` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.equippedBackground` |
 | `data-theme` | `#screen-game`, `#game-shell-chrome` | `default` | Reserved |
+| `data-identity-accent` | `#screen-game`, `#game-shell-chrome`, `#game-header` | `default` | `profile.identityAccent` (utility preference) |
 | `data-title` | `#nav-player-title` | `default` | `profile.equippedTitle` |
 
 Future CSS selects themes with attribute selectors, e.g. `[data-banner="cosmic"]`, `[data-background="blueprint"]`. Slugs derive from cosmetic item ids via `cosmeticIdToShellSlug()`.
@@ -688,9 +691,78 @@ Target aesthetic: educational, scientific, restrained, premium, readable.
 - Do not merge header and tabs structurally.
 - Do not add runtime inline styling or dynamic style-mutation systems for themes.
 
-#### Future layout note (not implemented)
+#### Future layout note (implemented in S4.5)
 
-Header may grow ~50% taller; player name/title may shift to a lower-middle chrome zone above tabs. Header sizing should remain mostly fixed (not aggressively viewport-scaled). S4 only reserves `--shell-header-min-height` and mount points.
+Header height uses tokenized ~1.5× scale (`--shell-header-base-min-height` × 1.5). Player title uses a non-flow overlay anchored to the identity region. See **S4.5 — Shell Polish** below.
+
+#### S4.5 — Shell Polish (structure + identity infrastructure)
+
+S4.5 finalizes shell sizing, title overlay structure, and identity accent infrastructure. **No cosmetic visuals** (banner art, background textures, title effects) — those begin in S5.
+
+**Header sizing**
+
+- `--shell-header-base-min-height: 3rem` (baseline)
+- `--shell-header-min-height: calc(var(--shell-header-base-min-height) * 1.5)` (~50% taller)
+- `--shell-header-padding-block` replaces Tailwind `py-*` on `#game-header`
+- No fixed pixel heights, no `vh` scaling on header
+
+**Title overlay doctrine (non-flow)**
+
+- `#nav-player-title` is **not** in the identity flex row
+- `position: absolute` within `.game-header-identity-wrap` (anchored to identity region, not viewport center)
+- `pointer-events: none` — decorative overlay only
+- `transform: translateY(50%)` allowed on title element only (static divider overlap; not animated)
+- Header/tab divider remains authoritative; title may visually touch overlap
+- Clipped by `#game-header` and `#game-shell-chrome { overflow: hidden }`
+- Visible only when equipped title cosmetic has label text (`data-title !== "default"`)
+- Forbidden on titles: glow, bounce, pulse, animation, excessive text-shadow, multi-line wrap
+
+**Title vs identity accent vs earned cosmetics**
+
+| Concern | Mechanism | Type |
+|---------|-----------|------|
+| Title **text** | `profile.equippedTitle` → `#nav-player-title` | Earned cosmetic (shop/achievement) |
+| Title **color** | `--identity-accent` via `data-identity-accent` | Profile utility preference |
+| Username **color** | Same `--identity-accent` | Profile utility preference |
+| Banner / background visuals | `data-banner`, `data-background` | Earned cosmetics (S5+) |
+
+**Identity accent system (`data-identity-accent`)**
+
+- **Not** an earned cosmetic, banner theme, shell theme pack, or title cosmetic
+- **Not** `data-theme` (reserved for future aggregate shell accent)
+- Curated allowlist (~14 slugs): `default`, `slate`, `silver`, `ice`, `sky`, `teal`, `emerald`, `lime`, `gold`, `amber`, `coral`, `rose`, `lavender`, `violet`, `indigo`
+- Stored at `players/{username}/profile/identityAccent`
+- Applied via `applyShellTheme()` → `data-identity-accent` on `#screen-game`, `#game-shell-chrome`, `#game-header`
+- CSS maps slugs to `--identity-accent`; consumed by `.nav-identity-name` and `.nav-player-title-slot` only
+- Mutation: `setIdentityAccent()` in `shop-mutations.js` (profile utility, not shop purchase)
+- No arbitrary hex, no inline styles, no runtime style injection
+
+**Stacking / clipping governance**
+
+| Layer | z-index | Notes |
+|-------|---------|-------|
+| `#game-shell-backdrop` | 0 | Visual-only |
+| `#game-shell-chrome::before` | -1 | Shared surface |
+| Header/tab flow | 1 | Brand, username, tabs |
+| `#nav-player-title` | 2 | Overlay; pointer-events none |
+| `#btn-logout` | 3 | Always clickable |
+| `#game-shell-chrome` | 2 | Container; overflow hidden |
+| `#game-content-scroll` | 1 | Gameplay scroll |
+| Global modals | 50+ | Viewport-fixed; authoritative |
+
+**Forbidden (shell drift prevention)**
+
+- Title in flex document flow
+- `transform` / `filter` on `#screen-game` or modal ancestors
+- `position: fixed` header/tabs
+- Shell chrome `z-index` > 10
+- Inline identity colors or RGB picker
+- Title animations or glow effects
+- Merging `#game-header` and `#tab-nav` structurally
+
+**S5 boundary**
+
+S5 adds cosmetic **visual definitions** only: `[data-banner="…"]`, `[data-background="…"]`, title typography refinements per `[data-title="…"]`. S4.5 must remain visually restrained (scientific, elegant, readable).
 
 ---
 

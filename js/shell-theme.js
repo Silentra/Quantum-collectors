@@ -1,5 +1,5 @@
 /**
- * Application shell theme hooks (S4 infrastructure).
+ * Application shell theme hooks (S4 / S4.5 infrastructure).
  *
  * Applies stable data-* attributes and title mount metadata only.
  * No inline styles, no runtime style mutation, no cosmetic visual definitions.
@@ -15,6 +15,32 @@ export const SHELL_THEME_DEFAULTS = Object.freeze({
   background: 'default',
   theme: 'default',
 });
+
+export const IDENTITY_ACCENT_DEFAULT = 'default';
+
+/**
+ * Curated identity accent allowlist (~14 options).
+ * Profile utility preference — NOT an earned cosmetic, NOT a shell theme pack.
+ */
+export const IDENTITY_ACCENT_IDS = Object.freeze([
+  'default',
+  'slate',
+  'silver',
+  'ice',
+  'sky',
+  'teal',
+  'emerald',
+  'lime',
+  'gold',
+  'amber',
+  'coral',
+  'rose',
+  'lavender',
+  'violet',
+  'indigo',
+]);
+
+const IDENTITY_ACCENT_SET = new Set(IDENTITY_ACCENT_IDS);
 
 /**
  * Reserved shell-background cosmetic category (shop items may be added later).
@@ -33,6 +59,17 @@ const CATEGORY_BY_SLOT = Object.freeze({
   background: SHELL_BACKGROUND_CATEGORY,
   title: ITEM_CATEGORIES.TITLE,
 });
+
+/**
+ * Normalize identity accent slug; invalid values fall back to default.
+ * @param {string|null|undefined} accentId
+ * @returns {string}
+ */
+export function normalizeIdentityAccent(accentId) {
+  if (typeof accentId !== 'string') return IDENTITY_ACCENT_DEFAULT;
+  const slug = accentId.trim().toLowerCase();
+  return IDENTITY_ACCENT_SET.has(slug) ? slug : IDENTITY_ACCENT_DEFAULT;
+}
 
 /**
  * Map a cosmetic item id to a stable, CSS-safe theme slug for data-* hooks.
@@ -61,7 +98,7 @@ function isEquippedCosmetic(itemId, playerData, category) {
  * Resolve independent shell theme hook values from canonical profile runtime state.
  * Categories remain independent (banner + background + title may mix freely).
  * @param {object|null|undefined} playerData
- * @returns {{ banner: string, background: string, theme: string, titleSlug: string, titleItemId: string|null }}
+ * @returns {{ banner: string, background: string, theme: string, identityAccent: string, titleSlug: string, titleItemId: string|null }}
  */
 export function resolveShellThemeState(playerData) {
   const bannerId = playerData?.profile?.[PROFILE_EQUIPPED_FIELDS.banner] ?? null;
@@ -80,48 +117,62 @@ export function resolveShellThemeState(playerData) {
     ? (cosmeticIdToShellSlug(titleId) || SHELL_THEME_DEFAULTS.theme)
     : 'default';
 
+  const identityAccent = normalizeIdentityAccent(playerData?.profile?.identityAccent);
+
   return {
     banner,
     background,
     theme: SHELL_THEME_DEFAULTS.theme,
+    identityAccent,
     titleSlug,
     titleItemId: isEquippedCosmetic(titleId, playerData, CATEGORY_BY_SLOT.title) ? titleId : null,
   };
 }
 
-function applyThemeAttributes(screen, chrome, state) {
+function applyThemeAttributes(screen, chrome, header, state) {
   screen.dataset.banner = state.banner;
   screen.dataset.background = state.background;
   screen.dataset.theme = state.theme;
+  screen.dataset.identityAccent = state.identityAccent;
 
   if (chrome) {
     chrome.dataset.banner = state.banner;
     chrome.dataset.background = state.background;
     chrome.dataset.theme = state.theme;
+    chrome.dataset.identityAccent = state.identityAccent;
+  }
+
+  if (header) {
+    header.dataset.identityAccent = state.identityAccent;
   }
 }
 
 /**
- * Normalize #nav-player-title mount (metadata only; presentation deferred to S5+).
- * @param {object|null|undefined} playerData
+ * Sync #nav-player-title overlay mount (non-flow; visibility when equipped title has label).
  * @param {{ titleSlug: string, titleItemId: string|null }} state
  */
-export function syncNavPlayerTitleMount(playerData, state) {
+export function syncNavPlayerTitleMount(state) {
   const el = document.getElementById('nav-player-title');
   if (!el) return;
 
   const titleId = state?.titleItemId ?? null;
   const def = titleId ? ITEM_DEFINITIONS[titleId] : null;
-  const label = def?.name || def?.label || '';
+  const label = (def?.name || def?.label || '').trim();
 
   el.dataset.title = state?.titleSlug || 'default';
   el.textContent = label;
-  el.hidden = true;
-  el.setAttribute('aria-hidden', 'true');
+
+  const visible = Boolean(label && state?.titleSlug && state.titleSlug !== 'default');
+  el.hidden = !visible;
+  if (visible) {
+    el.removeAttribute('aria-hidden');
+  } else {
+    el.setAttribute('aria-hidden', 'true');
+  }
 }
 
 /**
- * Apply shell theme hooks to #screen-game / #game-shell-chrome.
+ * Apply shell theme hooks to #screen-game / #game-shell-chrome / #game-header.
  * Pass null to reset to defaults (e.g. on logout).
  * @param {object|null|undefined} playerData
  */
@@ -130,14 +181,16 @@ export function applyShellTheme(playerData = null) {
   if (!screen) return;
 
   const chrome = document.getElementById('game-shell-chrome');
+  const header = document.getElementById('game-header');
   const state = playerData ? resolveShellThemeState(playerData) : {
     ...SHELL_THEME_DEFAULTS,
+    identityAccent: IDENTITY_ACCENT_DEFAULT,
     titleSlug: 'default',
     titleItemId: null,
   };
 
-  applyThemeAttributes(screen, chrome, state);
-  syncNavPlayerTitleMount(playerData, state);
+  applyThemeAttributes(screen, chrome, header, state);
+  syncNavPlayerTitleMount(state);
 }
 
 export function resetShellTheme() {

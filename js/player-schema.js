@@ -29,6 +29,7 @@ import {
 } from './shop-state.js';
 import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { ensureAchievementStats } from './achievement-stats.js';
+import { IDENTITY_ACCENT_DEFAULT, normalizeIdentityAccent } from './shell-theme.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default schema shapes (frozen — canonical source of truth)
@@ -96,6 +97,7 @@ export const DEFAULT_PROFILE = Object.freeze({
   equippedBorder: null,
   equippedBanner: null,
   equippedTitle: null,
+  identityAccent: 'default',
   featuredCards: Object.freeze([]),
   featuredAchievements: Object.freeze([]),
 });
@@ -225,6 +227,7 @@ function createProfileDefaultsFromLegacy(player = {}) {
       ? equipped.profileBanner
       : null,
     equippedTitle: isOwnedValidCosmetic(equipped.title, owned, ITEM_CATEGORIES.TITLE) ? equipped.title : null,
+    identityAccent: normalizeIdentityAccent(player.profile?.identityAccent),
     featuredCards: normalizeIdArray(customization.featuredCards, MAX_FEATURED_CARDS),
     featuredAchievements: normalizeIdArray(customization.featuredAchievements, MAX_FEATURED_ACHIEVEMENTS),
   };
@@ -259,6 +262,7 @@ export function getPhase2ADefaults() {
       equippedBorder: null,
       equippedBanner: null,
       equippedTitle: null,
+      identityAccent: IDENTITY_ACCENT_DEFAULT,
       featuredCards: [],
       featuredAchievements: [],
     },
@@ -492,6 +496,17 @@ export function normalizePlayerSchema(username) {
         valuesDiffer(player.profile.featuredAchievements, featuredAchievements)) {
       db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
       patched = true;
+    }
+
+    if (player.profile.identityAccent === undefined) {
+      db.set(`players/${username}/profile/identityAccent`, IDENTITY_ACCENT_DEFAULT);
+      patched = true;
+    } else {
+      const normalizedAccent = normalizeIdentityAccent(player.profile.identityAccent);
+      if (player.profile.identityAccent !== normalizedAccent) {
+        db.set(`players/${username}/profile/identityAccent`, normalizedAccent);
+        patched = true;
+      }
     }
   }
 

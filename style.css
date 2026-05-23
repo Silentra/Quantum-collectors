@@ -3,7 +3,7 @@
 * { box-sizing: border-box; }
 body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
-/* ===================== APPLICATION SHELL (S1–S4) ===================== */
+/* ===================== APPLICATION SHELL (S1–S4.5) ===================== */
 
 /* Viewport-owned game shell: flex height chain, single gameplay scroll region */
 html.app-mode-game {
@@ -31,7 +31,7 @@ body.app-mode-game #screen-game.screen.active {
   position: relative;
 }
 
-/* --- S4: theme variable foundation (defaults match current visuals) --- */
+/* --- S4/S4.5: theme + header token foundation --- */
 #screen-game {
   --shell-bg: #020617;
   --shell-chrome-surface: #0f172a;
@@ -41,14 +41,18 @@ body.app-mode-game #screen-game.screen.active {
   --banner-border: transparent;
   --tab-accent: #818cf8;
   --background-overlay: transparent;
-  --shell-header-min-height: 3rem;
+  --shell-header-base-min-height: 3rem;
+  --shell-header-min-height: calc(var(--shell-header-base-min-height) * 1.5);
+  --shell-header-padding-block: 0.75rem;
   --shell-safe-inline: 1rem;
+  --identity-accent: #cbd5e1;
 }
 
 #game-shell-chrome {
   flex-shrink: 0;
   position: relative;
   z-index: 2;
+  overflow: hidden;
 }
 
 /* Shared chrome surface prep (header + tabs remain separate DOM children) */
@@ -63,13 +67,78 @@ body.app-mode-game #screen-game.screen.active {
 
 #game-header {
   min-height: var(--shell-header-min-height);
+  padding-inline: var(--shell-safe-inline);
+  padding-block: var(--shell-header-padding-block);
   position: relative;
   z-index: 1;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--shell-border);
+}
+
+.game-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: calc(var(--shell-header-min-height) - (var(--shell-header-padding-block) * 2));
+}
+
+.game-header-identity-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.game-header-identity {
+  position: relative;
+  z-index: 1;
+}
+
+.game-header-logout {
+  position: relative;
+  z-index: 3;
 }
 
 #tab-nav {
   position: relative;
   z-index: 1;
+  background: transparent;
+}
+
+.nav-identity-name,
+.nav-player-title-slot {
+  color: var(--identity-accent);
+}
+
+/* Title overlay — non-flow, anchored to identity region, divider overlap (S4.5) */
+.nav-player-title-slot {
+  display: none;
+  position: absolute;
+  right: calc(var(--shell-safe-inline) + 5.5rem);
+  bottom: 0;
+  z-index: 2;
+  pointer-events: none;
+  max-width: min(14rem, 42vw);
+  padding: 0;
+  margin: 0;
+  font-size: clamp(0.625rem, 2.2vw, 0.75rem);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: none;
+  transform: translateY(50%);
+  text-align: right;
+}
+
+.nav-player-title-slot:not([hidden]) {
+  display: block;
 }
 
 /* Visual-only backdrop: fixed to shell viewport, does not scroll with gameplay */
@@ -94,12 +163,85 @@ body.app-mode-game #screen-game.screen.active {
   z-index: 1;
 }
 
-/* Title cosmetic mount — hidden until S5+ presentation layer */
-.nav-player-title-slot {
-  display: none;
+/* --- S4.5: identity accent allowlist (profile utility — not earned cosmetics) --- */
+#screen-game[data-identity-accent="default"],
+#game-header[data-identity-accent="default"] { --identity-accent: #cbd5e1; }
+#screen-game[data-identity-accent="slate"],
+#game-header[data-identity-accent="slate"] { --identity-accent: #94a3b8; }
+#screen-game[data-identity-accent="silver"],
+#game-header[data-identity-accent="silver"] { --identity-accent: #e2e8f0; }
+#screen-game[data-identity-accent="ice"],
+#game-header[data-identity-accent="ice"] { --identity-accent: #bae6fd; }
+#screen-game[data-identity-accent="sky"],
+#game-header[data-identity-accent="sky"] { --identity-accent: #7dd3fc; }
+#screen-game[data-identity-accent="teal"],
+#game-header[data-identity-accent="teal"] { --identity-accent: #5eead4; }
+#screen-game[data-identity-accent="emerald"],
+#game-header[data-identity-accent="emerald"] { --identity-accent: #6ee7b7; }
+#screen-game[data-identity-accent="lime"],
+#game-header[data-identity-accent="lime"] { --identity-accent: #bef264; }
+#screen-game[data-identity-accent="gold"],
+#game-header[data-identity-accent="gold"] { --identity-accent: #facc15; }
+#screen-game[data-identity-accent="amber"],
+#game-header[data-identity-accent="amber"] { --identity-accent: #fbbf24; }
+#screen-game[data-identity-accent="coral"],
+#game-header[data-identity-accent="coral"] { --identity-accent: #fb7185; }
+#screen-game[data-identity-accent="rose"],
+#game-header[data-identity-accent="rose"] { --identity-accent: #fda4af; }
+#screen-game[data-identity-accent="lavender"],
+#game-header[data-identity-accent="lavender"] { --identity-accent: #c4b5fd; }
+#screen-game[data-identity-accent="violet"],
+#game-header[data-identity-accent="violet"] { --identity-accent: #a78bfa; }
+#screen-game[data-identity-accent="indigo"],
+#game-header[data-identity-accent="indigo"] { --identity-accent: #818cf8; }
+
+/* Profile identity accent picker */
+.profile-accent-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-/* S5+: title presentation uses [data-title] on .nav-player-title-slot */
+.profile-accent-swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 9999px;
+  border: 2px solid #334155;
+  cursor: pointer;
+  padding: 0;
+  background: var(--swatch-color, #cbd5e1);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.profile-accent-swatch:hover {
+  border-color: #64748b;
+}
+
+.profile-accent-swatch.is-selected {
+  border-color: #e2e8f0;
+  box-shadow: 0 0 0 2px #0f172a, 0 0 0 4px #818cf8;
+}
+
+.profile-accent-swatch:focus-visible {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}
+
+.profile-accent-swatch[data-accent="default"] { --swatch-color: #cbd5e1; }
+.profile-accent-swatch[data-accent="slate"] { --swatch-color: #94a3b8; }
+.profile-accent-swatch[data-accent="silver"] { --swatch-color: #e2e8f0; }
+.profile-accent-swatch[data-accent="ice"] { --swatch-color: #bae6fd; }
+.profile-accent-swatch[data-accent="sky"] { --swatch-color: #7dd3fc; }
+.profile-accent-swatch[data-accent="teal"] { --swatch-color: #5eead4; }
+.profile-accent-swatch[data-accent="emerald"] { --swatch-color: #6ee7b7; }
+.profile-accent-swatch[data-accent="lime"] { --swatch-color: #bef264; }
+.profile-accent-swatch[data-accent="gold"] { --swatch-color: #facc15; }
+.profile-accent-swatch[data-accent="amber"] { --swatch-color: #fbbf24; }
+.profile-accent-swatch[data-accent="coral"] { --swatch-color: #fb7185; }
+.profile-accent-swatch[data-accent="rose"] { --swatch-color: #fda4af; }
+.profile-accent-swatch[data-accent="lavender"] { --swatch-color: #c4b5fd; }
+.profile-accent-swatch[data-accent="violet"] { --swatch-color: #a78bfa; }
+.profile-accent-swatch[data-accent="indigo"] { --swatch-color: #818cf8; }
 
 /* Screen Management */
 .screen { display: none !important; }

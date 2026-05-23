@@ -64,6 +64,7 @@ import {
   canUnfeatureAchievement,
   canUnfeatureCard,
 } from './shop-validation.js';
+import { normalizeIdentityAccent } from './shell-theme.js';
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -1081,4 +1082,21 @@ export function setFeaturedAchievements(username, achievementIds = []) {
 
   db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
   return { success: true, featuredAchievements };
+}
+
+/**
+ * Set profile identity accent (utility preference — not a cosmetic unlock).
+ * @param {string} username
+ * @param {string} accentId
+ */
+export function setIdentityAccent(username, accentId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const identityAccent = normalizeIdentityAccent(accentId);
+  db.set(`players/${username}/profile/identityAccent`, identityAccent);
+  return { success: true, identityAccent };
 }
