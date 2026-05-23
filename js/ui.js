@@ -24,6 +24,7 @@ import { renderTrading, cleanupTrading } from './trade-ui.js';
 import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
 import { renderShopAdminPanel } from './shop-admin.js';
 import { renderAchievementsAdminPanel } from './achievements-admin.js';
+import { applyShellTheme, resetShellTheme } from './shell-theme.js';
 import {
   adminCompleteActiveProject,
   adminGrantResearchPoints,
@@ -93,6 +94,7 @@ export function showScreen(screenId) {
   document.documentElement.classList.toggle('app-mode-game', isGame);
   document.body.classList.toggle('app-mode-game', isGame);
   document.getElementById('app')?.classList.toggle('app-mode-game', isGame);
+  if (!isGame) resetShellTheme();
 }
 
 // Tab management
@@ -256,6 +258,9 @@ export function enterGame() {
       badge.textContent = groups.getGroupName(p.group);
       badge.classList.remove('hidden');
     }
+    applyShellTheme(player.getPlayer(session.username));
+  } else {
+    resetShellTheme();
   }
 
   document.getElementById('btn-logout').addEventListener('click', () => {

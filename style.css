@@ -3,7 +3,7 @@
 * { box-sizing: border-box; }
 body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
-/* ===================== APPLICATION SHELL (S1–S3) ===================== */
+/* ===================== APPLICATION SHELL (S1–S4) ===================== */
 
 /* Viewport-owned game shell: flex height chain, single gameplay scroll region */
 html.app-mode-game {
@@ -28,22 +28,78 @@ body.app-mode-game #screen-game.screen.active {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  position: relative;
+}
+
+/* --- S4: theme variable foundation (defaults match current visuals) --- */
+#screen-game {
+  --shell-bg: #020617;
+  --shell-chrome-surface: #0f172a;
+  --shell-accent: #818cf8;
+  --shell-border: #334155;
+  --banner-bg: transparent;
+  --banner-border: transparent;
+  --tab-accent: #818cf8;
+  --background-overlay: transparent;
+  --shell-header-min-height: 3rem;
+  --shell-safe-inline: 1rem;
 }
 
 #game-shell-chrome {
   flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+/* Shared chrome surface prep (header + tabs remain separate DOM children) */
+#game-shell-chrome::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: var(--shell-chrome-surface);
+}
+
+#game-header {
+  min-height: var(--shell-header-min-height);
+  position: relative;
+  z-index: 1;
+}
+
+#tab-nav {
+  position: relative;
+  z-index: 1;
+}
+
+/* Visual-only backdrop: fixed to shell viewport, does not scroll with gameplay */
+#game-shell-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  background-color: var(--shell-bg);
+  background-image: var(--background-overlay);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
 }
 
 #game-content-scroll {
   flex: 1 1 auto;
   min-height: 0;
   overscroll-behavior-y: contain;
+  position: relative;
+  z-index: 1;
 }
 
-.game-shell-backdrop,
-.game-shell-slot-inert {
+/* Title cosmetic mount — hidden until S5+ presentation layer */
+.nav-player-title-slot {
   display: none;
 }
+
+/* S5+: title presentation uses [data-title] on .nav-player-title-slot */
 
 /* Screen Management */
 .screen { display: none !important; }

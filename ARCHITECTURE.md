@@ -17,6 +17,7 @@ js/
   packs.js           - Pack types, weighted rarity rolling, pack opening
   groups.js          - Group/subgroup hierarchy
   ui.js              - All DOM rendering, event wiring, screen management
+  shell-theme.js     - Application shell theme hooks (data-* attrs, title mount); no cosmetic visuals
   toast.js           - Toast notification utility
   research.js        - Research Points (RP) infrastructure: schema, migration, helpers, leaderboard queries
   trading.js         - Phase T-1 validation helpers (pure) + Phase T-2 direct trade lifecycle (create/accept/decline/cancel/getPending) + T-4 migration
@@ -581,6 +582,117 @@ js/
   - Mixed weighted generation is preserved; `maxCardSlots` / `maxPackSlots` are ceilings only (0..N by RNG), not bucket-fill targets.
   - Static consumables/cosmetics and synthetic cards: unique per rotation by `item.id` (no duplicate `shop_card:{cardId}`).
   - Synthetic packs: the same `shop_pack:{packId}` may occupy multiple slots up to `maxPackSlots`.
+
+### Application Shell & Theme Doctrine (S1–S4)
+
+The game screen is a **viewport-owned flex shell**. Login and loading screens are unaffected. Global modals remain **outside** `#screen-game` as `position: fixed` viewport overlays.
+
+#### Shell ownership hierarchy
+
+```
+html/body.app-mode-game          (viewport lock — game screen only)
+└── #app.app-mode-game
+    └── #screen-game              (theme hook owner: data-banner, data-background, data-theme)
+        ├── #game-shell-backdrop  (visual-only, non-scrolling, pointer-events: none)
+        ├── #game-shell-chrome    (mirrors theme hooks; shared chrome surface prep)
+        │   ├── #game-header      (brand + identity + #nav-player-title mount + logout)
+        │   └── #tab-nav          (navigation only — structurally separate from header)
+        └── #game-content-scroll  (sole authoritative gameplay vertical scroll)
+```
+
+**S1 — Viewport height contract**
+
+- `showScreen('game')` toggles `app-mode-game` on `html`, `body`, `#app`.
+- Document/body do not scroll in game mode (`overflow: hidden`, `100dvh` on body).
+- `#screen-game` is `flex: 1`, `min-height: 0`, `height: 100%`, `overflow: hidden`.
+- Flex `min-height: 0` is required on scroll flex children; missing it allows document growth.
+
+**S2 — Semantic regions**
+
+- Header and tabs are **not merged** in the DOM.
+- Future visual unification uses `#game-shell-chrome` shared surface (`::before`), CSS variables, and backdrop layers — not structural coupling.
+
+**S3 — Scroll ownership polish**
+
+- `#game-content-scroll` is the only primary gameplay scroll container (`overflow-y: auto`).
+- Main tab switches reset `scrollTop` on `#game-content-scroll`.
+- `overscroll-behavior-y: contain` reduces scroll chaining to the document.
+
+**S4 — Theme infrastructure (hooks only)**
+
+- Implemented: data attributes, CSS variable defaults, backdrop layer activation, title mount normalization.
+- **Not implemented yet**: banner/background/title visual definitions, animations, theme shop, runtime style injection.
+
+#### Scroll ownership doctrine
+
+| Region | Scrolls? | Notes |
+|--------|----------|-------|
+| `html` / `body` (game mode) | No | Locked while `#screen-game` is active |
+| `#game-shell-backdrop` | No | Absolute within `#screen-game`; visual-only |
+| `#game-shell-chrome` | No | Persistent chrome |
+| `#game-content-scroll` | Yes | Authoritative gameplay scroll |
+| Global modals (`#pack-opening-overlay`, `#card-detail-modal`, `#confirm-modal`) | Own internal overflow only | Fixed to viewport; never nested in shell |
+| Admin/tab nested `max-h-*` panels | Optional nested scroll | Intentional; `vh` is viewport-relative |
+
+**Non-scrolling background doctrine:** Shell backgrounds and backdrop textures must not scroll with gameplay content. They live on `#game-shell-backdrop` (or chrome pseudo-layers), not inside `#game-content-scroll`.
+
+#### Global vs card cosmetic separation
+
+| Layer | Categories | Mechanism | Must not touch |
+|-------|------------|-----------|----------------|
+| **Application shell** | `banner`, `background`, `title` | `data-banner`, `data-background`, `data-theme` on `#screen-game` / `#game-shell-chrome`; CSS classes/vars | Card renderer, card geometry, typography |
+| **Card renderer** | `card_aura`, `card_glow`, `border` | `renderSciCard()` / `card-render.js` | Shell chrome, navigation, scroll containers |
+
+Shell theming must not import card render paths. Card cosmetics must not mutate shell DOM or shell scroll behavior.
+
+#### Independent theme-category philosophy
+
+Players may mix categories freely (e.g. cosmic banner + blueprint background + scientific title). There are **no forced full-theme bundles**.
+
+- `data-banner` — chrome/header banner treatment (from `profile.equippedBanner` / `profile_banner` cosmetics).
+- `data-background` — shell backdrop treatment (from `profile.equippedBackground` / `shell_background` cosmetics when items exist).
+- `data-theme` — reserved aggregate/accent hook; defaults to `default`; does not override independent slots.
+- `#nav-player-title` — title mount (`data-title` slug); presentation hidden until S5+.
+
+`js/shell-theme.js` applies hooks via `applyShellTheme(playerData)` after login and profile cosmetic equip/unequip. Uses **data attributes only** — no inline styles, no JS-generated visual composition.
+
+#### Shell hook contract (public, stable)
+
+| Hook | Host(s) | Default | Source (when equipped) |
+|------|---------|---------|-------------------------|
+| `data-banner` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.equippedBanner` |
+| `data-background` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.equippedBackground` |
+| `data-theme` | `#screen-game`, `#game-shell-chrome` | `default` | Reserved |
+| `data-title` | `#nav-player-title` | `default` | `profile.equippedTitle` |
+
+Future CSS selects themes with attribute selectors, e.g. `[data-banner="cosmic"]`, `[data-background="blueprint"]`. Slugs derive from cosmetic item ids via `cosmeticIdToShellSlug()`.
+
+#### CSS variable foundation (`#screen-game`)
+
+Conservative defaults matching current visuals: `--shell-bg`, `--shell-chrome-surface`, `--shell-accent`, `--shell-border`, `--banner-bg`, `--banner-border`, `--tab-accent`, `--background-overlay`, `--shell-header-min-height`, `--shell-safe-inline`. Cosmetic CSS (S5+) reads these vars; do not over-expand the token surface prematurely.
+
+#### Animation intensity philosophy
+
+Target aesthetic: educational, scientific, restrained, premium, readable.
+
+- **Allowed (sparse):** subtle drift, faint shimmer, occasional restrained crackle, slow void movement, ambient twinkle.
+- **Not allowed:** aggressive pulsing, fast loops, particle storms, large sweeping glows, chaotic motion.
+- **Default expectation:** most cosmetics remain **static**; animation is optional premium enhancement.
+
+#### Constraints (do not regress)
+
+- Do not reintroduce document scrolling in game mode.
+- Do not remove `min-height: 0` from the shell flex chain.
+- Do not move modals inside `#screen-game`.
+- Do not use `position: fixed` for header/tabs (flex chrome only).
+- Do not merge header and tabs structurally.
+- Do not add runtime inline styling or dynamic style-mutation systems for themes.
+
+#### Future layout note (not implemented)
+
+Header may grow ~50% taller; player name/title may shift to a lower-middle chrome zone above tabs. Header sizing should remain mostly fixed (not aggressively viewport-scaled). S4 only reserves `--shell-header-min-height` and mount points.
+
+---
 
 Last verified stable deployment, new commit to note success
 ### Firebase Integration

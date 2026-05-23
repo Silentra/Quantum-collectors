@@ -5,6 +5,7 @@
 
 import * as auth from './auth.js';
 import * as player from './player.js';
+import { applyShellTheme } from './shell-theme.js';
 import * as cards from './cards.js';
 import * as groups from './groups.js';
 import * as toast from './toast.js';
@@ -448,6 +449,11 @@ function handleProfileAction(username, button) {
 
   if (result && !result.success) {
     toast.error(getReasonMessage(result.reason));
+    return;
+  }
+
+  if (result?.success && (action === 'equip-cosmetic' || action === 'unequip-cosmetic')) {
+    applyShellTheme(player.getPlayer(username));
   }
   renderProfile();
 }
@@ -467,4 +473,5 @@ export function renderProfile() {
   renderFeaturedCards(p, session.username);
   renderCollectionProgress(session.username);
   wireProfileActions(session.username);
+  applyShellTheme(p);
 }
