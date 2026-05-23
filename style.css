@@ -89,37 +89,47 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .game-header-main {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   align-items: stretch;
-  justify-content: space-between;
-  gap: 0.75rem;
+  column-gap: 0.5rem;
   width: 100%;
   min-height: calc(var(--shell-header-min-height) - var(--shell-header-padding-block) - var(--shell-header-padding-bottom));
 }
 
+/* LEFT — branding */
 .game-header-brand {
+  grid-column: 1;
+  justify-self: start;
   align-self: center;
+  min-width: 0;
 }
 
-.game-header-identity-wrap {
+/* CENTER — username + title overlay anchor */
+.game-header-center {
+  grid-column: 2;
   position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  justify-content: flex-end;
+  justify-self: center;
   align-self: flex-end;
   padding-bottom: 0.125rem;
+  max-width: min(20rem, 100%);
+  min-width: 0;
 }
 
 .game-header-identity {
   position: relative;
   z-index: 1;
+  width: 100%;
+  justify-content: center;
 }
 
+/* RIGHT — logout / utilities */
 .game-header-logout {
+  grid-column: 3;
+  justify-self: end;
+  align-self: flex-end;
   position: relative;
   z-index: 3;
-  align-self: flex-end;
   margin-bottom: 0.125rem;
 }
 
@@ -136,17 +146,19 @@ body.app-mode-game #screen-game.screen.active {
   color: var(--identity-accent);
 }
 
-/* Title overlay — non-flow; sits on header/tab visual boundary (S4.5) */
+/* Title overlay — non-flow; anchored to center identity column (S4.5) */
 .nav-player-title-slot {
   display: none;
   position: absolute;
-  right: calc(var(--shell-safe-inline) + 5.5rem);
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 2;
   pointer-events: none;
-  max-width: min(14rem, 42vw);
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
   padding: 0;
-  margin: 0;
   font-size: clamp(0.625rem, 2.2vw, 0.75rem);
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -156,7 +168,7 @@ body.app-mode-game #screen-game.screen.active {
   text-overflow: ellipsis;
   text-shadow: none;
   transform: translateY(var(--shell-title-overlap-y));
-  text-align: right;
+  text-align: center;
 }
 
 .nav-player-title-slot:not([hidden]) {

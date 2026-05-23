@@ -595,9 +595,11 @@ html/body.app-mode-game          (viewport lock — game screen only)
     └── #screen-game              (theme hook owner: data-banner, data-background, data-theme)
         ├── #game-shell-backdrop  (visual-only, non-scrolling, pointer-events: none)
         ├── #game-shell-chrome    (mirrors theme hooks; shared chrome surface prep)
-        │   ├── #game-header      (brand + identity flow + title overlay + logout)
-        │   │   ├── .game-header-main (flow row)
-        │   │   └── #nav-player-title (absolute overlay; non-flow)
+        │   ├── #game-header      (three-zone chrome row: brand | identity | logout)
+        │   │   ├── .game-header-main (CSS grid: 1fr | auto | 1fr)
+        │   │   ├── .game-header-brand (left)
+        │   │   ├── .game-header-center (center; username + #nav-player-title overlay)
+        │   │   └── .game-header-logout (right)
         │   └── #tab-nav          (navigation only — structurally separate from header)
         └── #game-content-scroll  (sole authoritative gameplay vertical scroll)
 ```
@@ -707,10 +709,23 @@ S4.5 finalizes shell sizing, title overlay structure, and identity accent infras
 - `--shell-header-padding-block` replaces Tailwind `py-*` on `#game-header`
 - No fixed pixel heights, no `vh` scaling on header
 
+**Shell header zones (layout ownership)**
+
+`.game-header-main` uses a balanced **three-column grid** (`minmax(0, 1fr) | minmax(0, auto) | minmax(0, 1fr)`):
+
+| Zone | Element | Role |
+|------|---------|------|
+| Left | `.game-header-brand` | Game title / branding |
+| Center | `.game-header-center` | Username + group badge; hosts `#nav-player-title` overlay |
+| Right | `.game-header-logout` | Logout / utilities (isolated from title space) |
+
+Equal `1fr` side columns reserve space so the center column is **visually centered on the X-axis** without viewport `position: fixed` centering, `translateX` compensation, or logout-width magic offsets.
+
 **Title overlay doctrine (non-flow)**
 
-- `#nav-player-title` is **not** in the identity flex row
-- `position: absolute` within `.game-header-identity-wrap` (anchored to identity region, not viewport center)
+- `#nav-player-title` is **not** in the username flex row
+- `position: absolute` within `.game-header-center` only (center column containing block)
+- Horizontally centered via `left: 0; right: 0; margin-inline: auto; width: fit-content` (no `translateX`)
 - `pointer-events: none` — decorative overlay only
 - `transform: translateY(var(--shell-title-overlap-y))` allowed on title element only (~45%; static boundary overlap; not animated)
 - Header/tab inter-region divider is **visually suppressed**; regions remain separate DOM nodes. Title may lightly overlap the header/tab visual boundary.
