@@ -613,6 +613,7 @@ html/body.app-mode-game          (viewport lock — game screen only)
 
 - Header and tabs are **not merged** in the DOM.
 - Future visual unification uses `#game-shell-chrome` shared surface (`::before`), CSS variables, and backdrop layers — not structural coupling.
+- **Visual unification (S4.5+):** Header and tabs read as one continuous chrome plane via shared `#game-shell-chrome::before` surface. Inter-region borders are suppressed (`#game-header { border-bottom: none }`); a single edge border separates chrome from gameplay (`#tab-nav` bottom border only). DOM ownership remains split.
 
 **S3 — Scroll ownership polish**
 
@@ -711,8 +712,8 @@ S4.5 finalizes shell sizing, title overlay structure, and identity accent infras
 - `#nav-player-title` is **not** in the identity flex row
 - `position: absolute` within `.game-header-identity-wrap` (anchored to identity region, not viewport center)
 - `pointer-events: none` — decorative overlay only
-- `transform: translateY(50%)` allowed on title element only (static divider overlap; not animated)
-- Header/tab divider remains authoritative; title may visually touch overlap
+- `transform: translateY(var(--shell-title-overlap-y))` allowed on title element only (~45%; static boundary overlap; not animated)
+- Header/tab inter-region divider is **visually suppressed**; regions remain separate DOM nodes. Title may lightly overlap the header/tab visual boundary.
 - Clipped by `#game-header` and `#game-shell-chrome { overflow: hidden }`
 - Visible only when equipped title cosmetic has label text (`data-title !== "default"`)
 - Forbidden on titles: glow, bounce, pulse, animation, excessive text-shadow, multi-line wrap

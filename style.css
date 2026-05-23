@@ -44,7 +44,10 @@ body.app-mode-game #screen-game.screen.active {
   --shell-header-base-min-height: 3rem;
   --shell-header-min-height: calc(var(--shell-header-base-min-height) * 1.5);
   --shell-header-padding-block: 0.75rem;
+  --shell-header-padding-bottom: 0.125rem;
   --shell-safe-inline: 1rem;
+  --shell-chrome-edge-border: #1e293b;
+  --shell-title-overlap-y: 45%;
   --identity-accent: #cbd5e1;
 }
 
@@ -55,34 +58,47 @@ body.app-mode-game #screen-game.screen.active {
   overflow: hidden;
 }
 
-/* Shared chrome surface prep (header + tabs remain separate DOM children) */
+/* Shared chrome surface — one continuous visual plane for header + tabs (DOM remains separate) */
 #game-shell-chrome::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background: var(--shell-chrome-surface);
+  background-color: var(--shell-chrome-surface);
+  background-image: var(--background-overlay);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
 }
 
 #game-header {
   min-height: var(--shell-header-min-height);
   padding-inline: var(--shell-safe-inline);
-  padding-block: var(--shell-header-padding-block);
+  padding-top: var(--shell-header-padding-block);
+  padding-bottom: var(--shell-header-padding-bottom);
   position: relative;
   z-index: 1;
   overflow: hidden;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
   background: transparent;
-  border-bottom: 1px solid var(--shell-border);
+  border-bottom: none;
 }
 
 .game-header-main {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 0.75rem;
-  min-height: calc(var(--shell-header-min-height) - (var(--shell-header-padding-block) * 2));
+  width: 100%;
+  min-height: calc(var(--shell-header-min-height) - var(--shell-header-padding-block) - var(--shell-header-padding-bottom));
+}
+
+.game-header-brand {
+  align-self: center;
 }
 
 .game-header-identity-wrap {
@@ -91,6 +107,8 @@ body.app-mode-game #screen-game.screen.active {
   min-width: 0;
   display: flex;
   justify-content: flex-end;
+  align-self: flex-end;
+  padding-bottom: 0.125rem;
 }
 
 .game-header-identity {
@@ -101,12 +119,16 @@ body.app-mode-game #screen-game.screen.active {
 .game-header-logout {
   position: relative;
   z-index: 3;
+  align-self: flex-end;
+  margin-bottom: 0.125rem;
 }
 
 #tab-nav {
   position: relative;
   z-index: 1;
   background: transparent;
+  border-top: none;
+  border-bottom: 1px solid var(--shell-chrome-edge-border);
 }
 
 .nav-identity-name,
@@ -114,7 +136,7 @@ body.app-mode-game #screen-game.screen.active {
   color: var(--identity-accent);
 }
 
-/* Title overlay — non-flow, anchored to identity region, divider overlap (S4.5) */
+/* Title overlay — non-flow; sits on header/tab visual boundary (S4.5) */
 .nav-player-title-slot {
   display: none;
   position: absolute;
@@ -133,7 +155,7 @@ body.app-mode-game #screen-game.screen.active {
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: none;
-  transform: translateY(50%);
+  transform: translateY(var(--shell-title-overlap-y));
   text-align: right;
 }
 
