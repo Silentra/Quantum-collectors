@@ -545,7 +545,7 @@ Admin create/edit rejects duplicates using normalized keys: trim, collapse white
 | `enabled: false` | Temporarily off; record retained | Excluded | Excluded unless re-enabled | Hidden (inactive definition) |
 | `deleted: true` | Tombstone; admin-only history | Excluded | Excluded | Hidden; id may remain on profile until player unequips |
 
-Delete is implemented as a tombstone (`deleted`, `deletedAt`, forces `enabled: false`, `shopEnabled: false`), not a hard Firebase remove, for audit and id collision safety.
+Delete is implemented as a tombstone (`deleted`, `deletedAt`, forces `enabled: false`, `shopEnabled: false`), not a hard Firebase remove, for audit and id collision safety. Tombstoned titles remain in Firebase/registry but are **hidden from the default Admin → Cosmetics → Titles list** (disabled non-deleted titles remain visible).
 
 #### Source metadata
 
@@ -713,7 +713,7 @@ html/body.app-mode-game          (viewport lock — game screen only)
 | `#game-shell-backdrop` | No | Absolute within `#screen-game`; visual-only |
 | `#game-shell-chrome` | No | Persistent chrome |
 | `#game-content-scroll` | Yes | Authoritative gameplay scroll |
-| Global modals (`#pack-opening-overlay`, `#card-detail-modal`, `#confirm-modal`) | Own internal overflow only | Fixed to viewport; never nested in shell |
+| Global modals (`#player-detail-modal`, `#pack-opening-overlay`, `#card-detail-modal`, `#confirm-modal`) | Own internal overflow only | Fixed to viewport on `<body>`; never nested in `#screen-game` or `#game-content-scroll` |
 | Admin/tab nested `max-h-*` panels | Optional nested scroll | Intentional; `vh` is viewport-relative |
 
 **Non-scrolling background doctrine:** Shell backgrounds and backdrop textures must not scroll with gameplay content. They live on `#game-shell-backdrop` (or chrome pseudo-layers), not inside `#game-content-scroll`.
@@ -793,22 +793,27 @@ S4.5 finalizes shell sizing, title overlay structure, and identity accent infras
 | Zone | Element | Role |
 |------|---------|------|
 | Left | `.game-header-brand` | Game title / branding |
-| Center | `.game-header-center` | Username + group badge; hosts `#nav-player-title` overlay |
+| Center | `.game-header-center` | Username + group badge + `#nav-player-title` (title is absolute, right of username) |
 | Right | `.game-header-logout` | Logout / utilities (isolated from title space) |
 
 Equal `1fr` side columns reserve space so the center column is **visually centered on the X-axis** without viewport `position: fixed` centering, `translateX` compensation, or logout-width magic offsets.
 
 **Title overlay doctrine (non-flow)**
 
-- `#nav-player-title` is **not** in the username flex row
-- `position: absolute` within `.game-header-center` only (center column containing block)
-- Horizontally centered via `left: 0; right: 0; margin-inline: auto; width: fit-content` (no `translateX`)
+- `#nav-player-title` lives inside `.game-header-identity` but remains **out of flex flow** (`position: absolute`)
+- Anchored to the identity cluster: `left: calc(100% + 0.35rem)`, `top: 50%`, `transform: translateY(-50%)` — same visual baseline as username, immediately to the right (`[ username ] [ title ]`)
+- Identity cluster is `inline-flex` and centered in `.game-header-center` so username + title read as one centered group
 - `pointer-events: none` — decorative overlay only
-- `transform: translateY(var(--shell-title-overlap-y))` allowed on title element only (~45%; static boundary overlap; not animated)
-- Header/tab inter-region divider is **visually suppressed**; regions remain separate DOM nodes. Title may lightly overlap the header/tab visual boundary.
+- `max-width` + `ellipsis` on title; center column `max-width` prevents overlap with logout
 - Clipped by `#game-header` and `#game-shell-chrome { overflow: hidden }`
 - Visible only when equipped title cosmetic has label text (`data-title !== "default"`)
-- Forbidden on titles: glow, bounce, pulse, animation, excessive text-shadow, multi-line wrap
+- Forbidden on titles: glow, bounce, pulse, animation, excessive text-shadow, multi-line wrap; forbidden: logout-offset anchoring, viewport `translateX` centering hacks
+
+**Manage Player modal placement**
+
+- `#player-detail-modal` is a **global** modal (sibling of `#confirm-modal` on `<body>`), not nested under Admin → Players
+- Uses `z-[100]`, sticky header with prominent close control, and top padding on small viewports so the header is never clipped by tall shell chrome
+- Nested admin modals inside `#game-content-scroll` clip `position: fixed` descendants — global placement is required
 
 **Title vs identity accent vs earned cosmetics**
 
@@ -841,7 +846,7 @@ Equal `1fr` side columns reserve space so the center column is **visually center
 | `#btn-logout` | 3 | Always clickable |
 | `#game-shell-chrome` | 2 | Container; overflow hidden |
 | `#game-content-scroll` | 1 | Gameplay scroll |
-| Global modals | 50+ | Viewport-fixed; authoritative |
+| Global modals (`#player-detail-modal`, pack/card/confirm) | 100+ (`z-[100]`–`z-[110]`) | Viewport-fixed on `<body>`; always above shell chrome |
 
 **Forbidden (shell drift prevention)**
 

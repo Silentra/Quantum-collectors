@@ -6,6 +6,7 @@ import * as toast from './toast.js';
 import { ITEM_RARITIES } from './shop-definitions.js';
 import {
   deleteTitleDefinition,
+  getCosmeticDefinition,
   listTitleDefinitions,
   saveTitleDefinition,
   TITLE_DISPLAY_NAME_MAX_LENGTH,
@@ -176,9 +177,9 @@ function readTitleForm(editor) {
 }
 
 function titlesPanelHtml() {
-  const titles = listTitleDefinitions({ includeDeleted: true });
+  const titles = listTitleDefinitions();
   const editingDef = editingTitleId
-    ? titles.find(t => t.id === editingTitleId)
+    ? (titles.find(t => t.id === editingTitleId) || getCosmeticDefinition(editingTitleId))
     : null;
 
   return `
@@ -228,7 +229,7 @@ function wireTitlesPanel(container) {
   container.querySelectorAll('.cosmetics-delete-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
-      const def = listTitleDefinitions({ includeDeleted: true }).find(t => t.id === id);
+      const def = getCosmeticDefinition(id);
       const confirmed = await confirmDialog(
         `Delete title "${def?.name || id}"?\nPlayers who own it keep ownership, but it cannot be equipped or granted.`,
         'Delete title?'

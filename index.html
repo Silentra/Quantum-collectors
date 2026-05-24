@@ -254,8 +254,8 @@
               <div class="game-header-identity flex items-center justify-center gap-2 min-w-0">
                 <span id="nav-username" class="nav-identity-name text-sm truncate max-w-[11rem] sm:max-w-[16rem]"></span>
                 <span id="nav-group-badge" class="text-xs bg-surface-700 px-2 py-1 rounded hidden flex-shrink-0"></span>
+                <span id="nav-player-title" class="nav-player-title-slot" data-title="default" hidden aria-hidden="true"></span>
               </div>
-              <span id="nav-player-title" class="nav-player-title-slot" data-title="default" hidden aria-hidden="true"></span>
             </div>
             <button id="btn-logout" class="game-header-logout text-surface-400 hover:text-white text-sm px-3 py-1 rounded border border-surface-600 hover:border-surface-500 transition flex-shrink-0">
               Logout
@@ -487,17 +487,6 @@
                   </select>
                 </div>
                 <div id="admin-players-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto"></div>
-              </div>
-
-              <!-- Player Detail Modal -->
-              <div id="player-detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-                <div class="bg-surface-900 rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-surface-700">
-                  <div class="flex items-center justify-between mb-4">
-                    <h3 id="player-detail-name" class="text-xl font-bold"></h3>
-                    <button id="btn-close-player-detail" class="text-surface-400 hover:text-white text-2xl">&times;</button>
-                  </div>
-                  <div id="player-detail-content"></div>
-                </div>
               </div>
             </div>
 
@@ -903,6 +892,17 @@
           </div>
         </div>
       </main>
+    </div>
+  </div>
+
+  <!-- Manage Player Modal (global — viewport-fixed above shell chrome; not inside #game-content-scroll) -->
+  <div id="player-detail-modal" class="global-modal-overlay hidden fixed inset-0 bg-black/80 z-[100] flex items-start sm:items-center justify-center p-4 pt-[max(1rem,var(--shell-header-min-height,4.5rem))] sm:pt-4">
+    <div class="global-modal-panel bg-surface-900 rounded-2xl max-w-2xl w-full max-h-[min(90dvh,calc(100dvh-1.5rem))] border border-surface-700 flex flex-col min-h-0 shadow-xl">
+      <div class="global-modal-header sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-4 bg-surface-900 border-b border-surface-700/80 rounded-t-2xl flex-shrink-0">
+        <h3 id="player-detail-name" class="text-xl font-bold truncate min-w-0"></h3>
+        <button type="button" id="btn-close-player-detail" class="global-modal-close flex-shrink-0 text-surface-300 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface-800 transition" aria-label="Close player details">&times;</button>
+      </div>
+      <div id="player-detail-content" class="overflow-y-auto px-6 pb-6 pt-4 flex-1 min-h-0"></div>
     </div>
   </div>
 

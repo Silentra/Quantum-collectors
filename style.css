@@ -105,22 +105,28 @@ body.app-mode-game #screen-game.screen.active {
   min-width: 0;
 }
 
-/* CENTER — username + title overlay anchor */
+/* CENTER — username + title identity cluster (centered as one unit) */
 .game-header-center {
   grid-column: 2;
   position: relative;
   justify-self: center;
   align-self: flex-end;
+  display: flex;
+  justify-content: center;
   padding-bottom: 0.125rem;
-  max-width: min(20rem, 100%);
+  max-width: min(22rem, calc(100% - 1rem));
   min-width: 0;
 }
 
 .game-header-identity {
   position: relative;
   z-index: 1;
-  width: 100%;
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
+  max-width: 100%;
+  min-width: 0;
+  flex-wrap: nowrap;
 }
 
 /* RIGHT — logout / utilities */
@@ -146,18 +152,19 @@ body.app-mode-game #screen-game.screen.active {
   color: var(--identity-accent);
 }
 
-/* Title overlay — non-flow; anchored to center identity column (S4.5) */
+/* Title overlay — non-flow; sits to the right of username on the same baseline (S4.5+) */
 .nav-player-title-slot {
   display: none;
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: calc(100% + 0.35rem);
+  top: 50%;
+  right: auto;
+  bottom: auto;
   z-index: 2;
   pointer-events: none;
   width: fit-content;
-  max-width: 100%;
-  margin-inline: auto;
+  max-width: min(9rem, 36vw);
+  margin: 0;
   padding: 0;
   font-size: clamp(0.625rem, 2.2vw, 0.75rem);
   font-weight: 500;
@@ -167,12 +174,21 @@ body.app-mode-game #screen-game.screen.active {
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: none;
-  transform: translateY(var(--shell-title-overlap-y));
-  text-align: center;
+  transform: translateY(-50%);
+  text-align: left;
 }
 
 .nav-player-title-slot:not([hidden]) {
   display: block;
+}
+
+/* Global modals — viewport-fixed on <body>, above #game-shell-chrome (z-index 2) */
+.global-modal-overlay {
+  z-index: 100;
+}
+
+.global-modal-close {
+  pointer-events: auto;
 }
 
 /* Visual-only backdrop: fixed to shell viewport, does not scroll with gameplay */
