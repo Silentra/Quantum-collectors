@@ -222,18 +222,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   },
 
   // ── Cosmetics — Titles ─────────────────────────────────────────────────
-
-  title_master_researcher: {
-    id: 'title_master_researcher',
-    name: 'Master Researcher',
-    description: 'Display the title "Master Researcher" on your profile.',
-    type: ITEM_TYPES.COSMETIC,
-    category: ITEM_CATEGORIES.TITLE,
-    rarity: ITEM_RARITIES.LEGENDARY,
-    price: 1000,
-    weight: 2,
-    enabled: true,
-  },
+  // Titles are authored via Admin → Cosmetics (Firebase registry). No static title seeds.
 });
 
 /**

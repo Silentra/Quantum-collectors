@@ -673,7 +673,7 @@ html/body.app-mode-game          (viewport lock — game screen only)
         ├── #game-shell-backdrop  (visual-only, non-scrolling, pointer-events: none)
         ├── #game-shell-chrome    (mirrors theme hooks; shared chrome surface prep)
         │   ├── #game-header      (three-zone chrome row: brand | identity | logout)
-        │   │   ├── .game-header-main (CSS grid: 1fr | auto | 1fr)
+        │   │   ├── .game-header-main (CSS grid: 1fr | 1fr | 1fr — expandable center column)
         │   │   ├── .game-header-brand (left)
         │   │   ├── .game-header-center (center; username + #nav-player-title overlay)
         │   │   └── .game-header-logout (right)
@@ -788,26 +788,27 @@ S4.5 finalizes shell sizing, title overlay structure, and identity accent infras
 
 **Shell header zones (layout ownership)**
 
-`.game-header-main` uses a balanced **three-column grid** (`minmax(0, 1fr) | minmax(0, auto) | minmax(0, 1fr)`):
+`.game-header-main` uses a balanced **three-column grid** (`minmax(0, 1fr) | minmax(0, 1fr) | minmax(0, 1fr)`):
 
 | Zone | Element | Role |
 |------|---------|------|
 | Left | `.game-header-brand` | Game title / branding |
-| Center | `.game-header-center` | Username + group badge + `#nav-player-title` (title is absolute, right of username) |
+| Center | `.game-header-center` | Full `1fr` column; `.game-header-identity-line` (username + badge + title flex row) |
 | Right | `.game-header-logout` | Logout / utilities (isolated from title space) |
 
 Equal `1fr` side columns reserve space so the center column is **visually centered on the X-axis** without viewport `position: fixed` centering, `translateX` compensation, or logout-width magic offsets.
 
-**Title overlay doctrine (non-flow)**
+**Title identity line doctrine**
 
-- `#nav-player-title` lives inside `.game-header-identity` but remains **out of flex flow** (`position: absolute`)
-- Anchored to the identity cluster: `left: calc(100% + 0.35rem)`, `top: 50%`, `transform: translateY(-50%)` — same visual baseline as username, immediately to the right (`[ username ] [ title ]`)
-- Identity cluster is `inline-flex` and centered in `.game-header-center` so username + title read as one centered group
-- `pointer-events: none` — decorative overlay only
-- `max-width` + `ellipsis` on title; center column `max-width` prevents overlap with logout
-- Clipped by `#game-header` and `#game-shell-chrome { overflow: hidden }`
-- Visible only when equipped title cosmetic has label text (`data-title !== "default"`)
-- Forbidden on titles: glow, bounce, pulse, animation, excessive text-shadow, multi-line wrap; forbidden: logout-offset anchoring, viewport `translateX` centering hacks
+- Shell grid center column is `minmax(0, 1fr)` (equal side `1fr` columns preserve visual balance); `.game-header-center` stretches to **full center column width** (no ~20rem artificial cap)
+- `.game-header-identity-line` + `.game-header-identity-stack` form the centered identity row: `[ username ][ badge? ][ title… ]`; stack uses full center width when title is visible (`:has()`), shrink-wrap + centered when title hidden
+- `#nav-username`: `flex: 0 0 auto`, `white-space: nowrap` — **must not truncate** on normal desktop widths
+- `#nav-player-title`: `flex: 1 1 auto`, `min-width: 0`, ellipsis — **only the title truncates** when space runs out
+- Title hidden (`[hidden]`) → line centers username/badge only; title does not reserve width
+- `pointer-events: none` on title slot; clipped by `#game-header` / `#game-shell-chrome { overflow: hidden }`
+- Visible only when equipped title cosmetic has active definition + label text
+- Forbidden: logout-offset anchoring, viewport `translateX` centering hacks, username truncation on desktop except extreme narrow (`≤380px`) safety
+- Static seed titles removed from `ITEM_DEFINITIONS`; titles ship via admin/Firebase registry only. Missing/deleted equipped ids degrade via `isCosmeticDefinitionActive()` (no header label)
 
 **Manage Player modal placement**
 

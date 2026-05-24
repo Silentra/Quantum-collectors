@@ -47,7 +47,6 @@ body.app-mode-game #screen-game.screen.active {
   --shell-header-padding-bottom: 0.125rem;
   --shell-safe-inline: 1rem;
   --shell-chrome-edge-border: #1e293b;
-  --shell-title-overlap-y: 45%;
   --identity-accent: #cbd5e1;
 }
 
@@ -90,7 +89,8 @@ body.app-mode-game #screen-game.screen.active {
 
 .game-header-main {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  /* Equal side columns + expandable center — center uses available header width */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
   align-items: stretch;
   column-gap: 0.5rem;
   width: 100%;
@@ -105,28 +105,60 @@ body.app-mode-game #screen-game.screen.active {
   min-width: 0;
 }
 
-/* CENTER — username + title identity cluster (centered as one unit) */
+/* CENTER — full grid column width; identity line centered within */
 .game-header-center {
   grid-column: 2;
   position: relative;
-  justify-self: center;
+  justify-self: stretch;
   align-self: flex-end;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding-bottom: 0.125rem;
-  max-width: min(22rem, calc(100% - 1rem));
+  padding-inline: 0.25rem;
+}
+
+/* Outer wrapper — centers the stack in the center grid column */
+.game-header-identity-line {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
 }
 
-.game-header-identity {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
+/* Inner row — full center width when title visible; shrink-wrap when title hidden */
+.game-header-identity-stack {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  max-width: 100%;
-  min-width: 0;
   flex-wrap: nowrap;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 100%;
+  width: auto;
+  justify-content: center;
+}
+
+.game-header-identity-stack:has(.nav-player-title-slot:not([hidden])) {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.nav-identity-name {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.nav-group-badge {
+  flex: 0 0 auto;
 }
 
 /* RIGHT — logout / utilities */
@@ -152,18 +184,13 @@ body.app-mode-game #screen-game.screen.active {
   color: var(--identity-accent);
 }
 
-/* Title overlay — non-flow; sits to the right of username on the same baseline (S4.5+) */
+/* Title slot — flex remainder after username; only title truncates */
 .nav-player-title-slot {
   display: none;
-  position: absolute;
-  left: calc(100% + 0.35rem);
-  top: 50%;
-  right: auto;
-  bottom: auto;
-  z-index: 2;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   pointer-events: none;
-  width: fit-content;
-  max-width: min(9rem, 36vw);
   margin: 0;
   padding: 0;
   font-size: clamp(0.625rem, 2.2vw, 0.75rem);
@@ -174,12 +201,20 @@ body.app-mode-game #screen-game.screen.active {
   overflow: hidden;
   text-overflow: ellipsis;
   text-shadow: none;
-  transform: translateY(-50%);
   text-align: left;
 }
 
 .nav-player-title-slot:not([hidden]) {
   display: block;
+}
+
+/* Mobile safety: username may truncate only on very narrow viewports */
+@media (max-width: 380px) {
+  .nav-identity-name {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }
 
 /* Global modals — viewport-fixed on <body>, above #game-shell-chrome (z-index 2) */
