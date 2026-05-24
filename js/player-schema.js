@@ -97,6 +97,7 @@ export const DEFAULT_PROFILE = Object.freeze({
   equippedAura: null,
   equippedBorder: null,
   equippedBanner: null,
+  equippedBackground: null,
   equippedTitle: null,
   identityAccent: 'default',
   featuredCards: Object.freeze([]),
@@ -225,6 +226,9 @@ function createProfileDefaultsFromLegacy(player = {}) {
     equippedBanner: isOwnedValidCosmetic(equipped.profileBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER)
       ? equipped.profileBanner
       : null,
+    equippedBackground: isOwnedValidCosmetic(equipped.shellBackground, owned, ITEM_CATEGORIES.SHELL_BACKGROUND)
+      ? equipped.shellBackground
+      : null,
     equippedTitle: isOwnedValidCosmetic(equipped.title, owned, ITEM_CATEGORIES.TITLE) ? equipped.title : null,
     identityAccent: normalizeIdentityAccent(player.profile?.identityAccent),
     featuredCards: normalizeIdArray(customization.featuredCards, MAX_FEATURED_CARDS),
@@ -260,6 +264,7 @@ export function getPhase2ADefaults() {
       equippedAura: null,
       equippedBorder: null,
       equippedBanner: null,
+      equippedBackground: null,
       equippedTitle: null,
       identityAccent: IDENTITY_ACCENT_DEFAULT,
       featuredCards: [],
@@ -460,6 +465,7 @@ export function normalizePlayerSchema(username) {
       equippedAura: ITEM_CATEGORIES.AURA,
       equippedBorder: ITEM_CATEGORIES.BORDER,
       equippedBanner: ITEM_CATEGORIES.PROFILE_BANNER,
+      equippedBackground: ITEM_CATEGORIES.SHELL_BACKGROUND,
       equippedTitle: ITEM_CATEGORIES.TITLE,
     };
 

@@ -326,6 +326,7 @@ export function getCosmeticCategoryAdminLabel(category) {
   if (category === ITEM_CATEGORIES.AURA) return 'Glow';
   if (category === ITEM_CATEGORIES.BORDER) return 'Border';
   if (category === ITEM_CATEGORIES.PROFILE_BANNER) return 'Banner';
+  if (category === ITEM_CATEGORIES.SHELL_BACKGROUND) return 'Background';
   if (category === ITEM_CATEGORIES.TITLE) return 'Title';
   return category || 'Other';
 }

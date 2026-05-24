@@ -18,6 +18,7 @@ export const ITEM_CATEGORIES = Object.freeze({
   AURA:           'aura',           // profile card aura effects
   BORDER:         'border',         // profile card border styles
   PROFILE_BANNER: 'profile_banner', // profile banner cosmetics
+  SHELL_BACKGROUND: 'shell_background', // gameplay shell backdrop (below tabs)
   TITLE:          'title',          // display title cosmetics
   PACK:           'pack',           // card packs
   CARD:           'card',           // individual cards
@@ -221,6 +222,86 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
   },
 
+  // ── Cosmetics — Shell Backgrounds (BG-1: solid colors; visuals in CSS only) ──
+
+  shell_background_deep_blue: {
+    id: 'shell_background_deep_blue',
+    name: 'Deep Blue',
+    description: 'A deep blue gameplay shell background.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 75,
+    weight: 14,
+    enabled: true,
+    display: { emoji: '▮' },
+  },
+
+  shell_background_crimson: {
+    id: 'shell_background_crimson',
+    name: 'Crimson',
+    description: 'A deep crimson gameplay shell background.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 75,
+    weight: 14,
+    enabled: true,
+    display: { emoji: '▮' },
+  },
+
+  shell_background_emerald: {
+    id: 'shell_background_emerald',
+    name: 'Emerald',
+    description: 'A deep emerald gameplay shell background.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 75,
+    weight: 14,
+    enabled: true,
+    display: { emoji: '▮' },
+  },
+
+  shell_background_purple: {
+    id: 'shell_background_purple',
+    name: 'Purple',
+    description: 'A deep purple gameplay shell background.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 120,
+    weight: 10,
+    enabled: true,
+    display: { emoji: '▮' },
+  },
+
+  shell_background_charcoal: {
+    id: 'shell_background_charcoal',
+    name: 'Charcoal',
+    description: 'A neutral charcoal gameplay shell background.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 50,
+    weight: 16,
+    enabled: true,
+    display: { emoji: '▮' },
+  },
+
+  shell_background_slate: {
+    id: 'shell_background_slate',
+    name: 'Slate',
+    description: 'A cool slate gameplay shell background.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 50,
+    weight: 16,
+    enabled: true,
+    display: { emoji: '▮' },
+  },
+
   // ── Cosmetics — Titles ─────────────────────────────────────────────────
   // Titles are authored via Admin → Cosmetics (Firebase registry). No static title seeds.
 });
@@ -252,6 +333,7 @@ function fallbackEmoji(definition) {
     if (definition.category === ITEM_CATEGORIES.AURA) return '✦';
     if (definition.category === ITEM_CATEGORIES.BORDER) return '▣';
     if (definition.category === ITEM_CATEGORIES.PROFILE_BANNER) return '▰';
+    if (definition.category === ITEM_CATEGORIES.SHELL_BACKGROUND) return '▮';
     if (definition.category === ITEM_CATEGORIES.TITLE) return '★';
     return '◆';
   }

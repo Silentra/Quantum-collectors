@@ -508,7 +508,7 @@ Runtime consumers must resolve cosmetics through `getCosmeticDefinition()`, `get
 |----------------------|---------------------------|--------|
 | Title | `title` | Text-only shell overlay; color from `identityAccent` only |
 | Banner | `profile_banner` | Shell `data-banner` |
-| Background | `shell_background` | Shell `data-background` (reserved) |
+| Background | `shell_background` | Gameplay shell `#game-shell-backdrop` via `data-background` on `#screen-game` only |
 | **Glow** (admin/UI) | **`aura`** (runtime) | **Do not rename** runtime category to `glow` |
 | Border | `border` | Card/shell border cosmetics |
 | Shimmer | *(future)* | Separate future category/system |
@@ -556,6 +556,26 @@ Every resolved definition carries `source: 'static' | 'admin'` (static tagged at
 Use registry helpers in: `shell-theme.js`, `shop-validation.js`, `shop-generation.js`, `shop-config.js` (merged defs), `player-schema.js`, `achievement-validation.js`, `achievements-admin.js`, `achievements-ui.js`, `profile-ui.js`, `admin-player-tools.js`, `shop-ui.js`, `ui.js` (admin grants), and `cosmetics-admin.js`.
 
 Do not bypass the registry for cosmetic resolution in new code.
+
+#### Background cosmetic doctrine (BG-1)
+
+**Scope:** Gameplay region below `#tab-nav` only. Independent from `profile_banner` / `data-banner` header-tab chrome. Does not affect card renderer, card glow/border effects, or banner visuals.
+
+**Render path:** `profile.equippedBackground` → registry validation → `cosmeticIdToShellSlug(id)` → `#screen-game[data-background="slug"]` → `--shell-bg` → `#game-shell-backdrop`.
+
+**Visual authorship:** CSS/code only (BG-1: solid colors). Static definitions carry acquisition/governance metadata only — no raw colors, gradients, CSS payloads, or animation definitions in Firebase or admin records.
+
+**Static ids:** `shell_background_*` (e.g. `shell_background_deep_blue` → slug `deep-blue`).
+
+**Equip field:** `players/{username}/profile/equippedBackground`.
+
+**Admin tab:** May inherit backdrop in panel gutters; no special override required.
+
+**Visibility:** Backdrop is non-scrolling behind `#game-content-scroll`; visible in gutters between opaque panels.
+
+**BG-1 non-goals:** gradients, images, animation, visual admin editor, color pickers, `data-background` on chrome.
+
+**Degradation:** Missing/disabled/deleted defs → `data-background="default"`.
 
 #### Admin — Cosmetics → Titles (`js/cosmetics-admin.js`)
 
@@ -743,7 +763,7 @@ Players may mix categories freely (e.g. cosmic banner + blueprint background + s
 | Hook | Host(s) | Default | Source (when equipped) |
 |------|---------|---------|-------------------------|
 | `data-banner` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.equippedBanner` |
-| `data-background` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.equippedBackground` |
+| `data-background` | `#screen-game` only | `default` | `profile.equippedBackground` |
 | `data-theme` | `#screen-game`, `#game-shell-chrome` | `default` | Reserved |
 | `data-identity-accent` | `#screen-game`, `#game-shell-chrome`, `#game-header` | `default` | `profile.identityAccent` (utility preference) |
 | `data-title` | `#nav-player-title` | `default` | `profile.equippedTitle` |
@@ -752,7 +772,7 @@ Future CSS selects themes with attribute selectors, e.g. `[data-banner="cosmic"]
 
 #### CSS variable foundation (`#screen-game`)
 
-Conservative defaults matching current visuals: `--shell-bg`, `--shell-chrome-surface`, `--shell-accent`, `--shell-border`, `--banner-bg`, `--banner-border`, `--tab-accent`, `--background-overlay`, `--shell-header-min-height`, `--shell-safe-inline`. Cosmetic CSS (S5+) reads these vars; do not over-expand the token surface prematurely.
+Conservative defaults matching current visuals: `--shell-bg`, `--shell-chrome-surface`, `--shell-accent`, `--shell-border`, `--banner-bg`, `--banner-border`, `--banner-overlay`, `--tab-accent`, `--shell-header-min-height`, `--shell-safe-inline`. Gameplay backgrounds (BG-1+) set `--shell-bg` on `#screen-game[data-background]` consumed by `#game-shell-backdrop` only. Banner chrome uses `--banner-overlay` on `#game-shell-chrome::before` (independent from gameplay background).
 
 #### Animation intensity philosophy
 

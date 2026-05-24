@@ -259,7 +259,7 @@ function renderCategoryContent(container) {
 
   const placeholders = {
     banners: 'Banner cosmetics are defined in code/CSS for now. Shell hooks: data-banner.',
-    backgrounds: 'Background cosmetics use shell_background (reserved). Defined in code for now.',
+    backgrounds: 'Shell backgrounds (shell_background) are code/CSS-defined. Acquisition via shop, achievements, and grants; no visual admin editor.',
     glow: 'Glow cosmetics use the runtime category aura (admin label: Glow). Defined in code for now.',
     borders: 'Border cosmetics use the border category. Defined in code for now.',
     shimmer: 'Shimmer is a future card effect category. Not available in admin yet.',

@@ -40,13 +40,13 @@ body.app-mode-game #screen-game.screen.active {
   --banner-bg: transparent;
   --banner-border: transparent;
   --tab-accent: #818cf8;
-  --background-overlay: transparent;
   --shell-header-base-min-height: 3rem;
   --shell-header-min-height: calc(var(--shell-header-base-min-height) * 1.5);
   --shell-header-padding-block: 0.75rem;
   --shell-header-padding-bottom: 0.125rem;
   --shell-safe-inline: 1rem;
   --shell-chrome-edge-border: #1e293b;
+  --banner-overlay: none;
   --identity-accent: #cbd5e1;
 }
 
@@ -65,7 +65,7 @@ body.app-mode-game #screen-game.screen.active {
   z-index: -1;
   pointer-events: none;
   background-color: var(--shell-chrome-surface);
-  background-image: var(--background-overlay);
+  background-image: var(--banner-overlay);
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center top;
@@ -234,11 +234,19 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: none;
   overflow: hidden;
   background-color: var(--shell-bg);
-  background-image: var(--background-overlay);
+  background-image: none;
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center;
 }
+
+/* BG-1: solid shell backgrounds — visuals in CSS only; definitions carry acquisition metadata */
+#screen-game[data-background="deep-blue"] { --shell-bg: #0c1929; }
+#screen-game[data-background="crimson"] { --shell-bg: #1f1218; }
+#screen-game[data-background="emerald"] { --shell-bg: #0f1f18; }
+#screen-game[data-background="purple"] { --shell-bg: #18102a; }
+#screen-game[data-background="charcoal"] { --shell-bg: #141414; }
+#screen-game[data-background="slate"] { --shell-bg: #151c28; }
 
 #game-content-scroll {
   flex: 1 1 auto;

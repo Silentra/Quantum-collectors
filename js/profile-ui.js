@@ -26,6 +26,7 @@ const EQUIPPED_FIELDS = Object.freeze({
   [ITEM_CATEGORIES.AURA]: 'equippedAura',
   [ITEM_CATEGORIES.BORDER]: 'equippedBorder',
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'equippedBanner',
+  [ITEM_CATEGORIES.SHELL_BACKGROUND]: 'equippedBackground',
   [ITEM_CATEGORIES.TITLE]: 'equippedTitle',
 });
 
@@ -33,6 +34,7 @@ const EQUIPPED_LABELS = Object.freeze({
   [ITEM_CATEGORIES.AURA]: 'Aura',
   [ITEM_CATEGORIES.BORDER]: 'Border',
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'Banner',
+  [ITEM_CATEGORIES.SHELL_BACKGROUND]: 'Background',
   [ITEM_CATEGORIES.TITLE]: 'Title',
 });
 
@@ -96,6 +98,10 @@ export function getEquippedBanner(playerData) {
   return resolveEquippedCosmetic(playerData, 'equippedBanner', ITEM_CATEGORIES.PROFILE_BANNER);
 }
 
+export function getEquippedBackground(playerData) {
+  return resolveEquippedCosmetic(playerData, 'equippedBackground', ITEM_CATEGORIES.SHELL_BACKGROUND);
+}
+
 export function getEquippedTitle(playerData) {
   return resolveEquippedCosmetic(playerData, 'equippedTitle', ITEM_CATEGORIES.TITLE);
 }
@@ -106,6 +112,7 @@ export function getProfileIdentityState(playerData) {
     aura: getEquippedAura(playerData),
     border: getEquippedBorder(playerData),
     banner: getEquippedBanner(playerData),
+    background: getEquippedBackground(playerData),
     title: getEquippedTitle(playerData),
     featuredCards: Array.isArray(profile.featuredCards) ? [...profile.featuredCards] : [],
     featuredAchievements: Array.isArray(profile.featuredAchievements)
@@ -226,6 +233,7 @@ function renderEquippedIdentity(p) {
     ITEM_CATEGORIES.AURA,
     ITEM_CATEGORIES.BORDER,
     ITEM_CATEGORIES.PROFILE_BANNER,
+    ITEM_CATEGORIES.SHELL_BACKGROUND,
     ITEM_CATEGORIES.TITLE,
   ];
   const rows = categories.map(category => {
@@ -318,6 +326,7 @@ function renderCosmetics(p) {
     ITEM_CATEGORIES.AURA,
     ITEM_CATEGORIES.BORDER,
     ITEM_CATEGORIES.PROFILE_BANNER,
+    ITEM_CATEGORIES.SHELL_BACKGROUND,
     ITEM_CATEGORIES.TITLE,
     'other',
   ];

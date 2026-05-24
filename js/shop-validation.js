@@ -60,6 +60,8 @@ const COSMETIC_CATEGORY_FIELDS = Object.freeze({
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'equippedBanner',
   banner: 'equippedBanner',
   profileBanner: 'equippedBanner',
+  [ITEM_CATEGORIES.SHELL_BACKGROUND]: 'equippedBackground',
+  shellBackground: 'equippedBackground',
   [ITEM_CATEGORIES.TITLE]: 'equippedTitle',
 });
 

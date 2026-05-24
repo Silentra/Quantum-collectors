@@ -47,10 +47,10 @@ export const IDENTITY_ACCENT_IDS = Object.freeze([
 const IDENTITY_ACCENT_SET = new Set(IDENTITY_ACCENT_IDS);
 
 /**
- * Reserved shell-background cosmetic category (shop items may be added later).
+ * Shell-background cosmetic category id (alias for ITEM_CATEGORIES.SHELL_BACKGROUND).
  * Independent from profile_banner and title.
  */
-export const SHELL_BACKGROUND_CATEGORY = 'shell_background';
+export const SHELL_BACKGROUND_CATEGORY = ITEM_CATEGORIES.SHELL_BACKGROUND;
 
 const PROFILE_EQUIPPED_FIELDS = Object.freeze({
   banner: 'equippedBanner',
@@ -140,7 +140,6 @@ function applyThemeAttributes(screen, chrome, header, state) {
 
   if (chrome) {
     chrome.dataset.banner = state.banner;
-    chrome.dataset.background = state.background;
     chrome.dataset.theme = state.theme;
     chrome.dataset.identityAccent = state.identityAccent;
   }

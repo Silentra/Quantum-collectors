@@ -757,6 +757,7 @@ function _renderAdminRuntimeSnapshot(p) {
           <div>Aura: ${profile.equippedAura || 'None'}</div>
           <div>Border: ${profile.equippedBorder || 'None'}</div>
           <div>Banner: ${profile.equippedBanner || 'None'}</div>
+          <div>Background: ${profile.equippedBackground || 'None'}</div>
           <div>Title: ${profile.equippedTitle || 'None'}</div>
         </div>
         <div class="bg-surface-900 rounded p-3">
