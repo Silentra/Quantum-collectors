@@ -32,7 +32,12 @@ import {
   getBuiltInRerollCost,
   resolveBuiltInRerolls,
 } from './shop-config.js';
-import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import {
+  getCosmeticDefinition,
+  getItemDefinition,
+  isCosmeticDefinitionActive,
+} from './cosmetic-definitions.js';
+import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { PROJECT_STATES } from './project-state.js';
 import { getAvailableProjectSlots } from './project-refresh.js';
 import { MAX_FEATURED_ACHIEVEMENTS, MAX_FEATURED_CARDS } from './player-schema.js';
@@ -95,7 +100,7 @@ function getSlotItem(slot, options = {}) {
   if (typeof options.getItem === 'function') {
     return options.getItem(slot.itemId);
   }
-  return ITEM_DEFINITIONS[slot.itemId] || null;
+  return getItemDefinition(slot.itemId);
 }
 
 function getBuiltInRerollsUsed(player) {
@@ -215,7 +220,7 @@ export function canPurchaseItem(player, slotIndex, options = {}) {
     return { allowed: false, reason: 'unsupported_item_type', itemType: itemDefinition.type };
   }
 
-  if (itemDefinition.type === ITEM_TYPES.CONSUMABLE && !ITEM_DEFINITIONS[itemDefinition.id]) {
+  if (itemDefinition.type === ITEM_TYPES.CONSUMABLE && !getItemDefinition(itemDefinition.id)) {
     return { allowed: false, reason: 'invalid_consumable_grant' };
   }
 
@@ -525,8 +530,8 @@ export function canEquipCosmetic(player, cosmeticId, expectedCategory = null) {
     return { allowed: false, reason: 'invalid_cosmetic_id' };
   }
 
-  const definition = ITEM_DEFINITIONS[cosmeticId];
-  if (!definition || definition.enabled === false) {
+  const definition = getCosmeticDefinition(cosmeticId);
+  if (!isCosmeticDefinitionActive(definition)) {
     return { allowed: false, reason: 'invalid_cosmetic_definition' };
   }
   if (definition.type !== ITEM_TYPES.COSMETIC) {

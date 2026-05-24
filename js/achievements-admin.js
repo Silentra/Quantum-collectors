@@ -15,7 +15,13 @@ import {
 } from './achievement-config.js';
 import { listRegisteredStatKeys } from './achievement-stats.js';
 import { validateAchievementDefinition } from './achievement-validation.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import {
+  getCosmeticDefinition,
+  getCosmeticCategoryAdminLabel,
+  getMergedItemDefinitions,
+  listCosmeticDefinitions,
+} from './cosmetic-definitions.js';
+import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 
 let editingId = null;
 
@@ -80,15 +86,23 @@ function confirmDialog(message, title = 'Confirm') {
 }
 
 function listConsumableOptions() {
-  return Object.values(ITEM_DEFINITIONS)
-    .filter(d => d.type === ITEM_TYPES.CONSUMABLE && d.enabled !== false)
+  return Object.values(getMergedItemDefinitions())
+    .filter(d => d?.type === ITEM_TYPES.CONSUMABLE && d.enabled !== false && d.deleted !== true)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function listCosmeticOptions() {
-  return Object.values(ITEM_DEFINITIONS)
-    .filter(d => d.type === ITEM_TYPES.COSMETIC && d.enabled !== false && d.achievementEnabled !== false)
-    .sort((a, b) => a.name.localeCompare(b.name));
+const COSMETIC_REWARD_CATEGORIES = Object.freeze([
+  ITEM_CATEGORIES.TITLE,
+  ITEM_CATEGORIES.PROFILE_BANNER,
+  ITEM_CATEGORIES.AURA,
+  ITEM_CATEGORIES.BORDER,
+]);
+
+function listCosmeticRewardOptions(category = null) {
+  return listCosmeticDefinitions({
+    category: category || null,
+    achievementEligibleOnly: true,
+  });
 }
 
 function listPackOptions() {
@@ -162,11 +176,36 @@ function consumableOptions(selected) {
   return `<option value="">Select consumable…</option>${opts}`;
 }
 
-function cosmeticOptions(selected) {
-  const opts = listCosmeticOptions()
-    .map(d => `<option value="${escapeHtml(d.id)}"${d.id === selected ? ' selected' : ''}>${escapeHtml(d.name)}</option>`)
+function resolveCosmeticRewardCategory(selectedCategory, selectedItemId) {
+  if (selectedCategory) return selectedCategory;
+  if (selectedItemId) {
+    return getCosmeticDefinition(selectedItemId)?.category || ITEM_CATEGORIES.TITLE;
+  }
+  return ITEM_CATEGORIES.TITLE;
+}
+
+function cosmeticCategoryOptions(selectedCategory, selectedItemId) {
+  const active = resolveCosmeticRewardCategory(selectedCategory, selectedItemId);
+  const opts = COSMETIC_REWARD_CATEGORIES.map(cat => {
+    const label = getCosmeticCategoryAdminLabel(cat);
+    return `<option value="${escapeHtml(cat)}"${cat === active ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
+  return opts;
+}
+
+function cosmeticOptions(category, selectedId) {
+  const opts = listCosmeticRewardOptions(category)
+    .map(d => `<option value="${escapeHtml(d.id)}"${d.id === selectedId ? ' selected' : ''}>${escapeHtml(d.name)} (${escapeHtml(d.id)})</option>`)
     .join('');
   return `<option value="">Select cosmetic…</option>${opts}`;
+}
+
+function refreshRewardRowCosmeticSelect(row) {
+  const category = row.querySelector('.ach-reward-cosmetic-category')?.value || ITEM_CATEGORIES.TITLE;
+  const select = row.querySelector('.ach-reward-cosmetic');
+  if (!select) return;
+  const previous = select.value;
+  select.innerHTML = cosmeticOptions(category, previous);
 }
 
 function packOptions(selected) {
@@ -179,12 +218,16 @@ function packOptions(selected) {
 function rewardRowHtml(r = {}) {
   const type = r.type || 'rp';
   const types = REWARD_TYPES.map(t => `<option value="${t}"${t === type ? ' selected' : ''}>${t}</option>`).join('');
+  const cosmeticCategory = type === 'cosmetic'
+    ? resolveCosmeticRewardCategory(null, r.itemId)
+    : ITEM_CATEGORIES.TITLE;
   return `
     <div class="ach-admin-row ach-admin-reward-row" data-ach-reward-row data-reward-type="${escapeHtml(type)}">
       <select class="admin-input ach-reward-type">${types}</select>
       <input class="admin-input ach-reward-amount" type="number" min="1" placeholder="RP amount" value="${escapeHtml(r.amount ?? '')}" />
       <select class="admin-input ach-reward-consumable">${consumableOptions(r.itemId)}</select>
-      <select class="admin-input ach-reward-cosmetic">${cosmeticOptions(r.itemId)}</select>
+      <select class="admin-input ach-reward-cosmetic-category">${cosmeticCategoryOptions(cosmeticCategory, r.itemId)}</select>
+      <select class="admin-input ach-reward-cosmetic">${cosmeticOptions(cosmeticCategory, r.itemId)}</select>
       <select class="admin-input ach-reward-pack">${packOptions(r.packId)}</select>
       <input class="admin-input ach-reward-qty" type="number" min="1" placeholder="Qty" value="${escapeHtml(r.quantity ?? 1)}" />
       <button type="button" class="ach-admin-remove-row bg-surface-700 px-2 py-1 rounded text-xs">Remove</button>
@@ -276,6 +319,7 @@ function updateRewardRowVisibility(row) {
   row.dataset.rewardType = type;
   row.querySelector('.ach-reward-amount')?.classList.toggle('hidden', type !== 'rp');
   row.querySelector('.ach-reward-consumable')?.classList.toggle('hidden', type !== 'consumable');
+  row.querySelector('.ach-reward-cosmetic-category')?.classList.toggle('hidden', type !== 'cosmetic');
   row.querySelector('.ach-reward-cosmetic')?.classList.toggle('hidden', type !== 'cosmetic');
   row.querySelector('.ach-reward-pack')?.classList.toggle('hidden', type !== 'pack');
   const showQty = type === 'consumable' || type === 'pack';
@@ -338,8 +382,13 @@ function wireEditor(container) {
   });
 
   editor.addEventListener('change', e => {
+    const row = e.target?.closest('[data-ach-reward-row]');
+    if (!row) return;
     if (e.target?.classList?.contains('ach-reward-type')) {
-      updateRewardRowVisibility(e.target.closest('[data-ach-reward-row]'));
+      updateRewardRowVisibility(row);
+    }
+    if (e.target?.classList?.contains('ach-reward-cosmetic-category')) {
+      refreshRewardRowCosmeticSelect(row);
     }
   });
 

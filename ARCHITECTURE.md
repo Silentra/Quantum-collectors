@@ -489,6 +489,83 @@ js/
   - The `profile` object is additive and isolated. Removing Layer 3 callers leaves ownership, economy, inventory, and legacy profile data intact.
   - No new realtime listeners, all-player scans, root reads, derived fanout paths, or broad Firebase rewrites are introduced.
 
+### Cosmetic Definition Registry (`js/cosmetic-definitions.js`)
+
+Canonical read path for cosmetic and shop item metadata. Extends the existing `ITEM_TYPES.COSMETIC` + static `ITEM_DEFINITIONS` model; it does **not** replace shell rendering, equip/ownership mutations, or the card renderer.
+
+#### Merge order (static + Firebase)
+
+1. **Static** entries from `js/shop-definitions.js` → `ITEM_DEFINITIONS` (tagged `source: 'static'` at read time).
+2. **Admin titles** from Firebase `config/cosmetics/definitions/{id}` (normalized admin records, `source: 'admin'`).
+3. Admin entries with the same id override static fields for that id only.
+4. **Shop per-item overrides** (`config/shop/itemOverrides/{itemId}`) remain merged by `shop-config.js` / catalog helpers **after** the registry for shop economy fields (price, weight, enabled).
+
+Runtime consumers must resolve cosmetics through `getCosmeticDefinition()`, `getItemDefinition()`, or `listCosmeticDefinitions()` — not raw `ITEM_DEFINITIONS` — so admin titles and tombstones stay consistent.
+
+#### Category map (runtime id vs admin label)
+
+| Player / admin label | Runtime `ITEM_CATEGORIES` | Notes |
+|----------------------|---------------------------|--------|
+| Title | `title` | Text-only shell overlay; color from `identityAccent` only |
+| Banner | `profile_banner` | Shell `data-banner` |
+| Background | `shell_background` | Shell `data-background` (reserved) |
+| **Glow** (admin/UI) | **`aura`** (runtime) | **Do not rename** runtime category to `glow` |
+| Border | `border` | Card/shell border cosmetics |
+| Shimmer | *(future)* | Separate future category/system |
+
+**Aura vs Glow terminology:** Internal code, schema, Firebase paths, and equip fields keep `aura`. Admin dashboards and player-facing copy where category is shown may label the category **Glow**. This avoids migration risk on existing `equippedAura`, shop reroll scopes, and validation.
+
+#### Cosmetic definitions are data-only
+
+Definitions may include: `id`, `name`, `description`, `type`, `category`, `rarity`, `price`, `weight`, `enabled`, `shopEnabled`, `achievementEnabled`, `source`, lightweight `display` (e.g. emoji), and **CSS hook identifiers** (slugs derived at apply time, not inline CSS).
+
+Definitions must **not** include: arbitrary JS, renderer manipulation, DOM instructions, animation scripts, inline style payloads, or runtime behavior functions. Renderer and shell behavior stay renderer-owned (`shell-theme.js`, `card-render.js`).
+
+#### Title contract (lightweight)
+
+- Titles are plain text for `#nav-player-title` (shell overlay only).
+- No title-level color, glow, or animation in definitions.
+- Display color comes **only** from `profile.identityAccent` → `data-identity-accent` CSS.
+- Max display name length: 50 characters; single-line; HTML stripped on save.
+
+#### Title display-name uniqueness
+
+Admin create/edit rejects duplicates using normalized keys: trim, collapse whitespace, case-insensitive compare. Examples that collide: `Master Researcher`, `master researcher`, ` Master Researcher `.
+
+#### Immutable id doctrine
+
+- Title ids are generated once (prefix `title_`) and are **immutable** after creation.
+- Admin edit may change display name, rarity, price, weight, flags — not id.
+- Static code-defined ids in `ITEM_DEFINITIONS` are likewise stable contract keys.
+
+#### Disabled vs deleted
+
+| State | Meaning | Shop pool | Achievements | Equipped display |
+|-------|---------|-----------|--------------|------------------|
+| `enabled: false` | Temporarily off; record retained | Excluded | Excluded unless re-enabled | Hidden (inactive definition) |
+| `deleted: true` | Tombstone; admin-only history | Excluded | Excluded | Hidden; id may remain on profile until player unequips |
+
+Delete is implemented as a tombstone (`deleted`, `deletedAt`, forces `enabled: false`, `shopEnabled: false`), not a hard Firebase remove, for audit and id collision safety.
+
+#### Source metadata
+
+Every resolved definition carries `source: 'static' | 'admin'` (static tagged at merge; admin titles authored in Firebase). Reserved for future seasonal/achievement cosmetics, filtering, and auditing. No advanced routing logic required yet.
+
+#### Registry consumer doctrine
+
+Use registry helpers in: `shell-theme.js`, `shop-validation.js`, `shop-generation.js`, `shop-config.js` (merged defs), `player-schema.js`, `achievement-validation.js`, `achievements-admin.js`, `achievements-ui.js`, `profile-ui.js`, `admin-player-tools.js`, `shop-ui.js`, `ui.js` (admin grants), and `cosmetics-admin.js`.
+
+Do not bypass the registry for cosmetic resolution in new code.
+
+#### Admin — Cosmetics → Titles (`js/cosmetics-admin.js`)
+
+- Sub-tab under Admin → **Cosmetics** (category tabs; **Titles** implemented first).
+- CRUD for admin titles: create, edit, disable (`enabled: false`), delete (tombstone).
+- Static code-defined cosmetics remain read-only in admin (“Code-defined”).
+- Placeholder tabs: Banners, Backgrounds, Glow, Borders, Shimmer (future).
+
+Firebase path: `config/cosmetics/definitions/{titleId}`.
+
 ### Layer 4 — Shop UI Layer
 - **Player-facing tab only**: the Shop is a main game tab alongside Collection, Packs, Research Projects, Trading, Profile, and Leaderboard. This layer does not add admin tooling, cosmetic management UI, profile inventory UI, equip UI, monetization, seasonal/event UI, backend rewrites, or Firebase architecture changes.
 - **Tab shell** (`index.html`, `ui.js`):

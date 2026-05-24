@@ -31,7 +31,7 @@
  */
 
 import * as db from './database.js';
-import { ITEM_DEFINITIONS } from './shop-definitions.js';
+import { getItemDefinition } from './cosmetic-definitions.js';
 import {
   applyDiscountToSlot,
   consumeItem,
@@ -78,7 +78,7 @@ export function useConsumable(username, consumableItemId, context = {}, options 
     return { success: false, reason: 'invalid_username' };
   }
 
-  const definition = ITEM_DEFINITIONS[consumableItemId];
+  const definition = getItemDefinition(consumableItemId);
   const player = getConsumablePlayerSnapshot(username);
   const validation = canUseConsumable(player, definition, context);
   if (!validation.allowed) {

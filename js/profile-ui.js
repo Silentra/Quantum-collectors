@@ -9,7 +9,8 @@ import { applyShellTheme, IDENTITY_ACCENT_IDS, normalizeIdentityAccent } from '.
 import * as cards from './cards.js';
 import * as groups from './groups.js';
 import * as toast from './toast.js';
-import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
+import { getCosmeticDefinition, getItemDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
+import { ITEM_CATEGORIES, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import {
   equipCosmetic,
   featureCard,
@@ -77,9 +78,8 @@ function getReasonMessage(reason) {
 
 function resolveEquippedCosmetic(playerData, profileField, category) {
   const itemId = playerData?.profile?.[profileField] ?? null;
-  const definition = itemId ? ITEM_DEFINITIONS[itemId] : null;
-  if (!definition || definition.enabled === false) return null;
-  if (definition.type !== ITEM_TYPES.COSMETIC || definition.category !== category) return null;
+  const definition = itemId ? getCosmeticDefinition(itemId) : null;
+  if (!isCosmeticDefinitionActive(definition) || definition.category !== category) return null;
   if (!getOwnedCosmetics(playerData)[itemId]) return null;
   return { itemId, definition };
 }
@@ -126,8 +126,8 @@ function isKnownEquippableCategory(category) {
 function getOwnedCosmeticEntries(playerData) {
   return Object.entries(getOwnedCosmetics(playerData))
     .filter(([, owned]) => owned === true)
-    .map(([itemId]) => ({ itemId, definition: ITEM_DEFINITIONS[itemId] }))
-    .filter(entry => entry.definition?.type === ITEM_TYPES.COSMETIC);
+    .map(([itemId]) => ({ itemId, definition: getCosmeticDefinition(itemId) }))
+    .filter(entry => isCosmeticDefinitionActive(entry.definition));
 }
 
 function getOwnedConsumableEntries(playerData) {
@@ -136,7 +136,7 @@ function getOwnedConsumableEntries(playerData) {
     .map(([itemId, quantity]) => ({
       itemId,
       quantity: Math.max(0, Math.floor(Number(quantity) || 0)),
-      definition: ITEM_DEFINITIONS[itemId],
+      definition: getItemDefinition(itemId),
     }))
     .filter(entry => entry.quantity > 0 && entry.definition?.type === ITEM_TYPES.CONSUMABLE);
 }
@@ -230,8 +230,8 @@ function renderEquippedIdentity(p) {
   ];
   const rows = categories.map(category => {
     const itemId = getEquippedItemId(p, category);
-    const definition = itemId ? ITEM_DEFINITIONS[itemId] : null;
-    const validEquipped = definition?.type === ITEM_TYPES.COSMETIC &&
+    const definition = itemId ? getCosmeticDefinition(itemId) : null;
+    const validEquipped = isCosmeticDefinitionActive(definition) &&
       definition.category === category &&
       getOwnedCosmetics(p)[itemId] === true;
     return `

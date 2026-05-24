@@ -7,7 +7,11 @@
  * @see ARCHITECTURE.md — Application Shell & Theme Doctrine
  */
 
-import { ITEM_DEFINITIONS, ITEM_TYPES, ITEM_CATEGORIES } from './shop-definitions.js';
+import {
+  getCosmeticDefinition,
+  isCosmeticDefinitionActive,
+} from './cosmetic-definitions.js';
+import { ITEM_CATEGORIES } from './shop-definitions.js';
 
 /** Default hook values when nothing is equipped (matches current base visuals). */
 export const SHELL_THEME_DEFAULTS = Object.freeze({
@@ -88,9 +92,8 @@ export function cosmeticIdToShellSlug(itemId) {
 
 function isEquippedCosmetic(itemId, playerData, category) {
   if (!itemId || !category) return false;
-  const def = ITEM_DEFINITIONS[itemId];
-  if (!def || def.type !== ITEM_TYPES.COSMETIC || def.enabled === false) return false;
-  if (def.category !== category) return false;
+  const def = getCosmeticDefinition(itemId);
+  if (!isCosmeticDefinitionActive(def) || def.category !== category) return false;
   return playerData?.cosmetics?.owned?.[itemId] === true;
 }
 
@@ -156,8 +159,8 @@ export function syncNavPlayerTitleMount(state) {
   if (!el) return;
 
   const titleId = state?.titleItemId ?? null;
-  const def = titleId ? ITEM_DEFINITIONS[titleId] : null;
-  const label = (def?.name || def?.label || '').trim();
+  const def = titleId ? getCosmeticDefinition(titleId) : null;
+  const label = (def?.name || '').trim();
 
   el.dataset.title = state?.titleSlug || 'default';
   el.textContent = label;

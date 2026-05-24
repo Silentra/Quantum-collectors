@@ -17,7 +17,11 @@ import * as db from './database.js';
 import * as toast from './toast.js';
 import { buildShopCatalog } from './shop-catalog.js';
 import { getShopConfig } from './shop-config.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
+import {
+  getItemDefinition as getRegistryItemDefinition,
+  getMergedItemDefinitions,
+} from './cosmetic-definitions.js';
+import { ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
 import {
   ensureShopRotation,
@@ -74,8 +78,8 @@ function formatLabel(value, fallback = 'Unknown') {
 }
 
 function getItemDefinition(itemId) {
-  if (ITEM_DEFINITIONS[itemId]) return ITEM_DEFINITIONS[itemId];
-  return buildShopCatalog(getShopConfig()).getItem(itemId);
+  return getRegistryItemDefinition(itemId)
+    || buildShopCatalog(getShopConfig()).getItem(itemId);
 }
 
 function getSafeItem(slot) {
@@ -254,7 +258,7 @@ function getItemIcon(item) {
 }
 
 function getShopConsumables() {
-  return Object.values(ITEM_DEFINITIONS)
+  return Object.values(getMergedItemDefinitions())
     .filter(definition => definition?.type === ITEM_TYPES.CONSUMABLE)
     .filter(definition => SHOP_CONSUMABLE_BEHAVIORS.has(definition.behaviorType));
 }
@@ -512,7 +516,7 @@ async function handleShopAction(username, action, { slotIndex, itemId }) {
 }
 
 function handleConsumableSelection(username, itemId) {
-  const definition = ITEM_DEFINITIONS[itemId];
+  const definition = getItemDefinition(itemId);
   if (!definition) {
     toast.error('Unknown consumable.');
     return;

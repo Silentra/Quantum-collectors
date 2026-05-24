@@ -9,7 +9,8 @@
 import * as db from './database.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { getItemDefinition } from './cosmetic-definitions.js';
+import { ITEM_TYPES } from './shop-definitions.js';
 import { grantConsumable, unlockCosmetic } from './shop-mutations.js';
 import { resolveCompletedProject } from './project-resolution.js';
 import { claimProjectRewards } from './project-claiming.js';
@@ -75,7 +76,7 @@ export function adminGrantShopItem(username, itemId, quantity = 1) {
   if (!username || typeof username !== 'string') {
     return { success: false, reason: 'invalid_username' };
   }
-  const definition = ITEM_DEFINITIONS[itemId];
+  const definition = getItemDefinition(itemId);
   if (!definition) return { success: false, reason: 'invalid_item_id' };
 
   if (definition.type === ITEM_TYPES.CONSUMABLE) {

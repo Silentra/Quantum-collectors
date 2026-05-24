@@ -21,9 +21,16 @@ import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from '
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
 import { renderAdminSeasons } from './leaderboard-admin.js';
 import { renderTrading, cleanupTrading } from './trade-ui.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { ITEM_TYPES } from './shop-definitions.js';
 import { renderShopAdminPanel } from './shop-admin.js';
 import { renderAchievementsAdminPanel } from './achievements-admin.js';
+import { renderCosmeticsAdminPanel } from './cosmetics-admin.js';
+import {
+  getCosmeticDefinition,
+  getItemDefinition,
+  getMergedItemDefinitions,
+  listCosmeticDefinitions,
+} from './cosmetic-definitions.js';
 import { applyShellTheme, resetShellTheme } from './shell-theme.js';
 import {
   adminCompleteActiveProject,
@@ -559,6 +566,7 @@ function renderAdminSubTab(tab) {
     case 'balance': renderAdminBalance(); break;
     case 'shop-admin': renderShopAdminPanel(); break;
     case 'achievements-admin': renderAchievementsAdminPanel(); break;
+    case 'cosmetics-admin': renderCosmeticsAdminPanel(); break;
     case 'trading-controls': renderAdminTradingControls(); break;
     case 'seasons': renderAdminSeasons(); break;
   }
@@ -692,8 +700,11 @@ function _formatAdminLabel(value) {
 }
 
 function _renderShopItemOptions(type) {
-  return Object.values(ITEM_DEFINITIONS)
-    .filter(definition => definition.type === type)
+  const items = type === ITEM_TYPES.COSMETIC
+    ? listCosmeticDefinitions({ includeDisabled: false })
+    : Object.values(getMergedItemDefinitions()).filter(d => d?.type === type && d.enabled !== false && d.deleted !== true);
+
+  return items
     .map(definition => {
       const category = _formatAdminLabel(definition.category);
       return `<option value="${definition.id}">${definition.name || definition.id} (${category})</option>`;
@@ -711,19 +722,19 @@ function _renderAdminRuntimeSnapshot(p) {
   const consumables = Object.entries(items)
     .filter(([, qty]) => Number(qty) > 0)
     .map(([itemId, qty]) => {
-      const def = ITEM_DEFINITIONS[itemId];
+      const def = getItemDefinition(itemId);
       return `<div class="flex justify-between"><span>${def?.name || itemId}</span><span>${qty}</span></div>`;
     })
     .join('');
   const cosmeticsOwned = Object.entries(ownedCosmetics)
     .filter(([, owned]) => owned === true)
     .map(([itemId]) => {
-      const def = ITEM_DEFINITIONS[itemId];
+      const def = getCosmeticDefinition(itemId);
       return `<div>${def?.name || itemId} <span class="text-surface-500">(${_formatAdminLabel(def?.category)})</span></div>`;
     })
     .join('');
   const shopSnapshot = slots.slice(0, 12).map((slot, index) => {
-    const def = ITEM_DEFINITIONS[slot?.itemId];
+    const def = getItemDefinition(slot?.itemId);
     const flags = [
       slot?.purchased ? 'purchased' : '',
       slot?.frozen ? 'frozen' : '',

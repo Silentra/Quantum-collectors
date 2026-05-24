@@ -15,7 +15,7 @@ import {
   getStarredAchievementIds,
   toggleStarredAchievement,
 } from './achievement-preferences.js';
-import { ITEM_DEFINITIONS } from './shop-definitions.js';
+import { getCosmeticDefinition, getItemDefinition } from './cosmetic-definitions.js';
 
 const DEFAULT_SHOW_COUNT = 5;
 const SHOW_LIMIT_STORAGE_KEY = 'qc_profile_ach_show_limit';
@@ -77,7 +77,9 @@ function formatRewardSummary(reward) {
     return qty > 1 ? `${qty}× ${name}` : name;
   }
   if (reward.type === 'consumable' || reward.type === 'cosmetic') {
-    const def = ITEM_DEFINITIONS[reward.itemId];
+    const def = reward.type === 'cosmetic'
+      ? getCosmeticDefinition(reward.itemId)
+      : getItemDefinition(reward.itemId);
     const name = def?.name || reward.itemId || 'Item';
     if (reward.type === 'cosmetic') return `${name} (unlock)`;
     const qty = Math.max(1, Number(reward.quantity) || 1);

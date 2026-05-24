@@ -6,6 +6,7 @@
  */
 
 import * as db from './database.js';
+import { getMergedItemDefinitions } from './cosmetic-definitions.js';
 import { ITEM_DEFINITIONS, ITEM_RARITIES } from './shop-definitions.js';
 
 const ALL_RARITIES = Object.values(ITEM_RARITIES);
@@ -220,16 +221,20 @@ export function saveShopConfig(configPatch = {}) {
 
 export function getShopItemDefinitions() {
   const overrides = db.get(ITEM_OVERRIDES_PATH) || {};
+  const merged = getMergedItemDefinitions();
   return Object.fromEntries(
-    Object.entries(ITEM_DEFINITIONS).map(([itemId, definition]) => [
-      itemId,
-      mergeDefinition(definition, overrides[itemId]),
-    ])
+    Object.entries(merged)
+      .filter(([, definition]) => definition?.deleted !== true)
+      .map(([itemId, definition]) => [
+        itemId,
+        mergeDefinition(definition, overrides[itemId]),
+      ])
   );
 }
 
 export function saveShopItemOverride(itemId, patch = {}) {
-  if (!itemId || !ITEM_DEFINITIONS[itemId] || !isObject(patch)) {
+  const merged = getMergedItemDefinitions();
+  if (!itemId || !merged[itemId] || !isObject(patch)) {
     return { success: false, reason: 'invalid_item_override' };
   }
   const current = db.get(`${ITEM_OVERRIDES_PATH}/${itemId}`) || {};

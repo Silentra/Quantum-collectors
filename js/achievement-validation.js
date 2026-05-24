@@ -6,7 +6,8 @@
 import { CONDITION_MODES, CONDITION_OPS, REWARD_TYPES } from './achievement-config.js';
 import { listRegisteredStatKeys } from './achievement-stats.js';
 import { isPlayerClaimed, isPlayerUnlocked } from './achievement-engine.js';
-import { ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { getCosmeticDefinition, getItemDefinition } from './cosmetic-definitions.js';
+import { ITEM_TYPES } from './shop-definitions.js';
 import * as db from './database.js';
 
 function isObject(value) {
@@ -54,11 +55,17 @@ export function validateReward(reward = {}) {
     return { valid: true };
   }
   if (reward.type === 'consumable' || reward.type === 'cosmetic') {
-    if (!reward.itemId || !ITEM_DEFINITIONS[reward.itemId]) {
+    if (!reward.itemId) {
       return { valid: false, reason: 'invalid_item_id' };
     }
-    if (reward.type === 'cosmetic' && ITEM_DEFINITIONS[reward.itemId].type !== ITEM_TYPES.COSMETIC) {
-      return { valid: false, reason: 'item_not_cosmetic' };
+    if (reward.type === 'cosmetic') {
+      const def = getCosmeticDefinition(reward.itemId);
+      if (!def) return { valid: false, reason: 'invalid_item_id' };
+      return { valid: true };
+    }
+    const def = getItemDefinition(reward.itemId);
+    if (!def || def.type !== ITEM_TYPES.CONSUMABLE) {
+      return { valid: false, reason: 'invalid_item_id' };
     }
     return { valid: true };
   }

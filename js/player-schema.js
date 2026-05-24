@@ -27,7 +27,8 @@ import {
   createShopSlot,
   createDiscountApplied,
 } from './shop-state.js';
-import { ITEM_CATEGORIES, ITEM_DEFINITIONS, ITEM_TYPES } from './shop-definitions.js';
+import { getCosmeticDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
+import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { ensureAchievementStats } from './achievement-stats.js';
 import { IDENTITY_ACCENT_DEFAULT, normalizeIdentityAccent } from './shell-theme.js';
 
@@ -204,13 +205,11 @@ function normalizeIdArray(raw, maxEntries) {
 }
 
 function isOwnedValidCosmetic(itemId, owned, category) {
-  const definition = ITEM_DEFINITIONS[itemId];
+  const definition = getCosmeticDefinition(itemId);
   return Boolean(
     itemId &&
     owned?.[itemId] &&
-    definition &&
-    definition.enabled !== false &&
-    definition.type === ITEM_TYPES.COSMETIC &&
+    isCosmeticDefinitionActive(definition) &&
     definition.category === category
   );
 }
