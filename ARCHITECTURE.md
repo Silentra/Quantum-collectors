@@ -557,23 +557,37 @@ Use registry helpers in: `shell-theme.js`, `shop-validation.js`, `shop-generatio
 
 Do not bypass the registry for cosmetic resolution in new code.
 
-#### Background cosmetic doctrine (BG-1)
+#### Background cosmetic doctrine (BG-1 / BG-2)
 
 **Scope:** Gameplay region below `#tab-nav` only. Independent from `profile_banner` / `data-banner` header-tab chrome. Does not affect card renderer, card glow/border effects, or banner visuals.
 
-**Render path:** `profile.equippedBackground` → registry validation → `cosmeticIdToShellSlug(id)` → `#screen-game[data-background="slug"]` → `--shell-bg` → `#game-shell-backdrop`.
+**Render path:** `profile.equippedBackground` → registry validation → `cosmeticIdToShellSlug(id)` → `#screen-game[data-background="slug"]` → `--shell-bg` (+ optional backdrop pseudo-layers) → `#game-shell-backdrop`.
 
-**Visual authorship:** CSS/code only (BG-1: solid colors). Static definitions carry acquisition/governance metadata only — no raw colors, gradients, CSS payloads, or animation definitions in Firebase or admin records.
+**Visual authorship:** CSS/code only. Static definitions carry acquisition/governance metadata only — no raw colors, gradients, CSS payloads, or animation definitions in Firebase or admin records.
 
-**Static ids:** `shell_background_*` (e.g. `shell_background_deep_blue` → slug `deep-blue`).
+**Layer ownership (BG-2+ atmospheric):**
+
+| Layer | Host | Role |
+|-------|------|------|
+| Base fill | `#game-shell-backdrop` | `--shell-bg` dark base |
+| Primary atmosphere | `#game-shell-backdrop::before` | Gradients, milky-way band, canopy mass |
+| Accent depth | `#game-shell-backdrop::after` | Stars, moon glow, sparse accents |
+
+Pseudo-elements are `display: none` by default; only active when `#screen-game[data-background="…"]` selects an atmospheric slug. **Never** attach gameplay background visuals to `#game-content-scroll`, header, tabs, panels, or card renderer.
+
+**Visual restraint:** Backgrounds are atmospheric, not focal art. Keep opacity low; opaque gameplay panels remain the readability anchor. Backgrounds show primarily in gutters and spacing between panels.
+
+**Authoring guidance:** Prefer layered `linear-gradient` / `radial-gradient` stacks; no image assets, no animation, no shell transforms, no blur filters, no chrome coupling. Add new slugs as `shell_background_*` definitions + matching `#screen-game[data-background="slug"]` CSS blocks.
+
+**Static ids:** `shell_background_*` (e.g. `shell_background_starry_sky` → slug `starry-sky`).
 
 **Equip field:** `players/{username}/profile/equippedBackground`.
 
 **Admin tab:** May inherit backdrop in panel gutters; no special override required.
 
-**Visibility:** Backdrop is non-scrolling behind `#game-content-scroll`; visible in gutters between opaque panels.
+**BG-1:** solid `--shell-bg` only. **BG-2:** atmospheric pseudo-layers (e.g. `starry-sky`, `jungle`).
 
-**BG-1 non-goals:** gradients, images, animation, visual admin editor, color pickers, `data-background` on chrome.
+**Non-goals:** image assets, canvas/SVG injection, animation, parallax, visual admin editor, `data-background` on chrome.
 
 **Degradation:** Missing/disabled/deleted defs → `data-background="default"`.
 

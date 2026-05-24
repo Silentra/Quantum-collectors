@@ -302,6 +302,32 @@ export const ITEM_DEFINITIONS = Object.freeze({
     display: { emoji: '▮' },
   },
 
+  shell_background_starry_sky: {
+    id: 'shell_background_starry_sky',
+    name: 'Starry Sky',
+    description: 'A distant night sky with the Milky Way and a soft lunar glow.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.RARE,
+    price: 280,
+    weight: 5,
+    enabled: true,
+    display: { emoji: '🌌' },
+  },
+
+  shell_background_jungle: {
+    id: 'shell_background_jungle',
+    name: 'Jungle',
+    description: 'A peaceful view from within a lush tropical rainforest canopy.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 200,
+    weight: 7,
+    enabled: true,
+    display: { emoji: '🌿' },
+  },
+
   // ── Cosmetics — Titles ─────────────────────────────────────────────────
   // Titles are authored via Admin → Cosmetics (Firebase registry). No static title seeds.
 });

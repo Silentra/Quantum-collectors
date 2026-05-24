@@ -240,13 +240,119 @@ body.app-mode-game #screen-game.screen.active {
   background-position: center;
 }
 
-/* BG-1: solid shell backgrounds — visuals in CSS only; definitions carry acquisition metadata */
+/* Backdrop layers — inactive unless an atmospheric background is equipped (BG-2+) */
+#game-shell-backdrop::before,
+#game-shell-backdrop::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: none;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+
+/* BG-1: solid shell backgrounds — base color only; definitions carry acquisition metadata */
 #screen-game[data-background="deep-blue"] { --shell-bg: #0c1929; }
 #screen-game[data-background="crimson"] { --shell-bg: #1f1218; }
 #screen-game[data-background="emerald"] { --shell-bg: #0f1f18; }
 #screen-game[data-background="purple"] { --shell-bg: #18102a; }
 #screen-game[data-background="charcoal"] { --shell-bg: #141414; }
 #screen-game[data-background="slate"] { --shell-bg: #151c28; }
+
+/* BG-2: Starry Sky — atmospheric; UI must remain dominant */
+#screen-game[data-background="starry-sky"] {
+  --shell-bg: #040610;
+}
+
+#screen-game[data-background="starry-sky"] #game-shell-backdrop::before {
+  display: block;
+  opacity: 0.85;
+  background-image:
+    linear-gradient(
+      118deg,
+      transparent 18%,
+      rgba(72, 48, 88, 0.07) 32%,
+      rgba(140, 72, 98, 0.1) 42%,
+      rgba(168, 118, 148, 0.09) 48%,
+      rgba(118, 138, 188, 0.1) 56%,
+      rgba(88, 72, 120, 0.06) 68%,
+      transparent 82%
+    ),
+    radial-gradient(
+      ellipse 140% 55% at 62% 38%,
+      rgba(180, 150, 210, 0.07) 0%,
+      rgba(120, 90, 140, 0.04) 35%,
+      transparent 70%
+    ),
+    linear-gradient(
+      180deg,
+      transparent 55%,
+      rgba(48, 110, 72, 0.05) 72%,
+      rgba(110, 48, 62, 0.04) 84%,
+      transparent 100%
+    );
+}
+
+#screen-game[data-background="starry-sky"] #game-shell-backdrop::after {
+  display: block;
+  opacity: 0.9;
+  background-image:
+    radial-gradient(circle at 90% 10%, rgba(228, 224, 210, 0.14) 0%, rgba(200, 196, 180, 0.05) 6%, transparent 18%),
+    radial-gradient(1px 1px at 12% 18%, rgba(255, 255, 255, 0.35), transparent),
+    radial-gradient(1px 1px at 28% 62%, rgba(255, 255, 255, 0.25), transparent),
+    radial-gradient(1px 1px at 44% 24%, rgba(255, 255, 255, 0.3), transparent),
+    radial-gradient(1px 1px at 58% 78%, rgba(255, 255, 255, 0.2), transparent),
+    radial-gradient(1px 1px at 72% 34%, rgba(255, 255, 255, 0.28), transparent),
+    radial-gradient(1px 1px at 86% 58%, rgba(255, 255, 255, 0.22), transparent),
+    radial-gradient(1px 1px at 18% 82%, rgba(255, 255, 255, 0.18), transparent),
+    radial-gradient(1px 1px at 36% 46%, rgba(255, 255, 255, 0.2), transparent),
+    radial-gradient(1px 1px at 52% 12%, rgba(255, 255, 255, 0.24), transparent),
+    radial-gradient(1px 1px at 66% 52%, rgba(255, 255, 255, 0.16), transparent),
+    radial-gradient(1px 1px at 80% 22%, rgba(255, 255, 255, 0.26), transparent),
+    radial-gradient(1px 1px at 8% 44%, rgba(255, 255, 255, 0.14), transparent),
+    radial-gradient(1px 1px at 94% 72%, rgba(255, 255, 255, 0.2), transparent),
+    radial-gradient(1px 1px at 24% 30%, rgba(255, 255, 255, 0.12), transparent),
+    radial-gradient(1px 1px at 48% 68%, rgba(255, 255, 255, 0.15), transparent);
+}
+
+/* BG-2: Jungle — restrained canopy depth; sparse tropical accents */
+#screen-game[data-background="jungle"] {
+  --shell-bg: #07100c;
+}
+
+#screen-game[data-background="jungle"] #game-shell-backdrop::before {
+  display: block;
+  opacity: 0.88;
+  background-image:
+    radial-gradient(ellipse 120% 70% at 50% -10%, rgba(36, 88, 52, 0.28) 0%, transparent 55%),
+    linear-gradient(
+      180deg,
+      rgba(22, 58, 38, 0.35) 0%,
+      rgba(18, 48, 32, 0.22) 28%,
+      rgba(12, 32, 22, 0.1) 55%,
+      transparent 78%
+    ),
+    linear-gradient(
+      0deg,
+      rgba(48, 34, 22, 0.32) 0%,
+      rgba(32, 24, 16, 0.14) 18%,
+      transparent 38%
+    );
+}
+
+#screen-game[data-background="jungle"] #game-shell-backdrop::after {
+  display: block;
+  opacity: 0.75;
+  background-image:
+    radial-gradient(ellipse 90% 40% at 20% 8%, rgba(28, 72, 42, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 35% at 78% 12%, rgba(32, 68, 44, 0.15) 0%, transparent 55%),
+    radial-gradient(3px 4px at 22% 32%, rgba(220, 90, 48, 0.16), transparent),
+    radial-gradient(3px 3px at 68% 38%, rgba(48, 168, 200, 0.12), transparent),
+    radial-gradient(2px 3px at 54% 26%, rgba(240, 190, 48, 0.1), transparent),
+    radial-gradient(2px 2px at 38% 44%, rgba(200, 60, 80, 0.08), transparent);
+}
 
 #game-content-scroll {
   flex: 1 1 auto;
