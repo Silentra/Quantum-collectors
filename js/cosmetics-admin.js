@@ -1,19 +1,37 @@
 /**
- * cosmetics-admin.js — Admin CRUD for title cosmetics (registry-backed).
+ * cosmetics-admin.js — Admin cosmetic governance (registry-backed).
+ * Titles: full CRUD. Static cosmetics: acquisition/governance fields only (visuals in CSS).
  */
 
 import * as toast from './toast.js';
-import { ITEM_RARITIES } from './shop-definitions.js';
+import { ITEM_CATEGORIES, ITEM_RARITIES } from './shop-definitions.js';
 import {
   deleteTitleDefinition,
+  getCosmeticCategoryAdminLabel,
   getCosmeticDefinition,
+  listStaticCosmeticsByCategory,
   listTitleDefinitions,
+  saveCosmeticGovernanceOverride,
   saveTitleDefinition,
   TITLE_DISPLAY_NAME_MAX_LENGTH,
 } from './cosmetic-definitions.js';
 
 let editingTitleId = null;
 let activeCategory = 'titles';
+
+const STATIC_CATEGORY_TABS = Object.freeze({
+  banners: ITEM_CATEGORIES.PROFILE_BANNER,
+  backgrounds: ITEM_CATEGORIES.SHELL_BACKGROUND,
+  glow: ITEM_CATEGORIES.AURA,
+  borders: ITEM_CATEGORIES.BORDER,
+});
+
+const STATIC_CATEGORY_INTRO = Object.freeze({
+  banners: 'Banner visuals are code/CSS-authored. Edit shop and achievement eligibility here only.',
+  backgrounds: 'Background visuals are code/CSS-authored (solid colors in CSS). Edit acquisition/governance fields here.',
+  glow: 'Glow cosmetics use runtime category aura. Visuals are code-authored; edit governance fields here.',
+  borders: 'Border visuals are code-authored. Edit acquisition/governance fields here.',
+});
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -26,6 +44,17 @@ function escapeHtml(value) {
 function formatLabel(value) {
   if (!value || typeof value !== 'string') return '';
   return value.split('_').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+}
+
+function boolSelect(className, value) {
+  const yes = value !== false ? ' selected' : '';
+  const no = value === false ? ' selected' : '';
+  return `
+    <select class="admin-input w-full ${className}">
+      <option value="true"${yes}>Yes</option>
+      <option value="false"${no}>No</option>
+    </select>
+  `;
 }
 
 function confirmDialog(message, title = 'Confirm') {
@@ -84,13 +113,14 @@ function titlesListHtml(titles) {
               · ${t.enabled ? 'Enabled' : 'Disabled'}
               ${t.deleted ? ' · <span class="text-red-400">Deleted</span>' : ''}
               ${t.shopEnabled ? ' · Shop' : ''}
+              ${t.achievementEnabled !== false ? ' · Achievements' : ''}
             </div>
           </div>
           <div class="flex gap-2 flex-shrink-0">
             ${t.source === 'admin' && !t.deleted ? `
               <button type="button" class="cosmetics-edit-btn text-xs bg-surface-700 px-2 py-1 rounded" data-id="${escapeHtml(t.id)}">Edit</button>
               <button type="button" class="cosmetics-delete-btn text-xs bg-red-800 px-2 py-1 rounded" data-id="${escapeHtml(t.id)}">Delete</button>
-            ` : '<span class="text-xs text-surface-500">Code-defined</span>'}
+            ` : t.deleted ? '<span class="text-xs text-surface-500">Deleted</span>' : '<span class="text-xs text-surface-500">Code-defined</span>'}
           </div>
         </div>
       `).join('')}
@@ -137,22 +167,13 @@ function titleEditorHtml(definition = null) {
           <input id="cosmetics-title-weight" type="number" min="0" step="any" class="admin-input w-full mt-1" value="${escapeHtml(def.weight ?? 0)}" />
         </label>
         <label class="text-xs text-surface-400">Enabled
-          <select id="cosmetics-title-enabled" class="admin-input w-full mt-1">
-            <option value="true"${def.enabled !== false ? ' selected' : ''}>Yes</option>
-            <option value="false"${def.enabled === false ? ' selected' : ''}>No</option>
-          </select>
+          ${boolSelect('cosmetics-title-enabled-select', def.enabled !== false)}
         </label>
         <label class="text-xs text-surface-400">Shop enabled
-          <select id="cosmetics-title-shop-enabled" class="admin-input w-full mt-1">
-            <option value="true"${def.shopEnabled !== false ? ' selected' : ''}>Yes</option>
-            <option value="false"${def.shopEnabled === false ? ' selected' : ''}>No</option>
-          </select>
+          ${boolSelect('cosmetics-title-shop-enabled-select', def.shopEnabled !== false)}
         </label>
         <label class="text-xs text-surface-400">Achievement rewards
-          <select id="cosmetics-title-ach-enabled" class="admin-input w-full mt-1">
-            <option value="true"${def.achievementEnabled !== false ? ' selected' : ''}>Yes</option>
-            <option value="false"${def.achievementEnabled === false ? ' selected' : ''}>No</option>
-          </select>
+          ${boolSelect('cosmetics-title-ach-enabled-select', def.achievementEnabled !== false)}
         </label>
       </div>
       <div class="flex gap-2 flex-wrap">
@@ -170,10 +191,73 @@ function readTitleForm(editor) {
     rarity: editor.querySelector('#cosmetics-title-rarity')?.value,
     price: Number(editor.querySelector('#cosmetics-title-price')?.value),
     weight: Number(editor.querySelector('#cosmetics-title-weight')?.value),
-    enabled: editor.querySelector('#cosmetics-title-enabled')?.value === 'true',
-    shopEnabled: editor.querySelector('#cosmetics-title-shop-enabled')?.value === 'true',
-    achievementEnabled: editor.querySelector('#cosmetics-title-ach-enabled')?.value === 'true',
+    enabled: editor.querySelector('.cosmetics-title-enabled-select')?.value === 'true',
+    shopEnabled: editor.querySelector('.cosmetics-title-shop-enabled-select')?.value === 'true',
+    achievementEnabled: editor.querySelector('.cosmetics-title-ach-enabled-select')?.value === 'true',
   };
+}
+
+function staticCosmeticsPanelHtml(categoryKey, runtimeCategory) {
+  const items = listStaticCosmeticsByCategory(runtimeCategory);
+  const label = getCosmeticCategoryAdminLabel(runtimeCategory);
+  const intro = STATIC_CATEGORY_INTRO[categoryKey] || 'Visuals are code-authored. Edit governance fields only.';
+
+  if (!items.length) {
+    return `
+      <section class="space-y-3">
+        <p class="text-sm text-surface-400">${escapeHtml(intro)}</p>
+        <p class="text-surface-500 text-sm">No static ${escapeHtml(label.toLowerCase())} cosmetics defined yet.</p>
+      </section>
+    `;
+  }
+
+  const rows = items.map(definition => `
+    <tr class="border-t border-surface-800" data-cosmetic-id="${escapeHtml(definition.id)}">
+      <td class="py-2 pr-3 align-top">
+        <div class="font-medium text-sm">${escapeHtml(definition.name || definition.id)}</div>
+        <div class="text-xs text-surface-500 font-mono">${escapeHtml(definition.id)}</div>
+        <div class="text-xs text-surface-500 mt-1">Static · code-defined visuals</div>
+      </td>
+      <td class="py-2 pr-3 align-top">${boolSelect('cosm-gov-enabled', definition.enabled !== false)}</td>
+      <td class="py-2 pr-3 align-top">${boolSelect('cosm-gov-shop-enabled', definition.shopEnabled !== false)}</td>
+      <td class="py-2 pr-3 align-top">${boolSelect('cosm-gov-ach-enabled', definition.achievementEnabled !== false)}</td>
+      <td class="py-2 pr-3 align-top">
+        <select class="admin-input w-full cosm-gov-rarity">${rarityOptions(definition.rarity)}</select>
+      </td>
+      <td class="py-2 pr-3 align-top">
+        <input type="number" min="0" class="admin-input w-24 cosm-gov-price" value="${escapeHtml(definition.price ?? 0)}">
+      </td>
+      <td class="py-2 pr-3 align-top">
+        <input type="number" min="0" step="any" class="admin-input w-24 cosm-gov-weight" value="${escapeHtml(definition.weight ?? 0)}">
+      </td>
+      <td class="py-2 align-top text-right">
+        <button type="button" class="cosmetics-gov-save bg-primary-600 hover:bg-primary-500 px-3 py-1.5 rounded text-xs font-medium">Save</button>
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <section class="space-y-3">
+      <p class="text-sm text-surface-400">${escapeHtml(intro)}</p>
+      <div class="overflow-x-auto border border-surface-700 rounded-lg">
+        <table class="w-full text-left text-sm">
+          <thead class="text-xs text-surface-500 uppercase bg-surface-900/80">
+            <tr>
+              <th class="p-3 pr-3">Cosmetic</th>
+              <th class="p-3 pr-3">Enabled</th>
+              <th class="p-3 pr-3">Shop</th>
+              <th class="p-3 pr-3">Achievements</th>
+              <th class="p-3 pr-3">Rarity</th>
+              <th class="p-3 pr-3">Price</th>
+              <th class="p-3 pr-3">Weight</th>
+              <th class="p-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </section>
+  `;
 }
 
 function titlesPanelHtml() {
@@ -191,6 +275,17 @@ function titlesPanelHtml() {
       </section>
     </div>
   `;
+}
+
+function readStaticGovernanceRow(row) {
+  return {
+    enabled: row.querySelector('.cosm-gov-enabled')?.value === 'true',
+    shopEnabled: row.querySelector('.cosm-gov-shop-enabled')?.value === 'true',
+    achievementEnabled: row.querySelector('.cosm-gov-ach-enabled')?.value === 'true',
+    rarity: row.querySelector('.cosm-gov-rarity')?.value,
+    price: Number(row.querySelector('.cosm-gov-price')?.value || 0),
+    weight: Number(row.querySelector('.cosm-gov-weight')?.value || 0),
+  };
 }
 
 function wireTitlesPanel(container) {
@@ -247,6 +342,23 @@ function wireTitlesPanel(container) {
   });
 }
 
+function wireStaticCosmeticsPanel(container) {
+  container.querySelectorAll('.cosmetics-gov-save').forEach(button => {
+    button.addEventListener('click', () => {
+      const row = button.closest('[data-cosmetic-id]');
+      const itemId = row?.dataset.cosmeticId;
+      if (!itemId) return;
+      const result = saveCosmeticGovernanceOverride(itemId, readStaticGovernanceRow(row));
+      if (!result.success) {
+        toast.error('Could not save cosmetic settings.');
+        return;
+      }
+      toast.success('Cosmetic settings saved.');
+      renderCosmeticsAdminPanel(container);
+    });
+  });
+}
+
 function renderCategoryContent(container) {
   const content = container.querySelector('#cosmetics-admin-content');
   if (!content) return;
@@ -257,18 +369,22 @@ function renderCategoryContent(container) {
     return;
   }
 
-  const placeholders = {
-    banners: 'Banner cosmetics are defined in code/CSS for now. Shell hooks: data-banner.',
-    backgrounds: 'Shell backgrounds (shell_background) are code/CSS-defined. Acquisition via shop, achievements, and grants; no visual admin editor.',
-    glow: 'Glow cosmetics use the runtime category aura (admin label: Glow). Defined in code for now.',
-    borders: 'Border cosmetics use the border category. Defined in code for now.',
-    shimmer: 'Shimmer is a future card effect category. Not available in admin yet.',
-  };
+  if (activeCategory === 'shimmer') {
+    content.innerHTML = placeholderPanel(
+      'Shimmer',
+      'Shimmer is a future card effect category. Not available in admin yet.'
+    );
+    return;
+  }
 
-  content.innerHTML = placeholderPanel(
-    formatLabel(activeCategory),
-    placeholders[activeCategory] || 'Coming soon.'
-  );
+  const runtimeCategory = STATIC_CATEGORY_TABS[activeCategory];
+  if (runtimeCategory) {
+    content.innerHTML = staticCosmeticsPanelHtml(activeCategory, runtimeCategory);
+    wireStaticCosmeticsPanel(container);
+    return;
+  }
+
+  content.innerHTML = placeholderPanel(formatLabel(activeCategory), 'Coming soon.');
 }
 
 export function renderCosmeticsAdminPanel(container = document.getElementById('cosmetics-admin-panel')) {
@@ -287,7 +403,7 @@ export function renderCosmeticsAdminPanel(container = document.getElementById('c
     <div class="space-y-4">
       <div>
         <h3 class="text-lg font-semibold">Cosmetics</h3>
-        <p class="text-sm text-surface-400">Manage cosmetic definitions. Title cosmetics support full admin CRUD; other categories remain code-authored until later phases.</p>
+        <p class="text-sm text-surface-400">Manage cosmetic acquisition and shop eligibility. Visual rendering remains code/CSS-authored. Titles support full admin CRUD; static cosmetics support governance fields only.</p>
       </div>
       <div class="flex flex-wrap gap-2" id="cosmetics-category-nav">
         ${navItems.map(item => `

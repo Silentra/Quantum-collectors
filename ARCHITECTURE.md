@@ -577,12 +577,32 @@ Do not bypass the registry for cosmetic resolution in new code.
 
 **Degradation:** Missing/disabled/deleted defs → `data-background="default"`.
 
+#### Admin — Cosmetics ownership doctrine
+
+**Admin → Cosmetics** is the canonical home for cosmetic **governance and acquisition** fields:
+
+| Field | Titles (admin CRUD) | Static/code-defined cosmetics |
+|-------|---------------------|-------------------------------|
+| `enabled` | Firebase `config/cosmetics/definitions` | `config/shop/itemOverrides/{id}` |
+| `shopEnabled` | Firebase | itemOverrides |
+| `achievementEnabled` | Firebase | itemOverrides |
+| `rarity`, `price`, `weight` | Firebase | itemOverrides |
+
+**Visual authorship** remains code/CSS only for all non-title categories (and title *color* never comes from definitions). Admin → Cosmetics must not expose visual editors, color pickers, or CSS payloads.
+
+**Admin → Shop** retains economy tuning (slot counts, reroll costs, card rarity controls, consumable behaviorConfig) and **non-cosmetic** item balance only. Cosmetic rows are excluded from Shop admin item tables.
+
+**Static vs admin:** `source: 'static'` cosmetics accept governance overrides via `saveCosmeticGovernanceOverride()`; id/category/structure are immutable. `source: 'admin'` titles use Firebase definition CRUD via `saveTitleDefinition()`.
+
+Registry resolution applies governance overrides in `getItemDefinition()` / `listCosmeticDefinitions()` so shop, achievements, and equip paths stay consistent.
+
 #### Admin — Cosmetics → Titles (`js/cosmetics-admin.js`)
 
-- Sub-tab under Admin → **Cosmetics** (category tabs; **Titles** implemented first).
-- CRUD for admin titles: create, edit, disable (`enabled: false`), delete (tombstone).
-- Static code-defined cosmetics remain read-only in admin (“Code-defined”).
-- Placeholder tabs: Banners, Backgrounds, Glow, Borders, Shimmer (future).
+- Sub-tab under Admin → **Cosmetics** (category tabs: Titles, Banners, Backgrounds, Glow, Borders, Shimmer placeholder).
+- **Titles:** full admin CRUD (create/edit/disable/delete tombstone) with governance fields in the title editor.
+- **Static cosmetics:** governance table per category (enabled, shopEnabled, achievementEnabled, rarity, price, weight) — no visual editing.
+- Static code-defined cosmetics remain visually code-authored (“Static · code-defined visuals” in UI).
+- Placeholder tab: Shimmer (future card effect category).
 
 Firebase path: `config/cosmetics/definitions/{titleId}`.
 
@@ -647,7 +667,7 @@ Firebase path: `config/cosmetics/definitions/{titleId}`.
 - **Shop admin section** (`shop-admin.js`):
   - Renders shop economy controls for refresh cadence, slot counts, reroll costs, frozen slot limits, owned-cosmetic inclusion, and future `weeklyFreeRerolls` metadata.
   - Renders consumable behaviorConfig override controls for Discount Chip, Freeze Token, and Research Proposal without changing consumable routing logic.
-  - Renders all shop items from item metadata (`type`, `category`, `rarity`) with enable, price, weight, and rarity override controls.
+  - Renders **non-cosmetic** shop item balance only (consumables, etc.). Cosmetic governance is owned by Admin → Cosmetics.
 - **Config paths** (`shop-config.js`):
   - General shop overrides persist under `config/shop`.
   - Per-item overrides persist under `config/shop/itemOverrides/{itemId}` and are merged over static `ITEM_DEFINITIONS` by helper functions. Static definitions are not mutated.

@@ -29,7 +29,7 @@
  */
 
 import * as toast from './toast.js';
-import { ITEM_RARITIES } from './shop-definitions.js';
+import { ITEM_RARITIES, ITEM_TYPES } from './shop-definitions.js';
 import {
   ALL_RARITIES,
   DEFAULT_SHOP_CONFIG,
@@ -171,7 +171,10 @@ function renderCardRarityControls(config) {
 }
 
 function renderItemEditor(definitions) {
-  const rows = Object.values(definitions).map(definition => `
+  const nonCosmeticDefinitions = Object.fromEntries(
+    Object.entries(definitions).filter(([, definition]) => definition?.type !== ITEM_TYPES.COSMETIC)
+  );
+  const rows = Object.values(nonCosmeticDefinitions).map(definition => `
     <tr class="border-t border-surface-800" data-shop-item-id="${escapeHtml(definition.id)}">
       <td class="py-2 pr-3">
         <div class="font-medium text-sm">${escapeHtml(definition.name || definition.id)}</div>
@@ -199,8 +202,8 @@ function renderItemEditor(definitions) {
   return `
     <section class="bg-surface-900 rounded-xl border border-surface-700 p-6">
       <div class="mb-4">
-        <h3 class="font-semibold">Item Balance</h3>
-        <p class="text-xs text-surface-500 mt-1">Per-item overrides are stored separately from static item definitions.</p>
+        <h3 class="font-semibold">Non-Cosmetic Item Balance</h3>
+        <p class="text-xs text-surface-500 mt-1">Consumables and other non-cosmetic shop items. Cosmetic acquisition fields are managed under Admin → Cosmetics.</p>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">

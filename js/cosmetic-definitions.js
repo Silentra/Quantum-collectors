@@ -16,6 +16,18 @@ import {
 
 export const COSMETIC_DEFINITIONS_PATH = 'config/cosmetics/definitions';
 
+/** Shop governance overrides for static cosmetics (managed from Admin → Cosmetics). */
+export const COSMETIC_GOVERNANCE_OVERRIDES_PATH = 'config/shop/itemOverrides';
+
+const GOVERNANCE_OVERRIDE_KEYS = Object.freeze([
+  'enabled',
+  'shopEnabled',
+  'achievementEnabled',
+  'rarity',
+  'price',
+  'weight',
+]);
+
 export const COSMETIC_SOURCES = Object.freeze({
   STATIC: 'static',
   ADMIN: 'admin',
@@ -115,6 +127,17 @@ function getFirebaseCosmeticDefinitions() {
   return merged;
 }
 
+function applyItemGovernanceOverride(definition) {
+  if (!definition?.id) return definition;
+  const override = db.get(`${COSMETIC_GOVERNANCE_OVERRIDES_PATH}/${definition.id}`);
+  if (!isObject(override)) return definition;
+  const merged = { ...definition };
+  for (const key of GOVERNANCE_OVERRIDE_KEYS) {
+    if (override[key] !== undefined) merged[key] = override[key];
+  }
+  return merged;
+}
+
 /**
  * Merged static + admin cosmetic/item definitions (admin entries override same id).
  */
@@ -135,7 +158,7 @@ export function getItemDefinition(itemId) {
   if (!itemId || typeof itemId !== 'string') return null;
   const def = getMergedItemDefinitions()[itemId];
   if (!def || def.deleted === true) return null;
-  return def;
+  return applyItemGovernanceOverride(def);
 }
 
 /**
@@ -193,6 +216,7 @@ export function listCosmeticDefinitions(options = {}) {
       if (!achievementEligibleOnly) return true;
       return def.achievementEnabled !== false;
     })
+    .map(def => applyItemGovernanceOverride(def))
     .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 }
 
@@ -316,6 +340,41 @@ export function deleteTitleDefinition(titleId) {
   });
   db.set(`${COSMETIC_DEFINITIONS_PATH}/${titleId}`, normalized);
   return { success: true, definition: normalized };
+}
+
+/**
+ * Persist governance/acquisition overrides for a static/code-defined cosmetic.
+ * Admin-authored titles use saveTitleDefinition() instead.
+ * @param {string} itemId
+ * @param {object} patch
+ */
+export function saveCosmeticGovernanceOverride(itemId, patch = {}) {
+  const def = getMergedItemDefinitions()[itemId];
+  if (!itemId || !def || def.type !== ITEM_TYPES.COSMETIC || def.source === COSMETIC_SOURCES.ADMIN) {
+    return { success: false, reason: 'invalid_cosmetic_override' };
+  }
+  const safePatch = {};
+  for (const key of GOVERNANCE_OVERRIDE_KEYS) {
+    if (patch[key] !== undefined) safePatch[key] = patch[key];
+  }
+  if (!Object.keys(safePatch).length) {
+    return { success: false, reason: 'empty_patch' };
+  }
+  const current = db.get(`${COSMETIC_GOVERNANCE_OVERRIDES_PATH}/${itemId}`) || {};
+  const next = { ...current, ...safePatch };
+  db.set(`${COSMETIC_GOVERNANCE_OVERRIDES_PATH}/${itemId}`, next);
+  return { success: true, itemId, override: next };
+}
+
+/**
+ * List static cosmetics for a category with governance overrides applied.
+ * @param {string} category
+ * @returns {object[]}
+ */
+export function listStaticCosmeticsByCategory(category) {
+  return listCosmeticDefinitions({ category, includeDisabled: true })
+    .filter(def => def.source === COSMETIC_SOURCES.STATIC)
+    .map(def => applyItemGovernanceOverride(def));
 }
 
 /**
