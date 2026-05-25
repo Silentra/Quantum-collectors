@@ -1497,16 +1497,21 @@ body.app-mode-game #screen-game.screen.active {
  * State is fully derived — never stored on the card, vanishes when project
  * leaves ACTIVE state. Card remains viewable/clickable. */
 
-/* Subtle dim + grayscale — card is "busy" not "disabled" */
+/* Dim + grayscale — opaque shell so backdrop does not bleed through card body */
 .sci-card.sci-card--locked {
-  opacity: 0.62;
-  filter: grayscale(35%);
+  opacity: 1;
+  filter: grayscale(35%) brightness(0.88);
+  background: #0a0f18;
+}
+
+.sci-card.sci-card--locked .card-detail-inner {
+  background: #0d121c;
 }
 
 /* Preserve hover interactivity (card is still viewable) */
 .sci-card.sci-card--locked:hover {
-  opacity: 0.80;
-  filter: grayscale(20%);
+  opacity: 1;
+  filter: grayscale(20%) brightness(0.94);
   transform: translateY(-2px);
 }
 
@@ -1529,16 +1534,25 @@ body.app-mode-game #screen-game.screen.active {
 
 /* ===================== UNDISCOVERED CARDS — grayscale/locked state ===================== */
 
-/* Full grayscale + reduced opacity — card not yet owned */
+/* Unowned — grayscale dim via filter; opaque surfaces (no whole-card opacity) */
 .sci-card.sci-card--undiscovered {
-  filter: grayscale(100%);
-  opacity: 0.45;
+  filter: grayscale(100%) brightness(0.76);
+  opacity: 1;
+  background: #080c14;
+}
+
+.sci-card.sci-card--undiscovered .card-detail-inner {
+  background: #0a101a;
+}
+
+.sci-card.sci-card--undiscovered .card-detail-art {
+  background: #070b12;
 }
 
 /* Slight brighten on hover — card is still viewable/identifiable */
 .sci-card.sci-card--undiscovered:hover {
-  filter: grayscale(85%);
-  opacity: 0.60;
+  filter: grayscale(88%) brightness(0.86);
+  opacity: 1;
   transform: translateY(-2px);
 }
 
@@ -1683,8 +1697,9 @@ body.app-mode-game #screen-game.screen.active {
 
 /* Unavailable (locked/in-use) mini cards in the panel */
 .rp-mini-card--unavailable {
-  opacity: 0.38;
-  filter: grayscale(70%);
+  opacity: 1;
+  filter: grayscale(70%) brightness(0.74);
+  background: #0a0e16;
 }
 
 /* ===================== ASSIGNMENT PANEL — FILTER CONTROLS ===================== */
@@ -2311,11 +2326,12 @@ body.app-mode-game #screen-game.screen.active {
   background: #1e1b4b;
 }
 .rp-mini-card.locked-card {
-  opacity: 0.4;
+  opacity: 1;
   cursor: not-allowed;
-  filter: grayscale(60%);
+  filter: grayscale(60%) brightness(0.76);
+  background: #0a0e16;
 }
-.rp-mini-card.locked-card:hover { filter: grayscale(60%); }
+.rp-mini-card.locked-card:hover { filter: grayscale(60%) brightness(0.76); }
 
 .rp-mini-name {
   font-size: 0.58rem;
@@ -2369,11 +2385,12 @@ body.app-mode-game #screen-game.screen.active {
 
 /* Duplicate concept type — another card with same role already assigned */
 .rp-mini-card.duplicate-concept {
-  opacity: 0.35;
+  opacity: 1;
   cursor: not-allowed;
-  filter: grayscale(50%);
+  filter: grayscale(50%) brightness(0.72);
+  background: #0a0e16;
 }
-.rp-mini-card.duplicate-concept:hover { filter: grayscale(50%); }
+.rp-mini-card.duplicate-concept:hover { filter: grayscale(50%) brightness(0.72); }
 
 /* ===================== REPORT PANEL (Phase 4D-3) ===================== */
 
