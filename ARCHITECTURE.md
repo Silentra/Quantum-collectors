@@ -571,7 +571,7 @@ shell_background_{name}  →  cosmeticIdToShellSlug()  →  data-background="{sl
 
 **Render path:** `profile.equippedBackground` → registry validation → slug → `#screen-game[data-background]` → CSS maps slug to visuals → `#game-shell-backdrop` only.
 
-**Visual authorship:** Repository-owned CSS and/or static files under `/assets/backgrounds/`. Cosmetic definitions (static + Firebase governance) carry acquisition metadata only — **no** image URLs, colors, gradients, CSS payloads, or animation in Firebase or admin records. **No** JS URL injection or inline styles from `shell-theme.js`.
+**Visual authorship:** Repository-owned CSS and/or static files under `assets/backgrounds/`. Cosmetic definitions (static + Firebase governance) carry acquisition metadata only — **no** image URLs, colors, gradients, CSS payloads, or animation in Firebase or admin records. **No** JS URL injection or inline styles from `shell-theme.js`.
 
 **Three coexisting modes (permanent):**
 
@@ -579,15 +579,15 @@ shell_background_{name}  →  cosmeticIdToShellSlug()  →  data-background="{sl
 |------|--------------|---------------|-------------|
 | **BG-1 solid** | `deep-blue`, `slate` | `--shell-bg` on `#screen-game[data-background]` | Backdrop uses `background-color: var(--shell-bg)` only |
 | **BG-2 CSS** | *(future lightweight atmospheres)* | Gradients on `#game-shell-backdrop` + optional pseudos | Lightweight `linear-gradient` / `radial-gradient` only — not scene repaints |
-| **BG-2 asset** | `starry-sky` | Static image on `#game-shell-backdrop` | `url('/assets/backgrounds/{slug}.webp')` + optional readability overlays |
+| **BG-2 asset** | `starry-sky` | Static image on `#game-shell-backdrop` | `url('assets/backgrounds/{slug}.webp')` + optional readability overlays |
 
-**Asset-backed mapping (root-relative paths only):**
+**Asset-backed mapping (stylesheet-relative `url()` only):**
 
-| Cosmetic id | Slug | Asset path |
-|-------------|------|------------|
-| `shell_background_starry_sky` | `starry-sky` | `/assets/backgrounds/starry-sky.webp` |
+| Cosmetic id | Slug | Repo file | CSS `url()` |
+|-------------|------|-----------|-------------|
+| `shell_background_starry_sky` | `starry-sky` | `assets/backgrounds/starry-sky.webp` | `url('assets/backgrounds/starry-sky.webp')` |
 
-Naming: `shell_background_{snake_case}` → kebab slug → `/assets/backgrounds/{slug}.webp` (lowercase folders, kebab filenames). Assets are code-authored, cacheable, and **not** Firebase/user/runtime-generated.
+Naming: `shell_background_{snake_case}` → kebab slug → `assets/backgrounds/{slug}.webp` on disk; reference in CSS as `url('assets/backgrounds/{slug}.webp')` (resolved relative to [`style.css`](style.css), not host-root `/assets/...`). Avoid host-root absolute paths — they break Live Server subfolders, `file://`, and subpath deploys. Assets are code-authored, cacheable, and **not** Firebase/user/runtime-generated.
 
 **Layer ownership:**
 
@@ -612,10 +612,10 @@ Banners use the same **slug → CSS → static asset** pattern on chrome only:
 
 - Hook: `data-banner` on `#screen-game` / `#game-shell-chrome` (from `profile.equippedBanner`).
 - Surface: `#game-shell-chrome::before` consumes `--banner-overlay`.
-- Assets: `/assets/banners/{slug}.webp` set via e.g. `--banner-overlay: url('/assets/banners/research.webp');`
+- Assets: `assets/banners/{slug}.webp` set via e.g. `--banner-overlay: url('assets/banners/research.webp');` (stylesheet-relative, same rule as backgrounds).
 - **Independent** from gameplay `data-background` — no shared vars with `#game-shell-backdrop`.
 
-Scaffold folder: `/assets/banners/` (reserved; no banner images required until authored).
+Scaffold folder: `assets/banners/` (reserved; no banner images required until authored).
 
 #### Admin — Cosmetics ownership doctrine
 

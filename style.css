@@ -268,7 +268,7 @@ body.app-mode-game #screen-game.screen.active {
 
 #screen-game[data-background="starry-sky"] #game-shell-backdrop {
   background-color: var(--shell-bg);
-  background-image: url('/assets/backgrounds/starry-sky.webp');
+  background-image: url('assets/backgrounds/starry-sky.webp');
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center;
