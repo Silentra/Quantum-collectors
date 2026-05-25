@@ -557,41 +557,65 @@ Use registry helpers in: `shell-theme.js`, `shop-validation.js`, `shop-generatio
 
 Do not bypass the registry for cosmetic resolution in new code.
 
-#### Background cosmetic doctrine (BG-1 / BG-2)
+#### Background cosmetic doctrine (BG-1 / BG-2 CSS / BG-2 asset)
 
 **Scope:** Gameplay region below `#tab-nav` only. Independent from `profile_banner` / `data-banner` header-tab chrome. Does not affect card renderer, card glow/border effects, or banner visuals.
 
-**Render path:** `profile.equippedBackground` → registry validation → `cosmeticIdToShellSlug(id)` → `#screen-game[data-background="slug"]` → `--shell-bg` (+ optional backdrop pseudo-layers) → `#game-shell-backdrop`.
+**Stable contract (do not bypass):**
 
-**Visual authorship:** CSS/code only. Static definitions carry acquisition/governance metadata only — no raw colors, gradients, CSS payloads, or animation definitions in Firebase or admin records.
+```
+shell_background_{name}  →  cosmeticIdToShellSlug()  →  data-background="{slug}"
+                                                      →  CSS #screen-game[data-background="{slug}"]
+                                                      →  #game-shell-backdrop (visual host)
+```
 
-**Layer ownership (BG-2+ atmospheric):**
+**Render path:** `profile.equippedBackground` → registry validation → slug → `#screen-game[data-background]` → CSS maps slug to visuals → `#game-shell-backdrop` only.
 
-| Layer | Host | Role |
-|-------|------|------|
-| Base fill | `#game-shell-backdrop` | `--shell-bg` dark base |
-| Primary atmosphere | `#game-shell-backdrop::before` | Gradients, milky-way band, canopy mass |
-| Accent depth | `#game-shell-backdrop::after` | Stars, moon glow, sparse accents |
+**Visual authorship:** Repository-owned CSS and/or static files under `/assets/backgrounds/`. Cosmetic definitions (static + Firebase governance) carry acquisition metadata only — **no** image URLs, colors, gradients, CSS payloads, or animation in Firebase or admin records. **No** JS URL injection or inline styles from `shell-theme.js`.
 
-Pseudo-elements are `display: none` by default; only active when `#screen-game[data-background="…"]` selects an atmospheric slug. **Never** attach gameplay background visuals to `#game-content-scroll`, header, tabs, panels, or card renderer.
+**Three coexisting modes (permanent):**
 
-**Visual restraint:** Backgrounds are atmospheric, not focal art. Keep opacity low; opaque gameplay panels remain the readability anchor. Backgrounds show primarily in gutters and spacing between panels.
+| Mode | Example slug | Visual source | CSS pattern |
+|------|--------------|---------------|-------------|
+| **BG-1 solid** | `deep-blue`, `slate` | `--shell-bg` on `#screen-game[data-background]` | Backdrop uses `background-color: var(--shell-bg)` only |
+| **BG-2 CSS** | *(future lightweight atmospheres)* | Gradients on `#game-shell-backdrop` + optional pseudos | Lightweight `linear-gradient` / `radial-gradient` only — not scene repaints |
+| **BG-2 asset** | `starry-sky` | Static image on `#game-shell-backdrop` | `url('/assets/backgrounds/{slug}.webp')` + optional readability overlays |
 
-**Authoring guidance:** Prefer layered `linear-gradient` / `radial-gradient` stacks; no image assets, no animation, no shell transforms, no blur filters, no chrome coupling. Add new slugs as `shell_background_*` definitions + matching `#screen-game[data-background="slug"]` CSS blocks.
+**Asset-backed mapping (root-relative paths only):**
 
-**Starry Sky (`starry-sky`) composition:** Diagonal Milky Way band (lower-left → upper-right) with dust-rift gaps and corner vignettes on `::before` (color only, no placed stars). `::after` is a continuous star-field texture: many offset tiled radial-gradient layers (micro / mid / bright tiers) with irregular cluster tiles; galactic-band density and brightness variance come from an elliptical mask falloff plus subtle cover gradients—not anchor stars or separate glow blobs. Gameplay panels remain the readability anchor above the backdrop.
+| Cosmetic id | Slug | Asset path |
+|-------------|------|------------|
+| `shell_background_starry_sky` | `starry-sky` | `/assets/backgrounds/starry-sky.webp` |
 
-**Static ids:** `shell_background_*` (e.g. `shell_background_starry_sky` → slug `starry-sky`).
+Naming: `shell_background_{snake_case}` → kebab slug → `/assets/backgrounds/{slug}.webp` (lowercase folders, kebab filenames). Assets are code-authored, cacheable, and **not** Firebase/user/runtime-generated.
+
+**Layer ownership:**
+
+| Layer | Host | BG-1 solid | BG-2 CSS | BG-2 asset |
+|-------|------|------------|----------|------------|
+| Base | `#game-shell-backdrop` | `--shell-bg` fill | Gradients and/or fill | `background-image: url(...)` + `--shell-bg` fallback |
+| Overlay | `::before` / `::after` | Hidden (default) | Light atmosphere only | **Readability only** — vignette, edge darken; **not** decorative scene art |
+
+Pseudo-elements default to `display: none`; active only when a slug’s CSS enables them. **Never** attach gameplay background visuals to `#screen-game`, `#game-content-scroll`, header, tabs, panels, or card renderer.
+
+**Readability:** Backgrounds are atmospheric; opaque gameplay panels remain the dominant UI. Asset-backed art is the authored scene; CSS overlays stay subtle so gutters feel atmospheric without competing with panels.
+
+**Degradation:** Missing/disabled/deleted defs → `data-background="default"`. Removed defs (e.g. legacy `shell_background_jungle`) may remain in `cosmetics.owned` or profile equip fields but do not apply visuals when the registry has no active definition.
 
 **Equip field:** `players/{username}/profile/equippedBackground`.
 
-**Admin tab:** May inherit backdrop in panel gutters; no special override required.
+**Non-goals:** Firebase-authored assets, user uploads, runtime image composition, canvas/SVG injection, animation, parallax, blur-heavy filters, `data-background` on chrome, visual admin editor.
 
-**BG-1:** solid `--shell-bg` only. **BG-2:** atmospheric pseudo-layers (e.g. `starry-sky`, `jungle`).
+#### Banner asset doctrine (future)
 
-**Non-goals:** image assets, canvas/SVG injection, animation, parallax, visual admin editor, `data-background` on chrome.
+Banners use the same **slug → CSS → static asset** pattern on chrome only:
 
-**Degradation:** Missing/disabled/deleted defs → `data-background="default"`.
+- Hook: `data-banner` on `#screen-game` / `#game-shell-chrome` (from `profile.equippedBanner`).
+- Surface: `#game-shell-chrome::before` consumes `--banner-overlay`.
+- Assets: `/assets/banners/{slug}.webp` set via e.g. `--banner-overlay: url('/assets/banners/research.webp');`
+- **Independent** from gameplay `data-background` — no shared vars with `#game-shell-backdrop`.
+
+Scaffold folder: `/assets/banners/` (reserved; no banner images required until authored).
 
 #### Admin — Cosmetics ownership doctrine
 

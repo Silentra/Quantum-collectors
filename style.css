@@ -240,7 +240,7 @@ body.app-mode-game #screen-game.screen.active {
   background-position: center;
 }
 
-/* Backdrop layers — inactive unless an atmospheric background is equipped (BG-2+) */
+/* Backdrop layers — inactive unless a slug enables overlays (BG-2 CSS / BG-2 asset) */
 #game-shell-backdrop::before,
 #game-shell-backdrop::after {
   content: '';
@@ -261,301 +261,28 @@ body.app-mode-game #screen-game.screen.active {
 #screen-game[data-background="charcoal"] { --shell-bg: #141414; }
 #screen-game[data-background="slate"] { --shell-bg: #151c28; }
 
-/* BG-2: Starry Sky — continuous star-field texture + galactic band modulation */
+/* BG-2 asset: Starry Sky — image on backdrop; pseudos = readability overlays only */
 #screen-game[data-background="starry-sky"] {
   --shell-bg: #050a14;
 }
 
-/* Galactic color, dust rifts, corner falloff — no placed stars */
+#screen-game[data-background="starry-sky"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: url('/assets/backgrounds/starry-sky.webp');
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+
 #screen-game[data-background="starry-sky"] #game-shell-backdrop::before {
   display: block;
-  opacity: 1;
+  opacity: 0.42;
   background-image:
-    radial-gradient(ellipse 80% 65% at 88% 12%, rgba(4, 6, 16, 0.92) 0%, transparent 52%),
-    radial-gradient(ellipse 65% 50% at 8% 6%, rgba(4, 7, 18, 0.88) 0%, transparent 48%),
-    linear-gradient(
-      156deg,
-      transparent 4%,
-      rgba(22, 28, 48, 0.35) 14%,
-      rgba(52, 38, 58, 0.18) 24%,
-      transparent 30%,
-      rgba(88, 52, 72, 0.2) 36%,
-      rgba(128, 72, 88, 0.22) 40%,
-      rgba(168, 98, 102, 0.2) 44%,
-      rgba(195, 125, 108, 0.17) 48%,
-      rgba(175, 115, 128, 0.18) 52%,
-      transparent 56%,
-      rgba(118, 128, 168, 0.16) 60%,
-      rgba(92, 108, 148, 0.13) 64%,
-      rgba(68, 72, 108, 0.1) 70%,
-      transparent 82%
-    ),
-    radial-gradient(
-      ellipse 115% 42% at 34% 64%,
-      rgba(175, 128, 138, 0.18) 0%,
-      rgba(118, 88, 108, 0.1) 30%,
-      rgba(72, 58, 88, 0.04) 55%,
-      transparent 72%
-    ),
-    linear-gradient(
-      6deg,
-      transparent 64%,
-      rgba(48, 115, 72, 0.08) 78%,
-      rgba(105, 52, 58, 0.07) 88%,
-      rgba(165, 105, 62, 0.06) 95%,
-      transparent 100%
-    );
+    radial-gradient(ellipse 85% 70% at 88% 10%, rgba(4, 6, 14, 0.75) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 55% at 10% 8%, rgba(4, 7, 16, 0.7) 0%, transparent 50%),
+    linear-gradient(180deg, rgba(5, 10, 18, 0.35) 0%, transparent 28%, transparent 72%, rgba(5, 10, 18, 0.4) 100%);
   background-position: center;
   background-size: cover;
-}
-
-/* Star field — tiled statistical layers (micro / mid / bright); band via mask falloff */
-#screen-game[data-background="starry-sky"] #game-shell-backdrop::after {
-  display: block;
-  opacity: 1;
-  -webkit-mask-image: radial-gradient(
-    ellipse 112% 50% at 34% 62%,
-    #000 0%,
-    #000 36%,
-    rgba(0, 0, 0, 0.92) 50%,
-    rgba(0, 0, 0, 0.72) 64%,
-    rgba(0, 0, 0, 0.48) 78%,
-    rgba(0, 0, 0, 0.58) 100%
-  );
-  mask-image: radial-gradient(
-    ellipse 112% 50% at 34% 62%,
-    #000 0%,
-    #000 36%,
-    rgba(0, 0, 0, 0.92) 50%,
-    rgba(0, 0, 0, 0.72) 64%,
-    rgba(0, 0, 0, 0.48) 78%,
-    rgba(0, 0, 0, 0.58) 100%
-  );
-  background-image:
-    radial-gradient(
-      ellipse 100% 44% at 34% 60%,
-      rgba(210, 218, 238, 0.1) 0%,
-      rgba(175, 185, 215, 0.04) 45%,
-      transparent 72%
-    ),
-    radial-gradient(
-      ellipse 72% 28% at 48% 44%,
-      rgba(235, 210, 195, 0.06) 0%,
-      transparent 68%
-    ),
-    radial-gradient(
-      circle at 22% 26%,
-      rgba(255, 255, 255, 0.88) 1px,
-      transparent 1.12px
-    ),
-    radial-gradient(
-      circle at 71% 73%,
-      rgba(245, 248, 255, 0.62) 0.72px,
-      transparent 0.86px
-    ),
-    radial-gradient(
-      circle at 48% 52%,
-      rgba(255, 255, 255, 0.38) 0.55px,
-      transparent 0.66px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(240, 245, 255, 0.52) 0.62px,
-      transparent 0.72px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(225, 232, 248, 0.38) 0.5px,
-      transparent 0.6px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(215, 222, 240, 0.28) 0.42px,
-      transparent 0.52px
-    ),
-    radial-gradient(
-      circle at 14% 22%,
-      rgba(255, 255, 255, 0.44) 0.38px,
-      transparent 0.44px
-    ),
-    radial-gradient(
-      circle at 62% 78%,
-      rgba(235, 240, 255, 0.32) 0.32px,
-      transparent 0.38px
-    ),
-    radial-gradient(
-      circle at 84% 36%,
-      rgba(248, 250, 255, 0.28) 0.28px,
-      transparent 0.34px
-    ),
-    radial-gradient(
-      circle at 36% 68%,
-      rgba(255, 255, 255, 0.36) 0.34px,
-      transparent 0.4px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(255, 255, 255, 0.48) 0.38px,
-      transparent 0.44px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(240, 245, 255, 0.4) 0.36px,
-      transparent 0.42px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(230, 236, 252, 0.34) 0.34px,
-      transparent 0.4px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(255, 255, 255, 0.42) 0.34px,
-      transparent 0.4px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(225, 232, 248, 0.36) 0.32px,
-      transparent 0.38px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(248, 250, 255, 0.38) 0.32px,
-      transparent 0.38px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(215, 222, 240, 0.32) 0.3px,
-      transparent 0.36px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(255, 255, 255, 0.34) 0.28px,
-      transparent 0.34px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(240, 245, 255, 0.3) 0.26px,
-      transparent 0.32px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(255, 255, 255, 0.28) 0.24px,
-      transparent 0.3px
-    ),
-    radial-gradient(
-      circle at 50% 50%,
-      rgba(225, 232, 248, 0.26) 0.22px,
-      transparent 0.28px
-    );
-  background-size:
-    cover,
-    cover,
-    96px 104px,
-    108px 116px,
-    78px 86px,
-    44px 48px,
-    38px 42px,
-    52px 56px,
-    16px 18px,
-    17px 19px,
-    14px 15px,
-    15px 17px,
-    10px 11px,
-    11px 12px,
-    12px 13px,
-    13px 14px,
-    11px 13px,
-    12px 14px,
-    10px 12px,
-    9px 10px,
-    8px 9px,
-    8px 10px,
-    7px 8px;
-  background-position:
-    center,
-    center,
-    0 0,
-    41px 27px,
-    19px 53px,
-    0 0,
-    11px 7px,
-    23px 15px,
-    3px 5px,
-    8px 11px,
-    0 0,
-    4px 6px,
-    2px 1px,
-    5px 8px,
-    1px 4px,
-    7px 3px,
-    9px 6px,
-    6px 10px,
-    3px 7px,
-    2px 5px,
-    4px 2px,
-    1px 6px;
-  background-repeat:
-    no-repeat,
-    no-repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat,
-    repeat;
-}
-
-/* BG-2: Jungle — restrained canopy depth; sparse tropical accents */
-#screen-game[data-background="jungle"] {
-  --shell-bg: #07100c;
-}
-
-#screen-game[data-background="jungle"] #game-shell-backdrop::before {
-  display: block;
-  opacity: 0.88;
-  background-image:
-    radial-gradient(ellipse 120% 70% at 50% -10%, rgba(36, 88, 52, 0.28) 0%, transparent 55%),
-    linear-gradient(
-      180deg,
-      rgba(22, 58, 38, 0.35) 0%,
-      rgba(18, 48, 32, 0.22) 28%,
-      rgba(12, 32, 22, 0.1) 55%,
-      transparent 78%
-    ),
-    linear-gradient(
-      0deg,
-      rgba(48, 34, 22, 0.32) 0%,
-      rgba(32, 24, 16, 0.14) 18%,
-      transparent 38%
-    );
-}
-
-#screen-game[data-background="jungle"] #game-shell-backdrop::after {
-  display: block;
-  opacity: 0.75;
-  background-image:
-    radial-gradient(ellipse 90% 40% at 20% 8%, rgba(28, 72, 42, 0.18) 0%, transparent 60%),
-    radial-gradient(ellipse 80% 35% at 78% 12%, rgba(32, 68, 44, 0.15) 0%, transparent 55%),
-    radial-gradient(3px 4px at 22% 32%, rgba(220, 90, 48, 0.16), transparent),
-    radial-gradient(3px 3px at 68% 38%, rgba(48, 168, 200, 0.12), transparent),
-    radial-gradient(2px 3px at 54% 26%, rgba(240, 190, 48, 0.1), transparent),
-    radial-gradient(2px 2px at 38% 44%, rgba(200, 60, 80, 0.08), transparent);
 }
 
 #game-content-scroll {

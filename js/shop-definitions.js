@@ -222,7 +222,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
     enabled: true,
   },
 
-  // ── Cosmetics — Shell Backgrounds (BG-1: solid colors; visuals in CSS only) ──
+  // ── Cosmetics — Shell Backgrounds (BG-1 solid / BG-2 asset; visuals in CSS + /assets/backgrounds/) ──
 
   shell_background_deep_blue: {
     id: 'shell_background_deep_blue',
@@ -305,7 +305,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_starry_sky: {
     id: 'shell_background_starry_sky',
     name: 'Starry Sky',
-    description: 'A distant night sky with the Milky Way and a soft lunar glow.',
+    description: 'A distant night sky with the Milky Way — repository-authored artwork.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -313,19 +313,6 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 5,
     enabled: true,
     display: { emoji: '🌌' },
-  },
-
-  shell_background_jungle: {
-    id: 'shell_background_jungle',
-    name: 'Jungle',
-    description: 'A peaceful view from within a lush tropical rainforest canopy.',
-    type: ITEM_TYPES.COSMETIC,
-    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
-    rarity: ITEM_RARITIES.UNCOMMON,
-    price: 200,
-    weight: 7,
-    enabled: true,
-    display: { emoji: '🌿' },
   },
 
   // ── Cosmetics — Titles ─────────────────────────────────────────────────
