@@ -579,7 +579,7 @@ Pseudo-elements are `display: none` by default; only active when `#screen-game[d
 
 **Authoring guidance:** Prefer layered `linear-gradient` / `radial-gradient` stacks; no image assets, no animation, no shell transforms, no blur filters, no chrome coupling. Add new slugs as `shell_background_*` definitions + matching `#screen-game[data-background="slug"]` CSS blocks.
 
-**Starry Sky (`starry-sky`) refinement:** Reads as near-black navy at first glance; Milky Way is a soft diagonal band (lower-left toward upper-right) with dust-rift gaps and muted brown/magenta/indigo accents. Stars use a light procedural field plus sparse anchor points — no focal moon, no neon saturation. Detail should emerge only on extended viewing.
+**Starry Sky (`starry-sky`) composition:** Diagonal Milky Way band (lower-left → upper-right) with dust-rift gaps, warm core tones, and cool bluish fringes. Corner vignettes keep sparse sky darker than the band. Star field uses offset tiled micro-stars plus anchor points concentrated along the galactic path. Composition is calibrated for readable structure at gameplay distance; intensity may be tuned down in later passes.
 
 **Static ids:** `shell_background_*` (e.g. `shell_background_starry_sky` → slug `starry-sky`).
 
