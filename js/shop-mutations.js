@@ -64,7 +64,11 @@ import {
   canUnfeatureAchievement,
   canUnfeatureCard,
 } from './shop-validation.js';
-import { normalizeIdentityAccent } from './shell-theme.js';
+import {
+  normalizeIdentityAccent,
+  normalizeProfileBodyTextColor,
+  normalizeProfileHeaderTextColor,
+} from './shell-theme.js';
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -1099,4 +1103,36 @@ export function setIdentityAccent(username, accentId) {
   const identityAccent = normalizeIdentityAccent(accentId);
   db.set(`players/${username}/profile/identityAccent`, identityAccent);
   return { success: true, identityAccent };
+}
+
+/**
+ * @param {string} username
+ * @param {string} colorId
+ */
+export function setProfileHeaderTextColor(username, colorId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const headerTextColor = normalizeProfileHeaderTextColor(colorId);
+  db.set(`players/${username}/profile/headerTextColor`, headerTextColor);
+  return { success: true, headerTextColor };
+}
+
+/**
+ * @param {string} username
+ * @param {string} colorId
+ */
+export function setProfileBodyTextColor(username, colorId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const bodyTextColor = normalizeProfileBodyTextColor(colorId);
+  db.set(`players/${username}/profile/bodyTextColor`, bodyTextColor);
+  return { success: true, bodyTextColor };
 }

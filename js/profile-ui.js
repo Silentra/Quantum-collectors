@@ -5,7 +5,14 @@
 
 import * as auth from './auth.js';
 import * as player from './player.js';
-import { applyShellTheme, IDENTITY_ACCENT_IDS, normalizeIdentityAccent } from './shell-theme.js';
+import {
+  applyShellTheme,
+  IDENTITY_ACCENT_IDS,
+  normalizeIdentityAccent,
+  normalizeProfileBodyTextColor,
+  normalizeProfileHeaderTextColor,
+  PROFILE_TEXT_COLOR_IDS,
+} from './shell-theme.js';
 import * as cards from './cards.js';
 import * as groups from './groups.js';
 import * as toast from './toast.js';
@@ -15,6 +22,8 @@ import {
   equipCosmetic,
   featureCard,
   setIdentityAccent,
+  setProfileBodyTextColor,
+  setProfileHeaderTextColor,
   unequipCosmetic,
   unfeatureCard,
 } from './shop-mutations.js';
@@ -31,12 +40,20 @@ const EQUIPPED_FIELDS = Object.freeze({
 });
 
 const EQUIPPED_LABELS = Object.freeze({
-  [ITEM_CATEGORIES.AURA]: 'Aura',
+  [ITEM_CATEGORIES.AURA]: 'Glow',
   [ITEM_CATEGORIES.BORDER]: 'Border',
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'Banner',
   [ITEM_CATEGORIES.SHELL_BACKGROUND]: 'Background',
   [ITEM_CATEGORIES.TITLE]: 'Title',
 });
+
+const COSMETIC_CATEGORY_ORDER = [
+  ITEM_CATEGORIES.SHELL_BACKGROUND,
+  ITEM_CATEGORIES.PROFILE_BANNER,
+  ITEM_CATEGORIES.TITLE,
+  ITEM_CATEGORIES.AURA,
+  ITEM_CATEGORIES.BORDER,
+];
 
 function getOwnedCosmetics(playerData) {
   return playerData?.cosmetics?.owned && typeof playerData.cosmetics.owned === 'object'
@@ -159,6 +176,164 @@ function getOwnedCardEntries(username) {
     .filter(entry => entry.card);
 }
 
+function renderColorSwatchGrid(current, actionName) {
+  return PROFILE_TEXT_COLOR_IDS.map(colorId => {
+    const label = formatLabel(colorId, 'Default');
+    const selected = colorId === current ? ' is-selected' : '';
+    return `
+      <button type="button"
+        class="profile-accent-swatch${selected}"
+        data-profile-action="${escapeHtml(actionName)}"
+        data-color-id="${escapeHtml(colorId)}"
+        data-accent="${escapeHtml(colorId)}"
+        title="${escapeHtml(label)}"
+        aria-label="${escapeHtml(label)}"
+        aria-pressed="${colorId === current ? 'true' : 'false'}">
+      </button>
+    `;
+  }).join('');
+}
+
+function renderAppearanceDropdown(title, hint, summaryValue, bodyHtml) {
+  return `
+    <details class="profile-compact-dropdown">
+      <summary class="profile-compact-summary">
+        <span class="profile-compact-summary-label">${escapeHtml(title)}</span>
+        <span class="profile-compact-summary-value">${escapeHtml(summaryValue)}</span>
+      </summary>
+      <div class="profile-compact-dropdown-body">
+        <p class="profile-compact-hint">${escapeHtml(hint)}</p>
+        ${bodyHtml}
+      </div>
+    </details>
+  `;
+}
+
+function renderProfileAppearance(p) {
+  const container = document.getElementById('profile-appearance');
+  if (!container) return;
+
+  const identityCurrent = normalizeIdentityAccent(p?.profile?.identityAccent);
+  const headerCurrent = normalizeProfileHeaderTextColor(p?.profile?.headerTextColor);
+  const bodyCurrent = normalizeProfileBodyTextColor(p?.profile?.bodyTextColor);
+
+  const dropdowns = [
+    renderAppearanceDropdown(
+      'Identity Accent',
+      'Colors your name and equipped title in the header.',
+      formatLabel(identityCurrent),
+      `<div class="profile-accent-grid">${renderColorSwatchGrid(identityCurrent, 'set-identity-accent')}</div>`
+    ),
+    renderAppearanceDropdown(
+      'Header Text Color',
+      'Primary headings and bright labels across gameplay panels.',
+      formatLabel(headerCurrent),
+      `<div class="profile-accent-grid">${renderColorSwatchGrid(headerCurrent, 'set-header-text-color')}</div>`
+    ),
+    renderAppearanceDropdown(
+      'Text Color',
+      'Secondary and muted supporting text across gameplay panels.',
+      formatLabel(bodyCurrent),
+      `<div class="profile-accent-grid">${renderColorSwatchGrid(bodyCurrent, 'set-body-text-color')}</div>`
+    ),
+  ].join('');
+
+  container.innerHTML = `
+    <section class="profile-panel profile-appearance-panel">
+      <div class="profile-panel-header">
+        <h3>Appearance</h3>
+        <span>Readability settings — not inventory cosmetics</span>
+      </div>
+      <div class="profile-compact-dropdown-stack">${dropdowns}</div>
+    </section>
+  `;
+}
+
+function getEquippedSummary(p, category) {
+  const itemId = getEquippedItemId(p, category);
+  const definition = itemId ? getCosmeticDefinition(itemId) : null;
+  const valid = isCosmeticDefinitionActive(definition) &&
+    definition.category === category &&
+    getOwnedCosmetics(p)[itemId] === true;
+  return valid ? (definition.name || itemId) : 'None equipped';
+}
+
+function renderCompactCosmetics(p) {
+  const container = document.getElementById('profile-cosmetics');
+  if (!container) return;
+
+  const entries = getOwnedCosmeticEntries(p);
+  const groupsByCategory = new Map();
+  for (const entry of entries) {
+    const key = isKnownEquippableCategory(entry.definition.category)
+      ? entry.definition.category
+      : 'other';
+    if (!groupsByCategory.has(key)) groupsByCategory.set(key, []);
+    groupsByCategory.get(key).push(entry);
+  }
+
+  const dropdowns = COSMETIC_CATEGORY_ORDER
+    .filter(category => groupsByCategory.has(category))
+    .map(category => {
+      const label = EQUIPPED_LABELS[category] || formatLabel(category);
+      const equippedId = getEquippedItemId(p, category);
+      const items = groupsByCategory.get(category);
+      const summaryValue = getEquippedSummary(p, category);
+
+      const options = items.map(({ itemId, definition }) => {
+        const equipped = equippedId === itemId;
+        return `
+          <button type="button"
+            class="profile-compact-option${equipped ? ' is-equipped' : ''}"
+            data-profile-action="equip-cosmetic"
+            data-cosmetic-id="${escapeHtml(itemId)}"
+            ${equipped ? 'aria-current="true"' : ''}>
+            <span class="profile-compact-option-name">${escapeHtml(definition.name || itemId)}</span>
+            <span class="profile-compact-option-meta">${escapeHtml(formatLabel(definition.rarity, 'Cosmetic'))}</span>
+            ${equipped ? '<span class="profile-state-pill">Equipped</span>' : ''}
+          </button>
+        `;
+      }).join('');
+
+      const unequipBtn = equippedId
+        ? `<button type="button" class="profile-btn profile-compact-unequip" data-profile-action="unequip-cosmetic" data-category="${escapeHtml(category)}">Unequip ${escapeHtml(label)}</button>`
+        : '';
+
+      return `
+        <details class="profile-compact-dropdown">
+          <summary class="profile-compact-summary">
+            <span class="profile-compact-summary-label">${escapeHtml(label)}</span>
+            <span class="profile-compact-summary-value">${escapeHtml(summaryValue)}</span>
+          </summary>
+          <div class="profile-compact-dropdown-body">
+            <div class="profile-compact-option-list">${options}</div>
+            ${unequipBtn}
+          </div>
+        </details>
+      `;
+    }).join('');
+
+  if (!dropdowns) {
+    container.innerHTML = `
+      <section class="profile-panel">
+        <div class="profile-panel-header"><h3>Cosmetics</h3><span>Owned cosmetics only</span></div>
+        <div class="profile-empty-state">No cosmetics owned.</div>
+      </section>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <section class="profile-panel profile-cosmetics-compact">
+      <div class="profile-panel-header">
+        <h3>Cosmetics</h3>
+        <span>Select to equip instantly</span>
+      </div>
+      <div class="profile-compact-dropdown-stack">${dropdowns}</div>
+    </section>
+  `;
+}
+
 function renderProfileSummary(p) {
   document.getElementById('profile-username').textContent = p.username;
   const groupEl = document.getElementById('profile-group');
@@ -193,79 +368,6 @@ function renderProfileSummary(p) {
   `;
 }
 
-function renderIdentityAccent(p) {
-  const container = document.getElementById('profile-identity-accent');
-  if (!container) return;
-
-  const current = normalizeIdentityAccent(p?.profile?.identityAccent);
-  const swatches = IDENTITY_ACCENT_IDS.map(accentId => {
-    const label = formatLabel(accentId, 'Default');
-    const selected = accentId === current ? ' is-selected' : '';
-    return `
-      <button type="button"
-        class="profile-accent-swatch${selected}"
-        data-profile-action="set-identity-accent"
-        data-accent-id="${escapeHtml(accentId)}"
-        data-accent="${escapeHtml(accentId)}"
-        title="${escapeHtml(label)}"
-        aria-label="${escapeHtml(label)}"
-        aria-pressed="${accentId === current ? 'true' : 'false'}">
-      </button>
-    `;
-  }).join('');
-
-  container.innerHTML = `
-    <section class="profile-panel">
-      <div class="profile-panel-header">
-        <h3>Identity Accent</h3>
-        <span>Profile utility — colors your name and title in the header</span>
-      </div>
-      <div class="profile-accent-grid">${swatches}</div>
-    </section>
-  `;
-}
-
-function renderEquippedIdentity(p) {
-  const container = document.getElementById('profile-identity');
-  if (!container) return;
-
-  const categories = [
-    ITEM_CATEGORIES.AURA,
-    ITEM_CATEGORIES.BORDER,
-    ITEM_CATEGORIES.PROFILE_BANNER,
-    ITEM_CATEGORIES.SHELL_BACKGROUND,
-    ITEM_CATEGORIES.TITLE,
-  ];
-  const rows = categories.map(category => {
-    const itemId = getEquippedItemId(p, category);
-    const definition = itemId ? getCosmeticDefinition(itemId) : null;
-    const validEquipped = isCosmeticDefinitionActive(definition) &&
-      definition.category === category &&
-      getOwnedCosmetics(p)[itemId] === true;
-    return `
-      <div class="profile-identity-card">
-        <div>
-          <div class="profile-section-kicker">${escapeHtml(EQUIPPED_LABELS[category])}</div>
-          <div class="profile-card-title">${validEquipped ? escapeHtml(definition.name || itemId) : 'None equipped'}</div>
-          <div class="profile-card-meta">${validEquipped ? escapeHtml(formatLabel(definition.rarity, 'Cosmetic')) : 'No active cosmetic'}</div>
-        </div>
-        <button class="profile-btn" data-profile-action="unequip-cosmetic" data-category="${escapeHtml(category)}" ${validEquipped ? '' : 'disabled'}>Unequip</button>
-      </div>
-    `;
-  }).join('');
-
-  const hasEquipped = categories.some(category => Boolean(getEquippedItemId(p, category)));
-  container.innerHTML = `
-    <section class="profile-panel">
-      <div class="profile-panel-header">
-        <h3>Currently Equipped</h3>
-        <span>${hasEquipped ? 'Canonical profile runtime state' : 'No equipped cosmetics'}</span>
-      </div>
-      <div class="profile-identity-grid">${rows}</div>
-    </section>
-  `;
-}
-
 function renderConsumables(p) {
   const container = document.getElementById('profile-inventory');
   if (!container) return;
@@ -294,81 +396,6 @@ function renderConsumables(p) {
         <span class="profile-consumables-hint">Use in Shop</span>
       </header>
       <div class="profile-consumables-chips">${chips}</div>
-    </section>
-  `;
-}
-
-function renderCosmetics(p) {
-  const container = document.getElementById('profile-cosmetics');
-  if (!container) return;
-
-  const entries = getOwnedCosmeticEntries(p);
-  if (entries.length === 0) {
-    container.innerHTML = `
-      <section class="profile-panel">
-        <div class="profile-panel-header"><h3>Cosmetics</h3><span>Owned cosmetics only</span></div>
-        <div class="profile-empty-state">No cosmetics owned.</div>
-      </section>
-    `;
-    return;
-  }
-
-  const groupsByCategory = new Map();
-  for (const entry of entries) {
-    const key = isKnownEquippableCategory(entry.definition.category)
-      ? entry.definition.category
-      : 'other';
-    if (!groupsByCategory.has(key)) groupsByCategory.set(key, []);
-    groupsByCategory.get(key).push(entry);
-  }
-
-  const categoryOrder = [
-    ITEM_CATEGORIES.AURA,
-    ITEM_CATEGORIES.BORDER,
-    ITEM_CATEGORIES.PROFILE_BANNER,
-    ITEM_CATEGORIES.SHELL_BACKGROUND,
-    ITEM_CATEGORIES.TITLE,
-    'other',
-  ];
-
-  const sections = categoryOrder
-    .filter(category => groupsByCategory.has(category))
-    .map(category => {
-      const label = category === 'other' ? 'Other Cosmetics' : `${EQUIPPED_LABELS[category] || formatLabel(category)}s`;
-      const items = groupsByCategory.get(category).map(({ itemId, definition }) => {
-        const equipped = getEquippedItemId(p, definition.category) === itemId;
-        const equippable = isKnownEquippableCategory(definition.category);
-        return `
-          <article class="profile-item-card ${equipped ? 'is-equipped' : ''}">
-            <div class="profile-card-topline">
-              <span>${escapeHtml(formatLabel(definition.rarity, 'Cosmetic'))}</span>
-              <span>${escapeHtml(formatLabel(definition.category, 'Cosmetic'))}</span>
-            </div>
-            <h4 class="profile-card-title">${escapeHtml(definition.name || itemId)}</h4>
-            <p class="profile-card-description">${escapeHtml(definition.description || 'No description available.')}</p>
-            <div class="profile-card-actions">
-              ${equipped ? '<span class="profile-state-pill">Equipped</span>' : ''}
-              <button class="profile-btn profile-btn-primary" data-profile-action="equip-cosmetic" data-cosmetic-id="${escapeHtml(itemId)}" ${equippable && !equipped ? '' : 'disabled'}>Equip</button>
-              <button class="profile-btn" data-profile-action="unequip-cosmetic" data-category="${escapeHtml(definition.category)}" ${equipped ? '' : 'disabled'}>Unequip</button>
-            </div>
-          </article>
-        `;
-      }).join('');
-      return `
-        <div class="profile-cosmetic-group">
-          <h4>${escapeHtml(label)}</h4>
-          <div class="profile-item-grid">${items}</div>
-        </div>
-      `;
-    }).join('');
-
-  container.innerHTML = `
-    <section class="profile-panel">
-      <div class="profile-panel-header">
-        <h3>Cosmetics</h3>
-        <span>Owned cosmetics grouped by category</span>
-      </div>
-      ${sections}
     </section>
   `;
 }
@@ -456,8 +483,7 @@ function renderCollectionProgress(username) {
 
 function wireProfileActions(username) {
   const containers = [
-    document.getElementById('profile-identity'),
-    document.getElementById('profile-identity-accent'),
+    document.getElementById('profile-appearance'),
     document.getElementById('profile-cosmetics'),
     document.getElementById('profile-featured-cards'),
   ].filter(Boolean);
@@ -489,8 +515,14 @@ function handleProfileAction(username, button) {
     result = unfeatureCard(username, button.dataset.cardId);
     if (result.success) toast.success('Card removed from featured cards.');
   } else if (action === 'set-identity-accent') {
-    result = setIdentityAccent(username, button.dataset.accentId);
+    result = setIdentityAccent(username, button.dataset.colorId);
     if (result.success) toast.success('Identity accent updated.');
+  } else if (action === 'set-header-text-color') {
+    result = setProfileHeaderTextColor(username, button.dataset.colorId);
+    if (result.success) toast.success('Header text color updated.');
+  } else if (action === 'set-body-text-color') {
+    result = setProfileBodyTextColor(username, button.dataset.colorId);
+    if (result.success) toast.success('Text color updated.');
   }
 
   if (result && !result.success) {
@@ -498,7 +530,14 @@ function handleProfileAction(username, button) {
     return;
   }
 
-  if (result?.success && (action === 'equip-cosmetic' || action === 'unequip-cosmetic' || action === 'set-identity-accent')) {
+  const themeActions = new Set([
+    'equip-cosmetic',
+    'unequip-cosmetic',
+    'set-identity-accent',
+    'set-header-text-color',
+    'set-body-text-color',
+  ]);
+  if (result?.success && themeActions.has(action)) {
     applyShellTheme(player.getPlayer(username));
   }
   renderProfile();
@@ -512,11 +551,10 @@ export function renderProfile() {
   if (!p) return;
 
   renderProfileSummary(p);
-  renderEquippedIdentity(p);
-  renderIdentityAccent(p);
+  renderProfileAppearance(p);
   renderProfileAchievements();
   renderConsumables(p);
-  renderCosmetics(p);
+  renderCompactCosmetics(p);
   renderFeaturedCards(p, session.username);
   renderCollectionProgress(session.username);
   wireProfileActions(session.username);

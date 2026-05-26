@@ -30,7 +30,14 @@ import {
 import { getCosmeticDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { ensureAchievementStats } from './achievement-stats.js';
-import { IDENTITY_ACCENT_DEFAULT, normalizeIdentityAccent } from './shell-theme.js';
+import {
+  IDENTITY_ACCENT_DEFAULT,
+  PROFILE_BODY_TEXT_DEFAULT,
+  PROFILE_HEADER_TEXT_DEFAULT,
+  normalizeIdentityAccent,
+  normalizeProfileBodyTextColor,
+  normalizeProfileHeaderTextColor,
+} from './shell-theme.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Default schema shapes (frozen — canonical source of truth)
@@ -100,6 +107,8 @@ export const DEFAULT_PROFILE = Object.freeze({
   equippedBackground: null,
   equippedTitle: null,
   identityAccent: 'default',
+  headerTextColor: 'default',
+  bodyTextColor: 'default',
   featuredCards: Object.freeze([]),
   featuredAchievements: Object.freeze([]),
 });
@@ -231,6 +240,8 @@ function createProfileDefaultsFromLegacy(player = {}) {
       : null,
     equippedTitle: isOwnedValidCosmetic(equipped.title, owned, ITEM_CATEGORIES.TITLE) ? equipped.title : null,
     identityAccent: normalizeIdentityAccent(player.profile?.identityAccent),
+    headerTextColor: normalizeProfileHeaderTextColor(player.profile?.headerTextColor),
+    bodyTextColor: normalizeProfileBodyTextColor(player.profile?.bodyTextColor),
     featuredCards: normalizeIdArray(customization.featuredCards, MAX_FEATURED_CARDS),
     featuredAchievements: normalizeIdArray(customization.featuredAchievements, MAX_FEATURED_ACHIEVEMENTS),
   };
@@ -267,6 +278,8 @@ export function getPhase2ADefaults() {
       equippedBackground: null,
       equippedTitle: null,
       identityAccent: IDENTITY_ACCENT_DEFAULT,
+      headerTextColor: PROFILE_HEADER_TEXT_DEFAULT,
+      bodyTextColor: PROFILE_BODY_TEXT_DEFAULT,
       featuredCards: [],
       featuredAchievements: [],
     },
@@ -510,6 +523,28 @@ export function normalizePlayerSchema(username) {
       const normalizedAccent = normalizeIdentityAccent(player.profile.identityAccent);
       if (player.profile.identityAccent !== normalizedAccent) {
         db.set(`players/${username}/profile/identityAccent`, normalizedAccent);
+        patched = true;
+      }
+    }
+
+    if (player.profile.headerTextColor === undefined) {
+      db.set(`players/${username}/profile/headerTextColor`, PROFILE_HEADER_TEXT_DEFAULT);
+      patched = true;
+    } else {
+      const normalizedHeader = normalizeProfileHeaderTextColor(player.profile.headerTextColor);
+      if (player.profile.headerTextColor !== normalizedHeader) {
+        db.set(`players/${username}/profile/headerTextColor`, normalizedHeader);
+        patched = true;
+      }
+    }
+
+    if (player.profile.bodyTextColor === undefined) {
+      db.set(`players/${username}/profile/bodyTextColor`, PROFILE_BODY_TEXT_DEFAULT);
+      patched = true;
+    } else {
+      const normalizedBody = normalizeProfileBodyTextColor(player.profile.bodyTextColor);
+      if (player.profile.bodyTextColor !== normalizedBody) {
+        db.set(`players/${username}/profile/bodyTextColor`, normalizedBody);
         patched = true;
       }
     }

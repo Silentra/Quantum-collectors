@@ -21,6 +21,7 @@ import {
   getItemDefinition as getRegistryItemDefinition,
   getMergedItemDefinitions,
 } from './cosmetic-definitions.js';
+import { renderShopCosmeticPreview } from './cosmetic-preview.js';
 import { ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
 import {
@@ -215,6 +216,9 @@ function renderSlot(slot, index, snapshot) {
   const frozen = slot?.frozen === true;
   const discounted = Boolean(slot?.discountApplied);
   const ownedCosmetic = isOwnedCosmetic(snapshot, item.id, item);
+  const previewHtml = item?.type === ITEM_TYPES.COSMETIC
+    ? renderShopCosmeticPreview(item, escapeHtml)
+    : '';
   const isTargetable = targetMode && !purchased;
   const targetDisabled = !isTargetable || (targetMode?.behaviorType === 'reroll_shop' && frozen);
   const classes = [
@@ -232,6 +236,7 @@ function renderSlot(slot, index, snapshot) {
         <span class="shop-rarity-pill">${escapeHtml(formatLabel(item.rarity))}</span>
         <span class="shop-category-pill">${escapeHtml(formatLabel(item.category))}</span>
       </div>
+      ${previewHtml}
       <div class="shop-slot-header">
         <div>
           <h3 class="shop-slot-title">${escapeHtml(item.name)}</h3>

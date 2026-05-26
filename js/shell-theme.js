@@ -21,6 +21,27 @@ export const SHELL_THEME_DEFAULTS = Object.freeze({
 });
 
 export const IDENTITY_ACCENT_DEFAULT = 'default';
+export const PROFILE_HEADER_TEXT_DEFAULT = 'default';
+export const PROFILE_BODY_TEXT_DEFAULT = 'default';
+
+/** Profile readability palette (same options as identity accent swatches). */
+export const PROFILE_TEXT_COLOR_IDS = Object.freeze([
+  'default',
+  'slate',
+  'silver',
+  'ice',
+  'sky',
+  'teal',
+  'emerald',
+  'lime',
+  'gold',
+  'amber',
+  'coral',
+  'rose',
+  'lavender',
+  'violet',
+  'indigo',
+]);
 
 /**
  * Curated identity accent allowlist (~14 options).
@@ -45,6 +66,7 @@ export const IDENTITY_ACCENT_IDS = Object.freeze([
 ]);
 
 const IDENTITY_ACCENT_SET = new Set(IDENTITY_ACCENT_IDS);
+const PROFILE_TEXT_COLOR_SET = new Set(PROFILE_TEXT_COLOR_IDS);
 
 /**
  * Shell-background cosmetic category id (alias for ITEM_CATEGORIES.SHELL_BACKGROUND).
@@ -76,6 +98,26 @@ export function normalizeIdentityAccent(accentId) {
 }
 
 /**
+ * @param {string|null|undefined} colorId
+ * @returns {string}
+ */
+export function normalizeProfileHeaderTextColor(colorId) {
+  if (typeof colorId !== 'string') return PROFILE_HEADER_TEXT_DEFAULT;
+  const slug = colorId.trim().toLowerCase();
+  return PROFILE_TEXT_COLOR_SET.has(slug) ? slug : PROFILE_HEADER_TEXT_DEFAULT;
+}
+
+/**
+ * @param {string|null|undefined} colorId
+ * @returns {string}
+ */
+export function normalizeProfileBodyTextColor(colorId) {
+  if (typeof colorId !== 'string') return PROFILE_BODY_TEXT_DEFAULT;
+  const slug = colorId.trim().toLowerCase();
+  return PROFILE_TEXT_COLOR_SET.has(slug) ? slug : PROFILE_BODY_TEXT_DEFAULT;
+}
+
+/**
  * Map a cosmetic item id to a stable, CSS-safe theme slug for data-* hooks.
  * @param {string|null|undefined} itemId
  * @returns {string|null}
@@ -101,7 +143,7 @@ function isEquippedCosmetic(itemId, playerData, category) {
  * Resolve independent shell theme hook values from canonical profile runtime state.
  * Categories remain independent (banner + background + title may mix freely).
  * @param {object|null|undefined} playerData
- * @returns {{ banner: string, background: string, theme: string, identityAccent: string, titleSlug: string, titleItemId: string|null }}
+ * @returns {{ banner: string, background: string, theme: string, identityAccent: string, headerTextColor: string, bodyTextColor: string, titleSlug: string, titleItemId: string|null }}
  */
 export function resolveShellThemeState(playerData) {
   const bannerId = playerData?.profile?.[PROFILE_EQUIPPED_FIELDS.banner] ?? null;
@@ -121,12 +163,16 @@ export function resolveShellThemeState(playerData) {
     : 'default';
 
   const identityAccent = normalizeIdentityAccent(playerData?.profile?.identityAccent);
+  const headerTextColor = normalizeProfileHeaderTextColor(playerData?.profile?.headerTextColor);
+  const bodyTextColor = normalizeProfileBodyTextColor(playerData?.profile?.bodyTextColor);
 
   return {
     banner,
     background,
     theme: SHELL_THEME_DEFAULTS.theme,
     identityAccent,
+    headerTextColor,
+    bodyTextColor,
     titleSlug,
     titleItemId: isEquippedCosmetic(titleId, playerData, CATEGORY_BY_SLOT.title) ? titleId : null,
   };
@@ -137,6 +183,8 @@ function applyThemeAttributes(screen, chrome, header, state) {
   screen.dataset.background = state.background;
   screen.dataset.theme = state.theme;
   screen.dataset.identityAccent = state.identityAccent;
+  screen.dataset.headerText = state.headerTextColor;
+  screen.dataset.bodyText = state.bodyTextColor;
 
   if (chrome) {
     chrome.dataset.banner = state.banner;
@@ -187,6 +235,8 @@ export function applyShellTheme(playerData = null) {
   const state = playerData ? resolveShellThemeState(playerData) : {
     ...SHELL_THEME_DEFAULTS,
     identityAccent: IDENTITY_ACCENT_DEFAULT,
+    headerTextColor: PROFILE_HEADER_TEXT_DEFAULT,
+    bodyTextColor: PROFILE_BODY_TEXT_DEFAULT,
     titleSlug: 'default',
     titleItemId: null,
   };
