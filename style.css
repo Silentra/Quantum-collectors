@@ -151,15 +151,15 @@ body.app-mode-game #screen-game.screen.active {
  * BN-3 — CSS-only ambient banner chrome (minimal proof-of-concept)
  * Single pseudo-layer (::before); no ::after sprites yet.
  * profile_banner_football_field → data-banner / data-banner-slug = football-field
- * Asset tiles seamlessly every ~256px on the horizontal axis — keyframes drift must stay in sync or the loop hits.
+ * Panoramic drift: one oversized asset (Field.webp ~3072×256), no-repeat, slow 0%→100% pan.
  */
 
-@keyframes bn3-football-field-scroll {
-  from { background-position-x: 0; }
-  to { background-position-x: -256px; }
+@keyframes bn3-football-field-pan {
+  from { background-position: 0% 100%; }
+  to { background-position: 100% 100%; }
 }
 
-/* Live chrome — field layer */
+/* Live chrome — panoramic field layer */
 #game-shell-chrome[data-banner="football-field"] {
   --banner-chrome-fill: #142318;
   --banner-overlay: none;
@@ -174,17 +174,16 @@ body.app-mode-game #screen-game.screen.active {
 #game-shell-chrome[data-banner="football-field"]::before {
   background-color: var(--banner-chrome-fill);
   background-image: url('assets/banners/Field.webp');
-  background-repeat: repeat-x;
-  background-size: auto 128%;
-  background-position-x: 0;
-  background-position-y: 100%;
-  animation: bn3-football-field-scroll 110s linear infinite;
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+  background-position: 0% 100%;
+  animation: bn3-football-field-pan 120s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   #game-shell-chrome[data-banner="football-field"]::before {
     animation: none;
-    background-position-x: 0;
+    background-position: 0% 100%;
   }
 }
 
@@ -1374,18 +1373,17 @@ body.app-mode-game #screen-game.screen.active {
 .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
   background-color: #142318;
   background-image: url('assets/banners/Field.webp');
-  background-repeat: repeat-x;
-  background-size: auto 128%;
-  background-position-x: 0;
-  background-position-y: 100%;
-  animation: bn3-football-field-scroll 110s linear infinite;
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+  background-position: 0% 100%;
+  animation: bn3-football-field-pan 120s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
     animation: none;
-    background-position-x: 0;
+    background-position: 0% 100%;
   }
 }
 
