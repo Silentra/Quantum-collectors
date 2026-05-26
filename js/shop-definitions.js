@@ -288,6 +288,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     display: { emoji: '▰' },
   },
 
+  profile_banner_football_field: {
+    id: 'profile_banner_football_field',
+    name: 'Football Field Banner',
+    description: 'A subtle scrolling turf strip for banner chrome.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 180,
+    weight: 8,
+    enabled: true,
+    display: { emoji: '🏟️' },
+  },
+
   // ── Cosmetics — Shell Backgrounds (BG-1 solid / BG-2 asset; visuals in CSS + /assets/backgrounds/) ──
 
   shell_background_deep_blue: {

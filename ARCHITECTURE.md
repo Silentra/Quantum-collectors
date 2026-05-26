@@ -653,7 +653,19 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 
 **Previews:** Same slug as chrome — `shop-cosmetic-preview--banner[data-banner-slug]` (+ `.cosmetic-preview-stage` for modal). No separate renderer.
 
-**BN-2+ (future — not BN-1):** Gradient/image banners via `--banner-overlay: url('assets/banners/{slug}.webp')` on `#game-shell-chrome::before` (stylesheet-relative). Scaffold: `assets/banners/`. Independent from gameplay backgrounds.
+**BN-2:** Static raster/gradient overlays via `--banner-overlay: url('assets/banners/{slug}.webp')` on `#game-shell-chrome::before`, `background-repeat: no-repeat`, and sizing/position authored per slug (`background-size`/position appropriate to the asset). Scaffold: [`assets/banners/`](/assets/banners/). Independent from gameplay backgrounds.
+
+**BN-3 (MVP — CSS-only ambient motion):** One horizontal strip may use **slow, linear infinite** `@keyframes` on **`background-position-x`** only (`transform`, filters, shadows, blur, JS-driven animation loops, video, canvas, SVG animation, extra DOM nodes, and **`::before` layout-affecting changes** remain out of scope). **Ownership:** **`#game-shell-chrome::before` only** for live chrome (`z-index: -1`, `pointer-events: none` unchanged). **Sprites / `::after` overlays:** reserved for future BN-3 tiers; MVP is **single-layer** tiling + drift only.
+
+- **Slug example:** `profile_banner_football_field` → `data-banner="football-field"` / `data-banner-slug="football-field"` (via `cosmeticIdToShellSlug()`). **`Field.webp`** authored as a **horizontal seamless strip** — the animation loop offsets `background-position-x` by exactly **one tile width** in CSS (**`-256px` in stylesheet** MUST match repeat distance in artwork or scrolling will visibly hitch).
+
+- **Scaling:** Prefer **`repeat-x`** with explicit **`background-size`** (typically `auto <percent>` vertically, **never** BN-2 `cover` stretch for BN-3 proof assets). Tint fallback via **`--banner-chrome-fill`** on `#game-shell-chrome[data-banner="{slug}"]`; tab readability tokens (`--chrome-tab-*`, `--shell-chrome-edge-border`) overridden per slug as for BN-1.
+
+- **Previews:** Mirror the same **`background-*` + `animation`** declarations on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"], .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** — no alternate renderer path.
+
+- **Accessibility:** **`@media (prefers-reduced-motion: reduce)`** — `animation: none` and pinned `background-position-x` — static appearance must remain acceptable.
+
+- **Performance doctrine (minimal):** **One** `@keyframes`, **one** continuously animated banner layer per equipped slug — **ambient** durations (often **many tens of seconds** per tile drift). Avoid filter/shadow-heavy layers; **`background-position` scroll** acceptable at low drift speed on chrome height only — no gameplay-area animations.
 
 #### Admin — Cosmetics ownership doctrine
 
