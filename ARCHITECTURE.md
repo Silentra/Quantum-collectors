@@ -578,13 +578,19 @@ shell_background_{name}  →  cosmeticIdToShellSlug()  →  data-background="{sl
 | Mode | Example slug | Visual source | CSS pattern |
 |------|--------------|---------------|-------------|
 | **BG-1 solid** | `deep-blue`, `slate` | `--shell-bg` on `#screen-game[data-background]` | Backdrop uses `background-color: var(--shell-bg)` only |
-| **BG-2 CSS** | *(future lightweight atmospheres)* | Gradients on `#game-shell-backdrop` + optional pseudos | Lightweight `linear-gradient` / `radial-gradient` only — not scene repaints |
+| **BG-2 CSS** | `crimson-fade`, `aurora`, `nebula`, … | Gradients on `#game-shell-backdrop` + optional pseudos | Full-shell `linear-gradient` and/or layered soft `radial-gradient` fields — stylized atmosphere, not scene repaints |
 | **BG-2 asset** | `starry-sky` | Static image on `#game-shell-backdrop` | `url('assets/backgrounds/{slug}.webp')` + optional readability overlays |
 
 **Asset-backed mapping (stylesheet-relative `url()` only):**
 
 | Cosmetic id | Slug | Repo file | CSS `url()` |
 |-------------|------|-----------|-------------|
+| `shell_background_crimson_fade` | `crimson-fade` | — | `linear-gradient` on `#game-shell-backdrop` |
+| `shell_background_arctic_depths` | `arctic-depths` | — | `linear-gradient` on `#game-shell-backdrop` |
+| `shell_background_teal_emerald` | `teal-emerald` | — | `linear-gradient` on `#game-shell-backdrop` |
+| `shell_background_deep_cosmos` | `deep-cosmos` | — | `linear-gradient` on `#game-shell-backdrop` |
+| `shell_background_aurora` | `aurora` | — | base gradient + soft radial overlays (`::before` / `::after`) |
+| `shell_background_nebula` | `nebula` | — | base gradient + soft radial overlays (`::before` / `::after`) |
 | `shell_background_starry_sky` | `starry-sky` | `assets/backgrounds/starry-sky.webp` | `url('assets/backgrounds/starry-sky.webp')` |
 | `shell_background_blueprint_paper` | `blueprint-paper` | `assets/backgrounds/blueprint-paper.webp` | `url('assets/backgrounds/blueprint-paper.webp')` |
 | `shell_background_football_field` | `football-field` | `assets/backgrounds/football-field.webp` | `url('assets/backgrounds/football-field.webp')` |

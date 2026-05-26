@@ -261,6 +261,150 @@ body.app-mode-game #screen-game.screen.active {
 #screen-game[data-background="charcoal"] { --shell-bg: #141414; }
 #screen-game[data-background="slate"] { --shell-bg: #151c28; }
 
+/* BG-2 CSS: gradient atmospheres — full-shell linear blends */
+#screen-game[data-background="crimson-fade"] {
+  --shell-bg: #030204;
+}
+
+#screen-game[data-background="crimson-fade"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: linear-gradient(
+    180deg,
+    #7a2234 0%,
+    #5c1a28 14%,
+    #3a1018 32%,
+    #1e0a10 52%,
+    #0c0608 74%,
+    #020203 100%
+  );
+}
+
+#screen-game[data-background="arctic-depths"] {
+  --shell-bg: #050a14;
+}
+
+#screen-game[data-background="arctic-depths"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: linear-gradient(
+    180deg,
+    #5ec8e8 0%,
+    #3a9ec4 12%,
+    #256892 28%,
+    #163a5c 48%,
+    #0c2238 68%,
+    #050a14 100%
+  );
+}
+
+#screen-game[data-background="teal-emerald"] {
+  --shell-bg: #061210;
+}
+
+#screen-game[data-background="teal-emerald"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: linear-gradient(
+    180deg,
+    #2dd4bf 0%,
+    #1fa89a 14%,
+    #157a6a 30%,
+    #0f5248 50%,
+    #0a342c 72%,
+    #061210 100%
+  );
+}
+
+#screen-game[data-background="deep-cosmos"] {
+  --shell-bg: #0a0614;
+}
+
+#screen-game[data-background="deep-cosmos"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: linear-gradient(
+    180deg,
+    #1e3a8a 0%,
+    #1a2f72 14%,
+    #162458 30%,
+    #121a42 48%,
+    #0e122e 66%,
+    #0a0614 100%
+  );
+}
+
+/* BG-2 CSS: aurora / nebula — layered soft radial fields */
+#screen-game[data-background="aurora"] {
+  --shell-bg: #060a12;
+}
+
+#screen-game[data-background="aurora"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: linear-gradient(
+    168deg,
+    #0c1824 0%,
+    #08141e 38%,
+    #060e18 68%,
+    #040810 100%
+  );
+}
+
+#screen-game[data-background="aurora"] #game-shell-backdrop::before {
+  display: block;
+  opacity: 0.78;
+  background-image:
+    radial-gradient(ellipse 95% 58% at 14% 26%, rgba(52, 211, 178, 0.42) 0%, transparent 58%),
+    radial-gradient(ellipse 88% 52% at 78% 20%, rgba(96, 165, 250, 0.34) 0%, transparent 56%),
+    radial-gradient(ellipse 90% 55% at 42% 82%, rgba(129, 140, 248, 0.28) 0%, transparent 62%),
+    radial-gradient(ellipse 70% 40% at 62% 48%, rgba(45, 212, 191, 0.18) 0%, transparent 55%);
+  background-position: center;
+  background-size: cover;
+}
+
+#screen-game[data-background="aurora"] #game-shell-backdrop::after {
+  display: block;
+  opacity: 0.62;
+  background-image:
+    radial-gradient(ellipse 110% 45% at 50% -5%, rgba(56, 189, 186, 0.26) 0%, transparent 62%),
+    linear-gradient(180deg, transparent 0%, rgba(6, 10, 18, 0.08) 70%, rgba(4, 6, 12, 0.38) 100%);
+  background-position: center;
+  background-size: cover;
+}
+
+#screen-game[data-background="nebula"] {
+  --shell-bg: #080510;
+}
+
+#screen-game[data-background="nebula"] #game-shell-backdrop {
+  background-color: var(--shell-bg);
+  background-image: linear-gradient(
+    152deg,
+    #14081c 0%,
+    #0e0616 42%,
+    #08040e 100%
+  );
+}
+
+#screen-game[data-background="nebula"] #game-shell-backdrop::before {
+  display: block;
+  opacity: 0.8;
+  background-image:
+    radial-gradient(ellipse 92% 56% at 22% 32%, rgba(192, 132, 252, 0.38) 0%, transparent 58%),
+    radial-gradient(ellipse 85% 50% at 76% 28%, rgba(244, 114, 182, 0.3) 0%, transparent 55%),
+    radial-gradient(ellipse 88% 54% at 48% 72%, rgba(99, 102, 241, 0.32) 0%, transparent 60%),
+    radial-gradient(ellipse 65% 38% at 58% 44%, rgba(167, 139, 250, 0.2) 0%, transparent 52%);
+  background-position: center;
+  background-size: cover;
+}
+
+#screen-game[data-background="nebula"] #game-shell-backdrop::after {
+  display: block;
+  opacity: 0.58;
+  background-image:
+    radial-gradient(ellipse 100% 48% at 50% 100%, rgba(30, 27, 75, 0.45) 0%, transparent 58%),
+    radial-gradient(ellipse 80% 35% at 12% 88%, rgba(88, 28, 135, 0.22) 0%, transparent 55%),
+    linear-gradient(180deg, rgba(8, 4, 14, 0.05) 0%, transparent 55%, rgba(6, 4, 10, 0.35) 100%);
+  background-position: center;
+  background-size: cover;
+}
+
 /* BG-2 asset: Starry Sky — image on backdrop; pseudos = readability overlays only */
 #screen-game[data-background="starry-sky"] {
   --shell-bg: #050a14;
