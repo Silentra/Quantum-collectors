@@ -151,8 +151,8 @@ body.app-mode-game #screen-game.screen.active {
  * BN-3 — CSS-only ambient banner chrome (minimal proof-of-concept)
  * Single pseudo-layer (::before); no ::after sprites yet.
  * profile_banner_football_field → data-banner / data-banner-slug = football-field
- * Panoramic drift: one wide asset (Field.webp ~3072×256), no-repeat, height overscale,
- * slow 0%↔100% pan with alternate (no loop snap).
+ * Panoramic drift: one wide asset (Field.webp ~3072×256), no-repeat, responsive height
+ * overscale + pan duration (wider viewports → larger overflow, slightly faster half-cycle).
  */
 
 @keyframes bn3-football-field-pan {
@@ -160,7 +160,7 @@ body.app-mode-game #screen-game.screen.active {
   to { background-position: 100% 100%; }
 }
 
-/* Live chrome — panoramic field layer */
+/* Live chrome — tab tokens */
 #game-shell-chrome[data-banner="football-field"] {
   --banner-chrome-fill: #142318;
   --banner-overlay: none;
@@ -172,17 +172,57 @@ body.app-mode-game #screen-game.screen.active {
   --shell-chrome-edge-border: #1e3b20;
 }
 
-#game-shell-chrome[data-banner="football-field"]::before {
-  background-color: var(--banner-chrome-fill);
+/* Panoramic layer — live chrome + shop/modal previews (responsive tuning) */
+#game-shell-chrome[data-banner="football-field"]::before,
+.shop-cosmetic-preview--banner[data-banner-slug="football-field"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
   background-image: url('assets/banners/Field.webp');
   background-repeat: no-repeat;
   background-size: auto 140%;
   background-position: 0% 100%;
-  animation: bn3-football-field-pan 120s linear infinite alternate;
+  animation: bn3-football-field-pan 150s linear infinite alternate;
+}
+
+#game-shell-chrome[data-banner="football-field"]::before {
+  background-color: var(--banner-chrome-fill);
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="football-field"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
+  background-color: #142318;
+}
+
+@media (min-width: 1200px) {
+  #game-shell-chrome[data-banner="football-field"]::before,
+  .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
+    background-size: auto 160%;
+    animation-duration: 120s;
+  }
+}
+
+@media (min-width: 1920px) {
+  #game-shell-chrome[data-banner="football-field"]::before,
+  .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
+    background-size: auto 190%;
+    animation-duration: 105s;
+  }
+}
+
+@media (min-width: 2560px) {
+  #game-shell-chrome[data-banner="football-field"]::before,
+  .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
+    background-size: auto 215%;
+    animation-duration: 95s;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #game-shell-chrome[data-banner="football-field"]::before {
+  #game-shell-chrome[data-banner="football-field"]::before,
+  .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
     animation: none;
     background-position: 0% 100%;
   }
@@ -1369,24 +1409,7 @@ body.app-mode-game #screen-game.screen.active {
   background-color: #151c28;
 }
 
-/* BN-3 — slug mirror for shop inline + enlarged preview (keyframes above with live chrome) */
-.shop-cosmetic-preview--banner[data-banner-slug="football-field"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
-  background-color: #142318;
-  background-image: url('assets/banners/Field.webp');
-  background-repeat: no-repeat;
-  background-size: auto 140%;
-  background-position: 0% 100%;
-  animation: bn3-football-field-pan 120s linear infinite alternate;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"] {
-    animation: none;
-    background-position: 0% 100%;
-  }
-}
+/* BN-3 football-field previews — panoramic rules grouped with live chrome (see BN-3 block above) */
 
 /* Background slug previews — inline shop + modal stage (shared hooks) */
 .shop-cosmetic-preview--bg[data-bg-slug="deep-blue"],

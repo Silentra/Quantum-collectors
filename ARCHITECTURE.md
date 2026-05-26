@@ -659,13 +659,13 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 
 - **Slug example:** `profile_banner_football_field` → `data-banner="football-field"` / `data-banner-slug="football-field"` (via `cosmeticIdToShellSlug()`). **`assets/banners/Field.webp`** — one wide panorama (~**3072×256**, may be revised to ~2048×256); **no `repeat-x`**, **no tile-width keyframe contract**. Animation pans **`background-position` from `0% 100%` to `100% 100%`** with **`animation-direction: alternate`** so drift reverses smoothly (no loop snap).
 
-- **Scaling:** **`background-size: auto 140%`** (or similar per asset) — height **overscales** so the image always extends beyond the chrome viewport horizontally during the full pan; width follows aspect ratio (no independent width stretch). Tint **`--banner-chrome-fill`** remains a safety underpaint only; the oversized panorama should cover chrome during motion. Tab readability tokens (`--chrome-tab-*`, `--shell-chrome-edge-border`) overridden per slug as for BN-1.
+- **Scaling (responsive):** Height **overscale** via **`background-size: auto <percent>`** — width follows aspect ratio. **`football-field` reference breakpoints:** default **140%** / **150s** half-cycle → **≥1200px:** **160%** / **120s** → **≥1920px:** **190%** / **105s** → **≥2560px:** **215%** / **95s**. Wider viewports get **more overflow** (no underpaint bleed) and **slightly shorter** `animation-duration` so perceived drift stays consistent. Tint **`--banner-chrome-fill`** remains safety underpaint only. Tab readability tokens (`--chrome-tab-*`, `--shell-chrome-edge-border`) overridden per slug as for BN-1.
 
-- **Previews:** Mirror the same **`background-*` + `animation`** declarations on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"], .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** — no alternate renderer path.
+- **Previews:** Mirror the same **`background-*` + `animation` + responsive `@media`** on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"], .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** — no alternate renderer path.
 
 - **Accessibility:** **`@media (prefers-reduced-motion: reduce)`** — `animation: none` and pinned **`background-position: 0% 100%`** — static appearance must remain acceptable.
 
-- **Performance doctrine (minimal):** **One** `@keyframes`, **one** continuously animated banner layer per equipped slug — **ambient** durations (~**90–180s** per half-cycle with `alternate`). Avoid filter/shadow-heavy layers; **`background-position` pan** acceptable at low drift speed on chrome height only — no gameplay-area animations.
+- **Performance doctrine (minimal):** **One** `@keyframes`, **one** continuously animated banner layer per equipped slug — **ambient** half-cycle durations (~**90–150s** with `alternate`, tuned per viewport). Avoid filter/shadow-heavy layers; **`background-position` pan** acceptable at low drift speed on chrome height only — no gameplay-area animations.
 
 #### Admin — Cosmetics ownership doctrine
 
