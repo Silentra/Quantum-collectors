@@ -208,18 +208,99 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'quantum',
   },
 
-  // ── Cosmetics — Profile Banners ────────────────────────────────────────
+  // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
-  profile_banner_research: {
-    id: 'profile_banner_research',
-    name: 'Research Lab Banner',
-    description: 'A sleek laboratory-themed profile banner.',
+  profile_banner_default: {
+    id: 'profile_banner_default',
+    name: 'Default Banner',
+    description: 'Standard chrome banner included with every collector profile.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 0,
+    weight: 0,
+    enabled: true,
+    shopEnabled: false,
+    achievementEnabled: false,
+    display: { emoji: '▰' },
+  },
+
+  profile_banner_deep_blue: {
+    id: 'profile_banner_deep_blue',
+    name: 'Deep Blue Banner',
+    description: 'A restrained deep blue chrome banner.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 75,
+    weight: 14,
+    enabled: true,
+    display: { emoji: '▰' },
+  },
+
+  profile_banner_crimson: {
+    id: 'profile_banner_crimson',
+    name: 'Crimson Banner',
+    description: 'A restrained crimson chrome banner.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 75,
+    weight: 14,
+    enabled: true,
+    display: { emoji: '▰' },
+  },
+
+  profile_banner_emerald: {
+    id: 'profile_banner_emerald',
+    name: 'Emerald Banner',
+    description: 'A restrained emerald chrome banner.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 75,
+    weight: 14,
+    enabled: true,
+    display: { emoji: '▰' },
+  },
+
+  profile_banner_purple: {
+    id: 'profile_banner_purple',
+    name: 'Purple Banner',
+    description: 'A restrained purple chrome banner.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.UNCOMMON,
-    price: 150,
+    price: 120,
     weight: 10,
     enabled: true,
+    display: { emoji: '▰' },
+  },
+
+  profile_banner_charcoal: {
+    id: 'profile_banner_charcoal',
+    name: 'Charcoal Banner',
+    description: 'A neutral charcoal chrome banner.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 50,
+    weight: 16,
+    enabled: true,
+    display: { emoji: '▰' },
+  },
+
+  profile_banner_slate: {
+    id: 'profile_banner_slate',
+    name: 'Slate Banner',
+    description: 'A cool slate chrome banner.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.PROFILE_BANNER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 50,
+    weight: 16,
+    enabled: true,
+    display: { emoji: '▰' },
   },
 
   // ── Cosmetics — Shell Backgrounds (BG-1 solid / BG-2 asset; visuals in CSS + /assets/backgrounds/) ──

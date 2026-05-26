@@ -619,16 +619,41 @@ Pseudo-elements default to `display: none`; active only when a slug’s CSS enab
 
 **Non-goals:** Firebase-authored assets, user uploads, runtime image composition, canvas/SVG injection, animation, parallax, blur-heavy filters, `data-background` on chrome, visual admin editor.
 
-#### Banner asset doctrine (future)
+#### Banner cosmetic doctrine (BN-1 solid chrome / BN-2+ assets)
 
-Banners use the same **slug → CSS → static asset** pattern on chrome only:
+**Separation (absolute):**
 
-- Hook: `data-banner` on `#screen-game` / `#game-shell-chrome` (from `profile.equippedBanner`).
-- Surface: `#game-shell-chrome::before` consumes `--banner-overlay`.
-- Assets: `assets/banners/{slug}.webp` set via e.g. `--banner-overlay: url('assets/banners/research.webp');` (stylesheet-relative, same rule as backgrounds).
-- **Independent** from gameplay `data-background` — no shared vars with `#game-shell-backdrop`.
+| Layer | Host | Scope |
+|-------|------|--------|
+| **Background** | `#game-shell-backdrop` | Gameplay atmosphere below tabs; `data-background` on `#screen-game` only |
+| **Banner** | `#game-shell-chrome::before` | Header + tab chrome only; `data-banner` on `#game-shell-chrome` (mirrored on `#screen-game` for hook parity) |
 
-Scaffold folder: `assets/banners/` (reserved; no banner images required until authored).
+Banners must **not** render on `#game-content-scroll`, cards, panels, or the gameplay backdrop.
+
+**BN-1 stable contract (solid banners):**
+
+```
+profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
+                                                    →  --banner-chrome-fill on #game-shell-chrome
+                                                    →  #game-shell-chrome::before background-color
+```
+
+- Visual authorship: CSS only (`--banner-chrome-fill`, `--banner-overlay: none`). No JS URLs, no inline styles, no Firebase visual payloads.
+- BN-1 solids match BG-1 palette: `default`, `deep-blue`, `crimson`, `emerald`, `purple`, `charcoal`, `slate`.
+- Equip field: `players/{username}/profile/equippedBanner`. Starter: `profile_banner_default` (owned by default, not shop-sold).
+- Legacy `profile_banner_research` removed in BN-1.
+
+**Interaction clarity (required):**
+
+- `#game-shell-chrome::before` stays `z-index: -1`, `pointer-events: none`.
+- Tab/header controls stay above the banner plane (`z-index` 1–3).
+- Per-`data-banner` tokens on `#game-shell-chrome`: `--chrome-tab-muted`, `--chrome-tab-hover`, `--chrome-tab-active`, `--chrome-tab-active-border`, `--shell-chrome-edge-border`.
+- `#game-shell-chrome .tab-btn` uses those tokens so inactive, hover, and **active** tabs remain readable on every BN-1 fill.
+- Priority: interaction clarity over banner visibility (restrained fills; no spectacle).
+
+**Previews:** Same slug as chrome — `shop-cosmetic-preview--banner[data-banner-slug]` (+ `.cosmetic-preview-stage` for modal). No separate renderer.
+
+**BN-2+ (future — not BN-1):** Gradient/image banners via `--banner-overlay: url('assets/banners/{slug}.webp')` on `#game-shell-chrome::before` (stylesheet-relative). Scaffold: `assets/banners/`. Independent from gameplay backgrounds.
 
 #### Admin — Cosmetics ownership doctrine
 

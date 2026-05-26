@@ -274,7 +274,7 @@ export function getPhase2ADefaults() {
     profile: {
       equippedAura: null,
       equippedBorder: null,
-      equippedBanner: null,
+      equippedBanner: 'profile_banner_default',
       equippedBackground: null,
       equippedTitle: null,
       identityAccent: IDENTITY_ACCENT_DEFAULT,
@@ -489,6 +489,37 @@ export function normalizePlayerSchema(username) {
         patched = true;
       } else if (value !== null && !isOwnedValidCosmetic(value, owned, category)) {
         db.set(`players/${username}/profile/${key}`, null);
+        patched = true;
+      }
+    }
+
+    // BN-1: remove legacy research banner; re-home invalid equipped banner
+    if (owned.profile_banner_research === true) {
+      db.remove(`players/${username}/cosmetics/owned/profile_banner_research`);
+      delete owned.profile_banner_research;
+      patched = true;
+    }
+    const legacyBanner = player.cosmetics?.equipped?.profileBanner;
+    const equippedBanner = player.profile.equippedBanner;
+    const researchEquipped = equippedBanner === 'profile_banner_research' ||
+      legacyBanner === 'profile_banner_research';
+    if (researchEquipped || (equippedBanner && !isOwnedValidCosmetic(equippedBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER))) {
+      const fallback = owned.profile_banner_default === true ? 'profile_banner_default' : null;
+      db.set(`players/${username}/profile/equippedBanner`, fallback);
+      if (player.cosmetics?.equipped && typeof player.cosmetics.equipped === 'object') {
+        db.set(`players/${username}/cosmetics/equipped/profileBanner`, fallback);
+      }
+      patched = true;
+    } else if (
+      (equippedBanner === null || equippedBanner === undefined) &&
+      isOwnedValidCosmetic(legacyBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER)
+    ) {
+      db.set(`players/${username}/profile/equippedBanner`, legacyBanner);
+      patched = true;
+    } else if (equippedBanner === null || equippedBanner === undefined) {
+      const fallback = owned.profile_banner_default === true ? 'profile_banner_default' : null;
+      if (fallback) {
+        db.set(`players/${username}/profile/equippedBanner`, fallback);
         patched = true;
       }
     }

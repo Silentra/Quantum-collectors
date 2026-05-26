@@ -60,17 +60,91 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 /* Shared chrome surface — one continuous visual plane for header + tabs (DOM remains separate) */
+#game-shell-chrome {
+  --banner-chrome-fill: var(--shell-chrome-surface);
+  --chrome-tab-muted: #94a3b8;
+  --chrome-tab-hover: #e2e8f0;
+  --chrome-tab-active: #818cf8;
+  --chrome-tab-active-border: #818cf8;
+}
+
 #game-shell-chrome::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-color: var(--shell-chrome-surface);
+  background-color: var(--banner-chrome-fill, var(--shell-chrome-surface));
   background-image: var(--banner-overlay);
   background-repeat: no-repeat;
   background-size: cover;
   background-position: center top;
+}
+
+/* BN-1: solid banner chrome fills (independent from gameplay data-background) */
+#game-shell-chrome[data-banner="default"] {
+  --banner-chrome-fill: #0f172a;
+  --banner-overlay: none;
+}
+
+#game-shell-chrome[data-banner="deep-blue"] {
+  --banner-chrome-fill: #0c1929;
+  --banner-overlay: none;
+  --chrome-tab-muted: #94a3b8;
+  --chrome-tab-hover: #e2e8f0;
+  --chrome-tab-active: #93c5fd;
+  --chrome-tab-active-border: #60a5fa;
+  --shell-chrome-edge-border: #1e3a5f;
+}
+
+#game-shell-chrome[data-banner="crimson"] {
+  --banner-chrome-fill: #1f1218;
+  --banner-overlay: none;
+  --chrome-tab-muted: #a8b4c4;
+  --chrome-tab-hover: #f1f5f9;
+  --chrome-tab-active: #fda4af;
+  --chrome-tab-active-border: #f87171;
+  --shell-chrome-edge-border: #3f1d28;
+}
+
+#game-shell-chrome[data-banner="emerald"] {
+  --banner-chrome-fill: #0f1f18;
+  --banner-overlay: none;
+  --chrome-tab-muted: #94a3b8;
+  --chrome-tab-hover: #d1fae5;
+  --chrome-tab-active: #6ee7b7;
+  --chrome-tab-active-border: #34d399;
+  --shell-chrome-edge-border: #1a3d32;
+}
+
+#game-shell-chrome[data-banner="purple"] {
+  --banner-chrome-fill: #18102a;
+  --banner-overlay: none;
+  --chrome-tab-muted: #a8b4c4;
+  --chrome-tab-hover: #ede9fe;
+  --chrome-tab-active: #c4b5fd;
+  --chrome-tab-active-border: #a78bfa;
+  --shell-chrome-edge-border: #2e1f4a;
+}
+
+#game-shell-chrome[data-banner="charcoal"] {
+  --banner-chrome-fill: #141414;
+  --banner-overlay: none;
+  --chrome-tab-muted: #9ca3af;
+  --chrome-tab-hover: #e5e7eb;
+  --chrome-tab-active: #e2e8f0;
+  --chrome-tab-active-border: #cbd5e1;
+  --shell-chrome-edge-border: #2a2a2a;
+}
+
+#game-shell-chrome[data-banner="slate"] {
+  --banner-chrome-fill: #151c28;
+  --banner-overlay: none;
+  --chrome-tab-muted: #94a3b8;
+  --chrome-tab-hover: #e2e8f0;
+  --chrome-tab-active: #bae6fd;
+  --chrome-tab-active-border: #7dd3fc;
+  --shell-chrome-edge-border: #243044;
 }
 
 #game-header {
@@ -179,6 +253,20 @@ body.app-mode-game #screen-game.screen.active {
   background: transparent;
   border-top: none;
   border-bottom: 1px solid var(--shell-chrome-edge-border);
+}
+
+/* Chrome tab readability — scoped to shell (not admin tabs); tokens set per data-banner */
+#game-shell-chrome .tab-btn {
+  color: var(--chrome-tab-muted, #94a3b8);
+}
+
+#game-shell-chrome .tab-btn:hover {
+  color: var(--chrome-tab-hover, #e2e8f0);
+}
+
+#game-shell-chrome .tab-btn.active {
+  color: var(--chrome-tab-active, #818cf8);
+  border-bottom-color: var(--chrome-tab-active-border, #818cf8);
 }
 
 .nav-identity-name,
@@ -1204,9 +1292,40 @@ body.app-mode-game #screen-game.screen.active {
 .shop-cosmetic-preview--border.rarity-epic { border-color: #a855f7; box-shadow: 0 0 10px rgba(168, 85, 247, 0.32); }
 .shop-cosmetic-preview--border.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.35); }
 
+/* BN-1 banner preview strips — same slug/colors as chrome (inline + modal stage) */
 .shop-cosmetic-preview--banner[data-banner-slug="default"],
-.shop-cosmetic-preview--banner[data-banner-slug="research"] {
-  background: linear-gradient(90deg, #1e3a5f 0%, #312e81 55%, #1e293b 100%);
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="default"] {
+  background-color: #0f172a;
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="deep-blue"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="deep-blue"] {
+  background-color: #0c1929;
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="crimson"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="crimson"] {
+  background-color: #1f1218;
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="emerald"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="emerald"] {
+  background-color: #0f1f18;
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="purple"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="purple"] {
+  background-color: #18102a;
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="charcoal"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="charcoal"] {
+  background-color: #141414;
+}
+
+.shop-cosmetic-preview--banner[data-banner-slug="slate"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="slate"] {
+  background-color: #151c28;
 }
 
 /* Background slug previews — inline shop + modal stage (shared hooks) */
