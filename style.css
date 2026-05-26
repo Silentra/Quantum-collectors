@@ -151,7 +151,8 @@ body.app-mode-game #screen-game.screen.active {
  * BN-3 — CSS-only ambient banner chrome (minimal proof-of-concept)
  * Single pseudo-layer (::before); no ::after sprites yet.
  * profile_banner_football_field → data-banner / data-banner-slug = football-field
- * Panoramic drift: one oversized asset (Field.webp ~3072×256), no-repeat, slow 0%→100% pan.
+ * Panoramic drift: one wide asset (Field.webp ~3072×256), no-repeat, height overscale,
+ * slow 0%↔100% pan with alternate (no loop snap).
  */
 
 @keyframes bn3-football-field-pan {
@@ -175,9 +176,9 @@ body.app-mode-game #screen-game.screen.active {
   background-color: var(--banner-chrome-fill);
   background-image: url('assets/banners/Field.webp');
   background-repeat: no-repeat;
-  background-size: auto 100%;
+  background-size: auto 140%;
   background-position: 0% 100%;
-  animation: bn3-football-field-pan 120s linear infinite;
+  animation: bn3-football-field-pan 120s linear infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1374,9 +1375,9 @@ body.app-mode-game #screen-game.screen.active {
   background-color: #142318;
   background-image: url('assets/banners/Field.webp');
   background-repeat: no-repeat;
-  background-size: auto 100%;
+  background-size: auto 140%;
   background-position: 0% 100%;
-  animation: bn3-football-field-pan 120s linear infinite;
+  animation: bn3-football-field-pan 120s linear infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {

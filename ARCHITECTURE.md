@@ -657,15 +657,15 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 
 **BN-3 (MVP — CSS-only ambient motion):** One oversized raster may use **slow, linear infinite** `@keyframes` on **`background-position`** (typically **`0%` → `100%` horizontal pan** with **`background-repeat: no-repeat`**) — a **panoramic drift** model, not a tiling strip (`transform`, filters, shadows, blur, JS-driven animation loops, video, canvas, SVG animation, extra DOM nodes, and **`::before` layout-affecting changes** remain out of scope). **Ownership:** **`#game-shell-chrome::before` only** for live chrome (`z-index: -1`, `pointer-events: none` unchanged). **Sprites / `::after` overlays:** reserved for future BN-3 tiers; MVP football banner is **single-layer panoramic drift** only.
 
-- **Slug example:** `profile_banner_football_field` → `data-banner="football-field"` / `data-banner-slug="football-field"` (via `cosmeticIdToShellSlug()`). **`assets/banners/Field.webp`** — one wide panorama (~**3072×256**, may be revised to ~2048×256); **no `repeat-x`**, **no tile-width keyframe contract**. Animation pans **`background-position` from `0% 100%` to `100% 100%`** so new regions of the single image enter the viewport over time.
+- **Slug example:** `profile_banner_football_field` → `data-banner="football-field"` / `data-banner-slug="football-field"` (via `cosmeticIdToShellSlug()`). **`assets/banners/Field.webp`** — one wide panorama (~**3072×256**, may be revised to ~2048×256); **no `repeat-x`**, **no tile-width keyframe contract**. Animation pans **`background-position` from `0% 100%` to `100% 100%`** with **`animation-direction: alternate`** so drift reverses smoothly (no loop snap).
 
-- **Scaling:** **`background-size: auto 100%`** (height fills chrome strip; width follows aspect ratio). Tint fallback via **`--banner-chrome-fill`** on `#game-shell-chrome[data-banner="{slug}"]`; tab readability tokens (`--chrome-tab-*`, `--shell-chrome-edge-border`) overridden per slug as for BN-1.
+- **Scaling:** **`background-size: auto 140%`** (or similar per asset) — height **overscales** so the image always extends beyond the chrome viewport horizontally during the full pan; width follows aspect ratio (no independent width stretch). Tint **`--banner-chrome-fill`** remains a safety underpaint only; the oversized panorama should cover chrome during motion. Tab readability tokens (`--chrome-tab-*`, `--shell-chrome-edge-border`) overridden per slug as for BN-1.
 
 - **Previews:** Mirror the same **`background-*` + `animation`** declarations on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"], .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** — no alternate renderer path.
 
 - **Accessibility:** **`@media (prefers-reduced-motion: reduce)`** — `animation: none` and pinned **`background-position: 0% 100%`** — static appearance must remain acceptable.
 
-- **Performance doctrine (minimal):** **One** `@keyframes`, **one** continuously animated banner layer per equipped slug — **ambient** durations (~**90–180s** per full pan). Avoid filter/shadow-heavy layers; **`background-position` pan** acceptable at low drift speed on chrome height only — no gameplay-area animations.
+- **Performance doctrine (minimal):** **One** `@keyframes`, **one** continuously animated banner layer per equipped slug — **ambient** durations (~**90–180s** per half-cycle with `alternate`). Avoid filter/shadow-heavy layers; **`background-position` pan** acceptable at low drift speed on chrome height only — no gameplay-area animations.
 
 #### Admin — Cosmetics ownership doctrine
 
