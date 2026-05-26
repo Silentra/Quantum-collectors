@@ -8,7 +8,9 @@ import * as auth from './auth.js';
 import { resetPlayerPassword } from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
-import { buildCardRenderModel, renderCardDetailView, renderPackCardWrapper, renderSciCard } from './card-render.js';
+import { initCardDetailModal, openCardDetailModal } from './card-detail-modal.js';
+import { initCosmeticPreviewModal } from './cosmetic-preview-modal.js';
+import { buildCardRenderModel, renderPackCardWrapper, renderSciCard } from './card-render.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import * as packs from './packs.js';
 import * as groups from './groups.js';
@@ -370,8 +372,8 @@ function renderCollection() {
     grid.querySelectorAll('.sci-card').forEach(el => {
       el.addEventListener('click', () => {
         const cardId = el.dataset.cardId;
-        const qty = parseInt(el.dataset.qty) || 1;
-        showCardDetail(cardId, qty);
+        const qty = parseInt(el.dataset.qty, 10) || 1;
+        openCardDetailModal(cardId, qty);
       });
     });
   }
@@ -404,31 +406,6 @@ function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered =
     profileCosmeticAura: null,
   });
   return renderSciCard(model);
-}
-
-/**
- * Show the enlarged card detail modal with full card info + aura tier display.
- */
-function showCardDetail(cardId, quantity = 1) {
-  const card = cards.getCard(cardId);
-  if (!card) return;
-
-  // If quantity wasn't passed, look it up from player inventory
-  if (quantity <= 1) {
-    const session = auth.getSession();
-    if (session && session.username !== '__admin__') {
-      const inv = player.getInventory(session.username);
-      const entry = inv.find(i => i.cardId === cardId);
-      if (entry) quantity = entry.quantity;
-    }
-  }
-
-  const modal = document.getElementById('card-detail-modal');
-  document.getElementById('card-detail-content').innerHTML = renderCardDetailView(card, {
-    quantity,
-    profileCosmeticAura: null,
-  });
-  modal.classList.remove('hidden');
 }
 
 // ===================== PACKS =====================
@@ -2840,9 +2817,8 @@ export function init() {
   document.getElementById('btn-close-pack')?.addEventListener('click', () => {
     document.getElementById('pack-opening-overlay').classList.add('hidden');
   });
-  document.getElementById('btn-close-card-detail')?.addEventListener('click', () => {
-    document.getElementById('card-detail-modal').classList.add('hidden');
-  });
+  initCardDetailModal();
+  initCosmeticPreviewModal();
   document.getElementById('btn-close-player-detail')?.addEventListener('click', () => {
     document.getElementById('player-detail-modal').classList.add('hidden');
   });

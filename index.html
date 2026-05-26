@@ -918,6 +918,21 @@
     </div>
   </div>
 
+  <!-- Cosmetic Preview Modal (global — shop enlarged previews; CSS slug-driven) -->
+  <div id="cosmetic-preview-modal" class="global-modal-overlay hidden fixed inset-0 bg-black/80 z-[100] flex items-start sm:items-center justify-center p-4 pt-[max(1rem,var(--shell-header-min-height,4.5rem))] sm:pt-4">
+    <div class="global-modal-panel cosmetic-preview-modal-panel bg-surface-900 rounded-2xl max-w-lg w-full max-h-[min(90dvh,calc(100dvh-1.5rem))] border border-surface-700 flex flex-col min-h-0 shadow-xl">
+      <div class="global-modal-header sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-4 bg-surface-900 border-b border-surface-700/80 rounded-t-2xl flex-shrink-0">
+        <h3 id="cosmetic-preview-title" class="text-lg font-bold truncate min-w-0"></h3>
+        <button type="button" id="btn-close-cosmetic-preview" class="global-modal-close flex-shrink-0 text-surface-300 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface-800 transition" aria-label="Close cosmetic preview">&times;</button>
+      </div>
+      <div class="cosmetic-preview-modal-body overflow-y-auto px-5 pb-5 pt-4 flex-1 min-h-0">
+        <p id="cosmetic-preview-meta" class="cosmetic-preview-meta text-sm text-surface-400 mb-3"></p>
+        <div id="cosmetic-preview-stage" class="cosmetic-preview-stage"></div>
+        <p id="cosmetic-preview-description" class="cosmetic-preview-description text-sm text-surface-400 mt-3 leading-relaxed"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- Card Detail Modal (global) -->
   <div id="card-detail-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
     <div class="card-detail-modal-panel bg-surface-900 rounded-2xl p-5 w-full border border-surface-700">

@@ -13,9 +13,13 @@
  */
 
 import * as auth from './auth.js';
+import * as cards from './cards.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
-import { buildShopCatalog } from './shop-catalog.js';
+import { renderCollectionCard } from './card-render.js';
+import { openCardDetailModal } from './card-detail-modal.js';
+import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
+import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
 import { getShopConfig } from './shop-config.js';
 import {
   getItemDefinition as getRegistryItemDefinition,
@@ -210,15 +214,50 @@ function renderPrice(slot) {
   `;
 }
 
+function renderShopCardPreview(item) {
+  if (item?.type !== ITEM_TYPES.CARD) return '';
+
+  const parsed = parseShopItemId(item.id);
+  if (!parsed || parsed.kind !== 'card') return '';
+
+  const card = cards.getCard(parsed.sourceId);
+  if (!card) return '';
+
+  const cardHtml = renderCollectionCard(card, {
+    quantity: 1,
+    variant: 'collection',
+    profileCosmeticAura: null,
+  });
+
+  const label = escapeHtml(card.name || parsed.sourceId);
+  return `
+    <button type="button"
+      class="shop-preview-expand shop-preview-expand--card"
+      data-shop-preview="card"
+      data-card-id="${escapeHtml(parsed.sourceId)}"
+      aria-label="View ${label} details">
+      <div class="shop-card-preview-slot">${cardHtml}</div>
+    </button>
+  `;
+}
+
+function renderSlotPreview(item) {
+  if (item?.type === ITEM_TYPES.COSMETIC) {
+    return renderShopCosmeticPreview(item, escapeHtml);
+  }
+  if (item?.type === ITEM_TYPES.CARD) {
+    return renderShopCardPreview(item);
+  }
+  return '';
+}
+
 function renderSlot(slot, index, snapshot) {
   const item = getSafeItem(slot);
   const purchased = slot?.purchased === true;
   const frozen = slot?.frozen === true;
   const discounted = Boolean(slot?.discountApplied);
   const ownedCosmetic = isOwnedCosmetic(snapshot, item.id, item);
-  const previewHtml = item?.type === ITEM_TYPES.COSMETIC
-    ? renderShopCosmeticPreview(item, escapeHtml)
-    : '';
+  const previewHtml = renderSlotPreview(item);
   const isTargetable = targetMode && !purchased;
   const targetDisabled = !isTargetable || (targetMode?.behaviorType === 'reroll_shop' && frozen);
   const classes = [
@@ -432,9 +471,33 @@ function renderError(message) {
   root.innerHTML = `<div class="shop-empty-state"><p>${escapeHtml(message)}</p></div>`;
 }
 
+function handleShopPreviewClick(previewButton) {
+  const kind = previewButton.dataset.shopPreview;
+  if (kind === 'card') {
+    const cardId = previewButton.dataset.cardId;
+    if (cardId) openCardDetailModal(cardId);
+    return;
+  }
+
+  if (kind === 'cosmetic') {
+    const itemId = previewButton.dataset.cosmeticItemId;
+    if (!itemId) return;
+    const item = getSafeItem({ itemId });
+    openCosmeticPreviewModal(item);
+  }
+}
+
 function wireShopEvents(root, username) {
   root.onclick = async event => {
     const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    const previewButton = target?.closest('[data-shop-preview]');
+    if (previewButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      handleShopPreviewClick(previewButton);
+      return;
+    }
+
     const button = target?.closest('[data-shop-action]');
     if (!button || actionInFlight) return;
     const action = button.dataset.shopAction;
