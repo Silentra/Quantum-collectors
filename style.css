@@ -599,6 +599,8 @@ body.app-mode-game #screen-game.screen.active {
 #game-header[data-identity-accent="violet"] { --identity-accent: #a78bfa; }
 #screen-game[data-identity-accent="indigo"],
 #game-header[data-identity-accent="indigo"] { --identity-accent: #818cf8; }
+#screen-game[data-identity-accent="black"],
+#game-header[data-identity-accent="black"] { --identity-accent: #000000; }
 
 /* Profile readability text colors (utility settings on #screen-game) */
 #screen-game[data-header-text="default"] { --profile-header-text: #e2e8f0; }
@@ -616,6 +618,7 @@ body.app-mode-game #screen-game.screen.active {
 #screen-game[data-header-text="lavender"] { --profile-header-text: #ddd6fe; }
 #screen-game[data-header-text="violet"] { --profile-header-text: #c4b5fd; }
 #screen-game[data-header-text="indigo"] { --profile-header-text: #c7d2fe; }
+#screen-game[data-header-text="black"] { --profile-header-text: #000000; }
 
 #screen-game[data-body-text="default"] { --profile-body-text: #94a3b8; }
 #screen-game[data-body-text="slate"] { --profile-body-text: #94a3b8; }
@@ -632,6 +635,7 @@ body.app-mode-game #screen-game.screen.active {
 #screen-game[data-body-text="lavender"] { --profile-body-text: #a78bfa; }
 #screen-game[data-body-text="violet"] { --profile-body-text: #a78bfa; }
 #screen-game[data-body-text="indigo"] { --profile-body-text: #818cf8; }
+#screen-game[data-body-text="black"] { --profile-body-text: #000000; }
 
 #game-content-scroll h1,
 #game-content-scroll h2,
@@ -706,6 +710,7 @@ body.app-mode-game #screen-game.screen.active {
 .profile-accent-swatch[data-accent="lavender"] { --swatch-color: #c4b5fd; }
 .profile-accent-swatch[data-accent="violet"] { --swatch-color: #a78bfa; }
 .profile-accent-swatch[data-accent="indigo"] { --swatch-color: #818cf8; }
+.profile-accent-swatch[data-accent="black"] { --swatch-color: #000000; border-color: #475569; }
 
 /* Profile tab — compact appearance / cosmetics dropdowns */
 .profile-compact-dropdown-stack {
@@ -1139,7 +1144,7 @@ body.app-mode-game #screen-game.screen.active {
 
 .shop-card-preview-slot .sci-card {
   width: 100%;
-  max-width: 9.5rem;
+  max-width: 7rem;
   margin: 0 auto;
 }
 
@@ -1163,7 +1168,7 @@ body.app-mode-game #screen-game.screen.active {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0f172a;
+  background-color: #0f172a;
 }
 
 .shop-cosmetic-preview-title-text {
@@ -1190,7 +1195,7 @@ body.app-mode-game #screen-game.screen.active {
   border-width: 2px;
   border-style: solid;
   border-color: #334155;
-  background: #111827;
+  background-color: #111827;
 }
 
 .shop-cosmetic-preview--border.rarity-common { border-color: #9ca3af; }
@@ -1204,79 +1209,100 @@ body.app-mode-game #screen-game.screen.active {
   background: linear-gradient(90deg, #1e3a5f 0%, #312e81 55%, #1e293b 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="deep-blue"] { background-color: #0c1929; }
-.shop-cosmetic-preview--bg[data-bg-slug="crimson"] { background-color: #1f1218; }
-.shop-cosmetic-preview--bg[data-bg-slug="emerald"] { background-color: #0f1f18; }
-.shop-cosmetic-preview--bg[data-bg-slug="purple"] { background-color: #18102a; }
-.shop-cosmetic-preview--bg[data-bg-slug="charcoal"] { background-color: #141414; }
-.shop-cosmetic-preview--bg[data-bg-slug="slate"] { background-color: #151c28; }
+/* Background slug previews — inline shop + modal stage (shared hooks) */
+.shop-cosmetic-preview--bg[data-bg-slug="deep-blue"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="deep-blue"] { background-color: #0c1929; }
+.shop-cosmetic-preview--bg[data-bg-slug="crimson"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="crimson"] { background-color: #1f1218; }
+.shop-cosmetic-preview--bg[data-bg-slug="emerald"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="emerald"] { background-color: #0f1f18; }
+.shop-cosmetic-preview--bg[data-bg-slug="purple"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="purple"] { background-color: #18102a; }
+.shop-cosmetic-preview--bg[data-bg-slug="charcoal"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="charcoal"] { background-color: #141414; }
+.shop-cosmetic-preview--bg[data-bg-slug="slate"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="slate"] { background-color: #151c28; }
 
-.shop-cosmetic-preview--bg[data-bg-slug="crimson-fade"] {
+.shop-cosmetic-preview--bg[data-bg-slug="crimson-fade"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="crimson-fade"] {
   background-image: linear-gradient(180deg, #7a2234 0%, #5c1a28 14%, #3a1018 32%, #1e0a10 52%, #0c0608 74%, #020203 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="arctic-depths"] {
+.shop-cosmetic-preview--bg[data-bg-slug="arctic-depths"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="arctic-depths"] {
   background-image: linear-gradient(180deg, #5ec8e8 0%, #3a9ec4 12%, #256892 28%, #163a5c 48%, #0c2238 68%, #050a14 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="teal-emerald"] {
+.shop-cosmetic-preview--bg[data-bg-slug="teal-emerald"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="teal-emerald"] {
   background-image: linear-gradient(180deg, #2dd4bf 0%, #1fa89a 14%, #157a6a 30%, #0f5248 50%, #0a342c 72%, #061210 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="deep-cosmos"] {
+.shop-cosmetic-preview--bg[data-bg-slug="deep-cosmos"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="deep-cosmos"] {
   background-image: linear-gradient(180deg, #1e3a8a 0%, #1a2f72 14%, #162458 30%, #121a42 48%, #0e122e 66%, #0a0614 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="aurora"] {
+.shop-cosmetic-preview--bg[data-bg-slug="aurora"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="aurora"] {
   background-image:
     radial-gradient(ellipse 95% 58% at 14% 26%, rgba(52, 211, 178, 0.42) 0%, transparent 58%),
     radial-gradient(ellipse 88% 52% at 78% 20%, rgba(96, 165, 250, 0.34) 0%, transparent 56%),
     linear-gradient(168deg, #0c1824 0%, #08141e 38%, #060e18 68%, #040810 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="nebula"] {
+.shop-cosmetic-preview--bg[data-bg-slug="nebula"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="nebula"] {
   background-image:
     radial-gradient(ellipse 92% 56% at 22% 32%, rgba(192, 132, 252, 0.38) 0%, transparent 58%),
     radial-gradient(ellipse 85% 50% at 76% 28%, rgba(244, 114, 182, 0.3) 0%, transparent 55%),
     linear-gradient(152deg, #14081c 0%, #0e0616 42%, #08040e 100%);
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="starry-sky"] {
+.shop-cosmetic-preview--bg[data-bg-slug="starry-sky"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="starry-sky"] {
   background-color: #050a14;
   background-image: url('assets/backgrounds/starry-sky.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="blueprint-paper"] {
+.shop-cosmetic-preview--bg[data-bg-slug="blueprint-paper"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="blueprint-paper"] {
   background-color: #0a1628;
   background-image: url('assets/backgrounds/blueprint-paper.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="football-field"] {
+.shop-cosmetic-preview--bg[data-bg-slug="football-field"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="football-field"] {
   background-color: #0a140a;
   background-image: url('assets/backgrounds/football-field.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="jungle"] {
+.shop-cosmetic-preview--bg[data-bg-slug="jungle"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="jungle"] {
   background-color: #081208;
   background-image: url('assets/backgrounds/jungle.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="pyramids"] {
+.shop-cosmetic-preview--bg[data-bg-slug="pyramids"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="pyramids"] {
   background-color: #14100a;
   background-image: url('assets/backgrounds/pyramids.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="saturn"] {
+.shop-cosmetic-preview--bg[data-bg-slug="saturn"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="saturn"] {
   background-color: #0a0814;
   background-image: url('assets/backgrounds/saturn.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="spiral-galaxy"] {
+.shop-cosmetic-preview--bg[data-bg-slug="spiral-galaxy"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="spiral-galaxy"] {
   background-color: #050a14;
   background-image: url('assets/backgrounds/spiral-galaxy.webp');
 }
 
-.shop-cosmetic-preview--bg[data-bg-slug="car"] {
+.shop-cosmetic-preview--bg[data-bg-slug="car"],
+.cosmetic-preview-stage .shop-cosmetic-preview--bg[data-bg-slug="car"] {
   background-color: #080808;
   background-image: url('assets/backgrounds/car.webp');
 }
@@ -1302,8 +1328,9 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .cosmetic-preview-stage .shop-cosmetic-preview--bg.cosmetic-preview--expanded {
+  background-repeat: no-repeat;
+  background-position: center;
   background-size: contain;
-  background-color: #0f172a;
 }
 
 .cosmetic-preview-stage .shop-cosmetic-preview--bg.cosmetic-preview--expanded[data-bg-slug="crimson-fade"],

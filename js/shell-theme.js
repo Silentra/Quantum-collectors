@@ -41,6 +41,7 @@ export const PROFILE_TEXT_COLOR_IDS = Object.freeze([
   'lavender',
   'violet',
   'indigo',
+  'black',
 ]);
 
 /**
@@ -63,6 +64,7 @@ export const IDENTITY_ACCENT_IDS = Object.freeze([
   'lavender',
   'violet',
   'indigo',
+  'black',
 ]);
 
 const IDENTITY_ACCENT_SET = new Set(IDENTITY_ACCENT_IDS);
