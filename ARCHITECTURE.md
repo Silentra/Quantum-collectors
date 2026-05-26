@@ -586,6 +586,13 @@ shell_background_{name}  →  cosmeticIdToShellSlug()  →  data-background="{sl
 | Cosmetic id | Slug | Repo file | CSS `url()` |
 |-------------|------|-----------|-------------|
 | `shell_background_starry_sky` | `starry-sky` | `assets/backgrounds/starry-sky.webp` | `url('assets/backgrounds/starry-sky.webp')` |
+| `shell_background_blueprint_paper` | `blueprint-paper` | `assets/backgrounds/blueprint-paper.webp` | `url('assets/backgrounds/blueprint-paper.webp')` |
+| `shell_background_football_field` | `football-field` | `assets/backgrounds/football-field.webp` | `url('assets/backgrounds/football-field.webp')` |
+| `shell_background_jungle` | `jungle` | `assets/backgrounds/jungle.webp` | `url('assets/backgrounds/jungle.webp')` |
+| `shell_background_pyramids` | `pyramids` | `assets/backgrounds/pyramids.webp` | `url('assets/backgrounds/pyramids.webp')` |
+| `shell_background_saturn` | `saturn` | `assets/backgrounds/saturn.webp` | `url('assets/backgrounds/saturn.webp')` |
+| `shell_background_spiral_galaxy` | `spiral-galaxy` | `assets/backgrounds/spiral-galaxy.webp` | `url('assets/backgrounds/spiral-galaxy.webp')` |
+| `shell_background_car` | `car` | `assets/backgrounds/car.webp` | `url('assets/backgrounds/car.webp')` |
 
 Naming: `shell_background_{snake_case}` → kebab slug → `assets/backgrounds/{slug}.webp` on disk; reference in CSS as `url('assets/backgrounds/{slug}.webp')` (resolved relative to [`style.css`](style.css), not host-root `/assets/...`). Avoid host-root absolute paths — they break Live Server subfolders, `file://`, and subpath deploys. Assets are code-authored, cacheable, and **not** Firebase/user/runtime-generated.
 

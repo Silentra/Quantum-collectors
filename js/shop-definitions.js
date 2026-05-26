@@ -315,6 +315,97 @@ export const ITEM_DEFINITIONS = Object.freeze({
     display: { emoji: '🌌' },
   },
 
+  shell_background_blueprint_paper: {
+    id: 'shell_background_blueprint_paper',
+    name: 'Blueprint Paper',
+    description: 'Technical blueprint tones for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 190,
+    weight: 8,
+    enabled: true,
+    display: { emoji: '📐' },
+  },
+
+  shell_background_football_field: {
+    id: 'shell_background_football_field',
+    name: 'Football Field',
+    description: 'Stadium turf atmosphere for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 200,
+    weight: 7,
+    enabled: true,
+    display: { emoji: '🏈' },
+  },
+
+  shell_background_jungle: {
+    id: 'shell_background_jungle',
+    name: 'Jungle',
+    description: 'Lush rainforest canopy mood for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 200,
+    weight: 7,
+    enabled: true,
+    display: { emoji: '🌿' },
+  },
+
+  shell_background_pyramids: {
+    id: 'shell_background_pyramids',
+    name: 'Pyramids',
+    description: 'Desert monument atmosphere for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.RARE,
+    price: 260,
+    weight: 5,
+    enabled: true,
+    display: { emoji: '🔺' },
+  },
+
+  shell_background_saturn: {
+    id: 'shell_background_saturn',
+    name: 'Saturn',
+    description: 'Ringed planet vista for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.RARE,
+    price: 280,
+    weight: 5,
+    enabled: true,
+    display: { emoji: '🪐' },
+  },
+
+  shell_background_spiral_galaxy: {
+    id: 'shell_background_spiral_galaxy',
+    name: 'Spiral Galaxy',
+    description: 'Deep-space spiral structure for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.RARE,
+    price: 300,
+    weight: 4,
+    enabled: true,
+    display: { emoji: '🌀' },
+  },
+
+  shell_background_car: {
+    id: 'shell_background_car',
+    name: 'Car',
+    description: 'Automotive scene mood for the gameplay shell backdrop.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHELL_BACKGROUND,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 190,
+    weight: 7,
+    enabled: true,
+    display: { emoji: '🚗' },
+  },
+
   // ── Cosmetics — Titles ─────────────────────────────────────────────────
   // Titles are authored via Admin → Cosmetics (Firebase registry). No static title seeds.
 });
