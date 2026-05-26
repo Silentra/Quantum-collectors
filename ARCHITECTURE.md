@@ -312,7 +312,7 @@ js/
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
 - **Schema subsystems** added to every player record:
   - `currencies` — `{ currentResearchPoints: 0 }`. Separate from lifetime RP (leaderboard) and seasonal RP. No mutation logic added.
-  - `cosmetics` — `{ owned: { profile_banner_default: true }, equipped: { aura: 'default_prismatic', border: null, title: null, profileBanner: 'profile_banner_default' } }`. `default_prismatic` is the **cosmetic** aura — completely separate from the gameplay aura multiplier system. No project/card systems modified.
+  - `cosmetics` — `{ owned: { }, equipped: { aura: 'default_prismatic', border: null, title: null, profileBanner: null } }`. `default_prismatic` is the **cosmetic** aura — completely separate from the gameplay aura multiplier system. **Banner default:** no equipped banner (`profile.equippedBanner` null) → default chrome (`data-banner="default"`); not a cosmetic item.
   - `items` — consumable inventory: `{ reroll_token, cosmetic_reroll_token, aura_reroll_token, border_reroll_token, discount_chip, freeze_token, research_proposal }`. All default 0, stackable. No usage logic.
   - `shopUsage` — `{ rerollsUsedThisRotation: 0, frozenSlotsUsedThisRotation: 0 }`. Rotation-scoped tracking. No shop generation added.
   - `shop` — Phase 2B persistent rotation storage. See Phase 2B section below. No runtime shop behavior added.
@@ -553,7 +553,7 @@ Every resolved definition carries `source: 'static' | 'admin'` (static tagged at
 
 #### Registry consumer doctrine
 
-Use registry helpers in: `shell-theme.js`, `shop-validation.js`, `shop-generation.js`, `shop-config.js` (merged defs), `player-schema.js`, `achievement-validation.js`, `achievements-admin.js`, `achievements-ui.js`, `profile-ui.js`, `admin-player-tools.js`, `shop-ui.js`, `ui.js` (admin grants), and `cosmetics-admin.js`.
+Use registry helpers in: `shell-theme.js`, `shop-validation.js`, `shop-generation.js`, `shop-config.js` (merged defs), `player-schema.js`, `achievement-validation.js`, `achievements-admin.js`, `achievements-ui.js`, `profile-ui.js`, `admin-player-tools.js`, `shop-ui.js`, `ui.js` (admin grants via `cosmetic-definitions.js` categories + `listGrantableCosmeticsForAdminCategory()`), and `cosmetics-admin.js`.
 
 Do not bypass the registry for cosmetic resolution in new code.
 
@@ -640,8 +640,8 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 
 - Visual authorship: CSS only (`--banner-chrome-fill`, `--banner-overlay: none`). No JS URLs, no inline styles, no Firebase visual payloads.
 - BN-1 solids match BG-1 palette: `default`, `deep-blue`, `crimson`, `emerald`, `purple`, `charcoal`, `slate`.
-- Equip field: `players/{username}/profile/equippedBanner`. Starter: `profile_banner_default` (owned by default, not shop-sold).
-- Legacy `profile_banner_research` removed in BN-1.
+- Equip field: `players/{username}/profile/equippedBanner`. **Null/absent = default chrome** (`data-banner="default"` via shell theme fallback); unequipping clears equip only. Purchasable/earnable cosmetics use ids `profile_banner_*` solids only — no pseudo “default banner” cosmetic.
+- Legacy pseudo-cosmetic `profile_banner_default` retired; normalization strips ownership/equip in `normalizePlayerSchema()`.
 
 **Interaction clarity (required):**
 

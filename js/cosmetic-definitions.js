@@ -33,6 +33,43 @@ export const COSMETIC_SOURCES = Object.freeze({
   ADMIN: 'admin',
 });
 
+/**
+ * Static cosmetic groups keyed by cosmetics-admin tab id (excludes titles + shimmer).
+ * Single source — reuse in cosmetics-admin.js and Manage Player grant UI.
+ */
+export const ADMIN_STATIC_COSMETIC_TAB_MAP = Object.freeze({
+  banners: ITEM_CATEGORIES.PROFILE_BANNER,
+  backgrounds: ITEM_CATEGORIES.SHELL_BACKGROUND,
+  glow: ITEM_CATEGORIES.AURA,
+  borders: ITEM_CATEGORIES.BORDER,
+});
+
+/**
+ * Admin cosmetics category nav: mirrors Admin → Cosmetics (titles + static + shimmer placeholder).
+ */
+export const ADMIN_COSMETIC_GRANT_CATEGORY_NAV = Object.freeze([
+  { id: 'titles', label: 'Titles', kind: 'titles' },
+  { id: 'banners', label: 'Banners', kind: 'static', category: ITEM_CATEGORIES.PROFILE_BANNER },
+  { id: 'backgrounds', label: 'Backgrounds', kind: 'static', category: ITEM_CATEGORIES.SHELL_BACKGROUND },
+  { id: 'glow', label: 'Glow', kind: 'static', category: ITEM_CATEGORIES.AURA },
+  { id: 'borders', label: 'Borders', kind: 'static', category: ITEM_CATEGORIES.BORDER },
+  { id: 'shimmer', label: 'Shimmer', kind: 'placeholder' },
+]);
+
+/**
+ * List enabled grantable cosmetics for Manage Player → Give Cosmetic category filter.
+ * @param {string} navId - key from ADMIN_COSMETIC_GRANT_CATEGORY_NAV
+ * @returns {object[]}
+ */
+export function listGrantableCosmeticsForAdminCategory(navId) {
+  const nav = ADMIN_COSMETIC_GRANT_CATEGORY_NAV.find(entry => entry.id === navId);
+  if (!nav || nav.kind === 'placeholder') return [];
+  if (nav.kind === 'titles') {
+    return listCosmeticDefinitions({ category: ITEM_CATEGORIES.TITLE, includeDisabled: false });
+  }
+  return listCosmeticDefinitions({ category: nav.category, includeDisabled: false });
+}
+
 export const TITLE_DISPLAY_NAME_MAX_LENGTH = 50;
 
 const ITEM_RARITY_SET = new Set(Object.values(ITEM_RARITIES));

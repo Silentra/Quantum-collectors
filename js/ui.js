@@ -28,10 +28,12 @@ import { renderShopAdminPanel } from './shop-admin.js';
 import { renderAchievementsAdminPanel } from './achievements-admin.js';
 import { renderCosmeticsAdminPanel } from './cosmetics-admin.js';
 import {
+  ADMIN_COSMETIC_GRANT_CATEGORY_NAV,
   getCosmeticDefinition,
   getItemDefinition,
   getMergedItemDefinitions,
   listCosmeticDefinitions,
+  listGrantableCosmeticsForAdminCategory,
 } from './cosmetic-definitions.js';
 import { applyShellTheme, resetShellTheme } from './shell-theme.js';
 import {
@@ -676,6 +678,33 @@ function _formatAdminLabel(value) {
   return value.split('_').map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 }
 
+function _pickInitialAdminGrantCosmeticCategory() {
+  for (const { id } of ADMIN_COSMETIC_GRANT_CATEGORY_NAV) {
+    if (listGrantableCosmeticsForAdminCategory(id).length) return id;
+  }
+  return ADMIN_COSMETIC_GRANT_CATEGORY_NAV[0]?.id ?? 'titles';
+}
+
+function _renderAdminGrantCosmeticCategoryOptions(selectedId) {
+  return ADMIN_COSMETIC_GRANT_CATEGORY_NAV.map(({ id, label }) => `
+      <option value="${id}"${id === selectedId ? ' selected' : ''}>${label}</option>
+    `).join('');
+}
+
+function _renderAdminGrantCosmeticItemOptions(navId) {
+  const items = listGrantableCosmeticsForAdminCategory(navId);
+  if (!items.length) {
+    return '<option value="">— No cosmetics —</option>';
+  }
+  return items.map(def => {
+    const safeName = String(def.name || def.id || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+    return `<option value="${String(def.id).replace(/"/g, '&quot;')}">${safeName}</option>`;
+  }).join('');
+}
+
 function _renderShopItemOptions(type) {
   const items = type === ITEM_TYPES.COSMETIC
     ? listCosmeticDefinitions({ includeDisabled: false })
@@ -733,7 +762,7 @@ function _renderAdminRuntimeSnapshot(p) {
           <div class="font-semibold mb-2 text-primary-400">Equipped Profile</div>
           <div>Aura: ${profile.equippedAura || 'None'}</div>
           <div>Border: ${profile.equippedBorder || 'None'}</div>
-          <div>Banner: ${profile.equippedBanner || 'None'}</div>
+          <div>Banner: ${profile.equippedBanner ? (getCosmeticDefinition(profile.equippedBanner)?.name || profile.equippedBanner) : 'Default chrome'}</div>
           <div>Background: ${profile.equippedBackground || 'None'}</div>
           <div>Title: ${profile.equippedTitle || 'None'}</div>
         </div>
@@ -773,6 +802,8 @@ function showPlayerDetail(username) {
       })
       .filter(Boolean)
   );
+
+  const pdGrantCosmeticCat = _pickInitialAdminGrantCosmeticCategory();
 
   const content = document.getElementById('player-detail-content');
   content.innerHTML = `
@@ -845,11 +876,16 @@ function showPlayerDetail(username) {
           </div>
           <div>
             <label class="text-xs text-surface-400 block mb-1">Give Cosmetic Ownership</label>
-            <div class="flex gap-2">
-              <select id="pd-cosmetic-select" class="admin-input flex-1">
-                ${_renderShopItemOptions(ITEM_TYPES.COSMETIC)}
+            <div class="flex flex-col gap-2">
+              <select id="pd-cosmetic-category" class="admin-input w-full max-w-xs">
+                ${_renderAdminGrantCosmeticCategoryOptions(pdGrantCosmeticCat)}
               </select>
-              <button id="pd-give-cosmetic" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm">Unlock</button>
+              <div class="flex gap-2">
+                <select id="pd-cosmetic-select" class="admin-input flex-1">
+                  ${_renderAdminGrantCosmeticItemOptions(pdGrantCosmeticCat)}
+                </select>
+                <button id="pd-give-cosmetic" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm">Unlock</button>
+              </div>
             </div>
             <p class="text-xs text-surface-500 mt-1">Unlocks ownership only; equipped profile state is not changed.</p>
           </div>
@@ -1003,6 +1039,10 @@ function showPlayerDetail(username) {
 
   content.querySelector('#pd-give-cosmetic')?.addEventListener('click', () => {
     const itemId = content.querySelector('#pd-cosmetic-select')?.value;
+    if (!itemId) {
+      toast.error('Select a cosmetic to grant.');
+      return;
+    }
     const result = adminGrantShopItem(username, itemId, 1);
     if (!result.success) {
       toast.error('Could not unlock cosmetic');
@@ -1010,6 +1050,12 @@ function showPlayerDetail(username) {
     }
     toast.success(`Cosmetic unlocked for ${username}`);
     showPlayerDetail(username);
+  });
+
+  content.querySelector('#pd-cosmetic-category')?.addEventListener('change', () => {
+    const cat = content.querySelector('#pd-cosmetic-category').value;
+    const sel = content.querySelector('#pd-cosmetic-select');
+    if (sel) sel.innerHTML = _renderAdminGrantCosmeticItemOptions(cat);
   });
 
   // Delete player — DESTRUCTIVE (requires confirmation)

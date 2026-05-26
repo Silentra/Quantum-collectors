@@ -50,14 +50,12 @@ export const DEFAULT_CURRENCIES = Object.freeze({
 
 /** Cosmetic ownership + equipment defaults */
 export const DEFAULT_COSMETICS = Object.freeze({
-  owned: Object.freeze({
-    profile_banner_default: true,
-  }),
+  owned: Object.freeze({}),
   equipped: Object.freeze({
     aura: 'default_prismatic',
     border: null,
     title: null,
-    profileBanner: 'profile_banner_default',
+    profileBanner: null,
   }),
 });
 
@@ -274,7 +272,7 @@ export function getPhase2ADefaults() {
     profile: {
       equippedAura: null,
       equippedBorder: null,
-      equippedBanner: 'profile_banner_default',
+      equippedBanner: null,
       equippedBackground: null,
       equippedTitle: null,
       identityAccent: IDENTITY_ACCENT_DEFAULT,
@@ -499,29 +497,45 @@ export function normalizePlayerSchema(username) {
       delete owned.profile_banner_research;
       patched = true;
     }
+    // BN-1 / polish: legacy default-banner cosmetic removed; strip orphan ownership
+    if (player.cosmetics?.owned?.profile_banner_default === true) {
+      db.remove(`players/${username}/cosmetics/owned/profile_banner_default`);
+      delete owned.profile_banner_default;
+      patched = true;
+    }
+
+    let equippedBanner = player.profile.equippedBanner;
     const legacyBanner = player.cosmetics?.equipped?.profileBanner;
-    const equippedBanner = player.profile.equippedBanner;
+
+    /* Default chrome = no equip; pseudo-cosmetic profile_banner_default retired */
+    if (equippedBanner === 'profile_banner_default') {
+      equippedBanner = null;
+      db.set(`players/${username}/profile/equippedBanner`, null);
+      patched = true;
+    }
+    if (legacyBanner === 'profile_banner_default') {
+      db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
+      patched = true;
+    }
+
     const researchEquipped = equippedBanner === 'profile_banner_research' ||
       legacyBanner === 'profile_banner_research';
-    if (researchEquipped || (equippedBanner && !isOwnedValidCosmetic(equippedBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER))) {
-      const fallback = owned.profile_banner_default === true ? 'profile_banner_default' : null;
-      db.set(`players/${username}/profile/equippedBanner`, fallback);
+    if (researchEquipped ||
+        (equippedBanner && !isOwnedValidCosmetic(equippedBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER))) {
+      db.set(`players/${username}/profile/equippedBanner`, null);
       if (player.cosmetics?.equipped && typeof player.cosmetics.equipped === 'object') {
-        db.set(`players/${username}/cosmetics/equipped/profileBanner`, fallback);
+        db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
       }
       patched = true;
     } else if (
       (equippedBanner === null || equippedBanner === undefined) &&
+      legacyBanner &&
+      legacyBanner !== 'profile_banner_default' &&
+      legacyBanner !== 'profile_banner_research' &&
       isOwnedValidCosmetic(legacyBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER)
     ) {
       db.set(`players/${username}/profile/equippedBanner`, legacyBanner);
       patched = true;
-    } else if (equippedBanner === null || equippedBanner === undefined) {
-      const fallback = owned.profile_banner_default === true ? 'profile_banner_default' : null;
-      if (fallback) {
-        db.set(`players/${username}/profile/equippedBanner`, fallback);
-        patched = true;
-      }
     }
 
     const featuredCards = normalizeIdArray(

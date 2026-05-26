@@ -6,6 +6,8 @@
 import * as toast from './toast.js';
 import { ITEM_CATEGORIES, ITEM_RARITIES } from './shop-definitions.js';
 import {
+  ADMIN_COSMETIC_GRANT_CATEGORY_NAV,
+  ADMIN_STATIC_COSMETIC_TAB_MAP,
   deleteTitleDefinition,
   getCosmeticCategoryAdminLabel,
   getCosmeticDefinition,
@@ -18,13 +20,6 @@ import {
 
 let editingTitleId = null;
 let activeCategory = 'titles';
-
-const STATIC_CATEGORY_TABS = Object.freeze({
-  banners: ITEM_CATEGORIES.PROFILE_BANNER,
-  backgrounds: ITEM_CATEGORIES.SHELL_BACKGROUND,
-  glow: ITEM_CATEGORIES.AURA,
-  borders: ITEM_CATEGORIES.BORDER,
-});
 
 const STATIC_CATEGORY_INTRO = Object.freeze({
   banners: 'Banner visuals are code/CSS-authored. Edit shop and achievement eligibility here only.',
@@ -377,7 +372,7 @@ function renderCategoryContent(container) {
     return;
   }
 
-  const runtimeCategory = STATIC_CATEGORY_TABS[activeCategory];
+  const runtimeCategory = ADMIN_STATIC_COSMETIC_TAB_MAP[activeCategory];
   if (runtimeCategory) {
     content.innerHTML = staticCosmeticsPanelHtml(activeCategory, runtimeCategory);
     wireStaticCosmeticsPanel(container);
@@ -390,14 +385,7 @@ function renderCategoryContent(container) {
 export function renderCosmeticsAdminPanel(container = document.getElementById('cosmetics-admin-panel')) {
   if (!container) return;
 
-  const navItems = [
-    { id: 'titles', label: 'Titles' },
-    { id: 'banners', label: 'Banners' },
-    { id: 'backgrounds', label: 'Backgrounds' },
-    { id: 'glow', label: 'Glow' },
-    { id: 'borders', label: 'Borders' },
-    { id: 'shimmer', label: 'Shimmer' },
-  ];
+  const navItems = ADMIN_COSMETIC_GRANT_CATEGORY_NAV.map(({ id, label }) => ({ id, label }));
 
   container.innerHTML = `
     <div class="space-y-4">

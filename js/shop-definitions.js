@@ -210,21 +210,6 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
-  profile_banner_default: {
-    id: 'profile_banner_default',
-    name: 'Default Banner',
-    description: 'Standard chrome banner included with every collector profile.',
-    type: ITEM_TYPES.COSMETIC,
-    category: ITEM_CATEGORIES.PROFILE_BANNER,
-    rarity: ITEM_RARITIES.COMMON,
-    price: 0,
-    weight: 0,
-    enabled: true,
-    shopEnabled: false,
-    achievementEnabled: false,
-    display: { emoji: '▰' },
-  },
-
   profile_banner_deep_blue: {
     id: 'profile_banner_deep_blue',
     name: 'Deep Blue Banner',

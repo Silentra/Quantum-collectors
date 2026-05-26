@@ -33,7 +33,7 @@
 import * as db from './database.js';
 import { DEFAULT_SHOP_CONFIG, getShopConfig, resolveShopRuntimeConfig } from './shop-config.js';
 import { buildShopCatalog } from './shop-catalog.js';
-import { ITEM_TYPES } from './shop-definitions.js';
+import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import {
   REROLL_SCOPES,
   generateReplacementShopSlot,
@@ -925,6 +925,10 @@ export function equipCosmetic(username, cosmeticId, options = {}) {
   }
 
   db.set(`players/${username}/profile/${validation.profileField}`, cosmeticId);
+  if (validation.category === ITEM_CATEGORIES.PROFILE_BANNER) {
+    db.set(`players/${username}/cosmetics/equipped/profileBanner`, cosmeticId);
+  }
+
   bumpPlayerStat(username, STAT_KEYS.COSMETICS_EQUIPPED, 1);
 
   return {
@@ -957,6 +961,9 @@ export function unequipCosmetic(username, category) {
   }
 
   db.set(`players/${username}/profile/${validation.profileField}`, null);
+  if (category === ITEM_CATEGORIES.PROFILE_BANNER) {
+    db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
+  }
 
   return {
     success: true,
