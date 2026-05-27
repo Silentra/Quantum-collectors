@@ -23,6 +23,7 @@ export const SHELL_THEME_DEFAULTS = Object.freeze({
 export const IDENTITY_ACCENT_DEFAULT = 'default';
 export const PROFILE_HEADER_TEXT_DEFAULT = 'default';
 export const PROFILE_BODY_TEXT_DEFAULT = 'default';
+export const PROFILE_TAB_TEXT_DEFAULT = 'default';
 
 /** Profile readability palette (same options as identity accent swatches). */
 export const PROFILE_TEXT_COLOR_IDS = Object.freeze([
@@ -120,6 +121,16 @@ export function normalizeProfileBodyTextColor(colorId) {
 }
 
 /**
+ * @param {string|null|undefined} colorId
+ * @returns {string}
+ */
+export function normalizeProfileTabTextColor(colorId) {
+  if (typeof colorId !== 'string') return PROFILE_TAB_TEXT_DEFAULT;
+  const slug = colorId.trim().toLowerCase();
+  return PROFILE_TEXT_COLOR_SET.has(slug) ? slug : PROFILE_TAB_TEXT_DEFAULT;
+}
+
+/**
  * Map a cosmetic item id to a stable, CSS-safe theme slug for data-* hooks.
  * @param {string|null|undefined} itemId
  * @returns {string|null}
@@ -145,7 +156,7 @@ function isEquippedCosmetic(itemId, playerData, category) {
  * Resolve independent shell theme hook values from canonical profile runtime state.
  * Categories remain independent (banner + background + title may mix freely).
  * @param {object|null|undefined} playerData
- * @returns {{ banner: string, background: string, theme: string, identityAccent: string, headerTextColor: string, bodyTextColor: string, titleSlug: string, titleItemId: string|null }}
+ * @returns {{ banner: string, background: string, theme: string, identityAccent: string, headerTextColor: string, bodyTextColor: string, tabTextColor: string, titleSlug: string, titleItemId: string|null }}
  */
 export function resolveShellThemeState(playerData) {
   const bannerId = playerData?.profile?.[PROFILE_EQUIPPED_FIELDS.banner] ?? null;
@@ -167,6 +178,7 @@ export function resolveShellThemeState(playerData) {
   const identityAccent = normalizeIdentityAccent(playerData?.profile?.identityAccent);
   const headerTextColor = normalizeProfileHeaderTextColor(playerData?.profile?.headerTextColor);
   const bodyTextColor = normalizeProfileBodyTextColor(playerData?.profile?.bodyTextColor);
+  const tabTextColor = normalizeProfileTabTextColor(playerData?.profile?.tabTextColor);
 
   return {
     banner,
@@ -175,6 +187,7 @@ export function resolveShellThemeState(playerData) {
     identityAccent,
     headerTextColor,
     bodyTextColor,
+    tabTextColor,
     titleSlug,
     titleItemId: isEquippedCosmetic(titleId, playerData, CATEGORY_BY_SLOT.title) ? titleId : null,
   };
@@ -187,11 +200,13 @@ function applyThemeAttributes(screen, chrome, header, state) {
   screen.dataset.identityAccent = state.identityAccent;
   screen.dataset.headerText = state.headerTextColor;
   screen.dataset.bodyText = state.bodyTextColor;
+  screen.dataset.tabText = state.tabTextColor;
 
   if (chrome) {
     chrome.dataset.banner = state.banner;
     chrome.dataset.theme = state.theme;
     chrome.dataset.identityAccent = state.identityAccent;
+    chrome.dataset.tabText = state.tabTextColor;
   }
 
   if (header) {
@@ -239,6 +254,7 @@ export function applyShellTheme(playerData = null) {
     identityAccent: IDENTITY_ACCENT_DEFAULT,
     headerTextColor: PROFILE_HEADER_TEXT_DEFAULT,
     bodyTextColor: PROFILE_BODY_TEXT_DEFAULT,
+    tabTextColor: PROFILE_TAB_TEXT_DEFAULT,
     titleSlug: 'default',
     titleItemId: null,
   };

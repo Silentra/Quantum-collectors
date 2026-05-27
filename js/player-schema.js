@@ -34,9 +34,11 @@ import {
   IDENTITY_ACCENT_DEFAULT,
   PROFILE_BODY_TEXT_DEFAULT,
   PROFILE_HEADER_TEXT_DEFAULT,
+  PROFILE_TAB_TEXT_DEFAULT,
   normalizeIdentityAccent,
   normalizeProfileBodyTextColor,
   normalizeProfileHeaderTextColor,
+  normalizeProfileTabTextColor,
 } from './shell-theme.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -107,6 +109,7 @@ export const DEFAULT_PROFILE = Object.freeze({
   identityAccent: 'default',
   headerTextColor: 'default',
   bodyTextColor: 'default',
+  tabTextColor: 'default',
   featuredCards: Object.freeze([]),
   featuredAchievements: Object.freeze([]),
 });
@@ -240,6 +243,7 @@ function createProfileDefaultsFromLegacy(player = {}) {
     identityAccent: normalizeIdentityAccent(player.profile?.identityAccent),
     headerTextColor: normalizeProfileHeaderTextColor(player.profile?.headerTextColor),
     bodyTextColor: normalizeProfileBodyTextColor(player.profile?.bodyTextColor),
+    tabTextColor: normalizeProfileTabTextColor(player.profile?.tabTextColor),
     featuredCards: normalizeIdArray(customization.featuredCards, MAX_FEATURED_CARDS),
     featuredAchievements: normalizeIdArray(customization.featuredAchievements, MAX_FEATURED_ACHIEVEMENTS),
   };
@@ -278,6 +282,7 @@ export function getPhase2ADefaults() {
       identityAccent: IDENTITY_ACCENT_DEFAULT,
       headerTextColor: PROFILE_HEADER_TEXT_DEFAULT,
       bodyTextColor: PROFILE_BODY_TEXT_DEFAULT,
+      tabTextColor: PROFILE_TAB_TEXT_DEFAULT,
       featuredCards: [],
       featuredAchievements: [],
     },
@@ -590,6 +595,17 @@ export function normalizePlayerSchema(username) {
       const normalizedBody = normalizeProfileBodyTextColor(player.profile.bodyTextColor);
       if (player.profile.bodyTextColor !== normalizedBody) {
         db.set(`players/${username}/profile/bodyTextColor`, normalizedBody);
+        patched = true;
+      }
+    }
+
+    if (player.profile.tabTextColor === undefined) {
+      db.set(`players/${username}/profile/tabTextColor`, PROFILE_TAB_TEXT_DEFAULT);
+      patched = true;
+    } else {
+      const normalizedTab = normalizeProfileTabTextColor(player.profile.tabTextColor);
+      if (player.profile.tabTextColor !== normalizedTab) {
+        db.set(`players/${username}/profile/tabTextColor`, normalizedTab);
         patched = true;
       }
     }

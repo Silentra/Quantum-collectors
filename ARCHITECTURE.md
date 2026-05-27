@@ -899,6 +899,9 @@ Players may mix categories freely (e.g. cosmic banner + blueprint background + s
 | `data-background` | `#screen-game` only | `default` | `profile.equippedBackground` |
 | `data-theme` | `#screen-game`, `#game-shell-chrome` | `default` | Reserved |
 | `data-identity-accent` | `#screen-game`, `#game-shell-chrome`, `#game-header` | `default` | `profile.identityAccent` (utility preference) |
+| `data-header-text` | `#screen-game` | `default` | `profile.headerTextColor` (gameplay panel headings) |
+| `data-body-text` | `#screen-game` | `default` | `profile.bodyTextColor` (gameplay panel secondary text) |
+| `data-tab-text` | `#screen-game`, `#game-shell-chrome` | `default` | `profile.tabTextColor` (shell tab labels only) |
 | `data-title` | `#nav-player-title` | `default` | `profile.equippedTitle` |
 
 Future CSS selects themes with attribute selectors, e.g. `[data-banner="cosmic"]`, `[data-background="blueprint"]`. Slugs derive from cosmetic item ids via `cosmeticIdToShellSlug()`.
@@ -988,6 +991,25 @@ Equal `1fr` side columns reserve space so the center column is **visually center
 - CSS maps slugs to `--identity-accent`; consumed by `.nav-identity-name` and `.nav-player-title-slot` only
 - Mutation: `setIdentityAccent()` in `shop-mutations.js` (profile utility, not shop purchase)
 - No arbitrary hex, no inline styles, no runtime style injection
+
+**Profile readability channels (utility — not cosmetics)**
+
+Four independent player-controlled channels in Profile → Appearance (same curated palette incl. `black`):
+
+| Channel | Profile field | Hook | Consumed by |
+|---------|---------------|------|-------------|
+| Identity accent | `identityAccent` | `data-identity-accent` | `.nav-identity-name`, `.nav-player-title-slot` |
+| Header text | `headerTextColor` | `data-header-text` | Gameplay panel headings (`--profile-header-text`) |
+| Body text | `bodyTextColor` | `data-body-text` | Gameplay panel secondary/muted text (`--profile-body-text`) |
+| Tab text | `tabTextColor` | `data-tab-text` | `#game-shell-chrome .tab-btn` label color (`--chrome-tab-text`) |
+
+- Tab label color is **not** coupled to banner slug auto-contrast or header/body colors — player agency only.
+- Active tab **underline** remains `--chrome-tab-active-border` from per-banner BN-1/BN-3 tokens; only label `color` uses `--chrome-tab-text`.
+- Mutations: `setIdentityAccent()`, `setProfileHeaderTextColor()`, `setProfileBodyTextColor()`, `setProfileTabTextColor()` in `shop-mutations.js`.
+
+**Identity typography scale (post–BN-3)**
+
+After BN-3 environmental banners, shell identity type was modestly increased (~+3–4px effective) without changing header height or grid layout: `.nav-identity-name` **1.0625rem / 600**, `.nav-player-title-slot` **clamp(0.8125rem, 2.5vw, 0.9375rem) / 600** — stronger hierarchy vs cinematic chrome backdrops.
 
 **Stacking / clipping governance**
 

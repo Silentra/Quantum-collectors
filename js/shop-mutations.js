@@ -68,6 +68,7 @@ import {
   normalizeIdentityAccent,
   normalizeProfileBodyTextColor,
   normalizeProfileHeaderTextColor,
+  normalizeProfileTabTextColor,
 } from './shell-theme.js';
 
 function isObject(value) {
@@ -1142,4 +1143,20 @@ export function setProfileBodyTextColor(username, colorId) {
   const bodyTextColor = normalizeProfileBodyTextColor(colorId);
   db.set(`players/${username}/profile/bodyTextColor`, bodyTextColor);
   return { success: true, bodyTextColor };
+}
+
+/**
+ * @param {string} username
+ * @param {string} colorId
+ */
+export function setProfileTabTextColor(username, colorId) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+  const player = getProfilePlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const tabTextColor = normalizeProfileTabTextColor(colorId);
+  db.set(`players/${username}/profile/tabTextColor`, tabTextColor);
+  return { success: true, tabTextColor };
 }

@@ -754,6 +754,9 @@ body.app-mode-game #screen-game.screen.active {
 
 .nav-identity-name {
   flex: 0 0 auto;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
@@ -781,17 +784,17 @@ body.app-mode-game #screen-game.screen.active {
   border-bottom: 1px solid var(--shell-chrome-edge-border);
 }
 
-/* Chrome tab readability — scoped to shell (not admin tabs); tokens set per data-banner */
+/* Chrome tab labels — player-controlled via data-tab-text; active border from per-banner tokens */
 #game-shell-chrome .tab-btn {
-  color: var(--chrome-tab-muted, #94a3b8);
+  color: var(--chrome-tab-text, #94a3b8);
 }
 
 #game-shell-chrome .tab-btn:hover {
-  color: var(--chrome-tab-hover, #e2e8f0);
+  color: var(--chrome-tab-text, #e2e8f0);
 }
 
 #game-shell-chrome .tab-btn.active {
-  color: var(--chrome-tab-active, #818cf8);
+  color: var(--chrome-tab-text, #818cf8);
   border-bottom-color: var(--chrome-tab-active-border, #818cf8);
 }
 
@@ -809,10 +812,10 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: none;
   margin: 0;
   padding: 0;
-  font-size: clamp(0.625rem, 2.2vw, 0.75rem);
-  font-weight: 500;
+  font-size: clamp(0.8125rem, 2.5vw, 0.9375rem);
+  font-weight: 600;
   letter-spacing: 0.02em;
-  line-height: 1;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1250,6 +1253,24 @@ body.app-mode-game #screen-game.screen.active {
 #screen-game[data-body-text="violet"] { --profile-body-text: #a78bfa; }
 #screen-game[data-body-text="indigo"] { --profile-body-text: #818cf8; }
 #screen-game[data-body-text="black"] { --profile-body-text: #000000; }
+
+/* Shell tab label readability (utility preference on #game-shell-chrome) */
+#game-shell-chrome[data-tab-text="default"] { --chrome-tab-text: #94a3b8; }
+#game-shell-chrome[data-tab-text="slate"] { --chrome-tab-text: #cbd5e1; }
+#game-shell-chrome[data-tab-text="silver"] { --chrome-tab-text: #e2e8f0; }
+#game-shell-chrome[data-tab-text="ice"] { --chrome-tab-text: #e0f2fe; }
+#game-shell-chrome[data-tab-text="sky"] { --chrome-tab-text: #bae6fd; }
+#game-shell-chrome[data-tab-text="teal"] { --chrome-tab-text: #99f6e4; }
+#game-shell-chrome[data-tab-text="emerald"] { --chrome-tab-text: #a7f3d0; }
+#game-shell-chrome[data-tab-text="lime"] { --chrome-tab-text: #d9f99d; }
+#game-shell-chrome[data-tab-text="gold"] { --chrome-tab-text: #fde68a; }
+#game-shell-chrome[data-tab-text="amber"] { --chrome-tab-text: #fcd34d; }
+#game-shell-chrome[data-tab-text="coral"] { --chrome-tab-text: #fda4af; }
+#game-shell-chrome[data-tab-text="rose"] { --chrome-tab-text: #fecdd3; }
+#game-shell-chrome[data-tab-text="lavender"] { --chrome-tab-text: #ddd6fe; }
+#game-shell-chrome[data-tab-text="violet"] { --chrome-tab-text: #c4b5fd; }
+#game-shell-chrome[data-tab-text="indigo"] { --chrome-tab-text: #c7d2fe; }
+#game-shell-chrome[data-tab-text="black"] { --chrome-tab-text: #000000; }
 
 #game-content-scroll h1,
 #game-content-scroll h2,

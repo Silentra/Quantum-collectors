@@ -11,6 +11,7 @@ import {
   normalizeIdentityAccent,
   normalizeProfileBodyTextColor,
   normalizeProfileHeaderTextColor,
+  normalizeProfileTabTextColor,
   PROFILE_TEXT_COLOR_IDS,
 } from './shell-theme.js';
 import * as cards from './cards.js';
@@ -24,6 +25,7 @@ import {
   setIdentityAccent,
   setProfileBodyTextColor,
   setProfileHeaderTextColor,
+  setProfileTabTextColor,
   unequipCosmetic,
   unfeatureCard,
 } from './shop-mutations.js';
@@ -216,6 +218,7 @@ function renderProfileAppearance(p) {
   const identityCurrent = normalizeIdentityAccent(p?.profile?.identityAccent);
   const headerCurrent = normalizeProfileHeaderTextColor(p?.profile?.headerTextColor);
   const bodyCurrent = normalizeProfileBodyTextColor(p?.profile?.bodyTextColor);
+  const tabCurrent = normalizeProfileTabTextColor(p?.profile?.tabTextColor);
 
   const dropdowns = [
     renderAppearanceDropdown(
@@ -235,6 +238,12 @@ function renderProfileAppearance(p) {
       'Secondary and muted supporting text across gameplay panels.',
       formatLabel(bodyCurrent),
       `<div class="profile-accent-grid">${renderColorSwatchGrid(bodyCurrent, 'set-body-text-color')}</div>`
+    ),
+    renderAppearanceDropdown(
+      'Tab Text Color',
+      'Tab labels in the shell chrome (independent from banner contrast).',
+      formatLabel(tabCurrent),
+      `<div class="profile-accent-grid">${renderColorSwatchGrid(tabCurrent, 'set-tab-text-color')}</div>`
     ),
   ].join('');
 
@@ -523,6 +532,9 @@ function handleProfileAction(username, button) {
   } else if (action === 'set-body-text-color') {
     result = setProfileBodyTextColor(username, button.dataset.colorId);
     if (result.success) toast.success('Text color updated.');
+  } else if (action === 'set-tab-text-color') {
+    result = setProfileTabTextColor(username, button.dataset.colorId);
+    if (result.success) toast.success('Tab text color updated.');
   }
 
   if (result && !result.success) {
@@ -536,6 +548,7 @@ function handleProfileAction(username, button) {
     'set-identity-accent',
     'set-header-text-color',
     'set-body-text-color',
+    'set-tab-text-color',
   ]);
   if (result?.success && themeActions.has(action)) {
     applyShellTheme(player.getPlayer(username));
