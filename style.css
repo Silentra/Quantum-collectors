@@ -57,7 +57,6 @@ body.app-mode-game #screen-game.screen.active {
   position: relative;
   z-index: 2;
   overflow: hidden;
-  container-type: size;
 }
 
 /* Shared chrome surface — one continuous visual plane for header + tabs (DOM remains separate) */
@@ -151,7 +150,7 @@ body.app-mode-game #screen-game.screen.active {
 /*
  * BN-3 — CSS-only environmental panoramic banner chrome
  * Single pseudo-layer (::before); centered vertical crop, hybrid overscale
- * (height-fill + width-overflow via max()), shared bn3-panoramic-drift keyframes.
+ * (auto 100% on narrow hosts; width-tier % auto from 1200px+), shared bn3-panoramic-drift.
  * profile_banner_{name} → data-banner / data-banner-slug via cosmeticIdToShellSlug()
  */
 
@@ -301,7 +300,7 @@ body.app-mode-game #screen-game.screen.active {
   --shell-chrome-edge-border: #1a3d4a;
 }
 
-/* ── BN-3 panoramic layer — shared motion + responsive tiers ── */
+/* ── BN-3 live chrome — motion (sizing split by breakpoint below) ── */
 #game-shell-chrome[data-banner="football-field"]::before,
 #game-shell-chrome[data-banner="ancient-library"]::before,
 #game-shell-chrome[data-banner="archeology"]::before,
@@ -315,7 +314,14 @@ body.app-mode-game #screen-game.screen.active {
 #game-shell-chrome[data-banner="night-sky"]::before,
 #game-shell-chrome[data-banner="observatory"]::before,
 #game-shell-chrome[data-banner="particle-accelerator"]::before,
-#game-shell-chrome[data-banner="underwater-research-facility"]::before,
+#game-shell-chrome[data-banner="underwater-research-facility"]::before {
+  background-repeat: no-repeat;
+  background-size: auto 100%;
+  background-position: 0% 50%;
+  animation: bn3-panoramic-drift 150s linear infinite alternate;
+}
+
+/* ── BN-3 inline shop previews — compact strip, height-fill (~12:1 assets) ── */
 .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
 .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
 .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
@@ -331,13 +337,12 @@ body.app-mode-game #screen-game.screen.active {
 .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
 .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
   background-repeat: no-repeat;
-  /* Hybrid: auto 100% fills host height; width% tier ensures ultrawide pan overflow (~12:1 assets) */
-  background-size: max(125% auto, auto 100%);
+  background-size: auto 100%;
   background-position: 0% 50%;
   animation: bn3-panoramic-drift 150s linear infinite alternate;
 }
 
-/* BN-3 expanded modal — fill tall preview stage (not compact inline strip sizing) */
+/* ── BN-3 expanded modal previews — tall stage, height-fill (no chrome selectors) ── */
 .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
 .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
 .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
@@ -354,9 +359,8 @@ body.app-mode-game #screen-game.screen.active {
 .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
   width: 100%;
   min-height: 0;
-  /* Height from .shop-cosmetic-preview.cosmetic-preview--expanded — not height:100% (stage has no fixed height) */
   background-repeat: no-repeat;
-  background-size: max(125% auto, auto 100%);
+  background-size: auto 100%;
   background-position: 0% 50%;
   animation: bn3-panoramic-drift 150s linear infinite alternate;
 }
@@ -507,7 +511,11 @@ body.app-mode-game #screen-game.screen.active {
   #game-shell-chrome[data-banner="night-sky"]::before,
   #game-shell-chrome[data-banner="observatory"]::before,
   #game-shell-chrome[data-banner="particle-accelerator"]::before,
-  #game-shell-chrome[data-banner="underwater-research-facility"]::before,
+  #game-shell-chrome[data-banner="underwater-research-facility"]::before {
+    background-size: 145% auto;
+    animation-duration: 120s;
+  }
+
   .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
   .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
   .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
@@ -521,11 +529,7 @@ body.app-mode-game #screen-game.screen.active {
   .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
   .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: max(145% auto, auto 100%);
-    animation-duration: 120s;
-  }
-
+  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
@@ -540,7 +544,6 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
-    background-size: max(145% auto, auto 100%);
     animation-duration: 120s;
   }
 }
@@ -559,7 +562,11 @@ body.app-mode-game #screen-game.screen.active {
   #game-shell-chrome[data-banner="night-sky"]::before,
   #game-shell-chrome[data-banner="observatory"]::before,
   #game-shell-chrome[data-banner="particle-accelerator"]::before,
-  #game-shell-chrome[data-banner="underwater-research-facility"]::before,
+  #game-shell-chrome[data-banner="underwater-research-facility"]::before {
+    background-size: 155% auto;
+    animation-duration: 105s;
+  }
+
   .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
   .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
   .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
@@ -573,11 +580,7 @@ body.app-mode-game #screen-game.screen.active {
   .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
   .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: max(155% auto, auto 100%);
-    animation-duration: 105s;
-  }
-
+  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
@@ -592,7 +595,6 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
-    background-size: max(155% auto, auto 100%);
     animation-duration: 105s;
   }
 }
@@ -611,7 +613,11 @@ body.app-mode-game #screen-game.screen.active {
   #game-shell-chrome[data-banner="night-sky"]::before,
   #game-shell-chrome[data-banner="observatory"]::before,
   #game-shell-chrome[data-banner="particle-accelerator"]::before,
-  #game-shell-chrome[data-banner="underwater-research-facility"]::before,
+  #game-shell-chrome[data-banner="underwater-research-facility"]::before {
+    background-size: 165% auto;
+    animation-duration: 95s;
+  }
+
   .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
   .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
   .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
@@ -625,11 +631,7 @@ body.app-mode-game #screen-game.screen.active {
   .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
   .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: max(165% auto, auto 100%);
-    animation-duration: 95s;
-  }
-
+  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
@@ -644,7 +646,6 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
-    background-size: max(165% auto, auto 100%);
     animation-duration: 95s;
   }
 }
