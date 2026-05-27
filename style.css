@@ -148,14 +148,15 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 /*
- * BN-3 — CSS-only panoramic banner chrome (reference: football-field)
- * Single pseudo-layer (::before); shared drift keyframes + responsive tiers.
+ * BN-3 — CSS-only environmental panoramic banner chrome
+ * Single pseudo-layer (::before); centered vertical crop, moderate height overscale,
+ * shared bn3-panoramic-drift keyframes + responsive duration tiers.
  * profile_banner_{name} → data-banner / data-banner-slug via cosmeticIdToShellSlug()
  */
 
 @keyframes bn3-panoramic-drift {
-  from { background-position: 0% 100%; }
-  to { background-position: 100% 100%; }
+  from { background-position: 0% 50%; }
+  to { background-position: 100% 50%; }
 }
 
 /* ── BN-3 tab readability tokens (per slug) ── */
@@ -343,8 +344,8 @@ body.app-mode-game #screen-game.screen.active {
 .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
 .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
   background-repeat: no-repeat;
-  background-size: auto 140%;
-  background-position: 0% 100%;
+  background-size: auto 110%;
+  background-position: 0% 50%;
   animation: bn3-panoramic-drift 150s linear infinite alternate;
 }
 
@@ -523,7 +524,7 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: auto 160%;
+    background-size: auto 120%;
     animation-duration: 120s;
   }
 }
@@ -571,7 +572,7 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: auto 190%;
+    background-size: auto 135%;
     animation-duration: 105s;
   }
 }
@@ -619,7 +620,7 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: auto 215%;
+    background-size: auto 150%;
     animation-duration: 95s;
   }
 }
@@ -668,7 +669,7 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
     animation: none;
-    background-position: 0% 100%;
+    background-position: 0% 50%;
   }
 }
 

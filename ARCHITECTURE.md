@@ -655,17 +655,18 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 
 **BN-2:** Static raster/gradient overlays via `--banner-overlay: url('assets/banners/{slug}.webp')` on `#game-shell-chrome::before`, `background-repeat: no-repeat`, and sizing/position authored per slug (`background-size`/position appropriate to the asset). Scaffold: [`assets/banners/`](/assets/banners/). Independent from gameplay backgrounds.
 
-**BN-3 (standardized panoramic tier — CSS-only ambient motion):** BN-3 is the **panoramic drifting banner** tier. **`profile_banner_football_field` / `football-field`** established the reference implementation; **all BN-3 banners share the same doctrine** (do not one-off animation systems per banner).
+**BN-3 (standardized panoramic tier — CSS-only ambient motion):** BN-3 is the **environmental panoramic drifting banner** tier. **`profile_banner_football_field` / `football-field`** was the first implementation; early overscaling (up to **215%** height, bottom-anchored crop) favored turf-style strips where upper sky could be cropped. **Finalized BN-3 doctrine** targets full-scene panoramas (observatories, skylines, canopy, architecture, labs): **vertically centered** composition, **moderate** height overscale, preserved horizontal drift and ultrawide overflow. **All BN-3 banners share one doctrine** — no per-banner scale exceptions.
 
 | Concern | Doctrine |
 |---------|----------|
-| **Motion** | Shared `@keyframes bn3-panoramic-drift`: **`background-position` `0% 100%` → `100% 100%`**, **`linear infinite alternate`** (bidirectional drift, no loop snap) |
-| **Asset** | Single wide WebP in **`assets/banners/{slug}.webp`** (exception: football uses **`Field.webp`**); **`background-repeat: no-repeat`** — **no `repeat-x`**, no tile-width contracts |
+| **Motion** | Shared `@keyframes bn3-panoramic-drift`: **`background-position` `0% 50%` → `100% 50%`** (vertical center), **`linear infinite alternate`** (bidirectional drift, no loop snap) |
+| **Composition** | **`background-position-y: 50%`** — center crop vertically; not bottom-anchored (`100%`) |
+| **Asset** | Single wide WebP in **`assets/banners/{slug}.webp`** (exception: football uses **`Field.webp`**); **`background-repeat: no-repeat`** — **no `repeat-x`**, no tile-width contracts, **no `background-size: cover`** |
 | **Layer** | **`#game-shell-chrome::before` only** (`z-index: -1`, `pointer-events: none`); no `::after` sprites yet |
-| **Responsive scale** | **`background-size: auto`** height overscale: **140% / 150s** → **≥1200px: 160% / 120s** → **≥1920px: 190% / 105s** → **≥2560px: 215% / 95s** |
+| **Responsive scale** | **`background-size: auto`** moderate height overscale (width-driven horizontal overflow): **110% / 150s** → **≥1200px: 120% / 120s** → **≥1920px: 135% / 105s** → **≥2560px: 150% / 95s** |
 | **Readability** | Per-slug **`--banner-chrome-fill`**, **`--chrome-tab-*`**, **`--shell-chrome-edge-border`** on `#game-shell-chrome[data-banner="{slug}"]` |
 | **Previews** | Same rules on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** + **`.cosmetic-preview-stage …`** |
-| **A11y** | **`prefers-reduced-motion: reduce`** → `animation: none`, **`background-position: 0% 100%`** |
+| **A11y** | **`prefers-reduced-motion: reduce`** → `animation: none`, **`background-position: 0% 50%`** |
 | **Non-goals** | JS animation, canvas/video, DOM injection, gameplay-area motion, parallax, particles |
 
 **BN-3 panoramic banner inventory** (`profile_banner_*` → `data-banner` slug → asset):
