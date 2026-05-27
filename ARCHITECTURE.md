@@ -651,23 +651,26 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 - `#game-shell-chrome .tab-btn` uses those tokens so inactive, hover, and **active** tabs remain readable on every BN-1 fill.
 - Priority: interaction clarity over banner visibility (restrained fills; no spectacle).
 
-**Previews:** Same slug as chrome — `shop-cosmetic-preview--banner[data-banner-slug]` (+ `.cosmetic-preview-stage` for modal). No separate renderer.
+**Previews:** Same slug as chrome — inline **`shop-cosmetic-preview--banner[data-banner-slug]`** (compact strip); expanded modal uses **`.cosmetic-preview--expanded`** on the same classes inside **`.cosmetic-preview-stage`**. BN-3 motion/sizing grouped in `style.css`; expanded layout height is separate from inline **`2.65rem`**. No separate renderer.
 
 **BN-2:** Static raster/gradient overlays via `--banner-overlay: url('assets/banners/{slug}.webp')` on `#game-shell-chrome::before`, `background-repeat: no-repeat`, and sizing/position authored per slug (`background-size`/position appropriate to the asset). Scaffold: [`assets/banners/`](/assets/banners/). Independent from gameplay backgrounds.
 
-**BN-3 (standardized panoramic tier — CSS-only ambient motion):** BN-3 is the **environmental panoramic drifting banner** tier. **`profile_banner_football_field` / `football-field`** was the first implementation. Doctrine evolved: early **height-driven** overscale (`background-size: auto X%`, bottom-anchored) cropped environmental scenes; **height-tuned center crop** (`auto 110%–150%`) improved composition but limited ultrawide horizontal overflow. **Finalized BN-3 sizing** uses **width-driven** overscale (`background-size: X% auto`) so vertical composition is preserved and horizontal travel room scales with viewport width. **All BN-3 banners share one doctrine** — no per-banner scale exceptions.
+**BN-3 (standardized panoramic tier — CSS-only ambient motion):** BN-3 is the **environmental panoramic drifting banner** tier. **`profile_banner_football_field` / `football-field`** was the first implementation. Doctrine evolved: early **height-driven** overscale (`background-size: auto X%`, bottom-anchored) cropped environmental scenes; **height-tuned center crop** (`auto 110%–150%`) improved composition but limited ultrawide horizontal overflow; **width-only** overscale (`background-size: X% auto`) preserved composition on desktop but **underpainted** short hosts (mobile portrait chrome, tall expanded preview stages) because ~**3072×256** assets (~**12:1**) render too shallow when height is derived only from width. **Final BN-3 sizing** uses a **hybrid `max()` doctrine** on chrome + previews. **All BN-3 banners share one doctrine** — no per-banner scale exceptions.
 
 | Concern | Doctrine |
 |---------|----------|
 | **Motion** | Shared `@keyframes bn3-panoramic-drift`: **`background-position` `0% 50%` → `100% 50%`** (vertical center), **`linear infinite alternate`** (bidirectional drift, no loop snap) |
 | **Composition** | **`background-position-y: 50%`** — center crop vertically; not bottom-anchored (`100%`) |
-| **Asset** | Single wide WebP in **`assets/banners/{slug}.webp`** (exception: football uses **`Field.webp`**); **`background-repeat: no-repeat`** — **no `repeat-x`**, no tile-width contracts, **no `background-size: cover`** |
-| **Layer** | **`#game-shell-chrome::before` only** (`z-index: -1`, `pointer-events: none`); no `::after` sprites yet |
-| **Responsive scale** | **Width-driven** overscale — **`background-size: <width>% auto`** (height follows aspect ratio; horizontal overflow is primary): **125% / 150s** → **≥1200px: 145% / 120s** → **≥1920px: 155% / 105s** → **≥2560px: 165% / 95s**. Tuned after live environmental-banner testing on ultrawide to balance horizontal overflow coverage, scene readability, and composition stability (earlier **165% / 180%** widest tiers were slightly overtuned). Retired: **`auto X%`** height-primary doctrine. |
+| **Asset** | Single wide WebP in **`assets/banners/{slug}.webp`** (exception: football uses **`Field.webp`**); **`background-repeat: no-repeat`** — **no `repeat-x`**, no tile-width contracts, **no `background-size: cover`** on the live/preview BN-3 layer |
+| **Layer** | **`#game-shell-chrome::before` only** (`z-index: -1`, `pointer-events: none`); `#game-shell-chrome` uses **`container-type: size`** so percentage sizing resolves against the chrome box |
+| **Coverage + pan** | **`background-size: max(<width-tier>% auto, auto 100%)`** — **`auto 100%`** guarantees the painted strip **fills host height** (no `--banner-chrome-fill` letterboxing on portrait/mobile); the **width-tier** (`125%` → `145%` → `155%` → `165%` at the same breakpoints as before) ensures **horizontal overflow** for panning on wide hosts. Retired: width-only **`X% auto`** without height floor. |
+| **Responsive duration** | **150s** → **≥1200px: 120s** → **≥1920px: 105s** → **≥2560px: 95s** (paired with width tiers above) |
 | **Readability** | Per-slug **`--banner-chrome-fill`**, **`--chrome-tab-*`**, **`--shell-chrome-edge-border`** on `#game-shell-chrome[data-banner="{slug}"]` |
-| **Previews** | Same rules on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** + **`.cosmetic-preview-stage …`** |
-| **A11y** | **`prefers-reduced-motion: reduce`** → `animation: none`, **`background-position: 0% 50%`** |
-| **Non-goals** | JS animation, canvas/video, DOM injection, gameplay-area motion, parallax, particles |
+| **Inline previews** | **`.shop-cosmetic-preview--banner[data-banner-slug]`** at fixed **`2.65rem`** strip height — same hybrid **`max()`** sizing + drift as chrome |
+| **Expanded previews** | **`.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded`** — **tall stage** via **`.shop-cosmetic-preview.cosmetic-preview--expanded`** (`height: min(52vh, 22rem)`); **same hybrid sizing + drift** as chrome. **Do not** set **`height: 100%`** on the banner node (stage has no explicit height → collapse to a thin strip). Stage uses **`align-items: stretch`** for BN-3 banners. |
+| **A11y** | **`prefers-reduced-motion: reduce`** → `animation: none`, **`background-position: 0% 50%`** (intentional freeze; **do not override** in product CSS/JS) |
+| **Diagnostics** | If drift appears “off” on a device, check OS/browser **Reduce motion** first. Confirmed laptop case: `matchMedia('(prefers-reduced-motion: reduce)')` true → computed **`animationName: none`**, **`animationDuration: 0s`** — banner system healthy, environment policy disabled motion. |
+| **Non-goals** | JS animation, canvas/video, DOM injection, gameplay-area motion, parallax, particles, bypassing reduced motion |
 
 **BN-3 panoramic banner inventory** (`profile_banner_*` → `data-banner` slug → asset):
 
@@ -688,7 +691,7 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 | `profile_banner_particle_accelerator` | `particle-accelerator` | `assets/banners/particle-accelerator.webp` |
 | `profile_banner_underwater_research_facility` | `underwater-research-facility` | `assets/banners/underwater-research-facility.webp` |
 
-**Adding a future BN-3 banner:** (1) WebP in `assets/banners/`, (2) `profile_banner_{name}` in `shop-definitions.js`, (3) per-slug tab tokens + asset URL block + preview underpaint in `style.css`, (4) append slug selectors to the **shared BN-3 grouped rules** (motion + responsive `@media` + reduced-motion). Do not fork animation architecture.
+**Adding a future BN-3 banner:** (1) WebP in `assets/banners/`, (2) `profile_banner_{name}` in `shop-definitions.js`, (3) per-slug tab tokens + asset URL block + preview underpaint in `style.css`, (4) append slug selectors to the **shared BN-3 grouped rules** (chrome + inline preview motion/sizing, **expanded** `.cosmetic-preview--expanded` block, responsive `@media` tiers, reduced-motion). Do not fork animation architecture or reintroduce width-only sizing.
 
 #### Admin — Cosmetics ownership doctrine
 

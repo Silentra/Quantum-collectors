@@ -57,6 +57,7 @@ body.app-mode-game #screen-game.screen.active {
   position: relative;
   z-index: 2;
   overflow: hidden;
+  container-type: size;
 }
 
 /* Shared chrome surface — one continuous visual plane for header + tabs (DOM remains separate) */
@@ -149,8 +150,8 @@ body.app-mode-game #screen-game.screen.active {
 
 /*
  * BN-3 — CSS-only environmental panoramic banner chrome
- * Single pseudo-layer (::before); centered vertical crop, width-driven overscale,
- * shared bn3-panoramic-drift keyframes + responsive duration tiers.
+ * Single pseudo-layer (::before); centered vertical crop, hybrid overscale
+ * (height-fill + width-overflow via max()), shared bn3-panoramic-drift keyframes.
  * profile_banner_{name} → data-banner / data-banner-slug via cosmeticIdToShellSlug()
  */
 
@@ -328,23 +329,34 @@ body.app-mode-game #screen-game.screen.active {
 .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
 .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
 .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-.shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="blueprints"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="chalkboard"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="circuit-board"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="city"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="computer-lab"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="desert"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="jungle-banner"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-.cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
+.shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
   background-repeat: no-repeat;
-  background-size: 125% auto;
+  /* Hybrid: auto 100% fills host height; width% tier ensures ultrawide pan overflow (~12:1 assets) */
+  background-size: max(125% auto, auto 100%);
+  background-position: 0% 50%;
+  animation: bn3-panoramic-drift 150s linear infinite alternate;
+}
+
+/* BN-3 expanded modal — fill tall preview stage (not compact inline strip sizing) */
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="blueprints"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="chalkboard"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="circuit-board"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="city"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="computer-lab"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="desert"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="jungle-banner"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="night-sky"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
+.cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
+  width: 100%;
+  min-height: 0;
+  /* Height from .shop-cosmetic-preview.cosmetic-preview--expanded — not height:100% (stage has no fixed height) */
+  background-repeat: no-repeat;
+  background-size: max(125% auto, auto 100%);
   background-position: 0% 50%;
   animation: bn3-panoramic-drift 150s linear infinite alternate;
 }
@@ -509,22 +521,26 @@ body.app-mode-game #screen-game.screen.active {
   .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
   .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="blueprints"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="chalkboard"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="circuit-board"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="city"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="computer-lab"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="desert"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="jungle-banner"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: 145% auto;
+  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
+    background-size: max(145% auto, auto 100%);
+    animation-duration: 120s;
+  }
+
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="blueprints"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="chalkboard"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="circuit-board"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="city"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="computer-lab"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="desert"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="jungle-banner"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="night-sky"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
+    background-size: max(145% auto, auto 100%);
     animation-duration: 120s;
   }
 }
@@ -557,22 +573,26 @@ body.app-mode-game #screen-game.screen.active {
   .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
   .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="blueprints"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="chalkboard"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="circuit-board"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="city"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="computer-lab"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="desert"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="jungle-banner"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: 155% auto;
+  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
+    background-size: max(155% auto, auto 100%);
+    animation-duration: 105s;
+  }
+
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="blueprints"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="chalkboard"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="circuit-board"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="city"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="computer-lab"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="desert"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="jungle-banner"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="night-sky"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
+    background-size: max(155% auto, auto 100%);
     animation-duration: 105s;
   }
 }
@@ -605,22 +625,26 @@ body.app-mode-game #screen-game.screen.active {
   .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
   .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="football-field"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="ancient-library"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="archeology"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="blueprints"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="chalkboard"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="circuit-board"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="city"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="computer-lab"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="desert"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="jungle-banner"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="night-sky"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
-  .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: 165% auto;
+  .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
+    background-size: max(165% auto, auto 100%);
+    animation-duration: 95s;
+  }
+
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="football-field"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="ancient-library"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="archeology"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="blueprints"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="chalkboard"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="circuit-board"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="city"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="computer-lab"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="desert"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="jungle-banner"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="night-sky"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="observatory"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="particle-accelerator"],
+  .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded[data-banner-slug="underwater-research-facility"] {
+    background-size: max(165% auto, auto 100%);
     animation-duration: 95s;
   }
 }
@@ -2047,8 +2071,14 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow: 0 0 18px rgba(245, 158, 11, 0.4);
 }
 
+/* BN-3 expanded: stage height comes from .shop-cosmetic-preview.cosmetic-preview--expanded */
+.cosmetic-preview-stage:has(.shop-cosmetic-preview--banner.cosmetic-preview--expanded) {
+  align-items: stretch;
+}
+
 .cosmetic-preview-stage .shop-cosmetic-preview--banner.cosmetic-preview--expanded {
-  min-height: 5.5rem;
+  align-self: stretch;
+  min-height: 0;
 }
 
 @media (max-width: 480px) {
