@@ -655,17 +655,39 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 
 **BN-2:** Static raster/gradient overlays via `--banner-overlay: url('assets/banners/{slug}.webp')` on `#game-shell-chrome::before`, `background-repeat: no-repeat`, and sizing/position authored per slug (`background-size`/position appropriate to the asset). Scaffold: [`assets/banners/`](/assets/banners/). Independent from gameplay backgrounds.
 
-**BN-3 (MVP — CSS-only ambient motion):** One oversized raster may use **slow, linear infinite** `@keyframes` on **`background-position`** (typically **`0%` → `100%` horizontal pan** with **`background-repeat: no-repeat`**) — a **panoramic drift** model, not a tiling strip (`transform`, filters, shadows, blur, JS-driven animation loops, video, canvas, SVG animation, extra DOM nodes, and **`::before` layout-affecting changes** remain out of scope). **Ownership:** **`#game-shell-chrome::before` only** for live chrome (`z-index: -1`, `pointer-events: none` unchanged). **Sprites / `::after` overlays:** reserved for future BN-3 tiers; MVP football banner is **single-layer panoramic drift** only.
+**BN-3 (standardized panoramic tier — CSS-only ambient motion):** BN-3 is the **panoramic drifting banner** tier. **`profile_banner_football_field` / `football-field`** established the reference implementation; **all BN-3 banners share the same doctrine** (do not one-off animation systems per banner).
 
-- **Slug example:** `profile_banner_football_field` → `data-banner="football-field"` / `data-banner-slug="football-field"` (via `cosmeticIdToShellSlug()`). **`assets/banners/Field.webp`** — one wide panorama (~**3072×256**, may be revised to ~2048×256); **no `repeat-x`**, **no tile-width keyframe contract**. Animation pans **`background-position` from `0% 100%` to `100% 100%`** with **`animation-direction: alternate`** so drift reverses smoothly (no loop snap).
+| Concern | Doctrine |
+|---------|----------|
+| **Motion** | Shared `@keyframes bn3-panoramic-drift`: **`background-position` `0% 100%` → `100% 100%`**, **`linear infinite alternate`** (bidirectional drift, no loop snap) |
+| **Asset** | Single wide WebP in **`assets/banners/{slug}.webp`** (exception: football uses **`Field.webp`**); **`background-repeat: no-repeat`** — **no `repeat-x`**, no tile-width contracts |
+| **Layer** | **`#game-shell-chrome::before` only** (`z-index: -1`, `pointer-events: none`); no `::after` sprites yet |
+| **Responsive scale** | **`background-size: auto`** height overscale: **140% / 150s** → **≥1200px: 160% / 120s** → **≥1920px: 190% / 105s** → **≥2560px: 215% / 95s** |
+| **Readability** | Per-slug **`--banner-chrome-fill`**, **`--chrome-tab-*`**, **`--shell-chrome-edge-border`** on `#game-shell-chrome[data-banner="{slug}"]` |
+| **Previews** | Same rules on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** + **`.cosmetic-preview-stage …`** |
+| **A11y** | **`prefers-reduced-motion: reduce`** → `animation: none`, **`background-position: 0% 100%`** |
+| **Non-goals** | JS animation, canvas/video, DOM injection, gameplay-area motion, parallax, particles |
 
-- **Scaling (responsive):** Height **overscale** via **`background-size: auto <percent>`** — width follows aspect ratio. **`football-field` reference breakpoints:** default **140%** / **150s** half-cycle → **≥1200px:** **160%** / **120s** → **≥1920px:** **190%** / **105s** → **≥2560px:** **215%** / **95s**. Wider viewports get **more overflow** (no underpaint bleed) and **slightly shorter** `animation-duration` so perceived drift stays consistent. Tint **`--banner-chrome-fill`** remains safety underpaint only. Tab readability tokens (`--chrome-tab-*`, `--shell-chrome-edge-border`) overridden per slug as for BN-1.
+**BN-3 panoramic banner inventory** (`profile_banner_*` → `data-banner` slug → asset):
 
-- **Previews:** Mirror the same **`background-*` + `animation` + responsive `@media`** on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"], .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** — no alternate renderer path.
+| Cosmetic id | `data-banner` slug | Asset |
+|-------------|-------------------|--------|
+| `profile_banner_football_field` | `football-field` | `assets/banners/Field.webp` |
+| `profile_banner_ancient_library` | `ancient-library` | `assets/banners/ancient-library.webp` |
+| `profile_banner_archeology` | `archeology` | `assets/banners/archeology.webp` |
+| `profile_banner_blueprints` | `blueprints` | `assets/banners/blueprints.webp` |
+| `profile_banner_chalkboard` | `chalkboard` | `assets/banners/chalkboard.webp` |
+| `profile_banner_circuit_board` | `circuit-board` | `assets/banners/circuit-board.webp` |
+| `profile_banner_city` | `city` | `assets/banners/city.webp` |
+| `profile_banner_computer_lab` | `computer-lab` | `assets/banners/computer-lab.webp` |
+| `profile_banner_desert` | `desert` | `assets/banners/desert.webp` |
+| `profile_banner_jungle_banner` | `jungle-banner` | `assets/banners/jungle-banner.webp` |
+| `profile_banner_night_sky` | `night-sky` | `assets/banners/night-sky.webp` |
+| `profile_banner_observatory` | `observatory` | `assets/banners/observatory.webp` |
+| `profile_banner_particle_accelerator` | `particle-accelerator` | `assets/banners/particle-accelerator.webp` |
+| `profile_banner_underwater_research_facility` | `underwater-research-facility` | `assets/banners/underwater-research-facility.webp` |
 
-- **Accessibility:** **`@media (prefers-reduced-motion: reduce)`** — `animation: none` and pinned **`background-position: 0% 100%`** — static appearance must remain acceptable.
-
-- **Performance doctrine (minimal):** **One** `@keyframes`, **one** continuously animated banner layer per equipped slug — **ambient** half-cycle durations (~**90–150s** with `alternate`, tuned per viewport). Avoid filter/shadow-heavy layers; **`background-position` pan** acceptable at low drift speed on chrome height only — no gameplay-area animations.
+**Adding a future BN-3 banner:** (1) WebP in `assets/banners/`, (2) `profile_banner_{name}` in `shop-definitions.js`, (3) per-slug tab tokens + asset URL block + preview underpaint in `style.css`, (4) append slug selectors to the **shared BN-3 grouped rules** (motion + responsive `@media` + reduced-motion). Do not fork animation architecture.
 
 #### Admin — Cosmetics ownership doctrine
 
