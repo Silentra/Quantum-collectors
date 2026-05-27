@@ -663,7 +663,7 @@ profile_banner_{name}  →  cosmeticIdToShellSlug()  →  data-banner="{slug}"
 | **Composition** | **`background-position-y: 50%`** — center crop vertically; not bottom-anchored (`100%`) |
 | **Asset** | Single wide WebP in **`assets/banners/{slug}.webp`** (exception: football uses **`Field.webp`**); **`background-repeat: no-repeat`** — **no `repeat-x`**, no tile-width contracts, **no `background-size: cover`** |
 | **Layer** | **`#game-shell-chrome::before` only** (`z-index: -1`, `pointer-events: none`); no `::after` sprites yet |
-| **Responsive scale** | **Width-driven** overscale — **`background-size: <width>% auto`** (height follows aspect ratio; horizontal overflow is primary): **125% / 150s** → **≥1200px: 145% / 120s** → **≥1920px: 165% / 105s** → **≥2560px: 180% / 95s**. Retired: **`auto X%`** height-primary doctrine. |
+| **Responsive scale** | **Width-driven** overscale — **`background-size: <width>% auto`** (height follows aspect ratio; horizontal overflow is primary): **125% / 150s** → **≥1200px: 145% / 120s** → **≥1920px: 155% / 105s** → **≥2560px: 165% / 95s**. Tuned after live environmental-banner testing on ultrawide to balance horizontal overflow coverage, scene readability, and composition stability (earlier **165% / 180%** widest tiers were slightly overtuned). Retired: **`auto X%`** height-primary doctrine. |
 | **Readability** | Per-slug **`--banner-chrome-fill`**, **`--chrome-tab-*`**, **`--shell-chrome-edge-border`** on `#game-shell-chrome[data-banner="{slug}"]` |
 | **Previews** | Same rules on **`.shop-cosmetic-preview--banner[data-banner-slug="{slug}"]`** + **`.cosmetic-preview-stage …`** |
 | **A11y** | **`prefers-reduced-motion: reduce`** → `animation: none`, **`background-position: 0% 50%`** |

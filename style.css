@@ -572,7 +572,7 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: 165% auto;
+    background-size: 155% auto;
     animation-duration: 105s;
   }
 }
@@ -620,7 +620,7 @@ body.app-mode-game #screen-game.screen.active {
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="observatory"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="particle-accelerator"],
   .cosmetic-preview-stage .shop-cosmetic-preview--banner[data-banner-slug="underwater-research-facility"] {
-    background-size: 180% auto;
+    background-size: 165% auto;
     animation-duration: 95s;
   }
 }
