@@ -512,7 +512,7 @@ body.app-mode-game #screen-game.screen.active {
   #game-shell-chrome[data-banner="observatory"]::before,
   #game-shell-chrome[data-banner="particle-accelerator"]::before,
   #game-shell-chrome[data-banner="underwater-research-facility"]::before {
-    background-size: 145% auto;
+    background-size: 135% auto;
     animation-duration: 120s;
   }
 
@@ -563,7 +563,7 @@ body.app-mode-game #screen-game.screen.active {
   #game-shell-chrome[data-banner="observatory"]::before,
   #game-shell-chrome[data-banner="particle-accelerator"]::before,
   #game-shell-chrome[data-banner="underwater-research-facility"]::before {
-    background-size: 155% auto;
+    background-size: 145% auto;
     animation-duration: 105s;
   }
 
@@ -614,7 +614,7 @@ body.app-mode-game #screen-game.screen.active {
   #game-shell-chrome[data-banner="observatory"]::before,
   #game-shell-chrome[data-banner="particle-accelerator"]::before,
   #game-shell-chrome[data-banner="underwater-research-facility"]::before {
-    background-size: 165% auto;
+    background-size: 155% auto;
     animation-duration: 95s;
   }
 
