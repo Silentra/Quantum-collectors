@@ -15,6 +15,7 @@ import * as cards from './js/cards.js';
 import * as packs from './js/packs.js';
 import * as auth from './js/auth.js';
 import * as ui from './js/ui.js';
+import { initCardArtFallback } from './js/card-art.js';
 
 // Research Points infrastructure
 import { migrateAllPlayersRP, migrateAllPlayersLeaderboardStats } from './js/research.js';
@@ -86,6 +87,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     initQuests();
     initAchievements();
     initSeasonal();
+
+    // 6b. Card artwork — delegated img onerror → emoji placeholder
+    initCardArtFallback();
 
     // 7. Initialize UI
     ui.init();

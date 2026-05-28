@@ -158,6 +158,26 @@ js/
 - **Disabled cards**: filtered out of player collection, pack stats, and profile progress
 - Admin card list/rendering is unchanged (still uses legacy `.card-item` styles)
 
+### Card artwork resolution (`js/card-art.js`)
+
+Canonical resolver for player-facing card images. **No per-card paths in Firebase** — filenames derive from `card.name` + `card.type` at render time.
+
+| Priority | Source | Behavior |
+|----------|--------|----------|
+| 1 | **Admin `imageUrl` / `image`** | Non-empty trimmed URL **always wins** (external or same-origin). |
+| 2 | **Local WebP** | `assets/scientists/{slug}.webp` or `assets/concepts/{slug}.webp` when override empty. |
+| 3 | **Placeholder** | `TYPE_EMOJIS` in `.card-detail-art-emoji` / `.rp-mini-emoji` (scientist 🔬, concept ⚡). |
+
+**Slug normalization** (`normalizeCardArtSlug(name)`): NFD + strip diacritics → lowercase → remove apostrophes/quotes → non-alphanumeric runs to `-` → trim hyphens. Asset names follow **display name**, not `cardId`.
+
+**Render integration**: `card-render.js` `buildCardRenderModel()` calls `resolveCardArt()`; `renderCardContent()` uses `renderCardDetailArtHtml()`. Research mini cards use `renderMiniCardArtHtml()` from `project-ui.js`. `initCardArtFallback()` in `main.js` registers a silent capture-phase `error` handler: failed `<img data-card-art-fallback="1">` → emoji (no console noise, no broken icon).
+
+**Non-goals**: preload, manifests, build-time registries, storing resolved URLs in DB.
+
+**Export spec (content)**: WebP **400×500** (4:5) ideal, **512px** max longest edge, **75–82** quality; top-weighted composition for `object-position: center top`. Drop files into `assets/scientists/` and `assets/concepts/` — no DB migration per card.
+
+**Pitfalls**: stale `imageUrl` blocks local art until cleared; renaming a card changes expected filename; slug collisions need manual resolution.
+
 ### Trading System (Phase T-1 + T-2 + T-3 + T-4 + T-6)
 - **Seven modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing atomic swap), `trade-lock-helpers.js` (project-lock helpers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)
 - **DB structure**: `/trades/direct/{tradeId}` for direct trades, `/trades/listings/{listingId}` for anonymous listings. Migration from flat `/trades/{tradeId}` happens automatically on init.

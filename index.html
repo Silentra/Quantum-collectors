@@ -516,7 +516,9 @@
                     <option value="risk">Risk Enhancer</option>
                   </select>
                   <input id="new-card-field" type="text" placeholder="Field / Category (e.g. Physics)" class="admin-input">
-                  <input id="new-card-imageUrl" type="text" placeholder="Image URL (optional)" class="admin-input">
+                  <input id="new-card-imageUrl" type="text" placeholder="Image URL (optional override)" class="admin-input sm:col-span-2">
+                  <p id="new-card-local-art-hint" class="text-xs text-surface-500 sm:col-span-2"></p>
+                  <p id="new-card-art-slug-hint" class="text-xs text-surface-600 font-mono sm:col-span-2"></p>
                   <!-- Phase 1D: auraType selector removed — aura is now a permanent default visual for all cards -->
                   <textarea id="new-card-keyFact" placeholder="Key Fact — the main educational content for this card" class="admin-input sm:col-span-2" rows="3"></textarea>
                   <!-- Legacy fields kept for backward compat -->
@@ -603,8 +605,10 @@
                       <input id="edit-card-field" type="text" class="admin-input w-full">
                     </div>
                     <div>
-                      <label class="text-xs text-surface-400 block mb-1">Image URL</label>
+                      <label class="text-xs text-surface-400 block mb-1">Image URL <span class="text-surface-600">(optional override)</span></label>
                       <input id="edit-card-imageUrl" type="text" class="admin-input w-full" placeholder="https://...">
+                      <p id="edit-card-local-art-hint" class="text-xs text-surface-500 mt-1"></p>
+                      <p id="edit-card-art-slug-hint" class="text-xs text-surface-600 font-mono mt-0.5"></p>
                     </div>
                     <!-- Image preview in edit modal -->
                     <div id="edit-card-image-preview" class="hidden">
