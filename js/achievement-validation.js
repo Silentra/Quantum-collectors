@@ -6,7 +6,12 @@
 import { CONDITION_MODES, CONDITION_OPS, REWARD_TYPES } from './achievement-config.js';
 import { listRegisteredStatKeys } from './achievement-stats.js';
 import { isPlayerClaimed, isPlayerUnlocked } from './achievement-engine.js';
-import { getCosmeticDefinition, getItemDefinition } from './cosmetic-definitions.js';
+import {
+  getCosmeticDefinition,
+  getItemDefinition,
+  isCosmeticAchievementRewardEligible,
+  isCosmeticGrantable,
+} from './cosmetic-definitions.js';
 import { ITEM_TYPES } from './shop-definitions.js';
 import * as db from './database.js';
 
@@ -16,7 +21,15 @@ function isObject(value) {
 
 const VALID_STATS = new Set(listRegisteredStatKeys());
 
-export function validateAchievementDefinition(definition = {}) {
+function collectLegacyCosmeticRewardIds(previousDefinition) {
+  const ids = new Set();
+  for (const reward of previousDefinition?.rewards || []) {
+    if (reward?.type === 'cosmetic' && reward.itemId) ids.add(reward.itemId);
+  }
+  return ids;
+}
+
+export function validateAchievementDefinition(definition = {}, options = {}) {
   if (!definition.id || typeof definition.id !== 'string') {
     return { valid: false, reason: 'invalid_id' };
   }
@@ -37,14 +50,27 @@ export function validateAchievementDefinition(definition = {}) {
   if (definition.conditionMode && !CONDITION_MODES.includes(definition.conditionMode)) {
     return { valid: false, reason: 'invalid_condition_mode' };
   }
+
+  const legacyCosmeticIds = collectLegacyCosmeticRewardIds(options.previousDefinition);
+
   for (const reward of definition.rewards || []) {
-    const r = validateReward(reward);
+    const allowLegacyCosmetic = reward?.type === 'cosmetic'
+      && reward.itemId
+      && legacyCosmeticIds.has(reward.itemId);
+    const r = validateReward(reward, { allowLegacyCosmetic });
     if (!r.valid) return r;
   }
   return { valid: true };
 }
 
-export function validateReward(reward = {}) {
+/**
+ * @param {object} reward
+ * @param {object} [options]
+ * @param {boolean} [options.forGrant] - true when granting a claimed achievement (legacy rewards allowed).
+ */
+export function validateReward(reward = {}, options = {}) {
+  const forGrant = options.forGrant === true;
+
   if (!REWARD_TYPES.includes(reward.type)) {
     return { valid: false, reason: 'invalid_reward_type' };
   }
@@ -60,7 +86,14 @@ export function validateReward(reward = {}) {
     }
     if (reward.type === 'cosmetic') {
       const def = getCosmeticDefinition(reward.itemId);
-      if (!def) return { valid: false, reason: 'invalid_item_id' };
+      if (forGrant) {
+        if (!isCosmeticGrantable(def)) return { valid: false, reason: 'invalid_item_id' };
+      } else if (!isCosmeticAchievementRewardEligible(def)) {
+        if (!options.allowLegacyCosmetic) {
+          return { valid: false, reason: 'cosmetic_not_achievement_eligible' };
+        }
+        if (!isCosmeticGrantable(def)) return { valid: false, reason: 'invalid_item_id' };
+      }
       return { valid: true };
     }
     const def = getItemDefinition(reward.itemId);
@@ -76,6 +109,11 @@ export function validateReward(reward = {}) {
     return { valid: true };
   }
   return { valid: false, reason: 'unsupported_reward' };
+}
+
+/** Grant path — tombstoned/missing cosmetics fail; disabled cosmetics remain valid. */
+export function validateRewardForGrant(reward = {}) {
+  return validateReward(reward, { forGrant: true });
 }
 
 export function canClaimAchievementReward(player, definition, achievementId) {

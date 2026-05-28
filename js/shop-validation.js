@@ -36,6 +36,7 @@ import {
   getCosmeticDefinition,
   getItemDefinition,
   isCosmeticDefinitionActive,
+  isCosmeticShopEligible,
 } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { PROJECT_STATES } from './project-state.js';
@@ -194,7 +195,15 @@ export function canPurchaseItem(player, slotIndex, options = {}) {
   if (!slot?.itemId) return { allowed: false, reason: 'missing_item_id' };
 
   const itemDefinition = getSlotItem(slot, options);
-  if (!itemDefinition || itemDefinition.enabled === false) {
+  if (!itemDefinition) {
+    return { allowed: false, reason: 'invalid_item_definition' };
+  }
+
+  if (itemDefinition.type === ITEM_TYPES.COSMETIC) {
+    if (!isCosmeticShopEligible(itemDefinition)) {
+      return { allowed: false, reason: 'cosmetic_not_shop_eligible' };
+    }
+  } else if (itemDefinition.enabled === false) {
     return { allowed: false, reason: 'invalid_item_definition' };
   }
 

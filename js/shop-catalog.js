@@ -6,6 +6,7 @@
  */
 
 import { getShopConfig, getShopItemDefinitions } from './shop-config.js';
+import { isCosmeticShopEligible } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_RARITIES, ITEM_TYPES } from './shop-definitions.js';
 import * as cards from './cards.js';
 import * as packs from './packs.js';
@@ -122,7 +123,10 @@ function buildPackShopEntries() {
  */
 export function buildShopCatalog(config = getShopConfig()) {
   const staticItems = Object.values(getShopItemDefinitions())
-    .filter(item => item?.enabled !== false)
+    .filter(item => item?.deleted !== true)
+    .filter(item => item?.type === ITEM_TYPES.COSMETIC
+      ? isCosmeticShopEligible(item)
+      : item?.enabled !== false)
     .map(item => ({ ...item, sourceType: 'static', sourceId: item.id }));
 
   const pool = [

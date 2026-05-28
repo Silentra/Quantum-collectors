@@ -6,7 +6,7 @@
 import { addResearchPoints } from './research.js';
 import { addPack } from './player.js';
 import { grantConsumable, unlockCosmetic } from './shop-mutations.js';
-import { validateReward } from './achievement-validation.js';
+import { validateRewardForGrant } from './achievement-validation.js';
 
 /**
  * Grant a single validated reward payload.
@@ -14,7 +14,7 @@ import { validateReward } from './achievement-validation.js';
  * @param {Object} reward
  */
 export function grantAchievementReward(username, reward) {
-  const validation = validateReward(reward);
+  const validation = validateRewardForGrant(reward);
   if (!validation.valid) {
     return { success: false, reason: validation.reason };
   }

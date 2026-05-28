@@ -195,10 +195,20 @@ function cosmeticCategoryOptions(selectedCategory, selectedItemId) {
 }
 
 function cosmeticOptions(category, selectedId) {
-  const opts = listCosmeticRewardOptions(category)
+  const eligible = listCosmeticRewardOptions(category);
+  const eligibleIds = new Set(eligible.map(d => d.id));
+  let legacyOption = '';
+  if (selectedId && !eligibleIds.has(selectedId)) {
+    const def = getCosmeticDefinition(selectedId);
+    const label = def
+      ? `${def.name || selectedId} (${selectedId}) — unavailable`
+      : `${selectedId} — unavailable`;
+    legacyOption = `<option value="${escapeHtml(selectedId)}" selected disabled>${escapeHtml(label)}</option>`;
+  }
+  const opts = eligible
     .map(d => `<option value="${escapeHtml(d.id)}"${d.id === selectedId ? ' selected' : ''}>${escapeHtml(d.name)} (${escapeHtml(d.id)})</option>`)
     .join('');
-  return `<option value="">Select cosmetic…</option>${opts}`;
+  return `<option value="">Select cosmetic…</option>${legacyOption}${opts}`;
 }
 
 function refreshRewardRowCosmeticSelect(row) {
@@ -403,7 +413,7 @@ function wireEditor(container) {
     const config = getAchievementConfig();
     const existingDef = editingId ? config.definitions[editingId] : null;
     const def = readFormDefinition(editor, existingDef);
-    const validation = validateAchievementDefinition(def);
+    const validation = validateAchievementDefinition(def, { previousDefinition: existingDef });
     if (!validation.valid) {
       toast.error(`Invalid definition: ${validation.reason}`);
       return;

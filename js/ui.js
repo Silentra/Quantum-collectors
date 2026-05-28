@@ -707,7 +707,7 @@ function _renderAdminGrantCosmeticItemOptions(navId) {
 
 function _renderShopItemOptions(type) {
   const items = type === ITEM_TYPES.COSMETIC
-    ? listCosmeticDefinitions({ includeDisabled: false })
+    ? listCosmeticDefinitions({ shopEligibleOnly: true })
     : Object.values(getMergedItemDefinitions()).filter(d => d?.type === type && d.enabled !== false && d.deleted !== true);
 
   return items

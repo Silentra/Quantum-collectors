@@ -49,6 +49,7 @@ import {
 import { generateAvailableProjects } from './project-pool.js';
 import { getLastWeeklyRefreshTimestamp } from './weekly-research-pack.js';
 import { bumpPlayerStat, notifyEquippedCosmeticsChanged, STAT_KEYS } from './achievements.js';
+import { getCosmeticDefinition, isCosmeticGrantable } from './cosmetic-definitions.js';
 import {
   canApplyDiscount,
   canFreezeSlot,
@@ -252,6 +253,11 @@ export function unlockCosmetic(username, itemId) {
   }
   if (!itemId || typeof itemId !== 'string') {
     return { success: false, reason: 'invalid_item_id' };
+  }
+
+  const def = getCosmeticDefinition(itemId);
+  if (!isCosmeticGrantable(def)) {
+    return { success: false, reason: 'invalid_cosmetic_definition' };
   }
 
   const wasOwned = db.get(`players/${username}/cosmetics/owned/${itemId}`) === true;

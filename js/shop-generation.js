@@ -21,8 +21,8 @@
  */
 
 import { SHOP_PACK_PREFIX } from './shop-catalog.js';
-import { DEFAULT_SHOP_CONFIG, resolveMaxCardSlots, resolveMaxPackSlots } from './shop-config.js';
-import { getItemDefinition, getMergedItemDefinitions } from './cosmetic-definitions.js';
+import { DEFAULT_SHOP_CONFIG, getShopItemDefinitions, resolveMaxCardSlots, resolveMaxPackSlots } from './shop-config.js';
+import { getItemDefinition, isCosmeticShopEligible } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { createShopRotationState, createShopSlot } from './shop-state.js';
 import { getNextWeeklyRefreshTimestamp } from './weekly-research-pack.js';
@@ -259,11 +259,12 @@ export function buildEligiblePool(player = {}, config = DEFAULT_SHOP_CONFIG, opt
 
   const sourcePool = Array.isArray(options.pool) && options.pool.length > 0
     ? options.pool
-    : Object.values(getMergedItemDefinitions()).filter(item => item?.deleted !== true);
+    : Object.values(getShopItemDefinitions());
 
   let pool = sourcePool
-    .filter(item => item?.enabled !== false)
-    .filter(item => item?.type !== ITEM_TYPES.COSMETIC || item.shopEnabled !== false)
+    .filter(item => item?.deleted !== true)
+    .filter(item => item?.type !== ITEM_TYPES.COSMETIC || isCosmeticShopEligible(item))
+    .filter(item => item?.type === ITEM_TYPES.COSMETIC || item?.enabled !== false)
     .filter(item => item?.id && !excluded.has(item.id))
     .filter(item => toPositiveNumber(item.weight, 0) > 0)
     .filter(item => Number.isFinite(Number(item.price)) && Number(item.price) >= 0)

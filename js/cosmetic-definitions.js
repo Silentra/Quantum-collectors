@@ -223,6 +223,52 @@ export function isCosmeticDefinitionActive(definition) {
 }
 
 /**
+ * Whether a cosmetic may appear in shop generation or be purchased from a slot.
+ * @param {object|null} definition — resolved definition (governance applied).
+ * @returns {boolean}
+ */
+export function isCosmeticShopEligible(definition) {
+  if (!isCosmeticDefinitionActive(definition)) return false;
+  if (definition.shopEnabled === false) return false;
+  if (!(Number(definition.weight) > 0)) return false;
+  return true;
+}
+
+/**
+ * Whether a cosmetic may be newly configured as an achievement reward.
+ * @param {object|null} definition — resolved definition (governance applied).
+ * @returns {boolean}
+ */
+export function isCosmeticAchievementRewardEligible(definition) {
+  if (!isCosmeticDefinitionActive(definition)) return false;
+  if (definition.achievementEnabled === false) return false;
+  return true;
+}
+
+/**
+ * Whether a configured achievement reward may grant this cosmetic (legacy-compatible).
+ * Disabled cosmetics remain grantable; tombstoned/missing definitions do not.
+ * @param {object|null} definition — resolved definition from getCosmeticDefinition().
+ * @returns {boolean}
+ */
+export function isCosmeticGrantable(definition) {
+  if (!definition) return false;
+  if (definition.deleted === true) return false;
+  if (definition.type !== ITEM_TYPES.COSMETIC) return false;
+  return true;
+}
+
+/**
+ * Merged cosmetic rows with governance overrides applied (pre-filter).
+ * @returns {object[]}
+ */
+function listResolvedCosmeticDefinitions() {
+  return Object.values(getMergedItemDefinitions())
+    .filter(def => def?.type === ITEM_TYPES.COSMETIC)
+    .map(def => applyItemGovernanceOverride(def));
+}
+
+/**
  * @param {object} [options]
  * @param {string} [options.category]
  * @param {boolean} [options.includeDisabled]
@@ -240,20 +286,12 @@ export function listCosmeticDefinitions(options = {}) {
     achievementEligibleOnly = false,
   } = options;
 
-  return Object.values(getMergedItemDefinitions())
-    .filter(def => def?.type === ITEM_TYPES.COSMETIC)
+  return listResolvedCosmeticDefinitions()
     .filter(def => (includeDeleted ? true : def.deleted !== true))
-    .filter(def => (includeDisabled ? true : def.enabled !== false))
+    .filter(def => (includeDisabled ? true : isCosmeticDefinitionActive(def)))
     .filter(def => !category || def.category === category)
-    .filter(def => {
-      if (!shopEligibleOnly) return true;
-      return def.shopEnabled !== false && Number(def.weight) > 0;
-    })
-    .filter(def => {
-      if (!achievementEligibleOnly) return true;
-      return def.achievementEnabled !== false;
-    })
-    .map(def => applyItemGovernanceOverride(def))
+    .filter(def => !shopEligibleOnly || isCosmeticShopEligible(def))
+    .filter(def => !achievementEligibleOnly || isCosmeticAchievementRewardEligible(def))
     .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 }
 
@@ -410,8 +448,7 @@ export function saveCosmeticGovernanceOverride(itemId, patch = {}) {
  */
 export function listStaticCosmeticsByCategory(category) {
   return listCosmeticDefinitions({ category, includeDisabled: true })
-    .filter(def => def.source === COSMETIC_SOURCES.STATIC)
-    .map(def => applyItemGovernanceOverride(def));
+    .filter(def => def.source === COSMETIC_SOURCES.STATIC);
 }
 
 /**
