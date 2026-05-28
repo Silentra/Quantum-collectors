@@ -88,12 +88,11 @@ export function buildCardRenderModel(card, options = {}) {
       ? 'card-detail-name--long'
       : '';
 
-  const showConceptLabel = isPackReveal
-    ? false
-    : (!isUndiscovered && card.type === 'concept' && card.conceptType);
-  const conceptEffectLabel = showConceptLabel
+  const hasConceptType = !isUndiscovered && card.type === 'concept' && card.conceptType;
+  const conceptEffectLabel = hasConceptType
     ? (CONCEPT_EFFECT_LABELS[card.conceptType] || '')
     : '';
+  const showOnCardConceptChip = !isModal && !isPackReveal && !!conceptEffectLabel;
 
   return {
     cardId: card.id,
@@ -118,6 +117,7 @@ export function buildCardRenderModel(card, options = {}) {
     isUndiscovered,
     clampKeyFact,
     conceptEffectLabel,
+    showOnCardConceptChip,
     conceptLabelClass: isModal && conceptEffectLabel ? 'concept-effect-label--modal' : '',
     extraBodyHtml: '',
     lockedClass: isPackReveal ? '' : (isLocked ? 'sci-card--locked' : ''),
@@ -138,11 +138,8 @@ export function buildCardRenderModel(card, options = {}) {
  * @returns {string}
  */
 export function renderCardContent(model) {
-  const conceptLabelClasses = model.conceptLabelClass
-    ? `concept-effect-label ${model.conceptLabelClass}`
-    : 'concept-effect-label';
-  const conceptEffectLabelHtml = model.conceptEffectLabel
-    ? `<div class="card-detail-header-meta"><div class="${conceptLabelClasses}">${model.conceptEffectLabel}</div></div>`
+  const conceptOverlayHtml = model.showOnCardConceptChip
+    ? `<div class="card-detail-concept-chip"><div class="concept-effect-label">${model.conceptEffectLabel}</div></div>`
     : '';
 
   const artHtml = model.artSrc
@@ -163,10 +160,10 @@ export function renderCardContent(model) {
           <div class="card-detail-header-row">
             <span class="card-detail-name ${model.nameScaleClass}">${model.name}</span>
           </div>
-          ${conceptEffectLabelHtml}
         </div>
         <div class="card-detail-art">
           ${artHtml}
+          ${conceptOverlayHtml}
         </div>
         <div class="card-detail-divider"></div>
         <div class="card-detail-body">
