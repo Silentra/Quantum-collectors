@@ -2885,6 +2885,9 @@ body.app-mode-game #screen-game.screen.active {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+  z-index: 2;
+  background: rgba(0, 0, 0, 0.56);
 }
 
 .card-detail-header-row {
@@ -2912,6 +2915,8 @@ body.app-mode-game #screen-game.screen.active {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  z-index: 1;
 }
 
 .card-detail-divider {
@@ -3278,7 +3283,10 @@ body.app-mode-game #screen-game.screen.active {
   color: #a78bfa;
   text-align: center;
   padding: 1px 4px;
-  opacity: 0.85;
+  opacity: 0.95;
+  background: rgba(12, 18, 32, 0.7);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 0.24rem;
 }
 
 .concept-effect-label--modal {
@@ -3289,6 +3297,10 @@ body.app-mode-game #screen-game.screen.active {
 
 .card-detail-modal-panel {
   max-width: min(20rem, 100%);
+}
+
+#edit-card-modal .edit-card-modal-panel {
+  max-height: min(90dvh, calc(100dvh - var(--shell-header-min-height, 4.5rem) - 1rem));
 }
 
 .card-detail-view {
@@ -3335,6 +3347,10 @@ body.app-mode-game #screen-game.screen.active {
 
 .card-detail-meta-flavor .concept-flavor-text {
   margin-top: 0;
+}
+
+.card-detail-meta-concept .concept-effect-label {
+  margin: 0;
 }
 
 .card-detail-owned-line {
@@ -4040,9 +4056,11 @@ body.app-mode-game #screen-game.screen.active {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.sci-card .sci-card-rarity-badge {
-  flex-shrink: 0;
-  margin-left: 0.2rem;
+.card-detail-name--long {
+  font-size: 0.9em;
+}
+.card-detail-name--ultra-long {
+  font-size: 0.82em;
 }
 
 /* Line-clamp for keyFact in grid cards (not modal) */
@@ -4242,9 +4260,24 @@ body.app-mode-game #screen-game.screen.active {
   bottom: 0.3rem;
   right: 0.3rem;
   display: flex;
-  gap: 2px;
+  align-items: center;
+  gap: 3px;
   z-index: 5;
 }
+.sci-card-rarity-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  display: inline-block;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.35);
+}
+.sci-card-rarity-dot.rarity-dot-common { background: #9ca3af; }
+.sci-card-rarity-dot.rarity-dot-uncommon { background: #22c55e; }
+.sci-card-rarity-dot.rarity-dot-rare { background: #3b82f6; }
+.sci-card-rarity-dot.rarity-dot-epic { background: #a855f7; }
+.sci-card-rarity-dot.rarity-dot-legendary { background: #f59e0b; }
 .sci-card-aura-dots .dot {
   width: 5px;
   height: 5px;
@@ -4342,12 +4375,12 @@ body.app-mode-game #screen-game.screen.active {
   }
 
   .sci-card .card-detail-name {
-    font-size: clamp(0.5rem, 7cqw, 0.95rem);
+    font-size: clamp(0.44rem, 7cqw, 0.95rem);
     font-weight: 600;
   }
 
   .card-detail-frame .card-detail-name {
-    font-size: clamp(0.5rem, 7cqw, 0.95rem);
+    font-size: clamp(0.44rem, 7cqw, 0.95rem);
     font-weight: 700;
   }
 
@@ -4361,16 +4394,6 @@ body.app-mode-game #screen-game.screen.active {
   .card-detail-frame .card-detail-field {
     font-size: clamp(0.4rem, 4.5cqw, 0.68rem);
     margin-bottom: clamp(0.05rem, 0.8cqw, 0.35rem);
-  }
-
-  .sci-card .sci-card-rarity-badge,
-  .card-detail-frame .sci-card-rarity-badge {
-    font-size: clamp(0.35rem, 3.6cqw, 0.58rem);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    padding: clamp(0.05rem, 0.45cqw, 0.1rem) clamp(0.1rem, 0.9cqw, 0.25rem);
-    border-radius: 0.2rem;
   }
 
   .sci-card .concept-effect-label,
@@ -4394,10 +4417,6 @@ body.app-mode-game #screen-game.screen.active {
 @supports not (container-type: size) {
   .sci-card .card-detail-header { padding: 0.25rem 0.35rem; }
   .sci-card .card-detail-name { font-size: 0.75rem; font-weight: 600; }
-  .sci-card .sci-card-rarity-badge {
-    font-size: 0.5rem;
-    padding: 0.1rem 0.25rem;
-  }
   .sci-card .card-detail-body { padding: 0.3rem 0.35rem 0.35rem; }
   .sci-card .card-detail-field { font-size: 0.6rem; }
   .sci-card .card-detail-keyfact { font-size: 0.6rem; line-height: 1.35; }
