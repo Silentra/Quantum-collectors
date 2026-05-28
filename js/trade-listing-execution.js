@@ -19,7 +19,7 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
-import { bumpPlayerStat, STAT_KEYS } from './achievements.js';
+import { bumpPlayerStat, notifyCardInventoryChanged, STAT_KEYS } from './achievements.js';
 import { validateListingTrade, isDetailedLogging } from './trading.js';
 import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
 
@@ -187,6 +187,8 @@ export function executeListingTrade(listing, accepterId, chosenCardId) {
 
   bumpPlayerStat(ownerId, STAT_KEYS.TRADES_COMPLETED, 1);
   bumpPlayerStat(accepterId, STAT_KEYS.TRADES_COMPLETED, 1);
+  notifyCardInventoryChanged(ownerId);
+  notifyCardInventoryChanged(accepterId);
 
   if (isDetailedLogging()) {
     console.log(`[Listings][DETAIL] Listing ${listingId} fulfilled: ${ownerId} gave ${offeredCardId}, ${accepterId} gave ${chosenCardId}, accepter cooldown applied at ${now}`);

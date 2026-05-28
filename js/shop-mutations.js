@@ -48,7 +48,7 @@ import {
 } from './player-schema.js';
 import { generateAvailableProjects } from './project-pool.js';
 import { getLastWeeklyRefreshTimestamp } from './weekly-research-pack.js';
-import { bumpPlayerStat, STAT_KEYS } from './achievements.js';
+import { bumpPlayerStat, notifyEquippedCosmeticsChanged, STAT_KEYS } from './achievements.js';
 import {
   canApplyDiscount,
   canFreezeSlot,
@@ -930,7 +930,7 @@ export function equipCosmetic(username, cosmeticId, options = {}) {
     db.set(`players/${username}/cosmetics/equipped/profileBanner`, cosmeticId);
   }
 
-  bumpPlayerStat(username, STAT_KEYS.COSMETICS_EQUIPPED, 1);
+  notifyEquippedCosmeticsChanged(username);
 
   return {
     success: true,
@@ -965,6 +965,8 @@ export function unequipCosmetic(username, category) {
   if (category === ITEM_CATEGORIES.PROFILE_BANNER) {
     db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
   }
+
+  notifyEquippedCosmeticsChanged(username);
 
   return {
     success: true,

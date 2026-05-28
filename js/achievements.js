@@ -7,9 +7,12 @@
 import {
   applyStatChange,
   ensureAchievementStats,
+  healDerivedAchievementStats,
   recordBreakthrough,
+  recordCardInventoryChange,
   recordCardInventoryGain,
   recordProjectResolution,
+  refreshCosmeticsEquipped,
   STAT_KEYS,
 } from './achievement-stats.js';
 import {
@@ -85,6 +88,29 @@ export function recordCardCollectionGain(username, cardId, previousQuantity, new
 }
 
 /**
+ * Inventory lost or traded — refresh derived card stats (unique count, max-aura count).
+ */
+export function notifyCardInventoryChanged(username) {
+  const result = recordCardInventoryChange(username);
+  const statKeys = result.statKeys || [];
+  if (statKeys.length) {
+    return runEvaluation(username, statKeys);
+  }
+  return { unlocked: [], notified: [] };
+}
+
+/**
+ * Equip/unequip — refresh cosmeticsEquipped from live profile slots.
+ */
+export function notifyEquippedCosmeticsChanged(username) {
+  const refresh = refreshCosmeticsEquipped(username);
+  if (refresh.changed) {
+    return runEvaluation(username, [STAT_KEYS.COSMETICS_EQUIPPED]);
+  }
+  return { unlocked: [], notified: [] };
+}
+
+/**
  * Breakthrough earned (call in addition to recordProjectOutcome on success if needed).
  */
 export function recordBreakthroughEarned(username) {
@@ -112,6 +138,10 @@ export function runLoginAchievementEvaluation(username) {
   }
   loginEvaluatedForSession = username;
   ensureAchievementStats(username);
+  const healedKeys = healDerivedAchievementStats(username);
+  if (healedKeys.length) {
+    runEvaluation(username, healedKeys);
+  }
   const result = evaluateAchievementsOnLogin(username);
   for (const achievementId of result.notified) {
     const def = getAchievementConfig().definitions[achievementId];

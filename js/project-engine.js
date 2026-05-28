@@ -165,23 +165,23 @@ export function calculateSuccessChance(power, difficulty, config = PROJECT_CONFI
  * Return a human-readable label for a given success chance (0–1).
  *
  * Thresholds are inclusive on the lower bound:
- *   >= 0.90  → "Near Certain"
- *   >= 0.75  → "Highly Likely"
- *   >= 0.60  → "Promising"
- *   >= 0.45  → "Uncertain"
- *   >= 0.30  → "Risky"
- *    < 0.30  → "Extremely Risky"
+ *   >= 0.85  → "Highly Likely"
+ *   >= 0.70  → "Likely"
+ *   >= 0.50  → "Good Odds"
+ *   >= 0.35  → "Uncertain"
+ *   >= 0.15  → "Risky"
+ *    < 0.15  → "Very Unlikely"
  *
- * @param {number} chance - Probability value between 0 and 1.
+ * @param {number} chance - Probability value between 0 and 1 (not rounded before lookup).
  * @returns {string}
  */
 export function getSuccessLabel(chance) {
-  if (chance >= 0.85) return 'Almost Certain';
-  if (chance >= 0.70) return 'Highly Likely';
-  if (chance >= 0.50) return 'Promising';
-  if (chance >= 0.35) return 'Risky';
-  if (chance >= 0.15) return 'Extremely Unlikely';
-  return 'Nearly Impossible';
+  if (chance >= 0.85) return 'Highly Likely';
+  if (chance >= 0.70) return 'Likely';
+  if (chance >= 0.50) return 'Good Odds';
+  if (chance >= 0.35) return 'Uncertain';
+  if (chance >= 0.15) return 'Risky';
+  return 'Very Unlikely';
 }
 
 // ─────────────────────────────────���───────────────────────────────────────────

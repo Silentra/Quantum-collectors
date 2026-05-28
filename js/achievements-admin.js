@@ -34,9 +34,9 @@ const STAT_LABELS = Object.freeze({
   packsOpened: 'Packs opened',
   shopPurchases: 'Shop purchases',
   cosmeticsUnlocked: 'Cosmetics unlocked',
-  cosmeticsEquipped: 'Cosmetics equipped',
+  cosmeticsEquipped: 'Cosmetics currently equipped',
   uniqueCardsDiscovered: 'Unique cards discovered',
-  maxCardAuraTier: 'Max card aura tier',
+  maxCardAuraTier: 'Cards at max aura (tier 3)',
   bestProjectSuccessStreak: 'Best project success streak',
 });
 

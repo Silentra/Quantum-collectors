@@ -3,7 +3,7 @@
  */
 
 import * as db from './database.js';
-import { recordCardCollectionGain } from './achievements.js';
+import { notifyCardInventoryChanged, recordCardCollectionGain } from './achievements.js';
 
 /**
  * Create a new player profile
@@ -95,6 +95,8 @@ export function removeCard(username, cardId, quantity = 1) {
   } else {
     db.set(`players/${username}/inventory/${cardId}`, current - quantity);
   }
+
+  notifyCardInventoryChanged(username);
   return true;
 }
 

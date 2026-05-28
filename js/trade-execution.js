@@ -15,7 +15,7 @@
  */
 
 import * as db from './database.js';
-import { bumpPlayerStat, STAT_KEYS } from './achievements.js';
+import { bumpPlayerStat, notifyCardInventoryChanged, STAT_KEYS } from './achievements.js';
 import * as config from './config.js';
 import { validateDirectTrade, isDetailedLogging } from './trading.js';
 import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
@@ -220,6 +220,8 @@ export function executeDirectTrade(trade) {
 
   bumpPlayerStat(offeringPlayerId, STAT_KEYS.TRADES_COMPLETED, 1);
   bumpPlayerStat(targetPlayerId, STAT_KEYS.TRADES_COMPLETED, 1);
+  notifyCardInventoryChanged(offeringPlayerId);
+  notifyCardInventoryChanged(targetPlayerId);
 
   if (isDetailedLogging()) {
     console.log(`[Trading][DETAIL] Trade ${tradeId} completed: ${offeringPlayerId} gave ${offeredCardId}, ${targetPlayerId} gave ${requestedCardId}, cooldowns applied at ${now}`);

@@ -7,7 +7,21 @@
 import * as db from './database.js';
 import * as cards from './cards.js';
 const { getAuraTier } = cards;
+import { getCosmeticDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
+import { ITEM_CATEGORIES } from './shop-definitions.js';
 import { refreshUniqueCardsOwned } from './research.js';
+
+/** Aura tier index when a card has reached maximum duplicate scaling. */
+const MAX_AURA_TIER = 3;
+
+/** Canonical profile slots counted toward cosmeticsEquipped (max 5). */
+const EQUIPPED_COSMETIC_SLOTS = Object.freeze([
+  { profileField: 'equippedAura', category: ITEM_CATEGORIES.AURA },
+  { profileField: 'equippedBorder', category: ITEM_CATEGORIES.BORDER },
+  { profileField: 'equippedBanner', category: ITEM_CATEGORIES.PROFILE_BANNER },
+  { profileField: 'equippedBackground', category: ITEM_CATEGORIES.SHELL_BACKGROUND },
+  { profileField: 'equippedTitle', category: ITEM_CATEGORIES.TITLE },
+]);
 
 /** Registry keys exposed to admin condition builder. */
 export const STAT_KEYS = Object.freeze({
@@ -107,6 +121,97 @@ export function ensureAchievementStats(username) {
 }
 
 /**
+ * Count owned cards whose current aura tier is max (tier 3).
+ * @param {string} username
+ * @returns {number}
+ */
+export function computeCardsAtMaxAura(username) {
+  if (!username) return 0;
+  const inventory = db.get(`players/${username}/inventory`) || {};
+  let count = 0;
+  for (const [cardId, qty] of Object.entries(inventory)) {
+    if (typeof qty !== 'number' || qty <= 0) continue;
+    const card = cards.getCard(cardId);
+    if (!card?.rarity) continue;
+    if (getAuraTier(card.rarity, qty) === MAX_AURA_TIER) count++;
+  }
+  return count;
+}
+
+/**
+ * Recompute stats/maxCardAuraTier from live inventory (can increase or decrease).
+ * @param {string} username
+ * @returns {{ changed: boolean, previous: number, value: number }}
+ */
+export function refreshMaxCardAuraTier(username) {
+  if (!username) return { changed: false, previous: 0, value: 0 };
+  ensureAchievementStats(username);
+  const path = STAT_PATHS[STAT_KEYS.MAX_CARD_AURA_TIER];
+  const previous = readPath(username, path);
+  const value = computeCardsAtMaxAura(username);
+  if (value !== previous) {
+    writePath(username, path, value);
+    return { changed: true, previous, value };
+  }
+  return { changed: false, previous, value };
+}
+
+/**
+ * Count profile cosmetic slots with a valid, owned, active equipped item.
+ * @param {string} username
+ * @returns {number}
+ */
+export function computeEquippedCosmeticsCount(username) {
+  if (!username) return 0;
+  const profile = db.get(`players/${username}/profile`) || {};
+  const owned = db.get(`players/${username}/cosmetics/owned`) || {};
+  let count = 0;
+  for (const { profileField, category } of EQUIPPED_COSMETIC_SLOTS) {
+    const itemId = profile[profileField];
+    if (!itemId || typeof itemId !== 'string') continue;
+    const definition = getCosmeticDefinition(itemId);
+    if (!isCosmeticDefinitionActive(definition) || definition.category !== category) continue;
+    if (!owned[itemId]) continue;
+    count++;
+  }
+  return count;
+}
+
+/**
+ * Recompute stats/cosmeticsEquipped from live profile + ownership (can increase or decrease).
+ * @param {string} username
+ * @returns {{ changed: boolean, previous: number, value: number }}
+ */
+export function refreshCosmeticsEquipped(username) {
+  if (!username) return { changed: false, previous: 0, value: 0 };
+  ensureAchievementStats(username);
+  const path = STAT_PATHS[STAT_KEYS.COSMETICS_EQUIPPED];
+  const previous = readPath(username, path);
+  const value = computeEquippedCosmeticsCount(username);
+  if (value !== previous) {
+    writePath(username, path, value);
+    return { changed: true, previous, value };
+  }
+  return { changed: false, previous, value };
+}
+
+/**
+ * Login / init self-heal for derived stats (no migration script).
+ * @param {string} username
+ * @returns {string[]} stat keys whose stored values changed
+ */
+export function healDerivedAchievementStats(username) {
+  if (!username) return [];
+  ensureAchievementStats(username);
+  const changedKeys = [];
+  const aura = refreshMaxCardAuraTier(username);
+  if (aura.changed) changedKeys.push(STAT_KEYS.MAX_CARD_AURA_TIER);
+  const equipped = refreshCosmeticsEquipped(username);
+  if (equipped.changed) changedKeys.push(STAT_KEYS.COSMETICS_EQUIPPED);
+  return changedKeys;
+}
+
+/**
  * Low-level stat write used by achievements.js after hooks.
  * @returns {{ changed: boolean, statKey: string, path: string, previous: number, value: number }}
  */
@@ -124,12 +229,36 @@ export function applyStatChange(username, statKey, delta = 1, options = {}) {
     return { changed: true, statKey, path, previous: value, value };
   }
 
+  if (statKey === STAT_KEYS.MAX_CARD_AURA_TIER) {
+    const previous = readPath(username, path);
+    const refresh = refreshMaxCardAuraTier(username);
+    return {
+      changed: refresh.changed,
+      statKey,
+      path,
+      previous: refresh.previous,
+      value: refresh.value,
+    };
+  }
+
+  if (statKey === STAT_KEYS.COSMETICS_EQUIPPED) {
+    const previous = readPath(username, path);
+    const refresh = refreshCosmeticsEquipped(username);
+    return {
+      changed: refresh.changed,
+      statKey,
+      path,
+      previous: refresh.previous,
+      value: refresh.value,
+    };
+  }
+
   const previous = readPath(username, path);
   let next = previous;
 
   if (options.setAbsolute === true && Number.isFinite(Number(options.value))) {
     next = Math.max(0, Math.floor(Number(options.value)));
-  } else if (statKey === STAT_KEYS.MAX_CARD_AURA_TIER || statKey === STAT_KEYS.BEST_PROJECT_SUCCESS_STREAK) {
+  } else if (statKey === STAT_KEYS.BEST_PROJECT_SUCCESS_STREAK) {
     const candidate = Number.isFinite(Number(options.value))
       ? Math.floor(Number(options.value))
       : previous + Math.max(0, Math.floor(Number(delta) || 0));
@@ -153,7 +282,7 @@ export function applyStatChange(username, statKey, delta = 1, options = {}) {
 }
 
 /**
- * After inventory gains a card, update discovery + aura tier high-water stats.
+ * After inventory changes, update discovery + derived inventory stats.
  * @param {string} username
  * @param {string} cardId
  * @param {number} newQuantity
@@ -170,18 +299,29 @@ export function recordCardInventoryGain(username, cardId, newQuantity, options =
     if (discovery.changed) statKeys.push(STAT_KEYS.UNIQUE_CARDS_DISCOVERED);
   }
 
-  const card = cards.getCard(cardId);
-  if (card?.rarity) {
-    const tier = getAuraTier(card.rarity, qty);
-    const aura = applyStatChange(username, STAT_KEYS.MAX_CARD_AURA_TIER, 0, {
-      setAbsolute: false,
-      value: tier,
-    });
-    if (aura.changed) statKeys.push(STAT_KEYS.MAX_CARD_AURA_TIER);
-  }
-
   refreshUniqueCardsOwned(username);
   statKeys.push(STAT_KEYS.UNIQUE_CARDS_OWNED);
+
+  const aura = refreshMaxCardAuraTier(username);
+  if (aura.changed) statKeys.push(STAT_KEYS.MAX_CARD_AURA_TIER);
+
+  return { changed: statKeys.length > 0, statKeys };
+}
+
+/**
+ * Recompute inventory-derived stats after removals/trades (no discovery bump).
+ * @param {string} username
+ * @returns {{ changed: boolean, statKeys: string[] }}
+ */
+export function recordCardInventoryChange(username) {
+  if (!username) return { changed: false, statKeys: [] };
+
+  const statKeys = [];
+  refreshUniqueCardsOwned(username);
+  statKeys.push(STAT_KEYS.UNIQUE_CARDS_OWNED);
+
+  const aura = refreshMaxCardAuraTier(username);
+  if (aura.changed) statKeys.push(STAT_KEYS.MAX_CARD_AURA_TIER);
 
   return { changed: statKeys.length > 0, statKeys };
 }
