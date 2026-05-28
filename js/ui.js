@@ -10,6 +10,12 @@ import * as player from './player.js';
 import * as cards from './cards.js';
 import { initCardDetailModal, openCardDetailModal } from './card-detail-modal.js';
 import { initCosmeticPreviewModal } from './cosmetic-preview-modal.js';
+import {
+  getAdminCardImageOverride,
+  getLocalCardArtPath,
+  normalizeCardArtSlug,
+  resolveCardArt,
+} from './card-art.js';
 import { buildCardRenderModel, renderPackCardWrapper, renderSciCard } from './card-render.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import * as packs from './packs.js';
@@ -1260,6 +1266,8 @@ function renderAdminCards() {
       } else {
         newCardConceptTypeEl.classList.add('hidden');
       }
+      updateCardArtAdminHints('new');
+      updateImagePreview('new-card-imageUrl', 'new-card-image-preview', 'new-card-preview-img', getNewCardDraft());
     };
     newCardTypeEl.onchange = toggleNewConceptType;
     toggleNewConceptType(); // set initial state
@@ -1357,8 +1365,8 @@ function openEditCardModal(cardId) {
     flavorTextRow?.classList.add('hidden');
   }
 
-  // Show image preview if URL exists
-  updateImagePreview('edit-card-imageUrl', 'edit-card-image-preview', 'edit-card-preview-img');
+  updateCardArtAdminHints('edit');
+  updateImagePreview('edit-card-imageUrl', 'edit-card-image-preview', 'edit-card-preview-img', getEditCardDraft());
 
   document.getElementById('edit-card-modal').classList.remove('hidden');
 }
@@ -1374,12 +1382,34 @@ function setupEditCardModal() {
 
   // Live image preview in edit modal
   document.getElementById('edit-card-imageUrl')?.addEventListener('input', () => {
-    updateImagePreview('edit-card-imageUrl', 'edit-card-image-preview', 'edit-card-preview-img');
+    updateCardArtAdminHints('edit');
+    updateImagePreview('edit-card-imageUrl', 'edit-card-image-preview', 'edit-card-preview-img', getEditCardDraft());
+  });
+
+  document.getElementById('edit-card-name')?.addEventListener('input', () => {
+    updateCardArtAdminHints('edit');
+    updateImagePreview('edit-card-imageUrl', 'edit-card-image-preview', 'edit-card-preview-img', getEditCardDraft());
+  });
+
+  document.getElementById('edit-card-type')?.addEventListener('change', () => {
+    updateCardArtAdminHints('edit');
+    updateImagePreview('edit-card-imageUrl', 'edit-card-image-preview', 'edit-card-preview-img', getEditCardDraft());
   });
 
   // Live image preview in create form
   document.getElementById('new-card-imageUrl')?.addEventListener('input', () => {
-    updateImagePreview('new-card-imageUrl', 'new-card-image-preview', 'new-card-preview-img');
+    updateCardArtAdminHints('new');
+    updateImagePreview('new-card-imageUrl', 'new-card-image-preview', 'new-card-preview-img', getNewCardDraft());
+  });
+
+  document.getElementById('new-card-name')?.addEventListener('input', () => {
+    updateCardArtAdminHints('new');
+    updateImagePreview('new-card-imageUrl', 'new-card-image-preview', 'new-card-preview-img', getNewCardDraft());
+  });
+
+  document.getElementById('new-card-type')?.addEventListener('change', () => {
+    updateCardArtAdminHints('new');
+    updateImagePreview('new-card-imageUrl', 'new-card-image-preview', 'new-card-preview-img', getNewCardDraft());
   });
 
   // Toggle conceptType + flavorText row visibility when type changes in edit modal
@@ -1445,17 +1475,63 @@ function setupEditCardModal() {
   });
 }
 
+function getEditCardDraft() {
+  return {
+    name: document.getElementById('edit-card-name')?.value?.trim() || '',
+    type: document.getElementById('edit-card-type')?.value || 'scientist',
+    imageUrl: document.getElementById('edit-card-imageUrl')?.value?.trim() || '',
+  };
+}
+
+function getNewCardDraft() {
+  return {
+    name: document.getElementById('new-card-name')?.value?.trim() || '',
+    type: document.getElementById('new-card-type')?.value || 'scientist',
+    imageUrl: document.getElementById('new-card-imageUrl')?.value?.trim() || '',
+  };
+}
+
 /**
- * Update an image preview element based on a URL input.
+ * Show resolved local asset path and slug for admin card forms.
+ * @param {'edit'|'new'} mode
  */
-function updateImagePreview(inputId, previewContainerId, previewImgId) {
-  const url = document.getElementById(inputId)?.value?.trim() || '';
+function updateCardArtAdminHints(mode) {
+  const draft = mode === 'edit' ? getEditCardDraft() : getNewCardDraft();
+  const prefix = mode === 'edit' ? 'edit-card' : 'new-card';
+  const hintEl = document.getElementById(`${prefix}-local-art-hint`);
+  const slugEl = document.getElementById(`${prefix}-art-slug-hint`);
+  if (!hintEl || !slugEl) return;
+
+  const slug = normalizeCardArtSlug(draft.name);
+  slugEl.textContent = slug ? `Slug: ${slug}` : 'Slug: —';
+
+  if (getAdminCardImageOverride(draft)) {
+    hintEl.textContent = 'Image URL override active — local asset is not used until URL is cleared.';
+    return;
+  }
+
+  const localPath = getLocalCardArtPath(draft);
+  hintEl.textContent = localPath
+    ? `Default local asset: ${localPath}`
+    : 'No local path (set a valid name and scientist/concept type). Placeholder emoji is used until art exists.';
+}
+
+/**
+ * Update an image preview element (effective resolved URL: override or local).
+ * @param {object} [draftCard] - when omitted, uses raw input URL only
+ */
+function updateImagePreview(inputId, previewContainerId, previewImgId, draftCard) {
+  const rawUrl = document.getElementById(inputId)?.value?.trim() || '';
   const container = document.getElementById(previewContainerId);
   const img = document.getElementById(previewImgId);
   if (!container || !img) return;
 
-  if (url) {
-    img.src = url;
+  const previewSrc = draftCard
+    ? resolveCardArt({ ...draftCard, imageUrl: rawUrl, image: rawUrl }).src
+    : rawUrl;
+
+  if (previewSrc) {
+    img.src = previewSrc;
     img.onerror = () => container.classList.add('hidden');
     img.onload = () => container.classList.remove('hidden');
     container.classList.remove('hidden');

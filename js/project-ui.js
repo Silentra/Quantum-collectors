@@ -36,6 +36,7 @@ import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
 import { recordBreakthroughEarned, recordProjectOutcome } from './achievements.js';
 
+import { renderMiniCardArtHtml } from './card-art.js';
 import { renderPackCardWrapper } from './card-render.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import { confirmAction } from './ui.js';
@@ -540,11 +541,7 @@ function _renderCardsAvailabilityPanel(projects, username) {
     el.className = `rp-mini-card rarity-${card.rarity}${isLocked ? ' rp-mini-card--unavailable' : ''}`;
     el.title = isLocked ? `${card.name} — assigned to active project` : card.name;
 
-    const imageUrl = card.imageUrl || card.image || '';
-    const emoji    = cards.TYPE_EMOJIS[card.type] || '🔬';
-    const imgHTML  = imageUrl
-      ? `<img class="rp-mini-img" src="${imageUrl}" alt="${card.name}" loading="lazy">`
-      : `<div class="rp-mini-emoji">${emoji}</div>`;
+    const imgHTML = renderMiniCardArtHtml(card);
 
     const roleLabel = (card.type === 'concept' && card.conceptType)
       ? `<div class="rp-mini-concept-role">${cards.CONCEPT_EFFECT_LABELS[card.conceptType] || ''}</div>`
@@ -1101,11 +1098,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     el.className = `rp-mini-card rarity-${card.rarity}${isLocked ? ' locked-card' : ''}`;
     el.dataset.cardId = card.id;
 
-    const imageUrl = card.imageUrl || card.image || '';
-    const emoji    = cards.TYPE_EMOJIS[card.type] || '🔬';
-    const imgHTML  = imageUrl
-      ? `<img class="rp-mini-img" src="${imageUrl}" alt="${card.name}" loading="lazy">`
-      : `<div class="rp-mini-emoji">${emoji}</div>`;
+    const imgHTML = renderMiniCardArtHtml(card);
 
     // Surface concept effect role label on concept mini cards
     const roleLabel = (card.type === 'concept' && card.conceptType)

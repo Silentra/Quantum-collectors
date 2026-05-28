@@ -8,9 +8,10 @@
  * Phase A: proportional CSS Grid on .card-detail-inner (geometry only)
  * Phase B: container-query typography (clamp + cqw/cqh); geometry unchanged
  *
- * Dependencies: cards.js only (no ui.js / project-ui.js imports).
+ * Dependencies: cards.js, card-art.js (no ui.js / project-ui.js imports).
  */
 
+import { renderCardDetailArtHtml, resolveCardArt } from './card-art.js';
 import {
   AURA_CSS_MAP,
   AURA_THRESHOLDS,
@@ -63,7 +64,7 @@ export function buildCardRenderModel(card, options = {}) {
   const isPackReveal = variant === 'pack-reveal';
   const clampKeyFact = options.clampKeyFact ?? (isPackReveal || !isModal);
 
-  const imageUrl = card.imageUrl || card.image || '';
+  const art = resolveCardArt(card);
   const keyFact = card.keyFact || card.flavor || '';
   const field = card.field || 'General';
   const visualAura = resolveVisualAura(profileCosmeticAura);
@@ -94,7 +95,12 @@ export function buildCardRenderModel(card, options = {}) {
     cardId: card.id,
     name: card.name,
     rarity: card.rarity,
-    imageUrl,
+    cardType: card.type,
+    artSrc: art.src,
+    artSource: art.source,
+    artSlug: art.slug,
+    /** @deprecated use artSrc — kept for callers that read model.imageUrl */
+    imageUrl: art.src || '',
     keyFact,
     field,
     emoji,
@@ -132,8 +138,11 @@ export function renderCardContent(model) {
     ? `<div class="card-detail-header-meta"><div class="${conceptLabelClasses}">${model.conceptEffectLabel}</div></div>`
     : '';
 
-  const artHtml = model.imageUrl
-    ? `<img src="${model.imageUrl}" alt="${model.name}">`
+  const artHtml = model.artSrc
+    ? renderCardDetailArtHtml(
+        { name: model.name, type: model.cardType },
+        { src: model.artSrc, source: model.artSource, slug: model.artSlug }
+      )
     : `<span class="card-detail-art-emoji" aria-hidden="true">${model.emoji}</span>`;
 
   const keyFactClass = model.clampKeyFact ? 'card-detail-keyfact grid-clamp' : 'card-detail-keyfact';
