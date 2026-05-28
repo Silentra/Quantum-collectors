@@ -558,94 +558,6 @@
                 </div>
                 <div id="admin-cards-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto"></div>
               </div>
-
-              <!-- Edit Card Modal -->
-              <div id="edit-card-modal" class="hidden fixed inset-0 bg-black/80 z-50 flex items-start sm:items-center justify-center p-4 pt-[max(1rem,var(--shell-header-min-height,4.5rem))] sm:pt-4">
-                <div class="edit-card-modal-panel bg-surface-900 rounded-2xl p-6 max-w-lg w-full max-h-[min(90dvh,calc(100dvh-1.5rem))] border border-surface-700 flex flex-col min-h-0 shadow-xl">
-                  <div class="flex items-center justify-between mb-4 flex-shrink-0">
-                    <h3 class="text-xl font-bold">Edit Card</h3>
-                    <button id="btn-close-edit-card" class="text-surface-400 hover:text-white text-2xl">&times;</button>
-                  </div>
-                  <div class="space-y-3 overflow-y-auto min-h-0 pr-1">
-                    <div>
-                      <label class="text-xs text-surface-400 block mb-1">Card Name</label>
-                      <input id="edit-card-name" type="text" class="admin-input w-full">
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <label class="text-xs text-surface-400 block mb-1">Rarity</label>
-                        <select id="edit-card-rarity" class="admin-input w-full">
-                          <option value="common">Common</option>
-                          <option value="uncommon">Uncommon</option>
-                          <option value="rare">Rare</option>
-                          <option value="epic">Epic</option>
-                          <option value="legendary">Legendary</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label class="text-xs text-surface-400 block mb-1">Type</label>
-                        <select id="edit-card-type" class="admin-input w-full">
-                          <option value="scientist">Scientist</option>
-                          <option value="concept">Concept</option>
-                        </select>
-                      </div>
-                    </div>
-                    <div id="edit-card-conceptType-row" class="hidden">
-                      <label class="text-xs text-surface-400 block mb-1">Concept Type</label>
-                      <select id="edit-card-conceptType" class="admin-input w-full">
-                        <option value="researchBoost">Research Amplifier</option>
-                        <option value="difficultyReduction">Complexity Reducer</option>
-                        <option value="synergyBoost">Synergy Booster</option>
-                        <option value="breakthrough">Breakthrough Catalyst</option>
-                        <option value="risk">Risk Enhancer</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="text-xs text-surface-400 block mb-1">Field / Category</label>
-                      <input id="edit-card-field" type="text" class="admin-input w-full">
-                    </div>
-                    <div>
-                      <label class="text-xs text-surface-400 block mb-1">Image URL <span class="text-surface-600">(optional override)</span></label>
-                      <input id="edit-card-imageUrl" type="text" class="admin-input w-full" placeholder="https://...">
-                      <p id="edit-card-local-art-hint" class="text-xs text-surface-500 mt-1"></p>
-                      <p id="edit-card-art-slug-hint" class="text-xs text-surface-600 font-mono mt-0.5"></p>
-                    </div>
-                    <!-- Image preview in edit modal -->
-                    <div id="edit-card-image-preview" class="hidden">
-                      <div class="w-24 h-28 bg-surface-800 rounded-lg overflow-hidden border border-surface-600">
-                        <img id="edit-card-preview-img" class="w-full h-full object-cover" alt="Preview">
-                      </div>
-                    </div>
-                    <div>
-                      <label class="text-xs text-surface-400 block mb-1">Key Fact</label>
-                      <textarea id="edit-card-keyFact" class="admin-input w-full" rows="4" placeholder="Main educational content for this card..."></textarea>
-                    </div>
-                    <!-- Flavor/lore text — concept cards only, presentational -->
-                    <div id="edit-card-flavorText-row" class="hidden">
-                      <label class="text-xs text-surface-400 block mb-1">Flavor / Lore Text <span class="text-surface-600">(concept cards — shown in collection view)</span></label>
-                      <textarea id="edit-card-flavorText" class="admin-input w-full" rows="2" placeholder="Optional lore text shown below the card in collection…"></textarea>
-                    </div>
-                    <!-- Phase 1D: Aura Type selector removed — aura is now always default_prismatic for all cards -->
-                    <div class="grid grid-cols-2 gap-3">
-                      <div>
-                        <label class="text-xs text-surface-400 block mb-1">Enabled</label>
-                        <select id="edit-card-enabled" class="admin-input w-full">
-                          <option value="true">Yes</option>
-                          <option value="false">No</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label class="text-xs text-surface-400 block mb-1">Effect (legacy)</label>
-                        <input id="edit-card-effect" type="text" class="admin-input w-full">
-                      </div>
-                    </div>
-                  </div>
-                  <input id="edit-card-id" type="hidden">
-                  <button id="btn-save-edit-card" class="mt-4 w-full bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm flex-shrink-0">
-                    Save Changes
-                  </button>
-                </div>
-              </div>
             </div>
 
             <!-- Admin Packs -->
@@ -919,6 +831,93 @@
       <button id="btn-close-pack" class="w-full bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition">
         Collect Cards
       </button>
+    </div>
+  </div>
+
+  <!-- Admin Edit Card Modal (global — viewport-fixed above shell chrome) -->
+  <div id="edit-card-modal" class="global-modal-overlay edit-card-modal-overlay hidden fixed inset-0 bg-black/80 flex items-start justify-center p-4">
+    <div class="edit-card-modal-panel global-modal-panel bg-surface-900 rounded-2xl max-w-lg w-full border border-surface-700 flex flex-col min-h-0 shadow-xl">
+      <div class="edit-card-modal-header global-modal-header sticky top-0 z-10 flex items-center justify-between gap-3 px-6 py-4 bg-surface-900 border-b border-surface-700/80 rounded-t-2xl flex-shrink-0">
+        <h3 class="text-xl font-bold truncate min-w-0">Edit Card</h3>
+        <button type="button" id="btn-close-edit-card" class="global-modal-close flex-shrink-0 text-surface-300 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface-800 transition" aria-label="Close edit card">&times;</button>
+      </div>
+      <div class="edit-card-modal-body space-y-3 overflow-y-auto flex-1 min-h-0 px-6 py-4">
+        <div>
+          <label class="text-xs text-surface-400 block mb-1">Card Name</label>
+          <input id="edit-card-name" type="text" class="admin-input w-full">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Rarity</label>
+            <select id="edit-card-rarity" class="admin-input w-full">
+              <option value="common">Common</option>
+              <option value="uncommon">Uncommon</option>
+              <option value="rare">Rare</option>
+              <option value="epic">Epic</option>
+              <option value="legendary">Legendary</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Type</label>
+            <select id="edit-card-type" class="admin-input w-full">
+              <option value="scientist">Scientist</option>
+              <option value="concept">Concept</option>
+            </select>
+          </div>
+        </div>
+        <div id="edit-card-conceptType-row" class="hidden">
+          <label class="text-xs text-surface-400 block mb-1">Concept Type</label>
+          <select id="edit-card-conceptType" class="admin-input w-full">
+            <option value="researchBoost">Research Amplifier</option>
+            <option value="difficultyReduction">Complexity Reducer</option>
+            <option value="synergyBoost">Synergy Booster</option>
+            <option value="breakthrough">Breakthrough Catalyst</option>
+            <option value="risk">Risk Enhancer</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs text-surface-400 block mb-1">Field / Category</label>
+          <input id="edit-card-field" type="text" class="admin-input w-full">
+        </div>
+        <div>
+          <label class="text-xs text-surface-400 block mb-1">Image URL <span class="text-surface-600">(optional override)</span></label>
+          <input id="edit-card-imageUrl" type="text" class="admin-input w-full" placeholder="https://...">
+          <p id="edit-card-local-art-hint" class="text-xs text-surface-500 mt-1"></p>
+          <p id="edit-card-art-slug-hint" class="text-xs text-surface-600 font-mono mt-0.5"></p>
+        </div>
+        <div id="edit-card-image-preview" class="hidden">
+          <div class="w-24 h-28 bg-surface-800 rounded-lg overflow-hidden border border-surface-600">
+            <img id="edit-card-preview-img" class="w-full h-full object-cover" alt="Preview">
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-surface-400 block mb-1">Key Fact</label>
+          <textarea id="edit-card-keyFact" class="admin-input w-full" rows="4" placeholder="Main educational content for this card..."></textarea>
+        </div>
+        <div id="edit-card-flavorText-row" class="hidden">
+          <label class="text-xs text-surface-400 block mb-1">Flavor / Lore Text <span class="text-surface-600">(concept cards — shown in collection view)</span></label>
+          <textarea id="edit-card-flavorText" class="admin-input w-full" rows="2" placeholder="Optional lore text shown below the card in collection…"></textarea>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Enabled</label>
+            <select id="edit-card-enabled" class="admin-input w-full">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Effect (legacy)</label>
+            <input id="edit-card-effect" type="text" class="admin-input w-full">
+          </div>
+        </div>
+        <input id="edit-card-id" type="hidden">
+      </div>
+      <div class="edit-card-modal-footer flex-shrink-0 px-6 pb-6 pt-2 border-t border-surface-700/80 bg-surface-900 rounded-b-2xl">
+        <button type="button" id="btn-save-edit-card" class="w-full bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm">
+          Save Changes
+        </button>
+      </div>
     </div>
   </div>
 

@@ -2902,8 +2902,33 @@ body.app-mode-game #screen-game.screen.active {
   flex-shrink: 0;
 }
 
-.card-detail-header-meta .concept-effect-label {
-  margin: 1px 0 0;
+/* On-card concept chip — overlays artwork (collection/grid only; modal uses metadata region) */
+.card-detail-art .card-detail-concept-chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: flex;
+  justify-content: center;
+  padding: clamp(2px, 1.5cqw, 5px) clamp(4px, 2cqw, 8px);
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.78) 0%,
+    rgba(0, 0, 0, 0.5) 65%,
+    transparent 100%
+  );
+}
+
+.card-detail-art .card-detail-concept-chip .concept-effect-label {
+  margin: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+.card-detail-art img {
+  position: relative;
+  z-index: 1;
 }
 
 .card-detail-art {
@@ -3299,8 +3324,33 @@ body.app-mode-game #screen-game.screen.active {
   max-width: min(20rem, 100%);
 }
 
+/* Admin Edit Card — shell-safe containment (lives on <body> as .global-modal-overlay) */
+#edit-card-modal.edit-card-modal-overlay {
+  align-items: flex-start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-top: max(1rem, var(--shell-header-min-height, 4.5rem));
+  padding-bottom: 1rem;
+}
+
 #edit-card-modal .edit-card-modal-panel {
-  max-height: min(90dvh, calc(100dvh - var(--shell-header-min-height, 4.5rem) - 1rem));
+  max-height: min(
+    calc(100dvh - var(--shell-header-min-height, 4.5rem) - 2rem),
+    90dvh
+  );
+  width: 100%;
+  margin: 0 auto;
+  flex: 0 1 auto;
+}
+
+#edit-card-modal .edit-card-modal-body {
+  -webkit-overflow-scrolling: touch;
+}
+
+#edit-card-modal .edit-card-modal-footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
 }
 
 .card-detail-view {
@@ -4063,6 +4113,18 @@ body.app-mode-game #screen-game.screen.active {
   font-size: 0.82em;
 }
 
+/* Detail modal — slightly more aggressive long-name shrink than collection grid */
+.card-detail-frame .card-detail-name--long {
+  font-size: 0.82em;
+  line-height: 1.12;
+  max-width: 100%;
+}
+.card-detail-frame .card-detail-name--ultra-long {
+  font-size: 0.72em;
+  line-height: 1.08;
+  max-width: 100%;
+}
+
 /* Line-clamp for keyFact in grid cards (not modal) */
 .card-detail-keyfact.grid-clamp {
   overflow: hidden;
@@ -4384,6 +4446,16 @@ body.app-mode-game #screen-game.screen.active {
     font-weight: 700;
   }
 
+  .card-detail-frame .card-detail-name--long {
+    font-size: clamp(0.38rem, 6.2cqw, 0.82rem);
+    line-height: 1.12;
+  }
+
+  .card-detail-frame .card-detail-name--ultra-long {
+    font-size: clamp(0.34rem, 5.4cqw, 0.72rem);
+    line-height: 1.08;
+  }
+
   .sci-card .card-detail-keyfact,
   .card-detail-frame .card-detail-keyfact {
     font-size: clamp(0.45rem, 5.5cqw, 0.8rem);
@@ -4396,8 +4468,7 @@ body.app-mode-game #screen-game.screen.active {
     margin-bottom: clamp(0.05rem, 0.8cqw, 0.35rem);
   }
 
-  .sci-card .concept-effect-label,
-  .card-detail-frame .concept-effect-label {
+  .sci-card .concept-effect-label {
     font-size: clamp(0.4rem, 4cqw, 0.65rem);
   }
 
@@ -4421,6 +4492,8 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card .card-detail-field { font-size: 0.6rem; }
   .sci-card .card-detail-keyfact { font-size: 0.6rem; line-height: 1.35; }
   .card-detail-frame .card-detail-name { font-size: 0.85rem; }
+  .card-detail-frame .card-detail-name--long { font-size: 0.76rem; line-height: 1.12; }
+  .card-detail-frame .card-detail-name--ultra-long { font-size: 0.68rem; line-height: 1.08; }
   .card-detail-frame .card-detail-keyfact { font-size: 0.75rem; }
   .card-detail-frame .card-detail-field { font-size: 0.65rem; }
   .concept-effect-label { font-size: 0.6rem; }
