@@ -81,12 +81,16 @@ export function buildCardRenderModel(card, options = {}) {
   }
 
   const emoji = TYPE_EMOJIS[card.type] || '\uD83D\uDD2C';
+  const nameLength = (card.name || '').trim().length;
+  const nameScaleClass = nameLength >= 30
+    ? 'card-detail-name--ultra-long'
+    : nameLength >= 22
+      ? 'card-detail-name--long'
+      : '';
 
   const showConceptLabel = isPackReveal
     ? false
-    : isModal
-      ? (card.type === 'concept' && card.conceptType)
-      : (!isUndiscovered && card.type === 'concept' && card.conceptType);
+    : (!isUndiscovered && card.type === 'concept' && card.conceptType);
   const conceptEffectLabel = showConceptLabel
     ? (CONCEPT_EFFECT_LABELS[card.conceptType] || '')
     : '';
@@ -122,6 +126,9 @@ export function buildCardRenderModel(card, options = {}) {
     showAuraDots: !isPackReveal && auraTier > 0,
     showLockedBadge: !isPackReveal && isLocked,
     showUndiscoveredBadge: !isPackReveal && isUndiscovered,
+    showRarityDot: true,
+    rarityDotClass: `rarity-dot-${card.rarity || 'common'}`,
+    nameScaleClass,
   };
 }
 
@@ -154,8 +161,7 @@ export function renderCardContent(model) {
       <div class="card-detail-inner">
         <div class="card-detail-header">
           <div class="card-detail-header-row">
-            <span class="card-detail-name">${model.name}</span>
-            <span class="sci-card-rarity-badge ${model.rarity}">${model.rarity}</span>
+            <span class="card-detail-name ${model.nameScaleClass}">${model.name}</span>
           </div>
           ${conceptEffectLabelHtml}
         </div>
@@ -191,12 +197,25 @@ export function renderModalAuraInfoHtml(model, card) {
   return `
     <div class="card-detail-aura-info">
       <span>💎 aura</span>
+      <span class="sci-card-rarity-dot ${model.rarityDotClass}" aria-hidden="true"></span>
       <div class="card-detail-aura-tier-bar" style="color:${pipColor}">
         ${[1, 2, 3].map(i => `<span class="pip ${i <= model.auraTier ? 'filled' : ''}"></span>`).join('')}
       </div>
       ${nextTierInfo}
     </div>
   `;
+}
+
+/**
+ * Concept label in modal metadata region (keeps artwork unobstructed).
+ * @param {object} card
+ * @returns {string}
+ */
+export function renderModalConceptTypeBlock(card) {
+  if (card.type !== 'concept' || !card.conceptType) return '';
+  const label = CONCEPT_EFFECT_LABELS[card.conceptType] || '';
+  if (!label) return '';
+  return `<section class="card-detail-meta-section card-detail-meta-concept"><div class="concept-effect-label concept-effect-label--modal">${label}</div></section>`;
 }
 
 const CARD_DETAIL_AURA_HELPER_TEXT =
@@ -267,6 +286,7 @@ export function renderCardDetailMeta(card, model, quantity) {
   return `
     <div class="card-detail-meta">
       ${renderModalAuraMetaSection(model, card)}
+      ${renderModalConceptTypeBlock(card)}
       ${renderConceptFlavorBlock(card)}
       ${renderCardDetailOwnershipLine(quantity)}
     </div>
@@ -303,11 +323,14 @@ export function renderCardDetailView(card, options = {}) {
  * @returns {string}
  */
 export function renderSciCard(model) {
-  const auraDots = model.showAuraDots
-    ? `<div class="sci-card-aura-dots">${
-        [1, 2, 3].map(i => `<span class="dot ${i <= model.auraTier ? 'filled' : ''}"></span>`).join('')
-      }</div>`
-    : '';
+  const auraDots = `
+    <div class="sci-card-aura-dots">
+      ${model.showRarityDot ? `<span class="sci-card-rarity-dot ${model.rarityDotClass}" aria-hidden="true"></span>` : ''}
+      ${model.showAuraDots
+        ? [1, 2, 3].map(i => `<span class="dot ${i <= model.auraTier ? 'filled' : ''}"></span>`).join('')
+        : ''}
+    </div>
+  `;
 
   const lockedBadge = model.showLockedBadge
     ? `<div class="sci-card-locked-badge" title="On active research project">\uD83D\uDD2C</div>`

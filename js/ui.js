@@ -23,7 +23,6 @@ import * as groups from './groups.js';
 import * as config from './config.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
-import { getLockedCardIds } from './project-state.js';
 import { refreshUniqueCardsOwned } from './research.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
@@ -339,10 +338,6 @@ function renderCollection() {
     return a.card.name.localeCompare(b.card.name);
   });
 
-  // Phase 4C — derive locked card IDs from ACTIVE ResearchProjects (read-only)
-  const p = player.getPlayer(session.username);
-  const lockedCardIds = new Set(getLockedCardIds(p?.projects ?? []));
-
   const grid = document.getElementById('collection-grid');
   const empty = document.getElementById('collection-empty');
 
@@ -372,7 +367,7 @@ function renderCollection() {
       <div class="collection-rarity-group">
         <div class="collection-rarity-label rarity-label-${rarity}">${rarity}</div>
         <div class="collection-rarity-row">
-          ${groupEntries.map(({ card, quantity, undiscovered }) => renderPlayerCard(card, quantity, lockedCardIds.has(card.id), undiscovered)).join('')}
+          ${groupEntries.map(({ card, quantity, undiscovered }) => renderPlayerCard(card, quantity, false, undiscovered)).join('')}
         </div>
       </div>
     `).join('');
@@ -402,8 +397,7 @@ function renderCollection() {
  * wrapped in a .sci-card shell for grid sizing, aura visuals, and click behavior.
  * The modal proportions are the visual reference standard.
  *
- * Phase 4C: isLocked is derived from ACTIVE ResearchProjects — purely visual,
- * never stored on the card itself. Card remains fully viewable when locked.
+ * Collection cards represent ownership state only (project-assigned visuals are hidden here).
  */
 function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered = false) {
   const model = buildCardRenderModel(card, {
