@@ -270,7 +270,7 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 - **Phase 5B — Admin Account Management**: admin player-detail panel (`showPlayerDetail()` in ui.js) has Promote/Remove Admin and Toggle Trade Restriction controls, all confirmation-gated. Self-demotion blocked. Player list shows ADMIN and TRADE LOCKED badges.
 - **Phase 5B-2 — Persistent Admin Gameplay Fix**: All gameplay rendering guards in ui.js now check `session.username === '__admin__'` (standalone emergency admin) instead of `session.isAdmin` (which also matches persistent admin players). Persistent admin accounts get full gameplay access (collection, packs, research, profile, navigation) plus admin tools. Only the standalone `__admin__` session bypasses gameplay. Affected: `renderCollection`, `showCardDetail`, `renderPacks`, `renderResearchProjects`, `renderProfile`, `enterGame` (username display + group badge).
 - **Phase 5C — Admin Gameplay Telemetry**: Persistent admin accounts (`isAdmin && username !== '__admin__'`) see developer-facing telemetry overlays in Research Projects. Gated by `_isPersistentAdmin()` helper in ui.js. Normal players see NO changes. Two additions:
-  1. **Success percentage overlay**: Flavor labels (e.g. "Promising") are appended with raw percentage (e.g. "Promising (68%)") in project cards (ACTIVE state) and the assignment panel live preview.
+  1. **Success percentage overlay**: Flavor labels (e.g. "Good Odds") are appended with raw percentage (e.g. "Good Odds (68%)") in project cards (ACTIVE state) and the assignment panel live preview.
   2. **Assignment telemetry panel**: Compact monospace panel below the preview box showing Effective Team Power, Effective Difficulty, Success %, Breakthrough Chance, Reward RP, Applied Concept Count — all sourced from `evaluateProject()` return values (no duplicate math). Styled with dashed blue border, visually secondary. CSS in style.css `.rp-admin-telemetry`.
 
 ### Admin Foundation (js/admin.js)
@@ -560,12 +560,27 @@ Admin create/edit rejects duplicates using normalized keys: trim, collapse white
 
 #### Disabled vs deleted
 
-| State | Meaning | Shop pool | Achievements | Equipped display |
-|-------|---------|-----------|--------------|------------------|
-| `enabled: false` | Temporarily off; record retained | Excluded | Excluded unless re-enabled | Hidden (inactive definition) |
-| `deleted: true` | Tombstone; admin-only history | Excluded | Excluded | Hidden; id may remain on profile until player unequips |
+| State | Meaning | Shop pool | New achievement config | Claim/grant legacy reward | Equipped display |
+|-------|---------|-----------|------------------------|---------------------------|------------------|
+| `enabled: false` | Temporarily off; record retained | Excluded | Excluded | **Still grants** if already configured | Hidden (inactive definition) |
+| `shopEnabled: false` | Shop-only off | Excluded | N/A | N/A | Hidden if inactive |
+| `achievementEnabled: false` | Reward picker off | May still shop if otherwise eligible | Excluded | **Still grants** if already configured | Hidden if inactive |
+| `deleted: true` | Tombstone; admin-only history | Excluded | Excluded | **Fails** (invalid item) | Hidden; id may remain on profile |
 
 Delete is implemented as a tombstone (`deleted`, `deletedAt`, forces `enabled: false`, `shopEnabled: false`), not a hard Firebase remove, for audit and id collision safety. Tombstoned titles remain in Firebase/registry but are **hidden from the default Admin → Cosmetics → Titles list** (disabled non-deleted titles remain visible).
+
+#### Eligibility helpers (central rules)
+
+Apply `config/shop/itemOverrides` **before** filtering lists (`listCosmeticDefinitions` resolves overrides first).
+
+| Helper | Use |
+|--------|-----|
+| `isCosmeticDefinitionActive(def)` | Equip UI, owned lists, shell resolution |
+| `isCosmeticShopEligible(def)` | Shop catalog, `buildEligiblePool`, `canPurchaseItem` |
+| `isCosmeticAchievementRewardEligible(def)` | Achievement admin save / reward picker |
+| `isCosmeticGrantable(def)` | Achievement claim grant only — allows disabled, rejects tombstoned |
+
+Achievement admin editor shows configured-but-ineligible cosmetics as a disabled legacy option; saving a **new** definition with a disabled cosmetic is rejected.
 
 #### Source metadata
 
@@ -789,7 +804,7 @@ Firebase path: `config/cosmetics/definitions/{titleId}`.
   - On stat bump: `buildStatIndex()` maps stat keys → achievement ids; only indexed achievements are evaluated (never full-definition scans per bump).
   - On login/session restore: `evaluateAchievementsOnLogin()` evaluates pending (not-yet-unlocked) definitions once per session (`resetLoginAchievementEvaluation()` on logout).
   - Conditions are simple `{stat, op, value}` with `conditionMode` `all`/`any` — no formulas, nesting, JS eval, or callbacks.
-- **Stat registry** (`achievement-stats.js`): additive counters on `players/{username}/stats/*` and top-level fields (`totalResearchPoints`, `projectsCompleted`, `researchStats/breakthroughs`). High-water stats: `bestProjectSuccessStreak`, `maxCardAuraTier`. Current `projectSuccessStreak` may reset on failure; achievements should target `bestProjectSuccessStreak`, not current streak.
+- **Stat registry** (`achievement-stats.js`): additive counters on `players/{username}/stats/*` and top-level fields (`totalResearchPoints`, `projectsCompleted`, `researchStats/breakthroughs`). Derived current-state stats (recomputed from inventory/profile): `uniqueCardsOwned`, `maxCardAuraTier` (count of owned cards at aura tier 3), `cosmeticsEquipped` (valid equipped profile slots, max 5). High-water: `bestProjectSuccessStreak`. Current `projectSuccessStreak` may reset on failure; achievements should target `bestProjectSuccessStreak`, not current streak.
 - **Rewards** (`achievement-rewards.js`): manual claim via `claimAchievementReward()` routes through `addResearchPoints`, `grantConsumable`, `unlockCosmetic` (ownership only — never auto-equip), and `addPack` — no direct inventory/cosmetic/pack writes.
 - **Hidden achievements**: locked hidden entries are omitted from the player list entirely until unlocked.
 - **UI**: `achievements-ui.js` (profile panel only); `achievements-admin.js` (simplified CRUD, auto IDs on create, drag-and-drop `sortOrder`, reward dropdowns).
