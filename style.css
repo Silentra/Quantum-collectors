@@ -1851,18 +1851,19 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .shop-cosmetic-preview--border {
+  position: relative;
   box-sizing: border-box;
-  border-width: 2px;
-  border-style: solid;
-  border-color: #334155;
+  border: 2px solid #243047;
+  border-radius: 0.5rem;
   background-color: #111827;
+  container-type: size;
+  container-name: card;
+  overflow: visible;
 }
 
-.shop-cosmetic-preview--border.rarity-common { border-color: #9ca3af; }
-.shop-cosmetic-preview--border.rarity-uncommon { border-color: #22c55e; box-shadow: 0 0 8px rgba(34, 197, 94, 0.22); }
-.shop-cosmetic-preview--border.rarity-rare { border-color: #3b82f6; box-shadow: 0 0 8px rgba(59, 130, 246, 0.28); }
-.shop-cosmetic-preview--border.rarity-epic { border-color: #a855f7; box-shadow: 0 0 10px rgba(168, 85, 247, 0.32); }
-.shop-cosmetic-preview--border.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 10px rgba(245, 158, 11, 0.35); }
+.shop-cosmetic-preview--border .card-cosmetic-effects {
+  border-radius: inherit;
+}
 
 /* BN-1 banner preview strips — same slug/colors as chrome (inline + modal stage) */
 .shop-cosmetic-preview--banner[data-banner-slug="default"],
@@ -2065,11 +2066,6 @@ body.app-mode-game #screen-game.screen.active {
 
 .cosmetic-preview-stage .shop-cosmetic-preview--border.cosmetic-preview--expanded {
   min-height: 9rem;
-  border-width: 3px;
-}
-
-.cosmetic-preview-stage .shop-cosmetic-preview--border.cosmetic-preview--expanded.rarity-legendary {
-  box-shadow: 0 0 18px rgba(245, 158, 11, 0.4);
 }
 
 /* BN-3 expanded: stage height comes from .shop-cosmetic-preview.cosmetic-preview--expanded */
@@ -2829,7 +2825,7 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card {
   position: relative;
   background: #0c1220;
-  border: 2.5px solid #334155;
+  border: 2.5px solid #243047;
   border-radius: 0.6rem;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -2850,14 +2846,23 @@ body.app-mode-game #screen-game.screen.active {
 }
 .sci-card:hover { transform: translateY(-3px); }
 
-/* Phase 3 — inert cosmetic mount (equipped glow/border/shimmer in a later phase) */
+/* Phase 3 — cosmetic mount (equipped border paints on ::before; v1 CSS borders) */
 .card-cosmetic-effects {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   border-radius: inherit;
   overflow: visible;
+}
+
+.card-cosmetic-effects::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* Phase 3 — content above aura ::after (tier 3 inner pulse, z-index: 1) */
@@ -2956,18 +2961,125 @@ body.app-mode-game #screen-game.screen.active {
   flex-direction: column;
 }
 
-/* Rarity border colors */
-.sci-card.rarity-common   { border-color: #4b5563; }
-.sci-card.rarity-uncommon { border-color: #22c55e; }
-.sci-card.rarity-rare     { border-color: #3b82f6; }
-.sci-card.rarity-epic     { border-color: #a855f7; }
-.sci-card.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 12px rgba(245,158,11,0.15); }
+/* Structural shell edge — neutral; visual rarity/cosmetic band on .card-cosmetic-effects::before */
 
-/* Rarity hover glow */
-.sci-card.rarity-uncommon:hover { box-shadow: 0 4px 16px rgba(34,197,94,0.15); }
-.sci-card.rarity-rare:hover     { box-shadow: 0 4px 16px rgba(59,130,246,0.15); }
-.sci-card.rarity-epic:hover     { box-shadow: 0 4px 16px rgba(168,85,247,0.2); }
-.sci-card.rarity-legendary:hover { box-shadow: 0 4px 20px rgba(245,158,11,0.3); }
+/* Default border — virtual equipped state (rarity-colored band, card rarity not cosmetic rarity) */
+.sci-card,
+.card-detail-frame,
+.shop-cosmetic-preview--border {
+  --card-border-band-default: clamp(1px, 5.5cqw, 4px);
+  --card-border-band-cosmetic: clamp(2px, 6.5cqw, 5px);
+}
+
+.sci-card[data-card-border="default"].rarity-common .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="default"].rarity-common .card-cosmetic-effects::before {
+  box-shadow: inset 0 0 0 var(--card-border-band-default) #4b5563;
+}
+.sci-card[data-card-border="default"].rarity-uncommon .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="default"].rarity-uncommon .card-cosmetic-effects::before {
+  box-shadow: inset 0 0 0 var(--card-border-band-default) #22c55e;
+}
+.sci-card[data-card-border="default"].rarity-rare .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="default"].rarity-rare .card-cosmetic-effects::before {
+  box-shadow: inset 0 0 0 var(--card-border-band-default) #3b82f6;
+}
+.sci-card[data-card-border="default"].rarity-epic .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="default"].rarity-epic .card-cosmetic-effects::before {
+  box-shadow: inset 0 0 0 var(--card-border-band-default) #a855f7;
+}
+.sci-card[data-card-border="default"].rarity-legendary .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="default"].rarity-legendary .card-cosmetic-effects::before {
+  box-shadow: inset 0 0 0 var(--card-border-band-default) #f59e0b;
+}
+
+/* Default legendary ambient glow (shell, not cosmetic band) */
+.sci-card[data-card-border="default"].rarity-legendary {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
+}
+
+/* Default rarity hover glow — collection grid only */
+.sci-card[data-card-border="default"].rarity-uncommon:hover { box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15); }
+.sci-card[data-card-border="default"].rarity-rare:hover     { box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15); }
+.sci-card[data-card-border="default"].rarity-epic:hover     { box-shadow: 0 4px 16px rgba(168, 85, 247, 0.2); }
+.sci-card[data-card-border="default"].rarity-legendary:hover { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
+
+/* v1 cosmetic borders — static CSS on .card-cosmetic-effects::before */
+.sci-card[data-card-border="silver"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="silver"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="silver"] .card-cosmetic-effects::before {
+  box-shadow:
+    inset 0 0 0 var(--card-border-band-cosmetic) rgba(148, 163, 184, 0.78),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.35);
+  background: linear-gradient(
+    155deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(203, 213, 225, 0.04) 38%,
+    rgba(51, 65, 85, 0.07) 72%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+}
+
+.sci-card[data-card-border="sapphire"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="sapphire"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="sapphire"] .card-cosmetic-effects::before {
+  box-shadow:
+    inset 0 0 0 var(--card-border-band-cosmetic) rgba(37, 99, 180, 0.82),
+    inset 0 1px 0 rgba(147, 197, 253, 0.2),
+    inset 0 -1px 0 rgba(15, 37, 68, 0.42);
+  background: linear-gradient(
+    155deg,
+    rgba(96, 165, 250, 0.11) 0%,
+    rgba(30, 64, 175, 0.06) 45%,
+    rgba(59, 130, 246, 0.08) 100%
+  );
+}
+
+.sci-card[data-card-border="emerald"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="emerald"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="emerald"] .card-cosmetic-effects::before {
+  box-shadow:
+    inset 0 0 0 var(--card-border-band-cosmetic) rgba(22, 120, 78, 0.82),
+    inset 0 1px 0 rgba(110, 231, 183, 0.18),
+    inset 0 -1px 0 rgba(6, 40, 28, 0.42);
+  background: linear-gradient(
+    155deg,
+    rgba(52, 211, 153, 0.1) 0%,
+    rgba(6, 95, 70, 0.06) 48%,
+    rgba(34, 197, 94, 0.07) 100%
+  );
+}
+
+.sci-card[data-card-border="graphite"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="graphite"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="graphite"] .card-cosmetic-effects::before {
+  box-shadow:
+    inset 0 0 0 var(--card-border-band-cosmetic) rgba(71, 85, 105, 0.88),
+    inset 0 1px 0 rgba(148, 163, 184, 0.12),
+    inset 0 -1px 0 rgba(15, 23, 42, 0.5);
+  background: linear-gradient(
+    155deg,
+    rgba(148, 163, 184, 0.07) 0%,
+    rgba(51, 65, 85, 0.1) 42%,
+    rgba(30, 41, 59, 0.08) 78%,
+    rgba(100, 116, 139, 0.06) 100%
+  );
+}
+
+.sci-card[data-card-border="violet"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="violet"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="violet"] .card-cosmetic-effects::before {
+  box-shadow:
+    inset 0 0 0 var(--card-border-band-cosmetic) rgba(109, 40, 180, 0.8),
+    inset 0 1px 0 rgba(196, 181, 253, 0.18),
+    inset 0 -1px 0 rgba(46, 16, 72, 0.42);
+  background: linear-gradient(
+    155deg,
+    rgba(167, 139, 250, 0.1) 0%,
+    rgba(88, 28, 135, 0.06) 46%,
+    rgba(139, 92, 246, 0.08) 100%
+  );
+}
 
 /* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
  * Applied when a card's ID appears in getLockedCardIds(player.projects).
@@ -4170,8 +4282,9 @@ body.app-mode-game #screen-game.screen.active {
 
 /* ===================== AURA SYSTEM ===================== */
 /*
- * Stacking (Phase 3): ::before z0, ::after z1, .card-cosmetic-effects z0,
- * .card-detail-inner z2, .sci-card-aura-dots z5, badges z10.
+ * Stacking (border v1): shell bg + structural edge → aura ::before z0 →
+ * .card-cosmetic-effects z1 → border ::before → tier-3 ::after z1 →
+ * .card-detail-inner z2 → .sci-card-aura-dots z5 → badges z10.
  * Shell overflow:visible — glow not clipped; inner overflow:hidden clips art/text.
  */
 
@@ -4371,9 +4484,9 @@ body.app-mode-game #screen-game.screen.active {
 
 .card-detail-frame {
   background: #0c1220;
-  border: 3px solid #334155;
+  border: 3px solid #243047;
   border-radius: 0.75rem;
-  overflow: hidden;
+  overflow: visible;
   max-width: 240px;
   margin: 0 auto;
   position: relative;
@@ -4397,11 +4510,10 @@ body.app-mode-game #screen-game.screen.active {
   min-height: 0;
   height: 100%;
 }
-.card-detail-frame.rarity-common   { border-color: #4b5563; }
-.card-detail-frame.rarity-uncommon { border-color: #22c55e; }
-.card-detail-frame.rarity-rare     { border-color: #3b82f6; }
-.card-detail-frame.rarity-epic     { border-color: #a855f7; }
-.card-detail-frame.rarity-legendary { border-color: #f59e0b; box-shadow: 0 0 20px rgba(245,158,11,0.2); }
+
+.card-detail-frame[data-card-border="default"].rarity-legendary {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+}
 
 .card-detail-header {
   background: rgba(0,0,0,0.5);

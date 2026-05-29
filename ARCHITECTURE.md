@@ -179,7 +179,7 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 **Pitfalls**: stale `imageUrl` blocks local art until cleared; renaming a card changes expected filename; slug collisions need manual resolution.
 
 ### Trading System (Phase T-1 + T-2 + T-3 + T-4 + T-6)
-- **Seven modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing atomic swap), `trade-lock-helpers.js` (project-lock helpers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)
+- **Eight modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing atomic swap), `trade-availability.js` (copy-aware reservation math), `trade-lock-helpers.js` (legacy wrappers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)
 - **DB structure**: `/trades/direct/{tradeId}` for direct trades, `/trades/listings/{listingId}` for anonymous listings. Migration from flat `/trades/{tradeId}` happens automatically on init.
 - **Phase T-1 — Pure Validation**: `validateDirectTrade()` and `validateListingTrade()` are fully pure (no DB writes, no side effects, no inventory mutation). Both take explicit data params and return `{ valid, reason }`. Safe to call repeatedly, including immediately before trade completion.
   - `validateListingTrade()` accepts `listing` object with `requestedCardIds` (1–3 array) + `chosenCardId` (the specific card the accepter provides)
@@ -239,11 +239,14 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
   - Toggle: "Hide Trading Profile: ON/OFF" rendered at top of trading tab, writes directly to `players/{username}/isTradeProfileHidden`
   - Migration: safe backfill to `false` on login + session restore (same pattern as `isTradeRestricted`), default `false` in `createPlayerRecord()`
   - Validation uses `target.isTradeProfileHidden` (NOT generic `hidden`) — scoped to trading systems only
-- **Phase T-6 — UX Safeguards** (`trade-lock-helpers.js` + validator/execution/UI edits):
-  - **Project card locking**: Cards assigned to ACTIVE research projects cannot be traded. Centralized in `trade-lock-helpers.js` via `getPlayerLockedCardIds(username)` → Set. Reuses `getLockedCardIds()` from `project-state.js`.
-  - Lock enforced at 3 levels: (1) UI filtering — locked cards excluded from selectors, (2) Validator — `_lockedCardIds` sets checked in `validateDirectTrade()` / `validateListingTrade()`, (3) Execution re-validation — fresh lock sets recomputed in `executeDirectTrade()` / `executeListingTrade()`
-  - Error codes: `OFFERED_CARD_LOCKED_BY_PROJECT`, `REQUESTED_CARD_LOCKED_BY_PROJECT`
-  - **Last-copy warning**: Non-blocking ⚠️ indicator on card selectors + confirmation dialogs when trading the last copy of a card
+- **Copy-aware availability** (`trade-availability.js`):
+  - **Projects (binary)**: `isCardLockedByActiveProject()` — one cardId → at most one active project; duplicates cannot be assigned across projects
+  - **Trades/listings (copy-aware)**: `getAvailableCopyCount()` = `ownedQty - (1 if project-locked else 0) - tradeReserved`
+  - **Project assignment**: `canAssignCardToProject()` = `!projectLocked AND (ownedQty - tradeReserved) >= 1`
+  - Error codes: `OFFERED_CARD_LOCKED_BY_PROJECT`, `REQUESTED_CARD_LOCKED_BY_PROJECT`, `CARD_RESERVED_BY_*`, `INSUFFICIENT_AVAILABLE_COPIES`
+- **Phase T-6 — UX Safeguards** (validators + UI):
+  - Static hint under offer selectors: cards in use on research projects are not shown in pickers
+  - **Last-copy warning**: ⚠️ when `availableCopies === 1` (reservation-aware)
   - **Trade confirmation**: Sandbox-safe in-app modal (`trade-confirm-modal.js → showTradeConfirmModal()`) before every trade action (direct send, direct accept, listing create, listing accept) — shows card names, rarities, last-copy warnings. Returns `Promise<boolean>`. Replaces native `confirm()` which is blocked in sandboxed iframes (`allow-modals` not set). Modal supports Esc/backdrop dismiss, responsive layout, dark translucent overlay. CSS classes: `.trade-confirm-overlay`, `.trade-confirm-modal`, `.trade-confirm-warning`, `.trade-confirm-actions`.
   - **Toast improvement**: Container moved to bottom-left (avoids platform controls), 5s visibility, slide-from-left animation
 - **Constraints**: 1-for-1 trades only, equal rarity required, same group required, `isTradeRestricted` blocks trading, `isTradeProfileHidden` blocks incoming direct trades (not listings), `tradable: false` on card def blocks that card, project-locked cards cannot be traded
