@@ -45,7 +45,7 @@ const MODAL_AURA_PIP_COLORS = {
  * @property {boolean} [isLocked=false]
  * @property {boolean} [isUndiscovered=false]
  * @property {string|null} [profileCosmeticAura=null] - future profile override for resolveVisualAura
- * @property {string|null} [borderRenderEffectId=null] - resolved data-card-border id; null → default
+ * @property {string|null} [borderRenderEffectId=null] - resolved data-card-border id; null → graphite default
  * @property {object|null} [equippedBorderDefinition=null] - cosmetic definition; resolved when borderRenderEffectId omitted
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
  * @property {'collection'|'modal'|'pack-reveal'} [variant='collection'] - layout/context preset

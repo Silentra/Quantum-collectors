@@ -508,6 +508,16 @@ export function normalizePlayerSchema(username) {
       delete owned.profile_banner_default;
       patched = true;
     }
+    // Retired placeholder border_quantum removed; strip orphan ownership/equip
+    if (player.cosmetics?.owned?.border_quantum === true) {
+      db.remove(`players/${username}/cosmetics/owned/border_quantum`);
+      delete owned.border_quantum;
+      patched = true;
+    }
+    if (player.profile?.equippedBorder === 'border_quantum') {
+      db.set(`players/${username}/profile/equippedBorder`, null);
+      patched = true;
+    }
 
     let equippedBanner = player.profile.equippedBanner;
     const legacyBanner = player.cosmetics?.equipped?.profileBanner;

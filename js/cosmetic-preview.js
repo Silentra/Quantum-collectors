@@ -10,7 +10,7 @@
 
 import { cosmeticIdToShellSlug } from './shell-theme.js';
 
-import { COSMETIC_BORDER_EFFECT_IDS } from './card-border.js';
+import { DEFAULT_BORDER_EFFECT_ID, COSMETIC_BORDER_EFFECT_IDS } from './card-border.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 
 
@@ -93,9 +93,11 @@ export function renderCosmeticPreviewSurface(item, escapeHtml, options = {}) {
 
     const effectId = COSMETIC_BORDER_EFFECT_IDS.includes(item.renderEffectId)
       ? item.renderEffectId
-      : 'silver';
+      : DEFAULT_BORDER_EFFECT_ID;
 
-    return `<div class="shop-cosmetic-preview shop-cosmetic-preview--border${expandedClass}" data-card-border="${escapeHtml(effectId)}" role="img" aria-label="Border preview"><div class="card-cosmetic-effects" aria-hidden="true"></div></div>`;
+    const rarityClass = effectId === 'spectrum' ? ' rarity-legendary' : '';
+
+    return `<div class="shop-cosmetic-preview shop-cosmetic-preview--border${rarityClass}${expandedClass}" data-card-border="${escapeHtml(effectId)}" role="img" aria-label="Border preview"><div class="card-cosmetic-effects" aria-hidden="true"></div></div>`;
 
   }
 

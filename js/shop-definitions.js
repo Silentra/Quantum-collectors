@@ -195,19 +195,6 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   // ── Cosmetics — Borders ────────────────────────────────────────────────
 
-  border_quantum: {
-    id: 'border_quantum',
-    name: 'Quantum Border',
-    description: 'A shimmering border of probability waves.',
-    type: ITEM_TYPES.COSMETIC,
-    category: ITEM_CATEGORIES.BORDER,
-    rarity: ITEM_RARITIES.RARE,
-    price: 350,
-    weight: 6,
-    enabled: true,
-    renderEffectId: 'quantum',
-  },
-
   border_silver: {
     id: 'border_silver',
     name: 'Silver Border',
@@ -250,12 +237,12 @@ export const ITEM_DEFINITIONS = Object.freeze({
   border_graphite: {
     id: 'border_graphite',
     name: 'Graphite Border',
-    description: 'A dark graphite frame with a muted industrial finish.',
+    description: 'Matte graphite stock — the standard collector frame with laminated depth.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
-    rarity: ITEM_RARITIES.RARE,
-    price: 300,
-    weight: 8,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 100,
+    weight: 10,
     enabled: true,
     renderEffectId: 'graphite',
   },
@@ -263,7 +250,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   border_violet: {
     id: 'border_violet',
     name: 'Violet Border',
-    description: 'A refined violet frame with a soft inner highlight.',
+    description: 'A deep violet frame with a soft satin finish.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
     rarity: ITEM_RARITIES.RARE,
@@ -271,6 +258,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 8,
     enabled: true,
     renderEffectId: 'violet',
+  },
+
+  border_spectrum: {
+    id: 'border_spectrum',
+    name: 'Spectrum Border',
+    description: 'A rarity-reactive chromatic frame — the classic high-energy collector look.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.LEGENDARY,
+    price: 450,
+    weight: 4,
+    enabled: true,
+    renderEffectId: 'spectrum',
   },
 
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──

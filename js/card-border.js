@@ -1,23 +1,31 @@
 /**
- * card-border.js — Border cosmetic render resolution (v1 CSS borders only).
+ * card-border.js — Border cosmetic render resolution (CSS frame borders).
  *
  * Full-size cards only (.sci-card, .card-detail-frame). Mini-cards excluded by design.
+ * Unequipped / null → graphite (virtual default frame).
  */
 
 import { getEquippedBorder } from './profile-ui.js';
 
-/** Virtual default — rarity-colored band when no cosmetic border is equipped. */
-export const DEFAULT_BORDER_EFFECT_ID = 'default';
+/** Virtual default — matte graphite frame when no cosmetic border is equipped. */
+export const DEFAULT_BORDER_EFFECT_ID = 'graphite';
 
-/** v1 CSS cosmetic border effect ids (excludes default and legacy ids like quantum). */
-export const COSMETIC_BORDER_EFFECT_IDS = ['silver', 'sapphire', 'emerald', 'graphite', 'violet'];
+/** Purchasable CSS border effect ids (includes graphite + premium spectrum). */
+export const COSMETIC_BORDER_EFFECT_IDS = [
+  'graphite',
+  'silver',
+  'sapphire',
+  'emerald',
+  'violet',
+  'spectrum',
+];
 
-/** All ids recognized by the border renderer (default + v1 cosmetics). */
-export const BORDER_EFFECT_IDS = [DEFAULT_BORDER_EFFECT_ID, ...COSMETIC_BORDER_EFFECT_IDS];
+/** All ids recognized by the border renderer. */
+export const BORDER_EFFECT_IDS = [...COSMETIC_BORDER_EFFECT_IDS];
 
 /**
  * Resolve equipped border definition → data-card-border effect id.
- * null / unequipped / unknown → default.
+ * null / unequipped / unknown → graphite default.
  * @param {object|null|undefined} borderDefinition - cosmetic item definition
  * @returns {string}
  */
