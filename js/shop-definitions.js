@@ -208,6 +208,71 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'quantum',
   },
 
+  border_silver: {
+    id: 'border_silver',
+    name: 'Silver Border',
+    description: 'A clean brushed-silver frame with a soft metallic sheen.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.COMMON,
+    price: 150,
+    weight: 12,
+    enabled: true,
+    renderEffectId: 'silver',
+  },
+
+  border_sapphire: {
+    id: 'border_sapphire',
+    name: 'Sapphire Border',
+    description: 'A deep blue frame with restrained sapphire highlights.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 220,
+    weight: 10,
+    enabled: true,
+    renderEffectId: 'sapphire',
+  },
+
+  border_emerald: {
+    id: 'border_emerald',
+    name: 'Emerald Border',
+    description: 'A polished emerald-toned frame with subtle depth.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 220,
+    weight: 10,
+    enabled: true,
+    renderEffectId: 'emerald',
+  },
+
+  border_graphite: {
+    id: 'border_graphite',
+    name: 'Graphite Border',
+    description: 'A dark graphite frame with a muted industrial finish.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.RARE,
+    price: 300,
+    weight: 8,
+    enabled: true,
+    renderEffectId: 'graphite',
+  },
+
+  border_violet: {
+    id: 'border_violet',
+    name: 'Violet Border',
+    description: 'A refined violet frame with a soft inner highlight.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.RARE,
+    price: 300,
+    weight: 8,
+    enabled: true,
+    renderEffectId: 'violet',
+  },
+
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {

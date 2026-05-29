@@ -17,6 +17,7 @@ import {
   resolveCardArt,
 } from './card-art.js';
 import { buildCardRenderModel, renderPackCardWrapper, renderSciCard } from './card-render.js';
+import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import * as packs from './packs.js';
 import * as groups from './groups.js';
@@ -400,12 +401,18 @@ function renderCollection() {
  * Collection cards represent ownership state only (project-assigned visuals are hidden here).
  */
 function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered = false) {
+  const session = auth.getSession();
+  const borderRenderEffectId = session && session.username !== '__admin__'
+    ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
+    : null;
+
   const model = buildCardRenderModel(card, {
     quantity,
     isLocked,
     isUndiscovered,
     variant: 'collection',
     profileCosmeticAura: null,
+    borderRenderEffectId,
   });
   return renderSciCard(model);
 }
@@ -474,8 +481,10 @@ function openPackUI(packId) {
 
   const cardsContainer = document.getElementById('pack-opening-cards');
 
+  const borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
+
   cardsContainer.innerHTML = result.cards
-    .map((card, i) => renderPackCardWrapper(card, i))
+    .map((card, i) => renderPackCardWrapper(card, i, { borderRenderEffectId }))
     .join('');
 
   // Show overlay first

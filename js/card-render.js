@@ -22,8 +22,12 @@ import {
   getAuraTier,
   resolveVisualAura,
 } from './cards.js';
+import {
+  DEFAULT_BORDER_EFFECT_ID,
+  resolveBorderRenderEffectId,
+} from './card-border.js';
 
-/** Inert host for future equipped glow/border/shimmer (Phase 3 — no visuals yet). */
+/** Cosmetic mount — equipped border paints on .card-cosmetic-effects::before (v1). */
 const CARD_COSMETIC_HOST_HTML = '<div class="card-cosmetic-effects" aria-hidden="true"></div>';
 
 /** Pip colors for modal aura tier bar (keyed by AURA_CSS_MAP suffix). */
@@ -41,6 +45,8 @@ const MODAL_AURA_PIP_COLORS = {
  * @property {boolean} [isLocked=false]
  * @property {boolean} [isUndiscovered=false]
  * @property {string|null} [profileCosmeticAura=null] - future profile override for resolveVisualAura
+ * @property {string|null} [borderRenderEffectId=null] - resolved data-card-border id; null → default
+ * @property {object|null} [equippedBorderDefinition=null] - cosmetic definition; resolved when borderRenderEffectId omitted
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
  * @property {'collection'|'modal'|'pack-reveal'} [variant='collection'] - layout/context preset
  */
@@ -57,8 +63,14 @@ export function buildCardRenderModel(card, options = {}) {
     isLocked = false,
     isUndiscovered = false,
     profileCosmeticAura = null,
+    borderRenderEffectId = null,
+    equippedBorderDefinition = null,
     variant = 'collection',
   } = options;
+
+  const resolvedBorderRenderEffectId = borderRenderEffectId != null
+    ? borderRenderEffectId
+    : resolveBorderRenderEffectId(equippedBorderDefinition);
 
   const isModal = variant === 'modal';
   const isPackReveal = variant === 'pack-reveal';
@@ -129,6 +141,7 @@ export function buildCardRenderModel(card, options = {}) {
     showRarityDot: true,
     rarityDotClass: `rarity-dot-${card.rarity || 'common'}`,
     nameScaleClass,
+    borderRenderEffectId: resolvedBorderRenderEffectId,
   };
 }
 
@@ -264,8 +277,9 @@ export function renderCardDetailOwnershipLine(quantity) {
  * @returns {string}
  */
 export function renderDetailFrame(model) {
+  const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
   return `
-    <div class="card-detail-frame rarity-${model.rarity}">
+    <div class="card-detail-frame rarity-${model.rarity}" data-card-border="${borderEffect}">
       ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
     </div>
@@ -297,11 +311,18 @@ export function renderCardDetailMeta(card, model, quantity) {
  * @returns {string}
  */
 export function renderCardDetailView(card, options = {}) {
-  const { quantity = 1, profileCosmeticAura = null } = options;
+  const {
+    quantity = 1,
+    profileCosmeticAura = null,
+    borderRenderEffectId = null,
+    equippedBorderDefinition = null,
+  } = options;
   const model = buildCardRenderModel(card, {
     quantity,
     variant: 'modal',
     profileCosmeticAura,
+    borderRenderEffectId,
+    equippedBorderDefinition,
   });
 
   return `
@@ -341,8 +362,10 @@ export function renderSciCard(model) {
     ? `<div class="sci-card-qty">\u00D7${model.quantity}</div>`
     : '';
 
+  const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
+
   return `
-    <div class="sci-card rarity-${model.rarity} ${model.auraClass} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}">
+    <div class="sci-card rarity-${model.rarity} ${model.auraClass} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}">
       ${qtyBadge}
       ${lockedBadge}
       ${undiscoveredBadge}
@@ -368,8 +391,8 @@ export function renderCollectionCard(card, options = {}) {
  * @param {object} card
  * @returns {string}
  */
-export function renderPackRevealSciCard(card) {
-  return renderSciCard(buildCardRenderModel(card, { variant: 'pack-reveal' }));
+export function renderPackRevealSciCard(card, options = {}) {
+  return renderSciCard(buildCardRenderModel(card, { variant: 'pack-reveal', ...options }));
 }
 
 /**
@@ -378,7 +401,7 @@ export function renderPackRevealSciCard(card) {
  * @param {number} index
  * @returns {string}
  */
-export function renderPackCardWrapper(card, index) {
+export function renderPackCardWrapper(card, index, options = {}) {
   const needsClick = ['rare', 'epic', 'legendary'].includes(card.rarity);
   const glowClass = needsClick ? `rarity-glow-${card.rarity}` : '';
 
@@ -387,7 +410,7 @@ export function renderPackCardWrapper(card, index) {
         <div class="pack-card-flipper">
           <div class="pack-card-back"></div>
           <div class="pack-card-front">
-            ${renderPackRevealSciCard(card)}
+            ${renderPackRevealSciCard(card, options)}
           </div>
         </div>
       </div>

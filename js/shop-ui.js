@@ -15,8 +15,10 @@
 import * as auth from './auth.js';
 import * as cards from './cards.js';
 import * as db from './database.js';
+import * as player from './player.js';
 import * as toast from './toast.js';
 import { renderCollectionCard } from './card-render.js';
+import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { openCardDetailModal } from './card-detail-modal.js';
 import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
 import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
@@ -223,10 +225,16 @@ function renderShopCardPreview(item) {
   const card = cards.getCard(parsed.sourceId);
   if (!card) return '';
 
+  const session = auth.getSession();
+  const borderRenderEffectId = session && session.username !== '__admin__'
+    ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
+    : null;
+
   const cardHtml = renderCollectionCard(card, {
     quantity: 1,
     variant: 'collection',
     profileCosmeticAura: null,
+    borderRenderEffectId,
   });
 
   const label = escapeHtml(card.name || parsed.sourceId);

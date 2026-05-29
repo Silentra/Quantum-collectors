@@ -5,6 +5,7 @@
 import * as auth from './auth.js';
 import * as cards from './cards.js';
 import * as player from './player.js';
+import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { renderCardDetailView } from './card-render.js';
 
 /**
@@ -17,8 +18,8 @@ export function openCardDetailModal(cardId, quantity = 1) {
   if (!card) return;
 
   let resolvedQty = quantity;
+  const session = auth.getSession();
   if (resolvedQty <= 1) {
-    const session = auth.getSession();
     if (session && session.username !== '__admin__') {
       const inv = player.getInventory(session.username);
       const entry = inv.find(i => i.cardId === cardId);
@@ -30,9 +31,15 @@ export function openCardDetailModal(cardId, quantity = 1) {
   const content = document.getElementById('card-detail-content');
   if (!modal || !content) return;
 
+  let borderRenderEffectId = null;
+  if (session && session.username !== '__admin__') {
+    borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
+  }
+
   content.innerHTML = renderCardDetailView(card, {
     quantity: resolvedQty,
     profileCosmeticAura: null,
+    borderRenderEffectId,
   });
   modal.classList.remove('hidden');
 }
