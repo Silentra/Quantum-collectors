@@ -18,7 +18,11 @@
 import * as db from './database.js';
 import * as config from './config.js';
 import { executeDirectTrade, getDirectTradeCooldown } from './trade-execution.js';
-import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
+import {
+  buildAvailabilitySnapshot,
+  canOfferCardInTrade,
+  getAvailabilityFailureReason,
+} from './trade-availability.js';
 
 // ─── Phase T-8: Trading config helpers ───────────────────────────────────────
 
@@ -98,6 +102,7 @@ export function validateDirectTrade({
   requestedCardId,
   players,
   cards,
+  excludeDirectTradeId = null,
 }) {
   // ── 1. Players must not be the same person ──────────────────────────────────
   if (offeringPlayerId === targetPlayerId) {
@@ -151,15 +156,28 @@ export function validateDirectTrade({
     return fail('RARITY_MISMATCH');
   }
 
-  // ── 11. Neither card may be locked by an active research project ──────────
-  //    Project-lock sets are passed in via the players map (optional).
-  //    Callers that provide lockedCardIds sets enable this check;
-  //    the check is silently skipped when sets are absent (backward compat).
-  if (offering._lockedCardIds && offering._lockedCardIds.has(offeredCardId)) {
-    return fail('OFFERED_CARD_LOCKED_BY_PROJECT');
+  // ── 11. Copy-aware availability (project + trade reservations) ───────────
+  const excludeIds = excludeDirectTradeId ? [excludeDirectTradeId] : [];
+
+  const offeringSnapshot = buildAvailabilitySnapshot(offeringPlayerId, {
+    playerData: offering,
+    excludeDirectTradeIds: excludeIds,
+  });
+  if (!canOfferCardInTrade(offeringSnapshot, offeredCardId)) {
+    const reason = getAvailabilityFailureReason(offeringSnapshot, offeredCardId, 'offer');
+    return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
-  if (target._lockedCardIds && target._lockedCardIds.has(requestedCardId)) {
-    return fail('REQUESTED_CARD_LOCKED_BY_PROJECT');
+
+  const targetSnapshot = buildAvailabilitySnapshot(targetPlayerId, {
+    playerData: target,
+    excludeDirectTradeIds: excludeIds,
+  });
+  if (!canOfferCardInTrade(targetSnapshot, requestedCardId)) {
+    const reason = getAvailabilityFailureReason(targetSnapshot, requestedCardId, 'offer');
+    if (reason === 'locked_cards_present') {
+      return fail('REQUESTED_CARD_LOCKED_BY_PROJECT');
+    }
+    return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
   return pass();
@@ -194,6 +212,7 @@ export function validateListingTrade({
   chosenCardId,
   players,
   cards,
+  excludeListingId = null,
 }) {
   // ── 1. Listing must exist ───────────────────────────────────────────────────
   if (!listing) return fail('LISTING_NOT_FOUND');
@@ -266,13 +285,28 @@ export function validateListingTrade({
     return fail('RARITY_MISMATCH');
   }
 
-  // ── 18. Neither card may be locked by an active research project ──────────
-  //    Project-lock sets are passed in via the players map (optional).
-  if (owner._lockedCardIds && owner._lockedCardIds.has(listing.offeredCardId)) {
-    return fail('OFFERED_CARD_LOCKED_BY_PROJECT');
+  // ── 18. Copy-aware availability (project + trade reservations) ───────────
+  const excludeIds = excludeListingId ? [excludeListingId] : [];
+
+  const ownerSnapshot = buildAvailabilitySnapshot(listing.ownerId, {
+    playerData: owner,
+    excludeListingIds: excludeIds,
+  });
+  if (!canOfferCardInTrade(ownerSnapshot, listing.offeredCardId)) {
+    const reason = getAvailabilityFailureReason(ownerSnapshot, listing.offeredCardId, 'offer');
+    return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
-  if (accepter._lockedCardIds && accepter._lockedCardIds.has(chosenCardId)) {
-    return fail('REQUESTED_CARD_LOCKED_BY_PROJECT');
+
+  const accepterSnapshot = buildAvailabilitySnapshot(accepterId, {
+    playerData: accepter,
+    excludeListingIds: excludeIds,
+  });
+  if (!canOfferCardInTrade(accepterSnapshot, chosenCardId)) {
+    const reason = getAvailabilityFailureReason(accepterSnapshot, chosenCardId, 'offer');
+    if (reason === 'locked_cards_present') {
+      return fail('REQUESTED_CARD_LOCKED_BY_PROJECT');
+    }
+    return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
   return pass();
@@ -392,11 +426,11 @@ export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId
   const allCards = db.get('cards') || {};
 
   const players = {
-    [offeringPlayerId]: { ..._normalizePlayer(freshOffering), _lockedCardIds: getPlayerLockedCardIds(offeringPlayerId) },
-    [targetPlayerId]:   { ..._normalizePlayer(freshTarget),   _lockedCardIds: getPlayerLockedCardIds(targetPlayerId) },
+    [offeringPlayerId]: _normalizePlayer(freshOffering),
+    [targetPlayerId]:   _normalizePlayer(freshTarget),
   };
 
-  // Pre-validate (includes project-lock check via _lockedCardIds)
+  // Pre-validate (copy-aware availability)
   const validation = validateDirectTrade({
     offeringPlayerId,
     targetPlayerId,

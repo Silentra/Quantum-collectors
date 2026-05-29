@@ -16,6 +16,11 @@ import * as toast from './toast.js';
 import * as db from './database.js';
 import { getLockedCardIds, PROJECT_STATES } from './project-state.js';
 import { activateProject } from './project-assignment.js';
+import {
+  buildAvailabilitySnapshot,
+  getAvailableCopyCount,
+  getProjectAssignmentLockTooltip,
+} from './trade-availability.js';
 import { evaluateProject } from './project-engine.js';
 import { claimProjectRewards } from './project-claiming.js';
 import { addResearchPoints, addSeasonalResearchPoints, refreshUniqueCardsOwned } from './research.js';
@@ -512,8 +517,7 @@ function _renderCardsAvailabilityPanel(projects, username) {
   const panelBody = document.getElementById('rp-cards-panel-body');
   if (!panelBody) return;
 
-  // Build locked set from active projects
-  const lockedIds = new Set(getLockedCardIds(projects));
+  const availabilitySnapshot = buildAvailabilitySnapshot(username, { projects });
 
   // Build owned card lists from inventory
   const inventory = player.getInventory(username);
@@ -536,10 +540,11 @@ function _renderCardsAvailabilityPanel(projects, username) {
 
   // Build a mini card element (read-only — no click handlers)
   function buildInfoMiniCard(card) {
-    const isLocked = lockedIds.has(card.id);
+    const isLocked = getAvailableCopyCount(availabilitySnapshot, card.id) < 1;
+    const lockTip = getProjectAssignmentLockTooltip(availabilitySnapshot, card.id);
     const el = document.createElement('div');
     el.className = `rp-mini-card rarity-${card.rarity}${isLocked ? ' rp-mini-card--unavailable' : ''}`;
-    el.title = isLocked ? `${card.name} — assigned to active project` : card.name;
+    el.title = lockTip ? `${card.name} — ${lockTip}` : card.name;
 
     const imgHTML = renderMiniCardArtHtml(card);
 
@@ -584,7 +589,9 @@ function _renderCardsAvailabilityPanel(projects, username) {
   }
 
   // Count locked for header badge
-  const totalLocked = [...scientistCards, ...conceptCards].filter(c => lockedIds.has(c.id)).length;
+  const totalLocked = [...scientistCards, ...conceptCards].filter(
+    c => getAvailableCopyCount(availabilitySnapshot, c.id) < 1
+  ).length;
   const totalOwned  = scientistCards.length + conceptCards.length;
 
   panelBody.innerHTML = '';
@@ -930,8 +937,9 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
   // Remove any pre-existing panel
   container.querySelector('.rp-assign-panel')?.remove();
 
-  // --- Derive locked card IDs from existing ACTIVE projects ---
-  const lockedIds = new Set(getLockedCardIds(playerData.projects ?? []));
+  const availabilitySnapshot = buildAvailabilitySnapshot(username, {
+    projects: playerData.projects ?? [],
+  });
 
   // --- Build inventory card lists, typed ---
   const inventory = player.getInventory(username);
@@ -1093,10 +1101,11 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
   container.appendChild(panel);
 
   // --- Helper: render a mini card element ---
-  function buildMiniCard(card, isLocked) {
+  function buildMiniCard(card, isLocked, lockTooltip = null) {
     const el = document.createElement('div');
     el.className = `rp-mini-card rarity-${card.rarity}${isLocked ? ' locked-card' : ''}`;
     el.dataset.cardId = card.id;
+    if (lockTooltip) el.title = `${card.name} — ${lockTooltip}`;
 
     const imgHTML = renderMiniCardArtHtml(card);
 
@@ -1258,8 +1267,8 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     sciGrid.innerHTML = '<div class="text-xs text-surface-500 col-span-full py-2">No scientist cards.</div>';
   }
   for (const card of scientistCards) {
-    const isLocked = lockedIds.has(card.id);
-    const el = buildMiniCard(card, isLocked);
+    const isLocked = getAvailableCopyCount(availabilitySnapshot, card.id) < 1;
+    const el = buildMiniCard(card, isLocked, getProjectAssignmentLockTooltip(availabilitySnapshot, card.id));
     sciCardEls.push({ el, card });
     if (!isLocked) {
       el.addEventListener('click', () => {
@@ -1294,8 +1303,8 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     conGrid.innerHTML = '<div class="text-xs text-surface-500 col-span-full py-2">No concept cards.</div>';
   }
   for (const card of conceptCards) {
-    const isLocked = lockedIds.has(card.id);
-    const el = buildMiniCard(card, isLocked);
+    const isLocked = getAvailableCopyCount(availabilitySnapshot, card.id) < 1;
+    const el = buildMiniCard(card, isLocked, getProjectAssignmentLockTooltip(availabilitySnapshot, card.id));
     conCardEls.push({ el, card });
     if (!isLocked) {
       el.addEventListener('click', () => {
@@ -1378,12 +1387,18 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
       return;
     }
 
+    const availabilitySnapshot = buildAvailabilitySnapshot(username, {
+      playerData: freshPlayer,
+      projects: allProjects,
+    });
+
     const result = activateProject({
       project:        freshProject,
       scientistCards: selectedScientists,
       conceptCards:   selectedConcepts,
       allProjects,
       startedAt:      Date.now(),
+      availabilitySnapshot,
     });
 
     if (!result.success) {
@@ -1393,6 +1408,10 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
         invalid_scientist_count:'5 scientist cards required.',
         invalid_concept_count:  '2 concept cards required.',
         locked_cards_present:   'One or more selected cards are already assigned to an active project.',
+        CARD_RESERVED_BY_LISTING: 'A selected card\'s last copy is listed for trade.',
+        CARD_RESERVED_BY_OUTGOING_TRADE: 'A selected card\'s last copy is offered in a trade.',
+        CARD_RESERVED_BY_INCOMING_TRADE: 'A selected card\'s last copy is reserved for an incoming trade.',
+        INSUFFICIENT_AVAILABLE_COPIES: 'One or more selected cards have no available copies.',
       };
       errEl.textContent = reasons[result.reason] ?? result.reason;
       errEl.classList.add('visible');

@@ -44,8 +44,16 @@ import {
 import {
   getListingAcceptCooldown,
 } from './trade-listing-execution.js';
-import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
+import {
+  buildAvailabilitySnapshot,
+  getAvailableCopyCount,
+  canOfferCardInTrade,
+  isLastAvailableCopy,
+} from './trade-availability.js';
 import { showTradeConfirmModal } from './trade-confirm-modal.js';
+
+const TRADE_PROJECT_IN_USE_HINT =
+  'Cards in use on research projects are not available.';
 
 // ─── State ──────────────────────────────────────────────────────────────────
 
@@ -292,17 +300,7 @@ export function cleanupTrading() {
   }
 }
 
-// ─── Project-lock & last-copy helpers ───────────────────────────────────────
-
-/**
- * Check if a card is the player's last copy.
- * @param {string} cardId
- * @param {object} inventory - raw {cardId: qty} map
- * @returns {boolean}
- */
-function _isLastCopy(cardId, inventory) {
-  return (inventory[cardId] || 0) === 1;
-}
+// ─── Availability helpers (UI) ──────────────────────────────────────────────
 
 /**
  * Build a confirmation summary string for trade confirmations.
@@ -473,9 +471,8 @@ function _renderCreateListingForm(username) {
   }
 
   const myInv = player.getInventory(username);
-  // T-6: Filter out project-locked cards from listing form
-  const lockedSet = getPlayerLockedCardIds(username);
-  const myCardsAll = _getTradableCards(myInv, lockedSet);
+  const mySnapshot = buildAvailabilitySnapshot(username);
+  const myCardsAll = _getTradableCards(myInv, mySnapshot);
 
   if (myCardsAll.length === 0) {
     return '<p class="text-surface-500 text-sm">You have no tradable cards to list.</p>';
@@ -487,17 +484,16 @@ function _renderCreateListingForm(username) {
   // Apply filters to listing card pool
   const myCards = _applyTradeFilters(myCardsAll);
 
-  const rawInv = db.get(`players/${username}/inventory`) || {};
-
   return `<div class="bg-surface-800 rounded-lg p-4 border border-surface-700">
     <div class="text-sm font-medium text-surface-200 mb-3">Create a Listing</div>
     ${_renderTradeFilterBar('listing', listingTypes)}
     <div class="listing-filter-count text-xs text-surface-500 mb-2">${myCards.length} of ${myCardsAll.length} card${myCardsAll.length !== 1 ? 's' : ''} shown</div>
     <div class="mb-3">
       <label class="text-sm text-surface-400 block mb-1">Card you want to offer</label>
+      <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
       <select id="listing-offered-card" class="w-full bg-surface-900 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
         <option value="">— Select a card —</option>
-        ${_buildCardOptions(myCards, rawInv)}
+        ${_buildCardOptions(myCards, mySnapshot)}
       </select>
     </div>
     <div id="listing-requested-section" class="hidden">
@@ -521,19 +517,14 @@ function _renderAvailableListing(listing, myUsername) {
   const timeLeft = _formatTimeLeft(listing.expiresAt);
   const acceptCd = getListingAcceptCooldown(myUsername);
 
-  // T-6: Get locked cards for accepter to filter out locked fulfillment options
-  const myLockedSet = getPlayerLockedCardIds(myUsername);
+  const mySnapshot = buildAvailabilitySnapshot(myUsername);
 
-  // Check which of the requested cards the current player owns AND are not locked
-  const myInv = db.get(`players/${myUsername}/inventory`) || {};
-  const canFulfillWith = requestedIds.filter(id =>
-    (myInv[id] || 0) >= 1 && !myLockedSet.has(id)
-  );
+  const canFulfillWith = requestedIds.filter(id => canOfferCardInTrade(mySnapshot, id));
 
   const requestedCards = requestedIds.map(id => {
     const c = cards.getCard(id);
-    const owns = (myInv[id] || 0) >= 1;
-    const locked = myLockedSet.has(id);
+    const owns = (mySnapshot.inventory[id] || 0) >= 1;
+    const locked = !canOfferCardInTrade(mySnapshot, id);
     return {
       id,
       name: c ? c.name : id,
@@ -559,7 +550,7 @@ function _renderAvailableListing(listing, myUsername) {
         <div class="text-xs text-surface-500 mb-1">They want (any one)</div>
         ${requestedCards.map(rc => {
           let extra = '';
-          if (rc.locked && rc.owns) extra = ' <span class="trade-locked-badge">IN PROJECT</span>';
+          if (rc.locked && rc.owns) extra = ' <span class="trade-locked-badge">IN USE</span>';
           else if (rc.owns) extra = ' ✓';
           const cls = rc.owns && !rc.locked
             ? 'rarity-text-' + rc.rarity + ' font-semibold'
@@ -573,7 +564,7 @@ function _renderAvailableListing(listing, myUsername) {
           ${canFulfillWith.map(cardId => {
             const c = cards.getCard(cardId);
             const cName = c ? c.name : cardId;
-            const isLast = _isLastCopy(cardId, myInv);
+            const isLast = isLastAvailableCopy(mySnapshot, cardId);
             const lastLabel = isLast ? ' ⚠️' : '';
             return acceptCd.onCooldown
               ? `<button class="flex-1 bg-surface-600 text-surface-400 text-sm py-2 px-3 rounded-lg cursor-not-allowed opacity-60" disabled
@@ -600,9 +591,10 @@ function _renderIncomingTrade(trade, myUsername) {
   const requestedRarity = requestedCard ? requestedCard.rarity : 'common';
   const ago = _timeAgo(trade.createdAt);
 
-  // T-6: Last-copy warning for the card being given away (requested card from my inv)
-  const myInv = db.get(`players/${myUsername}/inventory`) || {};
-  const isLast = _isLastCopy(trade.requestedCardId, myInv);
+  const acceptSnapshot = buildAvailabilitySnapshot(myUsername, {
+    excludeDirectTradeIds: trade.id ? [trade.id] : [],
+  });
+  const isLast = isLastAvailableCopy(acceptSnapshot, trade.requestedCardId);
   const lastCopyHtml = isLast ? '<span class="trade-last-copy-warn">LAST COPY</span>' : '';
 
   return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700">
@@ -698,12 +690,11 @@ function _renderCardPickers(username, targetUsername) {
   const myInv = player.getInventory(username);
   const targetInv = player.getInventory(targetUsername);
 
-  // T-6: Filter out project-locked cards from both players' selections
-  const myLockedSet = getPlayerLockedCardIds(username);
-  const targetLockedSet = getPlayerLockedCardIds(targetUsername);
+  const mySnapshot = buildAvailabilitySnapshot(username);
+  const targetSnapshot = buildAvailabilitySnapshot(targetUsername);
 
-  const myCardsAll = _getTradableCards(myInv, myLockedSet);
-  const targetCardsAll = _getTradableCards(targetInv, targetLockedSet);
+  const myCardsAll = _getTradableCards(myInv, mySnapshot);
+  const targetCardsAll = _getTradableCards(targetInv, targetSnapshot);
 
   if (myCardsAll.length === 0) {
     return '<p class="text-surface-500 text-sm mt-3">You have no tradable cards.</p>';
@@ -720,9 +711,6 @@ function _renderCardPickers(username, targetUsername) {
   // Apply only shared filters (type + rarity) to target's cards — no personal search/dupeOnly
   const targetCards = _applySharedTradeFilters(targetCardsAll);
 
-  const myRawInv = db.get(`players/${username}/inventory`) || {};
-  const targetRawInv = db.get(`players/${targetUsername}/inventory`) || {};
-
   return `
     ${_renderTradeFilterBar('picker', allTypes)}
     <div id="picker-filter-result-count" class="text-xs text-surface-500 mb-2">
@@ -731,16 +719,17 @@ function _renderCardPickers(username, targetUsername) {
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
       <div>
         <label class="text-sm text-surface-400 block mb-1">Card you offer</label>
+        <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
         <select id="trade-offered-card" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
           <option value="">— Select a card —</option>
-          ${_buildCardOptions(myCards, myRawInv)}
+          ${_buildCardOptions(myCards, mySnapshot)}
         </select>
       </div>
       <div>
         <label class="text-sm text-surface-400 block mb-1">Card you want from ${targetUsername}</label>
         <select id="trade-requested-card" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
           <option value="">— Select a card —</option>
-          ${_buildCardOptions(targetCards, targetRawInv)}
+          ${_buildCardOptions(targetCards, targetSnapshot)}
         </select>
       </div>
     </div>
@@ -754,20 +743,20 @@ function _renderCardPickers(username, targetUsername) {
 }
 
 /**
- * Get tradable cards from inventory, optionally excluding project-locked cards.
+ * Get tradable cards with copy-aware available quantities.
  * @param {Array} inventory - [{cardId, quantity}]
- * @param {Set<string>} [lockedSet] - Card IDs locked by active projects
+ * @param {import('./trade-availability.js').AvailabilitySnapshot} snapshot
  */
-function _getTradableCards(inventory, lockedSet) {
+function _getTradableCards(inventory, snapshot) {
   const result = [];
   for (const { cardId, quantity } of inventory) {
     if (quantity < 1) continue;
     const card = cards.getCard(cardId);
     if (!card || card.enabled === false) continue;
     if (card.tradable === false) continue;
-    // T-6: Filter out project-locked cards from UI
-    if (lockedSet && lockedSet.has(cardId)) continue;
-    result.push({ card, quantity });
+    const available = getAvailableCopyCount(snapshot, cardId);
+    if (available < 1) continue;
+    result.push({ card, quantity: available });
   }
   // Sort by rarity (legendary first) then alphabetical by name
   result.sort((a, b) => {
@@ -779,16 +768,15 @@ function _getTradableCards(inventory, lockedSet) {
 }
 
 /**
- * Build <option> tags for card selectors.
- * T-6: Appends "⚠️ LAST COPY" for single-quantity cards.
- * @param {Array} cardList - [{card, quantity}]
- * @param {object} [rawInv] - Raw {cardId: qty} inventory map for last-copy check
+ * Build <option> tags for card selectors (available copy counts).
+ * @param {Array} cardList - [{card, quantity}] quantity = available copies
+ * @param {import('./trade-availability.js').AvailabilitySnapshot} [snapshot]
  */
-function _buildCardOptions(cardList, rawInv) {
+function _buildCardOptions(cardList, snapshot) {
   return cardList.map(({ card, quantity }) => {
     const qty = quantity > 1 ? ` (x${quantity})` : '';
     const rarity = card.rarity ? ` [${card.rarity}]` : '';
-    const lastCopy = rawInv && (rawInv[card.id] || 0) === 1 ? ' ⚠️ LAST' : '';
+    const lastCopy = snapshot && isLastAvailableCopy(snapshot, card.id) ? ' ⚠️ LAST' : '';
     return `<option value="${card.id}" data-rarity="${card.rarity}">${card.name}${rarity}${qty}${lastCopy}</option>`;
   }).join('');
 }
@@ -985,15 +973,14 @@ function _wireListingFilterEvents(username) {
 
     // Rebuild only the offered-card select in the listing form + count
     const myInv = player.getInventory(username);
-    const lockedSet = getPlayerLockedCardIds(username);
-    const myCardsAll = _getTradableCards(myInv, lockedSet);
+    const mySnapshot = buildAvailabilitySnapshot(username);
+    const myCardsAll = _getTradableCards(myInv, mySnapshot);
     const myCards = _applyTradeFilters(myCardsAll);
-    const rawInv = db.get(`players/${username}/inventory`) || {};
 
     const listingSelect = document.getElementById('listing-offered-card');
     if (listingSelect) {
       const prevVal = listingSelect.value;
-      listingSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(myCards, rawInv)}`;
+      listingSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(myCards, mySnapshot)}`;
       if (prevVal && listingSelect.querySelector(`option[value="${prevVal}"]`)) {
         listingSelect.value = prevVal;
       } else {
@@ -1122,8 +1109,8 @@ async function _handleCreateListing(username) {
 
   // T-6: Sandbox-safe confirmation modal for listing creation
   const offeredCard = cards.getCard(offeredCardId);
-  const rawInv = db.get(`players/${username}/inventory`) || {};
-  const isLast = _isLastCopy(offeredCardId, rawInv);
+  const listingSnapshot = buildAvailabilitySnapshot(username);
+  const isLast = isLastAvailableCopy(listingSnapshot, offeredCardId);
   const requestedNames = requestedCardIds.map(id => {
     const c = cards.getCard(id);
     return c ? c.name : id;
@@ -1172,15 +1159,14 @@ function _wirePickerFilterEvents(username) {
 
     // Rebuild offered-card select (my side — full filters)
     const myInv = player.getInventory(username);
-    const myLockedSet = getPlayerLockedCardIds(username);
-    const myCardsAll = _getTradableCards(myInv, myLockedSet);
+    const mySnapshot = buildAvailabilitySnapshot(username);
+    const myCardsAll = _getTradableCards(myInv, mySnapshot);
     const myCards = _applyTradeFilters(myCardsAll);
-    const myRawInv = db.get(`players/${username}/inventory`) || {};
 
     const offeredSelect = document.getElementById('trade-offered-card');
     if (offeredSelect) {
       const prevVal = offeredSelect.value;
-      offeredSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(myCards, myRawInv)}`;
+      offeredSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(myCards, mySnapshot)}`;
       if (prevVal && offeredSelect.querySelector(`option[value="${prevVal}"]`)) {
         offeredSelect.value = prevVal;
       } else {
@@ -1193,15 +1179,14 @@ function _wirePickerFilterEvents(username) {
 
     // Rebuild requested-card select (target side — shared filters only: type + rarity)
     const targetInv = player.getInventory(_selectedTarget);
-    const targetLockedSet = getPlayerLockedCardIds(_selectedTarget);
-    const targetCardsAll = _getTradableCards(targetInv, targetLockedSet);
+    const targetSnapshot = buildAvailabilitySnapshot(_selectedTarget);
+    const targetCardsAll = _getTradableCards(targetInv, targetSnapshot);
     const targetCards = _applySharedTradeFilters(targetCardsAll);
-    const targetRawInv = db.get(`players/${_selectedTarget}/inventory`) || {};
 
     const requestedSelect = document.getElementById('trade-requested-card');
     if (requestedSelect) {
       const prevVal = requestedSelect.value;
-      requestedSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(targetCards, targetRawInv)}`;
+      requestedSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(targetCards, targetSnapshot)}`;
       if (prevVal && requestedSelect.querySelector(`option[value="${prevVal}"]`)) {
         requestedSelect.value = prevVal;
       } else {
@@ -1259,8 +1244,8 @@ function _wireCardSelectionEvents(username) {
     if (warningEl) warningEl.classList.add('hidden');
 
     // T-6: Check for last copy and show warning in preview
-    const rawInv = db.get(`players/${username}/inventory`) || {};
-    const isLast = _isLastCopy(_offeredCardId, rawInv);
+    const pickerSnapshot = buildAvailabilitySnapshot(username);
+    const isLast = isLastAvailableCopy(pickerSnapshot, _offeredCardId);
     const lastCopyHtml = isLast
       ? '<div class="mt-2 p-1.5 rounded bg-amber-900/40 border border-amber-700 text-amber-300 text-xs text-center">⚠️ This is your LAST COPY of this card</div>'
       : '';
@@ -1314,8 +1299,8 @@ async function _handleSendTrade(username) {
   // T-6: Sandbox-safe confirmation modal before sending direct trade
   const offeredCard = cards.getCard(_offeredCardId);
   const requestedCard = cards.getCard(_requestedCardId);
-  const rawInv = db.get(`players/${username}/inventory`) || {};
-  const isLast = _isLastCopy(_offeredCardId, rawInv);
+  const sendSnapshot = buildAvailabilitySnapshot(username);
+  const isLast = isLastAvailableCopy(sendSnapshot, _offeredCardId);
 
   let msg = `You offer: ${offeredCard ? offeredCard.name : _offeredCardId}`;
   if (offeredCard) msg += ` [${offeredCard.rarity}]`;
@@ -1796,6 +1781,10 @@ const ERROR_MESSAGES = {
   // T-6: Project-lock errors
   OFFERED_CARD_LOCKED_BY_PROJECT: 'This card is assigned to an active research project and cannot be traded.',
   REQUESTED_CARD_LOCKED_BY_PROJECT: 'The requested card is assigned to an active research project and cannot be traded.',
+  CARD_RESERVED_BY_LISTING: 'Your last available copy of this card is listed for trade.',
+  CARD_RESERVED_BY_OUTGOING_TRADE: 'Your last available copy of this card is offered in a pending trade.',
+  CARD_RESERVED_BY_INCOMING_TRADE: 'Your last available copy is reserved for an incoming trade offer.',
+  INSUFFICIENT_AVAILABLE_COPIES: 'You have no available copies of this card to trade.',
 };
 
 function _friendlyError(reason) {

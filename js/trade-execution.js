@@ -18,7 +18,6 @@ import * as db from './database.js';
 import { bumpPlayerStat, notifyCardInventoryChanged, STAT_KEYS } from './achievements.js';
 import * as config from './config.js';
 import { validateDirectTrade, isDetailedLogging } from './trading.js';
-import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -134,8 +133,8 @@ export function executeDirectTrade(trade) {
 
   // ── 3. Rerun T-1 validation with fresh data (includes project-lock check) ──
   const players = {
-    [offeringPlayerId]: { ..._normalizePlayerForValidation(freshOffering), _lockedCardIds: getPlayerLockedCardIds(offeringPlayerId) },
-    [targetPlayerId]:   { ..._normalizePlayerForValidation(freshTarget),   _lockedCardIds: getPlayerLockedCardIds(targetPlayerId) },
+    [offeringPlayerId]: _normalizePlayerForValidation(freshOffering),
+    [targetPlayerId]:   _normalizePlayerForValidation(freshTarget),
   };
 
   const validation = validateDirectTrade({
@@ -145,6 +144,7 @@ export function executeDirectTrade(trade) {
     requestedCardId,
     players,
     cards: allCards,
+    excludeDirectTradeId: tradeId,
   });
 
   if (!validation.valid) {

@@ -20,6 +20,7 @@
 import { PROJECT_STATES }  from './project-state.js';
 import { getLockedCardIds } from './project-state.js';
 import { evaluateProject }  from './project-engine.js';
+import { validateCardsAssignableToProject } from './trade-availability.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -46,6 +47,7 @@ const REQUIRED_CONCEPT_COUNT   = 2;
  *   scientistCards: object[],
  *   conceptCards:   object[],
  *   lockedCardIds:  string[],
+ *   availabilitySnapshot?: import('./trade-availability.js').AvailabilitySnapshot,
  * }} params
  *
  * @returns {{ valid: boolean, reason: string | null }}
@@ -55,6 +57,7 @@ export function canAssignProject({
   scientistCards = [],
   conceptCards   = [],
   lockedCardIds  = [],
+  availabilitySnapshot = null,
 } = {}) {
 
   // 1. Project must exist and be in AVAILABLE state
@@ -72,14 +75,21 @@ export function canAssignProject({
     return { valid: false, reason: 'invalid_concept_count' };
   }
 
-  // 4. No card may be locked by an active project
-  const lockedSet = new Set(lockedCardIds);
-
   const allCards = [...scientistCards, ...conceptCards];
-  for (const card of allCards) {
-    const cardId = card.id ?? card.cardId ?? null;
-    if (cardId !== null && lockedSet.has(cardId)) {
-      return { valid: false, reason: 'locked_cards_present' };
+  const cardIds = allCards.map(c => c.id ?? c.cardId ?? null).filter(Boolean);
+
+  // 4. Copy-aware availability (preferred) or legacy project-ID lock set
+  if (availabilitySnapshot) {
+    const avail = validateCardsAssignableToProject(availabilitySnapshot, cardIds);
+    if (!avail.valid) {
+      return { valid: false, reason: avail.reason ?? 'locked_cards_present' };
+    }
+  } else {
+    const lockedSet = new Set(lockedCardIds);
+    for (const cardId of cardIds) {
+      if (lockedSet.has(cardId)) {
+        return { valid: false, reason: 'locked_cards_present' };
+      }
     }
   }
 
@@ -106,6 +116,7 @@ export function canAssignProject({
  *   conceptCards:   object[],  - Exactly 2 concept card objects.
  *   allProjects:    object[],  - Full project pool (used to derive locked IDs).
  *   startedAt:      number,    - Activation timestamp (defaults to Date.now()).
+ *   availabilitySnapshot?: import('./trade-availability.js').AvailabilitySnapshot,
  * }} params
  *
  * @returns {{
@@ -120,18 +131,19 @@ export function activateProject({
   conceptCards   = [],
   allProjects    = [],
   startedAt      = Date.now(),
+  availabilitySnapshot = null,
 } = {}) {
 
   // STEP 1 — Derive locked card IDs from all currently ACTIVE projects.
-  // Exclude the target project itself (it is still AVAILABLE at this point).
   const lockedCardIds = getLockedCardIds(allProjects);
 
-  // STEP 2 — Validate the assignment.
+  // STEP 2 — Validate the assignment (copy-aware when snapshot provided).
   const { valid, reason } = canAssignProject({
     project,
     scientistCards,
     conceptCards,
     lockedCardIds,
+    availabilitySnapshot,
   });
 
   if (!valid) {

@@ -21,7 +21,6 @@ import * as db from './database.js';
 import * as config from './config.js';
 import { bumpPlayerStat, notifyCardInventoryChanged, STAT_KEYS } from './achievements.js';
 import { validateListingTrade, isDetailedLogging } from './trading.js';
-import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -106,8 +105,8 @@ export function executeListingTrade(listing, accepterId, chosenCardId) {
 
   // ── 3. Rerun T-1 listing validation with fresh data (includes project-lock check) ──
   const players = {
-    [ownerId]:    { ..._normalizePlayer(freshOwner),    _lockedCardIds: getPlayerLockedCardIds(ownerId) },
-    [accepterId]: { ..._normalizePlayer(freshAccepter), _lockedCardIds: getPlayerLockedCardIds(accepterId) },
+    [ownerId]:    _normalizePlayer(freshOwner),
+    [accepterId]: _normalizePlayer(freshAccepter),
   };
 
   const validation = validateListingTrade({
@@ -116,6 +115,7 @@ export function executeListingTrade(listing, accepterId, chosenCardId) {
     chosenCardId,
     players,
     cards: allCards,
+    excludeListingId: listingId,
   });
 
   if (!validation.valid) {

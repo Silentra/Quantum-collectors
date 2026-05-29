@@ -18,7 +18,11 @@ import * as db from './database.js';
 import * as config from './config.js';
 import { validateListingTrade, isCardTradable, isTradingEnabled, isListingsEnabled, isDetailedLogging } from './trading.js';
 import { executeListingTrade } from './trade-listing-execution.js';
-import { getPlayerLockedCardIds } from './trade-lock-helpers.js';
+import {
+  buildAvailabilitySnapshot,
+  canOfferCardInTrade,
+  getAvailabilityFailureReason,
+} from './trade-availability.js';
 
 // ─── Helpers ─────────────────────────────────���──────────────────────────────
 
@@ -178,10 +182,11 @@ export function createListing(ownerId, offeredCardId, requestedCardIds) {
     return { success: false, reason: 'OWNER_MISSING_OFFERED_CARD' };
   }
 
-  // Offered card must not be locked by an active research project
-  const lockedSet = getPlayerLockedCardIds(ownerId);
-  if (lockedSet.has(offeredCardId)) {
-    return { success: false, reason: 'OFFERED_CARD_LOCKED_BY_PROJECT' };
+  // Copy-aware availability (project + trade reservations)
+  const ownerSnapshot = buildAvailabilitySnapshot(ownerId, { playerData: owner });
+  if (!canOfferCardInTrade(ownerSnapshot, offeredCardId)) {
+    const reason = getAvailabilityFailureReason(ownerSnapshot, offeredCardId, 'offer');
+    return { success: false, reason: reason ?? 'INSUFFICIENT_AVAILABLE_COPIES' };
   }
 
   // All requested cards must exist, be tradable, and match offered rarity
