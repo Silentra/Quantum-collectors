@@ -78,18 +78,19 @@ export function canAssignProject({
   const allCards = [...scientistCards, ...conceptCards];
   const cardIds = allCards.map(c => c.id ?? c.cardId ?? null).filter(Boolean);
 
-  // 4. Copy-aware availability (preferred) or legacy project-ID lock set
+  // 4. Binary project lock + copy-aware trade reservation check
   if (availabilitySnapshot) {
     const avail = validateCardsAssignableToProject(availabilitySnapshot, cardIds);
     if (!avail.valid) {
       return { valid: false, reason: avail.reason ?? 'locked_cards_present' };
     }
-  } else {
-    const lockedSet = new Set(lockedCardIds);
-    for (const cardId of cardIds) {
-      if (lockedSet.has(cardId)) {
-        return { valid: false, reason: 'locked_cards_present' };
-      }
+  }
+
+  // Always enforce binary project uniqueness via lockedCardIds
+  const lockedSet = new Set(lockedCardIds);
+  for (const cardId of cardIds) {
+    if (lockedSet.has(cardId)) {
+      return { valid: false, reason: 'locked_cards_present' };
     }
   }
 

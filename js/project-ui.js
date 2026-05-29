@@ -18,7 +18,7 @@ import { getLockedCardIds, PROJECT_STATES } from './project-state.js';
 import { activateProject } from './project-assignment.js';
 import {
   buildAvailabilitySnapshot,
-  getAvailableCopyCount,
+  canAssignCardToProject,
   getProjectAssignmentLockTooltip,
 } from './trade-availability.js';
 import { evaluateProject } from './project-engine.js';
@@ -540,7 +540,7 @@ function _renderCardsAvailabilityPanel(projects, username) {
 
   // Build a mini card element (read-only — no click handlers)
   function buildInfoMiniCard(card) {
-    const isLocked = getAvailableCopyCount(availabilitySnapshot, card.id) < 1;
+    const isLocked = !canAssignCardToProject(availabilitySnapshot, card.id);
     const lockTip = getProjectAssignmentLockTooltip(availabilitySnapshot, card.id);
     const el = document.createElement('div');
     el.className = `rp-mini-card rarity-${card.rarity}${isLocked ? ' rp-mini-card--unavailable' : ''}`;
@@ -590,7 +590,7 @@ function _renderCardsAvailabilityPanel(projects, username) {
 
   // Count locked for header badge
   const totalLocked = [...scientistCards, ...conceptCards].filter(
-    c => getAvailableCopyCount(availabilitySnapshot, c.id) < 1
+    c => !canAssignCardToProject(availabilitySnapshot, c.id)
   ).length;
   const totalOwned  = scientistCards.length + conceptCards.length;
 
@@ -1267,7 +1267,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     sciGrid.innerHTML = '<div class="text-xs text-surface-500 col-span-full py-2">No scientist cards.</div>';
   }
   for (const card of scientistCards) {
-    const isLocked = getAvailableCopyCount(availabilitySnapshot, card.id) < 1;
+    const isLocked = !canAssignCardToProject(availabilitySnapshot, card.id);
     const el = buildMiniCard(card, isLocked, getProjectAssignmentLockTooltip(availabilitySnapshot, card.id));
     sciCardEls.push({ el, card });
     if (!isLocked) {
@@ -1303,7 +1303,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     conGrid.innerHTML = '<div class="text-xs text-surface-500 col-span-full py-2">No concept cards.</div>';
   }
   for (const card of conceptCards) {
-    const isLocked = getAvailableCopyCount(availabilitySnapshot, card.id) < 1;
+    const isLocked = !canAssignCardToProject(availabilitySnapshot, card.id);
     const el = buildMiniCard(card, isLocked, getProjectAssignmentLockTooltip(availabilitySnapshot, card.id));
     conCardEls.push({ el, card });
     if (!isLocked) {

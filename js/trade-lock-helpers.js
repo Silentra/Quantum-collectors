@@ -8,7 +8,7 @@
 import {
   buildAvailabilitySnapshot,
   getUnavailableCardIds,
-  countProjectCommittedCopies,
+  isCardLockedByActiveProject,
 } from './trade-availability.js';
 import * as db from './database.js';
 import { getLockedCardIds } from './project-state.js';
@@ -65,7 +65,7 @@ export function checkListingTradeProjectLocks(offeredCardId, chosenCardId, owner
  */
 export function getPlayerProjectCommittedCount(username, cardId) {
   const playerData = db.get(`players/${username}`);
-  return countProjectCommittedCopies(cardId, playerData?.projects ?? []);
+  return isCardLockedByActiveProject(cardId, playerData?.projects ?? []) ? 1 : 0;
 }
 
 /**

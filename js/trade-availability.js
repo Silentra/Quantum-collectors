@@ -1,57 +1,61 @@
 /**
  * trade-availability.js
  *
- * Copy-aware card availability derived from inventory minus reservations.
- * No inventory subtraction at reservation time — same model as project locks.
+ * Hybrid availability model:
+ *   - Projects: binary per cardId (one active project maximum per card identity)
+ *   - Trades/listings: copy-aware reservations (inventory minus reserved copies)
  *
- * Reservations counted:
- *   - ACTIVE project assignments (per card ID occurrence)
- *   - Pending direct trades (outgoing offered + incoming requested)
- *   - Active non-expired marketplace listings (offered card)
+ * No inventory subtraction at reservation time — all math is derived.
  */
 
 import * as db from './database.js';
 import { PROJECT_STATES } from './project-state.js';
 
-// ─── Pure: project commitment ───────────────────────────────────────────────
+// ─── Project uniqueness (binary per cardId) ───────────────────────────────────
 
 /**
- * Count how many ACTIVE project slots reference a card ID.
+ * True when cardId appears in ANY ACTIVE project's assignments.
+ * Projects consume the entire card identity — not per-copy slots.
+ *
  * @param {string} cardId
  * @param {object[]} [projects]
- * @returns {number}
+ * @returns {boolean}
  */
-export function countProjectCommittedCopies(cardId, projects = []) {
-  let count = 0;
+export function isCardLockedByActiveProject(cardId, projects = []) {
   for (const project of projects) {
     if (project.state !== PROJECT_STATES.ACTIVE) continue;
     for (const id of project.assignedScientists ?? []) {
-      if (id === cardId) count++;
+      if (id === cardId) return true;
     }
     for (const id of project.assignedConcepts ?? []) {
-      if (id === cardId) count++;
+      if (id === cardId) return true;
     }
   }
-  return count;
+  return false;
 }
 
-// ─── Pure: trade reservation tallies ──────────────────────────────────────────
+/**
+ * @deprecated Use isCardLockedByActiveProject — projects are binary, not copy-counted.
+ * @returns {number} 0 or 1
+ */
+export function countProjectCommittedCopies(cardId, projects = []) {
+  return isCardLockedByActiveProject(cardId, projects) ? 1 : 0;
+}
+
+// ─── Trade reservation tallies (copy-aware) ───────────────────────────────────
 
 /**
- * Per-card reservation breakdown for a player.
  * @typedef {{ outgoing: number, listing: number, incoming: number }} CardReservationBreakdown
  */
 
 /**
- * Aggregate trade/listing reservations from trade records.
- *
  * @param {string} username
  * @param {object} [opts]
- * @param {object} [opts.directTrades] - map of tradeId → trade
- * @param {object} [opts.listings] - map of listingId → listing
- * @param {number} [opts.now] - timestamp for expiry checks
- * @param {string[]} [opts.excludeDirectTradeIds] - pending trades to ignore (e.g. trade being accepted)
- * @param {string[]} [opts.excludeListingIds] - active listings to ignore (e.g. listing being fulfilled)
+ * @param {object} [opts.directTrades]
+ * @param {object} [opts.listings]
+ * @param {number} [opts.now]
+ * @param {string[]} [opts.excludeDirectTradeIds]
+ * @param {string[]} [opts.excludeListingIds]
  * @returns {Map<string, CardReservationBreakdown>}
  */
 export function buildTradeReservationCounts(username, {
@@ -98,7 +102,6 @@ export function buildTradeReservationCounts(username, {
 }
 
 /**
- * Total trade-side reserved copies for a card (outgoing + listing + incoming).
  * @param {Map<string, CardReservationBreakdown>} tradeCounts
  * @param {string} cardId
  * @returns {number}
@@ -114,26 +117,11 @@ export function getTradeReservedCopies(tradeCounts, cardId) {
 /**
  * @typedef {object} AvailabilitySnapshot
  * @property {string} username
- * @property {object} inventory - { cardId: qty }
+ * @property {object} inventory
  * @property {object[]} projects
  * @property {Map<string, CardReservationBreakdown>} tradeCounts
- * @property {string[]} [excludeDirectTradeIds]
- * @property {string[]} [excludeListingIds]
  */
 
-/**
- * Build a fresh availability snapshot for a player (DB reads unless overridden).
- *
- * @param {string} username
- * @param {object} [opts]
- * @param {object} [opts.playerData]
- * @param {object} [opts.directTrades]
- * @param {object} [opts.listings]
- * @param {number} [opts.now]
- * @param {string[]} [opts.excludeDirectTradeIds]
- * @param {string[]} [opts.excludeListingIds]
- * @returns {AvailabilitySnapshot}
- */
 export function buildAvailabilitySnapshot(username, opts = {}) {
   const playerData = opts.playerData ?? db.get(`players/${username}`);
   return {
@@ -152,93 +140,105 @@ export function buildAvailabilitySnapshot(username, opts = {}) {
   };
 }
 
+export function getOwnedCopyCount(snapshot, cardId) {
+  return snapshot.inventory[cardId] || 0;
+}
+
+// ─── Trade availability (copy-aware) ──────────────────────────────────────────
+
 /**
- * Available copies for a card after project + trade reservations.
+ * Copies available to offer in trade/listings.
+ * One active project assignment consumes one physical copy; trade reservations consume copies.
  *
  * @param {AvailabilitySnapshot} snapshot
  * @param {string} cardId
  * @returns {number}
  */
 export function getAvailableCopyCount(snapshot, cardId) {
-  const owned = snapshot.inventory[cardId] || 0;
-  const project = countProjectCommittedCopies(cardId, snapshot.projects);
+  const owned = getOwnedCopyCount(snapshot, cardId);
+  const projectCopy = isCardLockedByActiveProject(cardId, snapshot.projects) ? 1 : 0;
   const trade = getTradeReservedCopies(snapshot.tradeCounts, cardId);
-  return Math.max(0, owned - project - trade);
+  return Math.max(0, owned - projectCopy - trade);
 }
 
-/**
- * Owned quantity (ignoring reservations).
- * @param {AvailabilitySnapshot} snapshot
- * @param {string} cardId
- * @returns {number}
- */
-export function getOwnedCopyCount(snapshot, cardId) {
-  return snapshot.inventory[cardId] || 0;
-}
-
-// ─── Validation helpers ───────────────────────────────────────────────────────
-
-/**
- * @param {AvailabilitySnapshot} snapshot
- * @param {string} cardId
- * @returns {boolean}
- */
 export function canOfferCardInTrade(snapshot, cardId) {
   return getAvailableCopyCount(snapshot, cardId) >= 1;
 }
 
+export function isLastAvailableCopy(snapshot, cardId) {
+  return getAvailableCopyCount(snapshot, cardId) === 1;
+}
+
+// ─── Project assignment availability (binary project + copy-aware trade) ──────
+
 /**
+ * Whether a cardId may be assigned to a new ACTIVE project.
+ *   - Blocked if cardId is already on ANY active project (binary)
+ *   - Blocked if trade reservations leave no free copy
+ *
  * @param {AvailabilitySnapshot} snapshot
  * @param {string} cardId
  * @returns {boolean}
  */
 export function canAssignCardToProject(snapshot, cardId) {
-  return getAvailableCopyCount(snapshot, cardId) >= 1;
+  if (isCardLockedByActiveProject(cardId, snapshot.projects)) return false;
+  const owned = getOwnedCopyCount(snapshot, cardId);
+  const trade = getTradeReservedCopies(snapshot.tradeCounts, cardId);
+  return (owned - trade) >= 1;
+}
+
+export function isProjectAssignmentLocked(snapshot, cardId) {
+  return !canAssignCardToProject(snapshot, cardId);
 }
 
 /**
- * True when this card is the player's last *available* copy for trade warnings.
- * @param {AvailabilitySnapshot} snapshot
- * @param {string} cardId
- * @returns {boolean}
- */
-export function isLastAvailableCopy(snapshot, cardId) {
-  return getAvailableCopyCount(snapshot, cardId) === 1;
-}
-
-/**
- * Assignment-panel tooltip when availableCopies === 0.
- * Trade-specific copy only when trade reservation consumes the last copy.
- *
+ * Assignment-panel tooltip when the card cannot be assigned.
  * @param {AvailabilitySnapshot} snapshot
  * @param {string} cardId
  * @returns {string|null}
  */
 export function getProjectAssignmentLockTooltip(snapshot, cardId) {
-  if (getAvailableCopyCount(snapshot, cardId) > 0) return null;
+  if (getOwnedCopyCount(snapshot, cardId) < 1) return null;
+
+  if (isCardLockedByActiveProject(cardId, snapshot.projects)) {
+    return 'Assigned to an active research project';
+  }
 
   const owned = getOwnedCopyCount(snapshot, cardId);
-  if (owned < 1) return null;
+  const trade = getTradeReservedCopies(snapshot.tradeCounts, cardId);
+  if ((owned - trade) >= 1) return null;
 
   const b = snapshot.tradeCounts.get(cardId) ?? { outgoing: 0, listing: 0, incoming: 0 };
   if (b.incoming > 0) return 'Last remaining card is reserved for an incoming trade';
   if (b.listing > 0) return 'Last remaining card is listed for trade';
   if (b.outgoing > 0) return 'Last remaining card is offered in a trade';
 
-  const project = countProjectCommittedCopies(cardId, snapshot.projects);
-  if (project > 0) return 'Assigned to an active research project';
-
   return 'No copies available';
 }
 
 /**
- * Reason code for failed trade/project mutations.
  * @param {AvailabilitySnapshot} snapshot
  * @param {string} cardId
- * @param {'offer'|'assign'|'accept'} context
+ * @param {'offer'|'assign'} context
  * @returns {string|null}
  */
 export function getAvailabilityFailureReason(snapshot, cardId, context = 'offer') {
+  if (context === 'assign') {
+    if (isCardLockedByActiveProject(cardId, snapshot.projects)) {
+      return 'locked_cards_present';
+    }
+    const owned = getOwnedCopyCount(snapshot, cardId);
+    const trade = getTradeReservedCopies(snapshot.tradeCounts, cardId);
+    if ((owned - trade) >= 1) return null;
+
+    const b = snapshot.tradeCounts.get(cardId) ?? { outgoing: 0, listing: 0, incoming: 0 };
+    if (b.incoming > 0) return 'CARD_RESERVED_BY_INCOMING_TRADE';
+    if (b.listing > 0) return 'CARD_RESERVED_BY_LISTING';
+    if (b.outgoing > 0) return 'CARD_RESERVED_BY_OUTGOING_TRADE';
+    return 'INSUFFICIENT_AVAILABLE_COPIES';
+  }
+
+  // Trade / listing offer context — copy-aware including project copy consumption
   if (getAvailableCopyCount(snapshot, cardId) >= 1) return null;
 
   const b = snapshot.tradeCounts.get(cardId) ?? { outgoing: 0, listing: 0, incoming: 0 };
@@ -246,21 +246,13 @@ export function getAvailabilityFailureReason(snapshot, cardId, context = 'offer'
   if (b.listing > 0) return 'CARD_RESERVED_BY_LISTING';
   if (b.outgoing > 0) return 'CARD_RESERVED_BY_OUTGOING_TRADE';
 
-  const project = countProjectCommittedCopies(cardId, snapshot.projects);
-  if (project > 0) {
-    return context === 'assign' ? 'locked_cards_present' : 'OFFERED_CARD_LOCKED_BY_PROJECT';
+  if (isCardLockedByActiveProject(cardId, snapshot.projects)) {
+    return 'OFFERED_CARD_LOCKED_BY_PROJECT';
   }
 
   return 'INSUFFICIENT_AVAILABLE_COPIES';
 }
 
-/**
- * Validate multiple card IDs for project assignment (each needs >= 1 available).
- *
- * @param {AvailabilitySnapshot} snapshot
- * @param {string[]} cardIds
- * @returns {{ valid: boolean, reason: string|null, cardId?: string }}
- */
 export function validateCardsAssignableToProject(snapshot, cardIds) {
   for (const cardId of cardIds) {
     if (!cardId) continue;
@@ -273,9 +265,9 @@ export function validateCardsAssignableToProject(snapshot, cardIds) {
 }
 
 /**
- * Cards with zero available copies (any reason).
+ * Card IDs with zero trade-available copies (for trade UI filtering).
  * @param {AvailabilitySnapshot} snapshot
- * @param {string[]} [cardIds] - if omitted, scans all owned card IDs
+ * @param {string[]} [cardIds]
  * @returns {Set<string>}
  */
 export function getUnavailableCardIds(snapshot, cardIds = null) {
@@ -287,12 +279,6 @@ export function getUnavailableCardIds(snapshot, cardIds = null) {
   return out;
 }
 
-/**
- * Count owned tradable cards hidden from offer pickers (available < 1 but owned >= 1).
- * @param {AvailabilitySnapshot} snapshot
- * @param {string[]} ownedTradableCardIds
- * @returns {number}
- */
 export function countHiddenByReservations(snapshot, ownedTradableCardIds) {
   let hidden = 0;
   for (const cardId of ownedTradableCardIds) {
