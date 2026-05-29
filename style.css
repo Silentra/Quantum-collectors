@@ -2961,125 +2961,262 @@ body.app-mode-game #screen-game.screen.active {
   flex-direction: column;
 }
 
-/* Structural shell edge — neutral; visual rarity/cosmetic band on .card-cosmetic-effects::before */
+/* Structural shell edge — neutral; physical frame band on .card-cosmetic-effects::before */
 
-/* Default border — virtual equipped state (rarity-colored band, card rarity not cosmetic rarity) */
+/*
+ * Layered frame construction (all borders):
+ *   1. Outer structural rim — dark edge, physical separation
+ *   2. Main material band — primary color/texture (gradient)
+ *   3. Mid-tone depth ring — material variation
+ *   4. Inner separator — artwell lip between frame and content
+ *   + Directional lighting (top-left highlight, bottom-right shade)
+ */
 .sci-card,
 .card-detail-frame,
 .shop-cosmetic-preview--border {
-  --card-border-band-default: clamp(1px, 5.5cqw, 4px);
-  --card-border-band-cosmetic: clamp(2px, 6.5cqw, 5px);
+  --card-frame-band-base: clamp(2px, 7cqw, 5px);
+  --card-frame-band-premium: clamp(3px, 8cqw, 6px);
+  --card-frame-rim: 1px;
+  --card-frame-separator: 1px;
 }
 
-.sci-card[data-card-border="default"].rarity-common .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="default"].rarity-common .card-cosmetic-effects::before {
-  box-shadow: inset 0 0 0 var(--card-border-band-default) #4b5563;
-}
-.sci-card[data-card-border="default"].rarity-uncommon .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="default"].rarity-uncommon .card-cosmetic-effects::before {
-  box-shadow: inset 0 0 0 var(--card-border-band-default) #22c55e;
-}
-.sci-card[data-card-border="default"].rarity-rare .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="default"].rarity-rare .card-cosmetic-effects::before {
-  box-shadow: inset 0 0 0 var(--card-border-band-default) #3b82f6;
-}
-.sci-card[data-card-border="default"].rarity-epic .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="default"].rarity-epic .card-cosmetic-effects::before {
-  box-shadow: inset 0 0 0 var(--card-border-band-default) #a855f7;
-}
-.sci-card[data-card-border="default"].rarity-legendary .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="default"].rarity-legendary .card-cosmetic-effects::before {
-  box-shadow: inset 0 0 0 var(--card-border-band-default) #f59e0b;
-}
-
-/* Default legendary ambient glow (shell, not cosmetic band) */
-.sci-card[data-card-border="default"].rarity-legendary {
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.15);
-}
-
-/* Default rarity hover glow — collection grid only */
-.sci-card[data-card-border="default"].rarity-uncommon:hover { box-shadow: 0 4px 16px rgba(34, 197, 94, 0.15); }
-.sci-card[data-card-border="default"].rarity-rare:hover     { box-shadow: 0 4px 16px rgba(59, 130, 246, 0.15); }
-.sci-card[data-card-border="default"].rarity-epic:hover     { box-shadow: 0 4px 16px rgba(168, 85, 247, 0.2); }
-.sci-card[data-card-border="default"].rarity-legendary:hover { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
-
-/* v1 cosmetic borders — static CSS on .card-cosmetic-effects::before */
-.sci-card[data-card-border="silver"] .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="silver"] .card-cosmetic-effects::before,
-.shop-cosmetic-preview--border[data-card-border="silver"] .card-cosmetic-effects::before {
-  box-shadow:
-    inset 0 0 0 var(--card-border-band-cosmetic) rgba(148, 163, 184, 0.78),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.35);
-  background: linear-gradient(
-    155deg,
-    rgba(255, 255, 255, 0.08) 0%,
-    rgba(203, 213, 225, 0.04) 38%,
-    rgba(51, 65, 85, 0.07) 72%,
-    rgba(255, 255, 255, 0.05) 100%
-  );
-}
-
-.sci-card[data-card-border="sapphire"] .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="sapphire"] .card-cosmetic-effects::before,
-.shop-cosmetic-preview--border[data-card-border="sapphire"] .card-cosmetic-effects::before {
-  box-shadow:
-    inset 0 0 0 var(--card-border-band-cosmetic) rgba(37, 99, 180, 0.82),
-    inset 0 1px 0 rgba(147, 197, 253, 0.2),
-    inset 0 -1px 0 rgba(15, 37, 68, 0.42);
-  background: linear-gradient(
-    155deg,
-    rgba(96, 165, 250, 0.11) 0%,
-    rgba(30, 64, 175, 0.06) 45%,
-    rgba(59, 130, 246, 0.08) 100%
-  );
-}
-
-.sci-card[data-card-border="emerald"] .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="emerald"] .card-cosmetic-effects::before,
-.shop-cosmetic-preview--border[data-card-border="emerald"] .card-cosmetic-effects::before {
-  box-shadow:
-    inset 0 0 0 var(--card-border-band-cosmetic) rgba(22, 120, 78, 0.82),
-    inset 0 1px 0 rgba(110, 231, 183, 0.18),
-    inset 0 -1px 0 rgba(6, 40, 28, 0.42);
-  background: linear-gradient(
-    155deg,
-    rgba(52, 211, 153, 0.1) 0%,
-    rgba(6, 95, 70, 0.06) 48%,
-    rgba(34, 197, 94, 0.07) 100%
-  );
-}
-
+/* ── Graphite (default baseline) — calm matte cardstock ── */
 .sci-card[data-card-border="graphite"] .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="graphite"] .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="graphite"] .card-cosmetic-effects::before {
+  --frame-band: var(--card-frame-band-base);
+  --f-rim: rgba(6, 9, 15, 0.94);
+  --f-outer: rgba(42, 52, 68, 0.97);
+  --f-mid: rgba(58, 70, 88, 0.9);
+  --f-inner-sep: rgba(10, 14, 22, 0.92);
+  --f-light-t: rgba(186, 196, 210, 0.14);
+  --f-light-b: rgba(6, 10, 18, 0.38);
+  --f-grad-a: rgba(203, 213, 225, 0.09);
+  --f-grad-b: rgba(22, 30, 44, 0.14);
   box-shadow:
-    inset 0 0 0 var(--card-border-band-cosmetic) rgba(71, 85, 105, 0.88),
-    inset 0 1px 0 rgba(148, 163, 184, 0.12),
-    inset 0 -1px 0 rgba(15, 23, 42, 0.5);
-  background: linear-gradient(
-    155deg,
-    rgba(148, 163, 184, 0.07) 0%,
-    rgba(51, 65, 85, 0.1) 42%,
-    rgba(30, 41, 59, 0.08) 78%,
-    rgba(100, 116, 139, 0.06) 100%
-  );
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 3px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.58) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
 }
 
+/* ── Silver — elegant restrained metallic ── */
+.sci-card[data-card-border="silver"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="silver"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="silver"] .card-cosmetic-effects::before {
+  --frame-band: var(--card-frame-band-base);
+  --f-rim: rgba(12, 16, 24, 0.9);
+  --f-outer: rgba(148, 163, 184, 0.82);
+  --f-mid: rgba(176, 190, 208, 0.72);
+  --f-inner-sep: rgba(18, 24, 36, 0.88);
+  --f-light-t: rgba(248, 250, 252, 0.2);
+  --f-light-b: rgba(30, 41, 59, 0.32);
+  --f-grad-a: rgba(255, 255, 255, 0.11);
+  --f-grad-b: rgba(71, 85, 105, 0.1);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 3px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
+}
+
+/* ── Emerald — softer academic green stock ── */
+.sci-card[data-card-border="emerald"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="emerald"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="emerald"] .card-cosmetic-effects::before {
+  --frame-band: var(--card-frame-band-base);
+  --f-rim: rgba(6, 18, 14, 0.92);
+  --f-outer: rgba(22, 98, 68, 0.86);
+  --f-mid: rgba(38, 120, 86, 0.78);
+  --f-inner-sep: rgba(8, 22, 16, 0.9);
+  --f-light-t: rgba(134, 239, 172, 0.14);
+  --f-light-b: rgba(6, 32, 22, 0.36);
+  --f-grad-a: rgba(110, 231, 183, 0.08);
+  --f-grad-b: rgba(6, 50, 36, 0.12);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 3px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.56) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 42%, var(--f-grad-b) 100%);
+}
+
+/* ── Sapphire — richer deep blue ── */
+.sci-card[data-card-border="sapphire"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="sapphire"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="sapphire"] .card-cosmetic-effects::before {
+  --frame-band: var(--card-frame-band-base);
+  --f-rim: rgba(8, 14, 28, 0.93);
+  --f-outer: rgba(29, 78, 140, 0.88);
+  --f-mid: rgba(37, 99, 180, 0.8);
+  --f-inner-sep: rgba(10, 18, 34, 0.9);
+  --f-light-t: rgba(147, 197, 253, 0.16);
+  --f-light-b: rgba(8, 22, 48, 0.4);
+  --f-grad-a: rgba(96, 165, 250, 0.1);
+  --f-grad-b: rgba(15, 37, 68, 0.14);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 3px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.56) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
+}
+
+/* ── Violet — luxurious deep purple ── */
 .sci-card[data-card-border="violet"] .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="violet"] .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="violet"] .card-cosmetic-effects::before {
+  --frame-band: var(--card-frame-band-base);
+  --f-rim: rgba(14, 8, 26, 0.93);
+  --f-outer: rgba(91, 33, 140, 0.86);
+  --f-mid: rgba(109, 40, 180, 0.78);
+  --f-inner-sep: rgba(16, 10, 30, 0.9);
+  --f-light-t: rgba(196, 181, 253, 0.15);
+  --f-light-b: rgba(28, 12, 48, 0.38);
+  --f-grad-a: rgba(167, 139, 250, 0.09);
+  --f-grad-b: rgba(46, 16, 72, 0.13);
   box-shadow:
-    inset 0 0 0 var(--card-border-band-cosmetic) rgba(109, 40, 180, 0.8),
-    inset 0 1px 0 rgba(196, 181, 253, 0.18),
-    inset 0 -1px 0 rgba(46, 16, 72, 0.42);
-  background: linear-gradient(
-    155deg,
-    rgba(167, 139, 250, 0.1) 0%,
-    rgba(88, 28, 135, 0.06) 46%,
-    rgba(139, 92, 246, 0.08) 100%
-  );
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 3px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.56) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
 }
+
+/* ── Spectrum — premium rarity-reactive chromatic frame ── */
+.sci-card[data-card-border="spectrum"] .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="spectrum"] .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="spectrum"] .card-cosmetic-effects::before {
+  --frame-band: var(--card-frame-band-premium);
+}
+
+.sci-card[data-card-border="spectrum"].rarity-common .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="spectrum"].rarity-common .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-common .card-cosmetic-effects::before {
+  --f-rim: rgba(10, 12, 16, 0.92);
+  --f-outer: rgba(75, 85, 99, 0.92);
+  --f-mid: rgba(107, 114, 128, 0.82);
+  --f-inner-sep: rgba(12, 14, 18, 0.9);
+  --f-light-t: rgba(209, 213, 219, 0.14);
+  --f-light-b: rgba(17, 24, 39, 0.34);
+  --f-grad-a: rgba(156, 163, 175, 0.1);
+  --f-grad-b: rgba(31, 41, 55, 0.12);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 4px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before {
+  --f-rim: rgba(4, 18, 10, 0.92);
+  --f-outer: rgba(22, 140, 78, 0.9);
+  --f-mid: rgba(34, 170, 98, 0.82);
+  --f-inner-sep: rgba(6, 20, 12, 0.9);
+  --f-light-t: rgba(134, 239, 172, 0.18);
+  --f-light-b: rgba(4, 30, 18, 0.36);
+  --f-grad-a: rgba(74, 222, 128, 0.11);
+  --f-grad-b: rgba(5, 46, 28, 0.13);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 4px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before {
+  --f-rim: rgba(8, 16, 32, 0.92);
+  --f-outer: rgba(37, 99, 180, 0.9);
+  --f-mid: rgba(59, 130, 246, 0.82);
+  --f-inner-sep: rgba(10, 18, 36, 0.9);
+  --f-light-t: rgba(147, 197, 253, 0.18);
+  --f-light-b: rgba(8, 24, 52, 0.38);
+  --f-grad-a: rgba(96, 165, 250, 0.12);
+  --f-grad-b: rgba(15, 37, 68, 0.14);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 4px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before {
+  --f-rim: rgba(18, 8, 32, 0.92);
+  --f-outer: rgba(124, 58, 180, 0.9);
+  --f-mid: rgba(168, 85, 247, 0.82);
+  --f-inner-sep: rgba(20, 10, 34, 0.9);
+  --f-light-t: rgba(216, 180, 254, 0.18);
+  --f-light-b: rgba(36, 12, 56, 0.38);
+  --f-grad-a: rgba(192, 132, 252, 0.12);
+  --f-grad-b: rgba(59, 7, 100, 0.14);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 4px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before,
+.card-detail-frame[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before,
+.shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before {
+  --f-rim: rgba(28, 16, 4, 0.92);
+  --f-outer: rgba(180, 110, 20, 0.9);
+  --f-mid: rgba(217, 140, 30, 0.84);
+  --f-inner-sep: rgba(24, 14, 4, 0.9);
+  --f-light-t: rgba(253, 224, 140, 0.2);
+  --f-light-b: rgba(40, 22, 4, 0.4);
+  --f-grad-a: rgba(251, 191, 36, 0.13);
+  --f-grad-b: rgba(69, 26, 3, 0.15);
+  box-shadow:
+    inset 0 1px 0 var(--f-light-t),
+    inset 0 -2px 4px var(--f-light-b),
+    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
+    inset 0 0 0 var(--frame-band) var(--f-outer),
+    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
+}
+
+/* Spectrum — restrained legendary ambient (shell, not flat outline) */
+.sci-card[data-card-border="spectrum"].rarity-legendary {
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.12);
+}
+
+/* Spectrum — rarity hover energy (collection grid; toned vs legacy default) */
+.sci-card[data-card-border="spectrum"].rarity-uncommon:hover { box-shadow: 0 4px 14px rgba(34, 197, 94, 0.12); }
+.sci-card[data-card-border="spectrum"].rarity-rare:hover     { box-shadow: 0 4px 14px rgba(59, 130, 246, 0.12); }
+.sci-card[data-card-border="spectrum"].rarity-epic:hover     { box-shadow: 0 4px 16px rgba(168, 85, 247, 0.16); }
+.sci-card[data-card-border="spectrum"].rarity-legendary:hover { box-shadow: 0 4px 18px rgba(245, 158, 11, 0.22); }
 
 /* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
  * Applied when a card's ID appears in getLockedCardIds(player.projects).
@@ -4511,8 +4648,8 @@ body.app-mode-game #screen-game.screen.active {
   height: 100%;
 }
 
-.card-detail-frame[data-card-border="default"].rarity-legendary {
-  box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+.card-detail-frame[data-card-border="spectrum"].rarity-legendary {
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.16);
 }
 
 .card-detail-header {
