@@ -2967,14 +2967,14 @@ body.app-mode-game #screen-game.screen.active {
  *   1. Outer structural rim — dark edge, physical separation
  *   2. Main material band — primary color/texture (gradient)
  *   3. Mid-tone depth ring — material variation
- *   4. Inner separator — artwell lip between frame and content
+ *   4. Inner separator — recessed artwell lip (dark, material-matched; not a bright UI stroke)
  *   + Directional lighting (top-left highlight, bottom-right shade)
  */
 .sci-card,
 .card-detail-frame,
 .shop-cosmetic-preview--border {
-  --card-frame-band-base: clamp(2px, 7cqw, 5px);
-  --card-frame-band-premium: clamp(3px, 8cqw, 6px);
+  --card-frame-band-base: clamp(4px, 9cqw, 7px);
+  --card-frame-band-premium: clamp(5px, 10cqw, 8px);
   --card-frame-rim: 1px;
   --card-frame-separator: 1px;
   --card-frame-band-active: var(--card-frame-band-base);
@@ -3001,8 +3001,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(6, 9, 15, 0.94);
   --f-outer: rgba(42, 52, 68, 0.97);
   --f-mid: rgba(58, 70, 88, 0.9);
-  --f-inner-sep: rgba(10, 14, 22, 0.92);
-  --f-light-t: rgba(186, 196, 210, 0.14);
+  --f-inner-sep: rgba(4, 6, 10, 0.98);
+  --f-light-t: rgba(186, 196, 210, 0.09);
   --f-light-b: rgba(6, 10, 18, 0.38);
   --f-grad-a: rgba(203, 213, 225, 0.09);
   --f-grad-b: rgba(22, 30, 44, 0.14);
@@ -3023,9 +3023,9 @@ body.app-mode-game #screen-game.screen.active {
   --frame-band: var(--card-frame-band-base);
   --f-rim: rgba(12, 16, 24, 0.9);
   --f-outer: rgba(148, 163, 184, 0.82);
-  --f-mid: rgba(176, 190, 208, 0.72);
-  --f-inner-sep: rgba(18, 24, 36, 0.88);
-  --f-light-t: rgba(248, 250, 252, 0.2);
+  --f-mid: rgba(130, 142, 158, 0.68);
+  --f-inner-sep: rgba(28, 34, 44, 0.97);
+  --f-light-t: rgba(248, 250, 252, 0.08);
   --f-light-b: rgba(30, 41, 59, 0.32);
   --f-grad-a: rgba(255, 255, 255, 0.11);
   --f-grad-b: rgba(71, 85, 105, 0.1);
@@ -3047,8 +3047,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(6, 18, 14, 0.92);
   --f-outer: rgba(22, 98, 68, 0.86);
   --f-mid: rgba(38, 120, 86, 0.78);
-  --f-inner-sep: rgba(8, 22, 16, 0.9);
-  --f-light-t: rgba(134, 239, 172, 0.14);
+  --f-inner-sep: rgba(3, 12, 9, 0.97);
+  --f-light-t: rgba(134, 239, 172, 0.1);
   --f-light-b: rgba(6, 32, 22, 0.36);
   --f-grad-a: rgba(110, 231, 183, 0.08);
   --f-grad-b: rgba(6, 50, 36, 0.12);
@@ -3070,8 +3070,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(8, 14, 28, 0.93);
   --f-outer: rgba(29, 78, 140, 0.88);
   --f-mid: rgba(37, 99, 180, 0.8);
-  --f-inner-sep: rgba(10, 18, 34, 0.9);
-  --f-light-t: rgba(147, 197, 253, 0.16);
+  --f-inner-sep: rgba(4, 10, 22, 0.97);
+  --f-light-t: rgba(147, 197, 253, 0.11);
   --f-light-b: rgba(8, 22, 48, 0.4);
   --f-grad-a: rgba(96, 165, 250, 0.1);
   --f-grad-b: rgba(15, 37, 68, 0.14);
@@ -3093,8 +3093,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(14, 8, 26, 0.93);
   --f-outer: rgba(91, 33, 140, 0.86);
   --f-mid: rgba(109, 40, 180, 0.78);
-  --f-inner-sep: rgba(16, 10, 30, 0.9);
-  --f-light-t: rgba(196, 181, 253, 0.15);
+  --f-inner-sep: rgba(8, 4, 16, 0.97);
+  --f-light-t: rgba(196, 181, 253, 0.1);
   --f-light-b: rgba(28, 12, 48, 0.38);
   --f-grad-a: rgba(167, 139, 250, 0.09);
   --f-grad-b: rgba(46, 16, 72, 0.13);
@@ -3121,8 +3121,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(10, 12, 16, 0.92);
   --f-outer: rgba(75, 85, 99, 0.92);
   --f-mid: rgba(107, 114, 128, 0.82);
-  --f-inner-sep: rgba(12, 14, 18, 0.9);
-  --f-light-t: rgba(209, 213, 219, 0.14);
+  --f-inner-sep: rgba(8, 10, 14, 0.97);
+  --f-light-t: rgba(209, 213, 219, 0.09);
   --f-light-b: rgba(17, 24, 39, 0.34);
   --f-grad-a: rgba(156, 163, 175, 0.1);
   --f-grad-b: rgba(31, 41, 55, 0.12);
@@ -3142,8 +3142,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(4, 18, 10, 0.92);
   --f-outer: rgba(22, 140, 78, 0.9);
   --f-mid: rgba(34, 170, 98, 0.82);
-  --f-inner-sep: rgba(6, 20, 12, 0.9);
-  --f-light-t: rgba(134, 239, 172, 0.18);
+  --f-inner-sep: rgba(3, 14, 9, 0.97);
+  --f-light-t: rgba(134, 239, 172, 0.1);
   --f-light-b: rgba(4, 30, 18, 0.36);
   --f-grad-a: rgba(74, 222, 128, 0.11);
   --f-grad-b: rgba(5, 46, 28, 0.13);
@@ -3163,8 +3163,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(8, 16, 32, 0.92);
   --f-outer: rgba(37, 99, 180, 0.9);
   --f-mid: rgba(59, 130, 246, 0.82);
-  --f-inner-sep: rgba(10, 18, 36, 0.9);
-  --f-light-t: rgba(147, 197, 253, 0.18);
+  --f-inner-sep: rgba(4, 10, 24, 0.97);
+  --f-light-t: rgba(147, 197, 253, 0.11);
   --f-light-b: rgba(8, 24, 52, 0.38);
   --f-grad-a: rgba(96, 165, 250, 0.12);
   --f-grad-b: rgba(15, 37, 68, 0.14);
@@ -3184,8 +3184,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(18, 8, 32, 0.92);
   --f-outer: rgba(124, 58, 180, 0.9);
   --f-mid: rgba(168, 85, 247, 0.82);
-  --f-inner-sep: rgba(20, 10, 34, 0.9);
-  --f-light-t: rgba(216, 180, 254, 0.18);
+  --f-inner-sep: rgba(12, 6, 22, 0.97);
+  --f-light-t: rgba(216, 180, 254, 0.11);
   --f-light-b: rgba(36, 12, 56, 0.38);
   --f-grad-a: rgba(192, 132, 252, 0.12);
   --f-grad-b: rgba(59, 7, 100, 0.14);
@@ -3205,8 +3205,8 @@ body.app-mode-game #screen-game.screen.active {
   --f-rim: rgba(28, 16, 4, 0.92);
   --f-outer: rgba(180, 110, 20, 0.9);
   --f-mid: rgba(217, 140, 30, 0.84);
-  --f-inner-sep: rgba(24, 14, 4, 0.9);
-  --f-light-t: rgba(253, 224, 140, 0.2);
+  --f-inner-sep: rgba(16, 9, 3, 0.97);
+  --f-light-t: rgba(253, 224, 140, 0.12);
   --f-light-b: rgba(40, 22, 4, 0.4);
   --f-grad-a: rgba(251, 191, 36, 0.13);
   --f-grad-b: rgba(69, 26, 3, 0.15);
@@ -4346,7 +4346,7 @@ body.app-mode-game #screen-game.screen.active {
 .collection-rarity-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 172px));
-  gap: 0.625rem;
+  gap: 1.25rem;
   justify-content: center;
 }
 @media (min-width: 640px) {
@@ -4873,7 +4873,7 @@ body.app-mode-game #screen-game.screen.active {
 .pack-opening-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(9.5rem, 100%), 13.75rem));
-  gap: clamp(0.5rem, 2vw, 1rem);
+  gap: clamp(1.125rem, 2vw, 1.625rem);
   justify-content: center;
   justify-items: center;
   width: 100%;
