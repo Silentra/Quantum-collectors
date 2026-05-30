@@ -273,6 +273,97 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'spectrum',
   },
 
+  border_diamond_etched: {
+    id: 'border_diamond_etched',
+    name: 'Diamond Etched Metal',
+    description: 'Precision-machined steel with a restrained engraved diamond texture.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.RARE,
+    price: 340,
+    weight: 6,
+    enabled: true,
+    renderEffectId: 'diamond_etched',
+  },
+
+  border_brushed_aluminum: {
+    id: 'border_brushed_aluminum',
+    name: 'Brushed Aluminum',
+    description: 'Fine directional striations — laboratory-grade machined aluminum.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 250,
+    weight: 8,
+    enabled: true,
+    renderEffectId: 'brushed_aluminum',
+  },
+
+  border_leather_stitch: {
+    id: 'border_leather_stitch',
+    name: 'Matte Leather Stitching',
+    description: 'Dark field-journal leather with a subtle stitched outer edge.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 230,
+    weight: 8,
+    enabled: true,
+    renderEffectId: 'leather_stitch',
+  },
+
+  border_carbon_weave: {
+    id: 'border_carbon_weave',
+    name: 'Carbon Fiber Weave',
+    description: 'Low-contrast composite weave — precision engineering, not racing chrome.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.RARE,
+    price: 320,
+    weight: 6,
+    enabled: true,
+    renderEffectId: 'carbon_weave',
+  },
+
+  border_stone_slate: {
+    id: 'border_stone_slate',
+    name: 'Stone Slate Frame',
+    description: 'Dark slate stock with faint mineral variation — museum display plaque.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.UNCOMMON,
+    price: 210,
+    weight: 9,
+    enabled: true,
+    renderEffectId: 'stone_slate',
+  },
+
+  border_marble_inlay: {
+    id: 'border_marble_inlay',
+    name: 'Marble Inlay Frame',
+    description: 'Polished archival marble with sparse, restrained veining.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 390,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'marble_inlay',
+  },
+
+  border_storm: {
+    id: 'border_storm',
+    name: 'Storm Border',
+    description: 'Deep navy composite with embedded violet anomaly traces — contained, not conjured.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.BORDER,
+    rarity: ITEM_RARITIES.LEGENDARY,
+    price: 440,
+    weight: 3,
+    enabled: true,
+    renderEffectId: 'storm',
+  },
+
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {

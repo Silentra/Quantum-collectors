@@ -18,6 +18,13 @@ export const COSMETIC_BORDER_EFFECT_IDS = [
   'emerald',
   'violet',
   'spectrum',
+  'diamond_etched',
+  'brushed_aluminum',
+  'leather_stitch',
+  'carbon_weave',
+  'stone_slate',
+  'marble_inlay',
+  'storm',
 ];
 
 /** All ids recognized by the border renderer. */
