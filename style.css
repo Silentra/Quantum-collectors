@@ -2829,8 +2829,7 @@ body.app-mode-game #screen-game.screen.active {
   border-radius: 0.6rem;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
-  /* Phase 3: shell allows duplicate-tier aura / future glow bleed; inner clips content */
-  --card-bleed: 0px;
+  /* Outward frame bleed — tokens finalized in border frame block below */
   --card-cosmetic-gap: 0px;
   /* Phase A: geometry tokens (typography scaling deferred to Phase B) */
   --card-inner-inset: 3px;
@@ -2846,10 +2845,10 @@ body.app-mode-game #screen-game.screen.active {
 }
 .sci-card:hover { transform: translateY(-3px); }
 
-/* Phase 3 — cosmetic mount (equipped border paints on ::before; v1 CSS borders) */
+/* Phase 3 — cosmetic mount; paint host bleeds outward so inset frame is fully visible */
 .card-cosmetic-effects {
   position: absolute;
-  inset: 0;
+  inset: calc(-1 * var(--card-bleed, 0px));
   z-index: 1;
   pointer-events: none;
   border-radius: inherit;
@@ -2978,6 +2977,20 @@ body.app-mode-game #screen-game.screen.active {
   --card-frame-band-premium: clamp(3px, 8cqw, 6px);
   --card-frame-rim: 1px;
   --card-frame-separator: 1px;
+  --card-frame-band-active: var(--card-frame-band-base);
+  --card-bleed: max(0px, calc(var(--card-frame-band-active) + var(--card-frame-rim) - var(--card-inner-inset)));
+}
+
+/* Premium spectrum uses wider band — bleed recalculates on shells below */
+.sci-card[data-card-border="spectrum"],
+.card-detail-frame[data-card-border="spectrum"] {
+  --card-frame-band-active: var(--card-frame-band-premium);
+}
+
+/* Shop border swatches have no content well — no outward bleed needed */
+.shop-cosmetic-preview--border {
+  --card-inner-inset: 0px;
+  --card-bleed: 0px;
 }
 
 /* ── Graphite (default baseline) — calm matte cardstock ── */
@@ -4420,8 +4433,8 @@ body.app-mode-game #screen-game.screen.active {
 /* ===================== AURA SYSTEM ===================== */
 /*
  * Stacking (border v1): shell bg + structural edge → aura ::before z0 →
- * .card-cosmetic-effects z1 → border ::before → tier-3 ::after z1 →
- * .card-detail-inner z2 → .sci-card-aura-dots z5 → badges z10.
+ * .card-cosmetic-effects z1 (outward bleed via --card-bleed) → border ::before →
+ * tier-3 ::after z1 → .card-detail-inner z2 → .sci-card-aura-dots z5 → badges z10.
  * Shell overflow:visible — glow not clipped; inner overflow:hidden clips art/text.
  */
 
@@ -4630,7 +4643,6 @@ body.app-mode-game #screen-game.screen.active {
   aspect-ratio: 5/7;
   display: flex;
   flex-direction: column;
-  --card-bleed: 0px;
   --card-cosmetic-gap: 0px;
   --card-inner-inset: 4px;
   --card-row-header: 12fr;
@@ -4916,8 +4928,10 @@ body.app-mode-game #screen-game.screen.active {
 /* Front = the actual card content (hidden initially, revealed on flip) */
 .pack-card-front {
   transform: rotateY(180deg);
+  /* Allow cosmetic frame outward bleed (matches collection overflow contract) */
+  overflow: visible;
 }
-/* Pack face clips flip bounds; sci-card matches collection overflow contract */
+/* Pack face — sci-card uses same outward bleed / overflow contract as collection */
 .pack-card-front .sci-card {
   width: 100%;
   height: 100%;
