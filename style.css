@@ -2967,7 +2967,7 @@ body.app-mode-game #screen-game.screen.active {
  *   1. Outer structural rim — dark edge, physical separation
  *   2. Main material band — primary color/texture (gradient)
  *   3. Mid-tone depth ring — material variation
- *   4. Inner separator — recessed artwell lip (dark, material-matched; not a bright UI stroke)
+ *   4. Inner frame edge — extends to card face (bleed + inset); no outer remnant or gutter
  *   + Directional lighting (top-left highlight, bottom-right shade)
  */
 .sci-card,
@@ -2981,16 +2981,23 @@ body.app-mode-game #screen-game.screen.active {
   --card-bleed: max(0px, calc(var(--card-frame-band-active) + var(--card-frame-rim) - var(--card-inner-inset)));
 }
 
+/* Inner edge of frame paint aligns with card-detail-inner outer edge (host-relative) */
+.sci-card,
+.card-detail-frame {
+  --card-frame-inner-edge: calc(var(--card-bleed) + var(--card-inner-inset));
+}
+
 /* Premium spectrum uses wider band — bleed recalculates on shells below */
 .sci-card[data-card-border="spectrum"],
 .card-detail-frame[data-card-border="spectrum"] {
   --card-frame-band-active: var(--card-frame-band-premium);
 }
 
-/* Shop border swatches have no content well — no outward bleed needed */
+/* Shop border swatches have no content well — frame fills to band depth only */
 .shop-cosmetic-preview--border {
   --card-inner-inset: 0px;
   --card-bleed: 0px;
+  --card-frame-inner-edge: var(--card-frame-band-active);
 }
 
 /* ── Graphite (default baseline) — calm matte cardstock ── */
@@ -3009,7 +3016,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.58) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3032,7 +3039,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3055,7 +3062,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.56) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3078,7 +3085,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.56) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3101,7 +3108,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.56) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3129,7 +3136,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3150,7 +3157,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3171,7 +3178,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3192,7 +3199,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
@@ -3213,7 +3220,7 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
-    inset 0 0 0 calc(var(--frame-band) - var(--card-frame-separator)) var(--f-inner-sep),
+    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 calc(var(--frame-band) * 0.55) var(--f-mid),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
