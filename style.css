@@ -3055,19 +3055,19 @@ body.app-mode-game #screen-game.screen.active {
   background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
-/* ── Emerald — premium green cardstock (Phase 1: stronger hue identity) ── */
+/* ── Emerald — deep premium jewel-tone green cardstock ── */
 .sci-card[data-card-border="emerald"] .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="emerald"] .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="emerald"] .card-cosmetic-effects::before {
   --frame-band: var(--card-frame-band-base);
-  --f-rim: rgba(4, 22, 14, 0.94);
-  --f-outer: rgba(14, 128, 82, 0.92);
-  --f-mid: rgba(38, 152, 104, 0.86);
+  --f-rim: rgba(3, 18, 12, 0.94);
+  --f-outer: rgba(8, 92, 62, 0.93);
+  --f-mid: rgba(18, 108, 74, 0.88);
   --f-inner-sep: rgba(3, 14, 10, 0.97);
-  --f-light-t: rgba(120, 210, 160, 0.09);
-  --f-light-b: rgba(4, 28, 18, 0.38);
-  --f-grad-a: rgba(80, 190, 140, 0.1);
-  --f-grad-b: rgba(6, 44, 30, 0.14);
+  --f-light-t: rgba(88, 168, 128, 0.08);
+  --f-light-b: rgba(3, 24, 16, 0.4);
+  --f-grad-a: rgba(42, 128, 88, 0.09);
+  --f-grad-b: rgba(4, 36, 24, 0.15);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
@@ -3079,19 +3079,19 @@ body.app-mode-game #screen-game.screen.active {
   background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 42%, var(--f-grad-b) 100%);
 }
 
-/* ── Sapphire — clean blue cardstock (Phase 1: brighter mid-blue vs Storm navy) ── */
+/* ── Sapphire — deep premium sapphire blue cardstock ── */
 .sci-card[data-card-border="sapphire"] .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="sapphire"] .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="sapphire"] .card-cosmetic-effects::before {
   --frame-band: var(--card-frame-band-base);
-  --f-rim: rgba(6, 16, 36, 0.94);
-  --f-outer: rgba(28, 98, 188, 0.92);
-  --f-mid: rgba(52, 122, 210, 0.86);
+  --f-rim: rgba(4, 12, 28, 0.94);
+  --f-outer: rgba(14, 68, 132, 0.93);
+  --f-mid: rgba(24, 88, 158, 0.88);
   --f-inner-sep: rgba(4, 12, 28, 0.97);
-  --f-light-t: rgba(130, 185, 245, 0.09);
-  --f-light-b: rgba(6, 20, 44, 0.38);
-  --f-grad-a: rgba(90, 155, 235, 0.11);
-  --f-grad-b: rgba(12, 40, 78, 0.14);
+  --f-light-t: rgba(98, 155, 215, 0.08);
+  --f-light-b: rgba(4, 16, 36, 0.4);
+  --f-grad-a: rgba(48, 110, 185, 0.1);
+  --f-grad-b: rgba(8, 32, 62, 0.15);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
@@ -3103,19 +3103,19 @@ body.app-mode-game #screen-game.screen.active {
   background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
 }
 
-/* ── Violet — rich purple cardstock (Phase 1: stronger violet identity) ── */
+/* ── Violet — deep royal violet cardstock ── */
 .sci-card[data-card-border="violet"] .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="violet"] .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="violet"] .card-cosmetic-effects::before {
   --frame-band: var(--card-frame-band-base);
-  --f-rim: rgba(16, 6, 32, 0.94);
-  --f-outer: rgba(108, 48, 168, 0.91);
-  --f-mid: rgba(132, 72, 192, 0.85);
+  --f-rim: rgba(12, 4, 26, 0.94);
+  --f-outer: rgba(82, 36, 138, 0.92);
+  --f-mid: rgba(98, 48, 158, 0.87);
   --f-inner-sep: rgba(10, 4, 20, 0.97);
-  --f-light-t: rgba(190, 170, 235, 0.09);
-  --f-light-b: rgba(24, 10, 44, 0.38);
-  --f-grad-a: rgba(160, 120, 220, 0.1);
-  --f-grad-b: rgba(40, 14, 72, 0.14);
+  --f-light-t: rgba(168, 148, 218, 0.08);
+  --f-light-b: rgba(18, 8, 38, 0.4);
+  --f-grad-a: rgba(118, 88, 188, 0.09);
+  --f-grad-b: rgba(32, 12, 58, 0.15);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 3px var(--f-light-b),
@@ -3159,14 +3159,14 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before {
-  --f-rim: rgba(4, 18, 10, 0.92);
-  --f-outer: rgba(22, 140, 78, 0.9);
-  --f-mid: rgba(34, 170, 98, 0.82);
+  --f-rim: rgba(3, 14, 8, 0.92);
+  --f-outer: rgba(14, 108, 62, 0.91);
+  --f-mid: rgba(22, 128, 78, 0.83);
   --f-inner-sep: rgba(3, 14, 9, 0.97);
-  --f-light-t: rgba(134, 239, 172, 0.1);
-  --f-light-b: rgba(4, 30, 18, 0.36);
-  --f-grad-a: rgba(74, 222, 128, 0.11);
-  --f-grad-b: rgba(5, 46, 28, 0.13);
+  --f-light-t: rgba(110, 210, 150, 0.09);
+  --f-light-b: rgba(3, 24, 14, 0.38);
+  --f-grad-a: rgba(52, 175, 105, 0.1);
+  --f-grad-b: rgba(4, 38, 22, 0.14);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
@@ -3181,14 +3181,14 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before {
-  --f-rim: rgba(8, 16, 32, 0.92);
-  --f-outer: rgba(37, 99, 180, 0.9);
-  --f-mid: rgba(59, 130, 246, 0.82);
+  --f-rim: rgba(6, 12, 26, 0.92);
+  --f-outer: rgba(24, 72, 142, 0.91);
+  --f-mid: rgba(38, 98, 178, 0.83);
   --f-inner-sep: rgba(4, 10, 24, 0.97);
-  --f-light-t: rgba(147, 197, 253, 0.11);
-  --f-light-b: rgba(8, 24, 52, 0.38);
-  --f-grad-a: rgba(96, 165, 250, 0.12);
-  --f-grad-b: rgba(15, 37, 68, 0.14);
+  --f-light-t: rgba(118, 175, 230, 0.1);
+  --f-light-b: rgba(6, 18, 42, 0.4);
+  --f-grad-a: rgba(68, 135, 215, 0.11);
+  --f-grad-b: rgba(10, 28, 54, 0.15);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
@@ -3203,14 +3203,14 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before {
-  --f-rim: rgba(18, 8, 32, 0.92);
-  --f-outer: rgba(124, 58, 180, 0.9);
-  --f-mid: rgba(168, 85, 247, 0.82);
+  --f-rim: rgba(14, 6, 28, 0.92);
+  --f-outer: rgba(98, 44, 152, 0.91);
+  --f-mid: rgba(128, 62, 198, 0.83);
   --f-inner-sep: rgba(12, 6, 22, 0.97);
-  --f-light-t: rgba(216, 180, 254, 0.11);
-  --f-light-b: rgba(36, 12, 56, 0.38);
-  --f-grad-a: rgba(192, 132, 252, 0.12);
-  --f-grad-b: rgba(59, 7, 100, 0.14);
+  --f-light-t: rgba(188, 158, 235, 0.1);
+  --f-light-b: rgba(28, 10, 48, 0.4);
+  --f-grad-a: rgba(158, 108, 225, 0.11);
+  --f-grad-b: rgba(48, 8, 82, 0.15);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
@@ -3225,14 +3225,14 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before,
 .card-detail-frame[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before,
 .shop-cosmetic-preview--border[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before {
-  --f-rim: rgba(28, 16, 4, 0.92);
-  --f-outer: rgba(180, 110, 20, 0.9);
-  --f-mid: rgba(217, 140, 30, 0.84);
-  --f-inner-sep: rgba(16, 9, 3, 0.97);
-  --f-light-t: rgba(253, 224, 140, 0.12);
-  --f-light-b: rgba(40, 22, 4, 0.4);
-  --f-grad-a: rgba(251, 191, 36, 0.13);
-  --f-grad-b: rgba(69, 26, 3, 0.15);
+  --f-rim: rgba(26, 14, 3, 0.92);
+  --f-outer: rgba(188, 118, 22, 0.91);
+  --f-mid: rgba(218, 148, 32, 0.85);
+  --f-inner-sep: rgba(14, 8, 2, 0.97);
+  --f-light-t: rgba(255, 215, 130, 0.12);
+  --f-light-b: rgba(36, 20, 3, 0.42);
+  --f-grad-a: rgba(248, 188, 52, 0.13);
+  --f-grad-b: rgba(62, 28, 4, 0.16);
   box-shadow:
     inset 0 1px 0 var(--f-light-t),
     inset 0 -2px 4px var(--f-light-b),
@@ -3280,10 +3280,7 @@ body.app-mode-game #screen-game.screen.active {
 .shop-cosmetic-preview--border[data-card-border="stone_slate"] .card-cosmetic-effects::after,
 .sci-card[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
 .card-detail-frame[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
-.shop-cosmetic-preview--border[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
-.sci-card[data-card-border="storm"] .card-cosmetic-effects::after,
-.card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::after,
-.shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::after {
+.shop-cosmetic-preview--border[data-card-border="marble_inlay"] .card-cosmetic-effects::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -3540,209 +3537,6 @@ body.app-mode-game #screen-game.screen.active {
     linear-gradient(26deg, transparent 0 27%, rgba(68, 64, 58, 0.36) 28.2% 29%, transparent 30% 58%, rgba(70, 66, 60, 0.32) 62.4% 63.2%, transparent 64% 100%) 100% 31% / var(--f-tex-band) 12% no-repeat,
     linear-gradient(41deg, transparent 0 32%, rgba(74, 70, 64, 0.38) 33.2% 34%, transparent 35% 100%) 100% 55% / var(--f-tex-band) 9% no-repeat,
     linear-gradient(31deg, transparent 0 29%, rgba(66, 62, 56, 0.36) 30.2% 31%, transparent 32% 58%, rgba(72, 68, 62, 0.28) 64.4% 65.2%, transparent 66% 100%) 100% 82% / var(--f-tex-band) 11% no-repeat;
-}
-
-/* ── Storm — deep navy stock + embedded violet streaks (Phase 1: darker than Sapphire) ── */
-.sci-card[data-card-border="storm"] .card-cosmetic-effects::before,
-.card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::before,
-.shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::before {
-  --frame-band: var(--card-frame-band-base);
-  --f-rim: rgba(2, 6, 16, 0.96);
-  --f-outer: rgba(10, 20, 52, 0.95);
-  --f-mid: rgba(16, 28, 68, 0.9);
-  --f-inner-sep: rgba(4, 8, 20, 0.98);
-  --f-light-t: rgba(70, 90, 150, 0.07);
-  --f-light-b: rgba(2, 6, 16, 0.44);
-  --f-grad-a: rgba(40, 55, 110, 0.09);
-  --f-grad-b: rgba(4, 10, 28, 0.17);
-  box-shadow:
-    inset 0 1px 0 var(--f-light-t),
-    inset 0 -2px 3px var(--f-light-b),
-    inset 0 0 0 var(--card-frame-outer-accent) var(--f-outer),
-    inset 0 0 0 var(--card-frame-body-edge) var(--f-mid),
-    inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
-    inset 0 0 0 var(--frame-band) var(--f-outer),
-    inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
-  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
-}
-
-.sci-card[data-card-border="storm"] .card-cosmetic-effects::after,
-.card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::after,
-.shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::after {
-  /*
-   * Corner-origin lightning — four authored fracture systems (TL/TR/BL/BR).
-   * Border-local paths; full body-band mask for visibility. Layers sized to
-   * --f-tex-reach (band + intrusion) so bolt art extends toward card face.
-   */
-  --storm-tex-intrusion: clamp(4px, 2.8cqw, 6px);
-  --f-tex-band: var(--card-frame-body-edge);
-  --f-tex-reach: calc(var(--card-frame-body-edge) + var(--storm-tex-intrusion));
-  padding: var(--card-frame-body-edge);
-  background:
-    /* ── top-left: main bolt along top + branch down left + fork ── */
-    linear-gradient(
-      90deg,
-      rgba(185, 135, 255, 0.82) 0%,
-      rgba(185, 135, 255, 0.82) 0.4%,
-      transparent 0.4%,
-      transparent 3%,
-      rgba(170, 120, 245, 0.72) 3%,
-      rgba(170, 120, 245, 0.72) 3.55%,
-      transparent 3.55%,
-      transparent 7.5%,
-      rgba(195, 145, 255, 0.78) 7.5%,
-      rgba(195, 145, 255, 0.78) 8.05%,
-      transparent 8.05%,
-      transparent 12%,
-      rgba(165, 115, 240, 0.68) 12%,
-      rgba(165, 115, 240, 0.68) 12.5%,
-      transparent 12.5%,
-      transparent 18%,
-      rgba(180, 130, 250, 0.75) 18%,
-      rgba(180, 130, 250, 0.75) 18.65%,
-      transparent 18.65%,
-      transparent 24%,
-      rgba(160, 110, 235, 0.65) 24%,
-      rgba(160, 110, 235, 0.65) 24.45%,
-      transparent 24.45%,
-      transparent 100%
-    ) 0 0 / 32% var(--f-tex-reach) no-repeat,
-    linear-gradient(
-      180deg,
-      rgba(175, 125, 248, 0.7) 0%,
-      rgba(175, 125, 248, 0.7) 0.45%,
-      transparent 0.45%,
-      transparent 5%,
-      rgba(190, 140, 252, 0.76) 5%,
-      rgba(190, 140, 252, 0.76) 5.5%,
-      transparent 5.5%,
-      transparent 11%,
-      rgba(155, 105, 230, 0.62) 11%,
-      rgba(155, 105, 230, 0.62) 11.4%,
-      transparent 11.4%,
-      transparent 100%
-    ) 0 0 / var(--f-tex-reach) 20% no-repeat,
-    linear-gradient(
-      128deg,
-      transparent 0 38%,
-      rgba(180, 130, 250, 0.55) 39% 41%,
-      transparent 42% 100%
-    ) 0 0 / 14% var(--f-tex-reach) no-repeat,
-    /* ── top-right: main bolt along top (leftward) + branch down right + fork ── */
-    linear-gradient(
-      270deg,
-      rgba(188, 138, 252, 0.8) 0%,
-      rgba(188, 138, 252, 0.8) 0.45%,
-      transparent 0.45%,
-      transparent 4%,
-      rgba(172, 122, 246, 0.7) 4%,
-      rgba(172, 122, 246, 0.7) 4.55%,
-      transparent 4.55%,
-      transparent 9%,
-      rgba(198, 148, 255, 0.76) 9%,
-      rgba(198, 148, 255, 0.76) 9.5%,
-      transparent 9.5%,
-      transparent 15%,
-      rgba(162, 112, 238, 0.66) 15%,
-      rgba(162, 112, 238, 0.66) 15.45%,
-      transparent 15.45%,
-      transparent 22%,
-      rgba(178, 128, 248, 0.72) 22%,
-      rgba(178, 128, 248, 0.72) 22.6%,
-      transparent 22.6%,
-      transparent 100%
-    ) 100% 0 / 30% var(--f-tex-reach) no-repeat,
-    linear-gradient(
-      180deg,
-      rgba(182, 132, 250, 0.68) 0%,
-      rgba(182, 132, 250, 0.68) 0.5%,
-      transparent 0.5%,
-      transparent 6%,
-      rgba(168, 118, 242, 0.74) 6%,
-      rgba(168, 118, 242, 0.74) 6.45%,
-      transparent 6.45%,
-      transparent 100%
-    ) 100% 0 / var(--f-tex-reach) 18% no-repeat,
-    linear-gradient(
-      52deg,
-      transparent 0 36%,
-      rgba(175, 125, 248, 0.52) 37.5% 39.5%,
-      transparent 41% 100%
-    ) 100% 0 / 12% var(--f-tex-reach) no-repeat,
-    /* ── bottom-left: bolt along bottom + branch up left + fork ── */
-    linear-gradient(
-      90deg,
-      rgba(178, 128, 248, 0.78) 0%,
-      rgba(178, 128, 248, 0.78) 0.45%,
-      transparent 0.45%,
-      transparent 5%,
-      rgba(192, 142, 254, 0.74) 5%,
-      rgba(192, 142, 254, 0.74) 5.55%,
-      transparent 5.55%,
-      transparent 11%,
-      rgba(158, 108, 232, 0.64) 11%,
-      rgba(158, 108, 232, 0.64) 11.45%,
-      transparent 11.45%,
-      transparent 17%,
-      rgba(170, 120, 244, 0.7) 17%,
-      rgba(170, 120, 244, 0.7) 17.5%,
-      transparent 17.5%,
-      transparent 100%
-    ) 0 100% / 28% var(--f-tex-reach) no-repeat,
-    linear-gradient(
-      0deg,
-      rgba(184, 134, 252, 0.72) 0%,
-      rgba(184, 134, 252, 0.72) 0.5%,
-      transparent 0.5%,
-      transparent 7%,
-      rgba(166, 116, 240, 0.66) 7%,
-      rgba(166, 116, 240, 0.66) 7.4%,
-      transparent 7.4%,
-      transparent 100%
-    ) 0 100% / var(--f-tex-reach) 16% no-repeat,
-    linear-gradient(
-      38deg,
-      transparent 0 34%,
-      rgba(172, 122, 246, 0.5) 35.5% 37.5%,
-      transparent 39% 100%
-    ) 0 100% / 13% var(--f-tex-reach) no-repeat,
-    /* ── bottom-right: bolt along bottom (leftward) + branch up right + fork ── */
-    linear-gradient(
-      270deg,
-      rgba(186, 136, 254, 0.76) 0%,
-      rgba(186, 136, 254, 0.76) 0.5%,
-      transparent 0.5%,
-      transparent 6%,
-      rgba(174, 124, 248, 0.7) 6%,
-      rgba(174, 124, 248, 0.7) 6.5%,
-      transparent 6.5%,
-      transparent 13%,
-      rgba(196, 146, 255, 0.74) 13%,
-      rgba(196, 146, 255, 0.74) 13.45%,
-      transparent 13.45%,
-      transparent 20%,
-      rgba(160, 110, 236, 0.64) 20%,
-      rgba(160, 110, 236, 0.64) 20.55%,
-      transparent 20.55%,
-      transparent 100%
-    ) 100% 100% / 26% var(--f-tex-reach) no-repeat,
-    linear-gradient(
-      0deg,
-      rgba(180, 130, 250, 0.7) 0%,
-      rgba(180, 130, 250, 0.7) 0.45%,
-      transparent 0.45%,
-      transparent 8%,
-      rgba(164, 114, 238, 0.62) 8%,
-      rgba(164, 114, 238, 0.62) 8.45%,
-      transparent 8.45%,
-      transparent 100%
-    ) 100% 100% / var(--f-tex-reach) 15% no-repeat,
-    linear-gradient(
-      142deg,
-      transparent 0 32%,
-      rgba(176, 126, 246, 0.48) 33.5% 35.5%,
-      transparent 37% 100%
-    ) 100% 100% / 11% var(--f-tex-reach) no-repeat;
 }
 
 /* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
