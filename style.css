@@ -3511,60 +3511,103 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
 .shop-cosmetic-preview--border[data-card-border="marble_inlay"] .card-cosmetic-effects::after {
   /*
-   * Non-repeating vein network — irregular thickness, branching, dead ends.
-   * Replaces parallel repeating diagonals that read as decorative waves.
+   * Border-local marble — veins authored per edge strip, not card-spanning diagonals.
+   * Each layer is sized/positioned to the material body band only (top/bottom/left/right).
    */
+  --f-tex-band: var(--card-frame-body-edge);
   background:
+    /* top — horizontal veins + depth layering within band */
     linear-gradient(
-      138deg,
-      transparent 31%,
-      rgba(78, 74, 68, 0.1) 31.6%,
-      rgba(94, 88, 82, 0.22) 32.2%,
-      rgba(86, 82, 76, 0.16) 33.4%,
-      transparent 34.2%,
-      transparent 52%,
-      rgba(82, 78, 72, 0.12) 52.8%,
-      rgba(96, 90, 84, 0.2) 53.4%,
-      transparent 54.6%
-    ),
+      90deg,
+      transparent 0 5%,
+      rgba(94, 88, 82, 0.22) 5% 6.4%,
+      rgba(86, 82, 76, 0.14) 6.4% 7%,
+      transparent 7% 17%,
+      rgba(82, 78, 72, 0.18) 17% 18.2%,
+      transparent 18.2% 31%,
+      rgba(92, 88, 82, 0.2) 31% 32.5%,
+      transparent 32.5% 47%,
+      rgba(76, 72, 68, 0.12) 47% 47.8%,
+      transparent 47.8% 58%,
+      rgba(90, 86, 80, 0.16) 58% 59.4%,
+      transparent 59.4% 72%,
+      rgba(88, 84, 78, 0.14) 72% 73%,
+      transparent 73% 86%,
+      rgba(80, 76, 70, 0.11) 86% 86.8%,
+      transparent 86.8% 100%
+    ) top / 100% var(--f-tex-band) no-repeat,
     linear-gradient(
-      62deg,
-      transparent 44%,
-      rgba(88, 84, 78, 0.14) 44.7%,
-      rgba(98, 92, 86, 0.21) 45.3%,
-      transparent 46.1%,
-      transparent 58%,
-      rgba(72, 68, 64, 0.11) 58.5%,
-      rgba(90, 86, 80, 0.17) 59%,
-      transparent 59.6%
-    ),
+      180deg,
+      rgba(88, 84, 78, 0.1) 0,
+      transparent 42%,
+      rgba(74, 70, 66, 0.08) 68%,
+      transparent 100%
+    ) top / 100% var(--f-tex-band) no-repeat,
+    /* bottom — offset vein rhythm */
     linear-gradient(
-      108deg,
-      transparent 67%,
-      rgba(70, 66, 62, 0.09) 67.5%,
-      rgba(84, 80, 74, 0.15) 68%,
-      transparent 68.5%
-    ),
+      90deg,
+      transparent 0 11%,
+      rgba(86, 82, 76, 0.16) 11% 12%,
+      transparent 12% 24%,
+      rgba(94, 88, 82, 0.2) 24% 25.6%,
+      rgba(82, 78, 72, 0.12) 25.6% 26.2%,
+      transparent 26.2% 39%,
+      rgba(78, 74, 68, 0.14) 39% 39.8%,
+      transparent 39.8% 53%,
+      rgba(92, 88, 82, 0.18) 53% 54.4%,
+      transparent 54.4% 67%,
+      rgba(84, 80, 74, 0.13) 67% 68%,
+      transparent 68% 81%,
+      rgba(90, 86, 80, 0.15) 81% 82.2%,
+      transparent 82.2% 100%
+    ) bottom / 100% var(--f-tex-band) no-repeat,
+    /* left — vertical veins along border height */
     linear-gradient(
-      48deg,
-      transparent 18%,
-      rgba(80, 76, 70, 0.08) 18.4%,
-      rgba(92, 88, 82, 0.14) 18.9%,
-      transparent 19.4%,
-      transparent 72%,
-      rgba(76, 72, 68, 0.1) 72.6%,
-      transparent 73.2%
-    ),
+      180deg,
+      transparent 0 8%,
+      rgba(92, 88, 82, 0.2) 8% 9.4%,
+      transparent 9.4% 21%,
+      rgba(80, 76, 70, 0.14) 21% 21.8%,
+      transparent 21.8% 34%,
+      rgba(88, 84, 78, 0.17) 34% 35.6%,
+      transparent 35.6% 48%,
+      rgba(76, 72, 68, 0.11) 48% 48.7%,
+      transparent 48.7% 61%,
+      rgba(94, 88, 82, 0.19) 61% 62.5%,
+      transparent 62.5% 74%,
+      rgba(82, 78, 72, 0.13) 74% 74.9%,
+      transparent 74.9% 87%,
+      rgba(86, 82, 76, 0.15) 87% 88.2%,
+      transparent 88.2% 100%
+    ) left / var(--f-tex-band) 100% no-repeat,
     linear-gradient(
-      156deg,
-      transparent 78%,
-      rgba(86, 82, 76, 0.13) 78.6%,
-      rgba(100, 94, 88, 0.19) 79.2%,
-      transparent 80%
-    ),
-    radial-gradient(ellipse 38% 28% at 24% 22%, rgba(100, 96, 90, 0.1) 0%, transparent 68%),
-    radial-gradient(ellipse 32% 24% at 71% 38%, rgba(88, 84, 78, 0.08) 0%, transparent 62%),
-    radial-gradient(ellipse 22% 18% at 58% 78%, rgba(76, 72, 68, 0.07) 0%, transparent 58%);
+      90deg,
+      rgba(84, 80, 74, 0.09) 0,
+      transparent 55%,
+      rgba(72, 68, 64, 0.07) 100%
+    ) left / var(--f-tex-band) 100% no-repeat,
+    /* right — distinct vertical fracture set */
+    linear-gradient(
+      180deg,
+      transparent 0 14%,
+      rgba(88, 84, 78, 0.15) 14% 15%,
+      transparent 15% 27%,
+      rgba(94, 88, 82, 0.21) 27% 28.8%,
+      transparent 28.8% 41%,
+      rgba(78, 74, 68, 0.12) 41% 41.7%,
+      transparent 41.7% 55%,
+      rgba(90, 86, 80, 0.17) 55% 56.4%,
+      transparent 56.4% 68%,
+      rgba(82, 78, 72, 0.14) 68% 69%,
+      transparent 69% 82%,
+      rgba(86, 82, 76, 0.16) 82% 83.2%,
+      transparent 83.2% 100%
+    ) right / var(--f-tex-band) 100% no-repeat,
+    /* corner inclusions / branch nodes */
+    radial-gradient(circle at 35% 65%, rgba(96, 90, 84, 0.18) 0%, transparent 58%) top left / calc(var(--f-tex-band) * 2.4) calc(var(--f-tex-band) * 2.4) no-repeat,
+    radial-gradient(circle at 65% 35%, rgba(84, 80, 74, 0.14) 0%, transparent 55%) bottom right / calc(var(--f-tex-band) * 2.2) calc(var(--f-tex-band) * 2.2) no-repeat,
+    radial-gradient(circle at 60% 40%, rgba(88, 84, 78, 0.12) 0%, transparent 52%) top right / calc(var(--f-tex-band) * 2) calc(var(--f-tex-band) * 2) no-repeat,
+    radial-gradient(circle at 40% 60%, rgba(80, 76, 70, 0.11) 0%, transparent 50%) bottom left / calc(var(--f-tex-band) * 2) calc(var(--f-tex-band) * 2) no-repeat;
 }
 
 /* ── Storm — deep navy stock + embedded violet streaks (Phase 1: darker than Sapphire) ── */
@@ -3595,60 +3638,104 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::after,
 .shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::after {
   /*
-   * Non-repeating lightning scars — distinct paths, branches, abrupt ends.
-   * Replaces repeating diagonal stripes that tiled across the full card face.
+   * Border-local lightning — jagged scars per edge strip, not card-spanning bolts.
+   * Each scar path is confined to the visible material band on one side.
    */
+  --f-tex-band: var(--card-frame-body-edge);
   background:
+    /* top — primary horizontal fork with depth jog */
     linear-gradient(
-      124deg,
-      transparent 8%,
-      rgba(98, 68, 158, 0.14) 8.6%,
-      rgba(118, 82, 178, 0.26) 9.2%,
-      rgba(92, 64, 148, 0.18) 10%,
-      transparent 10.8%,
-      transparent 38%,
-      rgba(88, 60, 142, 0.12) 38.6%,
-      rgba(108, 74, 168, 0.22) 39.2%,
-      transparent 40%
-    ),
+      90deg,
+      transparent 0 14%,
+      rgba(118, 82, 178, 0.28) 14% 14.5%,
+      transparent 14.5% 14.7%,
+      rgba(108, 74, 168, 0.24) 14.7% 15%,
+      transparent 15% 15.2%,
+      rgba(98, 68, 158, 0.26) 15.2% 15.7%,
+      transparent 15.7% 28%,
+      rgba(112, 78, 172, 0.22) 28% 28.6%,
+      transparent 28.6% 28.8%,
+      rgba(92, 64, 148, 0.2) 28.8% 29.2%,
+      transparent 29.2% 52%,
+      rgba(106, 72, 164, 0.24) 52% 52.8%,
+      transparent 52.8% 53%,
+      rgba(88, 60, 142, 0.18) 53% 53.5%,
+      transparent 53.5% 100%
+    ) top / 100% var(--f-tex-band) no-repeat,
     linear-gradient(
-      156deg,
-      transparent 62%,
-      rgba(82, 56, 132, 0.11) 62.6%,
-      rgba(102, 70, 160, 0.2) 63.2%,
-      transparent 64%
-    ),
+      180deg,
+      transparent 0 35%,
+      rgba(108, 74, 168, 0.2) 35% 72%,
+      transparent 72% 100%
+    ) 15% 0 / 22% var(--f-tex-band) no-repeat,
     linear-gradient(
-      98deg,
-      transparent 26%,
-      rgba(94, 66, 152, 0.1) 26.5%,
-      rgba(112, 78, 172, 0.18) 27%,
-      transparent 27.5%
-    ),
+      180deg,
+      transparent 0 45%,
+      rgba(96, 66, 152, 0.16) 45% 80%,
+      transparent 80% 100%
+    ) 53% 0 / 18% var(--f-tex-band) no-repeat,
+    /* bottom — shorter terminated scar */
     linear-gradient(
-      142deg,
-      transparent 74%,
-      rgba(78, 52, 128, 0.09) 74.4%,
-      rgba(96, 66, 152, 0.16) 74.9%,
-      transparent 75.4%,
-      transparent 84%,
-      rgba(86, 58, 138, 0.11) 84.5%,
-      transparent 85%
-    ),
+      90deg,
+      transparent 0 38%,
+      rgba(102, 70, 160, 0.22) 38% 38.7%,
+      transparent 38.7% 39%,
+      rgba(88, 60, 142, 0.18) 39% 39.5%,
+      transparent 39.5% 62%,
+      rgba(112, 78, 172, 0.2) 62% 62.9%,
+      transparent 62.9% 100%
+    ) bottom / 100% var(--f-tex-band) no-repeat,
     linear-gradient(
-      68deg,
-      transparent 48%,
-      rgba(90, 62, 148, 0.08) 48.4%,
-      rgba(106, 72, 164, 0.15) 48.9%,
-      transparent 49.4%
-    ),
+      0deg,
+      transparent 0 40%,
+      rgba(98, 68, 158, 0.17) 40% 75%,
+      transparent 75% 100%
+    ) 39% 100% / 20% var(--f-tex-band) no-repeat,
+    /* left — vertical jagged scar */
     linear-gradient(
-      172deg,
-      transparent 88%,
-      rgba(72, 48, 118, 0.1) 88.5%,
-      rgba(88, 60, 140, 0.17) 89%,
-      transparent 89.5%
-    );
+      180deg,
+      transparent 0 18%,
+      rgba(118, 82, 178, 0.26) 18% 19%,
+      transparent 19% 19.3%,
+      rgba(98, 68, 158, 0.22) 19.3% 19.8%,
+      transparent 19.8% 36%,
+      rgba(108, 74, 168, 0.2) 36% 37.2%,
+      transparent 37.2% 37.5%,
+      rgba(92, 64, 148, 0.18) 37.5% 38%,
+      transparent 38% 58%,
+      rgba(106, 72, 164, 0.22) 58% 59%,
+      transparent 59% 100%
+    ) left / var(--f-tex-band) 100% no-repeat,
+    linear-gradient(
+      90deg,
+      transparent 0 42%,
+      rgba(112, 78, 172, 0.18) 42% 78%,
+      transparent 78% 100%
+    ) 0 22% / var(--f-tex-band) 100% no-repeat,
+    /* right — branching vertical scar */
+    linear-gradient(
+      180deg,
+      transparent 0 28%,
+      rgba(106, 72, 164, 0.24) 28% 29.2%,
+      transparent 29.2% 29.5%,
+      rgba(88, 60, 142, 0.19) 29.5% 30%,
+      transparent 30% 46%,
+      rgba(118, 82, 178, 0.25) 46% 47.4%,
+      transparent 47.4% 47.7%,
+      rgba(98, 68, 158, 0.2) 47.7% 48.2%,
+      transparent 48.2% 66%,
+      rgba(92, 64, 148, 0.17) 66% 66.8%,
+      transparent 66.8% 100%
+    ) right / var(--f-tex-band) 100% no-repeat,
+    linear-gradient(
+      270deg,
+      transparent 0 38%,
+      rgba(102, 70, 160, 0.16) 38% 72%,
+      transparent 72% 100%
+    ) 100% 47% / var(--f-tex-band) 100% no-repeat,
+    /* corner fracture nodes */
+    radial-gradient(circle at 40% 60%, rgba(120, 84, 188, 0.2) 0%, transparent 58%) top left / calc(var(--f-tex-band) * 2.2) calc(var(--f-tex-band) * 2.2) no-repeat,
+    radial-gradient(circle at 55% 45%, rgba(98, 68, 158, 0.16) 0%, transparent 55%) bottom right / calc(var(--f-tex-band) * 2) calc(var(--f-tex-band) * 2) no-repeat;
 }
 
 /* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
