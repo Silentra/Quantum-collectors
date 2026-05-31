@@ -3511,35 +3511,35 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
 .shop-cosmetic-preview--border[data-card-border="marble_inlay"] .card-cosmetic-effects::after {
   /*
-   * Border-band crack fragments — short jagged marks authored per edge strip.
-   * Uneven placement; no full-surface veins; no repeating rhythm.
+   * Border-band hairline fractures — same placement/distribution, ~50% thinner strokes,
+   * higher opacity/contrast for polished stone read.
    */
   --f-tex-band: var(--card-frame-body-edge);
   background:
     /* top — 3 crack systems */
-    linear-gradient(71deg, transparent 0 22%, rgba(94, 88, 82, 0.26) 28% 38%, transparent 44% 58%, rgba(86, 82, 76, 0.17) 64% 70%, transparent 76% 100%) 11% 0 / 12% var(--f-tex-band) no-repeat,
-    linear-gradient(104deg, transparent 0 18%, rgba(90, 86, 80, 0.24) 26% 40%, transparent 48% 100%) 43% 0 / 10% var(--f-tex-band) no-repeat,
-    linear-gradient(58deg, transparent 0 30%, rgba(88, 84, 78, 0.19) 38% 44%, transparent 50% 100%) 48% 0 / 7% var(--f-tex-band) no-repeat,
-    linear-gradient(93deg, transparent 0 24%, rgba(92, 88, 82, 0.22) 32% 42%, transparent 50% 62%, rgba(80, 76, 70, 0.14) 68% 74%, transparent 80% 100%) 79% 0 / 13% var(--f-tex-band) no-repeat,
+    linear-gradient(71deg, transparent 0 30%, rgba(72, 68, 62, 0.42) 31.2% 32.2%, transparent 33.4% 60%, rgba(68, 64, 58, 0.34) 64.8% 65.6%, transparent 66.4% 100%) 11% 0 / 12% var(--f-tex-band) no-repeat,
+    linear-gradient(104deg, transparent 0 27%, rgba(70, 66, 60, 0.4) 28.4% 29.4%, transparent 30.4% 100%) 43% 0 / 10% var(--f-tex-band) no-repeat,
+    linear-gradient(58deg, transparent 0 36%, rgba(74, 70, 64, 0.36) 37.2% 38%, transparent 39% 100%) 48% 0 / 7% var(--f-tex-band) no-repeat,
+    linear-gradient(93deg, transparent 0 31%, rgba(68, 64, 58, 0.38) 32.4% 33.4%, transparent 34.4% 65%, rgba(76, 72, 66, 0.3) 68.6% 69.4%, transparent 70.2% 100%) 79% 0 / 13% var(--f-tex-band) no-repeat,
     /* left — 7 crack systems */
-    linear-gradient(162deg, transparent 0 20%, rgba(96, 90, 84, 0.25) 28% 36%, transparent 44% 100%) 0 5% / var(--f-tex-band) 11% no-repeat,
-    linear-gradient(148deg, transparent 0 26%, rgba(84, 80, 74, 0.2) 34% 42%, transparent 50% 100%) 0 16% / var(--f-tex-band) 9% no-repeat,
-    linear-gradient(174deg, transparent 0 18%, rgba(92, 88, 82, 0.23) 24% 32%, transparent 40% 55%, rgba(86, 82, 76, 0.15) 62% 68%, transparent 74% 100%) 0 28% / var(--f-tex-band) 13% no-repeat,
-    linear-gradient(155deg, transparent 0 22%, rgba(88, 84, 78, 0.21) 30% 38%, transparent 46% 100%) 0 47% / var(--f-tex-band) 10% no-repeat,
-    linear-gradient(168deg, transparent 0 28%, rgba(94, 88, 82, 0.18) 36% 44%, transparent 52% 100%) 0 57% / var(--f-tex-band) 8% no-repeat,
-    linear-gradient(151deg, transparent 0 20%, rgba(82, 78, 72, 0.22) 28% 36%, transparent 44% 60%, rgba(90, 86, 80, 0.16) 66% 72%, transparent 78% 100%) 0 76% / var(--f-tex-band) 12% no-repeat,
-    linear-gradient(159deg, transparent 0 24%, rgba(86, 82, 76, 0.19) 32% 40%, transparent 48% 100%) 0 89% / var(--f-tex-band) 9% no-repeat,
+    linear-gradient(162deg, transparent 0 28%, rgba(70, 66, 60, 0.4) 29.2% 30%, transparent 31% 100%) 0 5% / var(--f-tex-band) 11% no-repeat,
+    linear-gradient(148deg, transparent 0 32%, rgba(68, 64, 58, 0.38) 33.2% 34%, transparent 35% 100%) 0 16% / var(--f-tex-band) 9% no-repeat,
+    linear-gradient(174deg, transparent 0 26%, rgba(72, 68, 62, 0.4) 27% 27.8%, transparent 28.6% 58%, rgba(66, 62, 56, 0.32) 62.4% 63.2%, transparent 64% 100%) 0 28% / var(--f-tex-band) 13% no-repeat,
+    linear-gradient(155deg, transparent 0 30%, rgba(74, 70, 64, 0.36) 31.2% 32%, transparent 33% 100%) 0 47% / var(--f-tex-band) 10% no-repeat,
+    linear-gradient(168deg, transparent 0 34%, rgba(70, 66, 60, 0.34) 35.2% 36%, transparent 37% 100%) 0 57% / var(--f-tex-band) 8% no-repeat,
+    linear-gradient(151deg, transparent 0 28%, rgba(68, 64, 58, 0.38) 29.2% 30%, transparent 31% 62%, rgba(72, 68, 62, 0.3) 66.4% 67.2%, transparent 68% 100%) 0 76% / var(--f-tex-band) 12% no-repeat,
+    linear-gradient(159deg, transparent 0 32%, rgba(66, 62, 56, 0.36) 33.2% 34%, transparent 35% 100%) 0 89% / var(--f-tex-band) 9% no-repeat,
     /* bottom — 5 crack systems */
-    linear-gradient(109deg, transparent 0 22%, rgba(90, 86, 80, 0.24) 30% 38%, transparent 46% 100%) 8% 100% / 11% var(--f-tex-band) no-repeat,
-    linear-gradient(67deg, transparent 0 18%, rgba(94, 88, 82, 0.21) 26% 34%, transparent 42% 58%, rgba(84, 80, 74, 0.14) 64% 70%, transparent 76% 100%) 23% 100% / 12% var(--f-tex-band) no-repeat,
-    linear-gradient(96deg, transparent 0 24%, rgba(88, 84, 78, 0.2) 32% 40%, transparent 48% 100%) 37% 100% / 9% var(--f-tex-band) no-repeat,
-    linear-gradient(78deg, transparent 0 20%, rgba(92, 88, 82, 0.23) 28% 38%, transparent 46% 100%) 68% 100% / 10% var(--f-tex-band) no-repeat,
-    linear-gradient(113deg, transparent 0 26%, rgba(86, 82, 76, 0.18) 34% 42%, transparent 50% 62%, rgba(96, 90, 84, 0.15) 68% 74%, transparent 80% 100%) 84% 100% / 13% var(--f-tex-band) no-repeat,
+    linear-gradient(109deg, transparent 0 30%, rgba(70, 66, 60, 0.4) 31.2% 32%, transparent 33% 100%) 8% 100% / 11% var(--f-tex-band) no-repeat,
+    linear-gradient(67deg, transparent 0 27%, rgba(72, 68, 62, 0.38) 28.2% 29%, transparent 30% 62%, rgba(68, 64, 58, 0.3) 64.6% 65.4%, transparent 66.2% 100%) 23% 100% / 12% var(--f-tex-band) no-repeat,
+    linear-gradient(96deg, transparent 0 32%, rgba(74, 70, 64, 0.36) 33.2% 34%, transparent 35% 100%) 37% 100% / 9% var(--f-tex-band) no-repeat,
+    linear-gradient(78deg, transparent 0 29%, rgba(68, 64, 58, 0.4) 30.2% 31%, transparent 32% 100%) 68% 100% / 10% var(--f-tex-band) no-repeat,
+    linear-gradient(113deg, transparent 0 33%, rgba(70, 66, 60, 0.34) 34.2% 35%, transparent 36% 64%, rgba(72, 68, 62, 0.3) 68.4% 69.2%, transparent 70% 100%) 84% 100% / 13% var(--f-tex-band) no-repeat,
     /* right — 4 crack systems */
-    linear-gradient(34deg, transparent 0 22%, rgba(94, 88, 82, 0.22) 30% 38%, transparent 46% 100%) 100% 11% / var(--f-tex-band) 10% no-repeat,
-    linear-gradient(26deg, transparent 0 18%, rgba(88, 84, 78, 0.2) 26% 34%, transparent 42% 56%, rgba(92, 88, 82, 0.16) 62% 68%, transparent 74% 100%) 100% 31% / var(--f-tex-band) 12% no-repeat,
-    linear-gradient(41deg, transparent 0 24%, rgba(84, 80, 74, 0.21) 32% 40%, transparent 48% 100%) 100% 55% / var(--f-tex-band) 9% no-repeat,
-    linear-gradient(31deg, transparent 0 20%, rgba(90, 86, 80, 0.19) 28% 36%, transparent 44% 58%, rgba(86, 82, 76, 0.13) 64% 70%, transparent 76% 100%) 100% 82% / var(--f-tex-band) 11% no-repeat;
+    linear-gradient(34deg, transparent 0 30%, rgba(72, 68, 62, 0.38) 31.2% 32%, transparent 33% 100%) 100% 11% / var(--f-tex-band) 10% no-repeat,
+    linear-gradient(26deg, transparent 0 27%, rgba(68, 64, 58, 0.36) 28.2% 29%, transparent 30% 58%, rgba(70, 66, 60, 0.32) 62.4% 63.2%, transparent 64% 100%) 100% 31% / var(--f-tex-band) 12% no-repeat,
+    linear-gradient(41deg, transparent 0 32%, rgba(74, 70, 64, 0.38) 33.2% 34%, transparent 35% 100%) 100% 55% / var(--f-tex-band) 9% no-repeat,
+    linear-gradient(31deg, transparent 0 29%, rgba(66, 62, 56, 0.36) 30.2% 31%, transparent 32% 58%, rgba(72, 68, 62, 0.28) 64.4% 65.2%, transparent 66% 100%) 100% 82% / var(--f-tex-band) 11% no-repeat;
 }
 
 /* ── Storm — deep navy stock + embedded violet streaks (Phase 1: darker than Sapphire) ── */
@@ -3570,51 +3570,179 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::after,
 .shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::after {
   /*
-   * EXPERIMENT — readability test: mask intrusion lets lightning extend ~5–7px onto card face.
-   * Three bold fracture paths; not optimized for subtlety.
+   * Corner-origin lightning — four authored fracture systems (TL/TR/BL/BR).
+   * Border-local paths; full body-band mask for visibility. Layers sized to
+   * --f-tex-reach (band + intrusion) so bolt art extends toward card face.
    */
-  --storm-tex-intrusion: clamp(5px, 3.2cqw, 7px);
-  padding: max(0px, calc(var(--card-frame-body-edge) - var(--storm-tex-intrusion)));
+  --storm-tex-intrusion: clamp(4px, 2.8cqw, 6px);
+  --f-tex-band: var(--card-frame-body-edge);
+  --f-tex-reach: calc(var(--card-frame-body-edge) + var(--storm-tex-intrusion));
+  padding: var(--card-frame-body-edge);
   background:
+    /* ── top-left: main bolt along top + branch down left + fork ── */
     linear-gradient(
-      112deg,
-      transparent 0%,
+      90deg,
+      rgba(185, 135, 255, 0.82) 0%,
+      rgba(185, 135, 255, 0.82) 0.4%,
+      transparent 0.4%,
+      transparent 3%,
+      rgba(170, 120, 245, 0.72) 3%,
+      rgba(170, 120, 245, 0.72) 3.55%,
+      transparent 3.55%,
+      transparent 7.5%,
+      rgba(195, 145, 255, 0.78) 7.5%,
+      rgba(195, 145, 255, 0.78) 8.05%,
+      transparent 8.05%,
+      transparent 12%,
+      rgba(165, 115, 240, 0.68) 12%,
+      rgba(165, 115, 240, 0.68) 12.5%,
+      transparent 12.5%,
+      transparent 18%,
+      rgba(180, 130, 250, 0.75) 18%,
+      rgba(180, 130, 250, 0.75) 18.65%,
+      transparent 18.65%,
+      transparent 24%,
+      rgba(160, 110, 235, 0.65) 24%,
+      rgba(160, 110, 235, 0.65) 24.45%,
+      transparent 24.45%,
+      transparent 100%
+    ) 0 0 / 32% var(--f-tex-reach) no-repeat,
+    linear-gradient(
+      180deg,
+      rgba(175, 125, 248, 0.7) 0%,
+      rgba(175, 125, 248, 0.7) 0.45%,
+      transparent 0.45%,
+      transparent 5%,
+      rgba(190, 140, 252, 0.76) 5%,
+      rgba(190, 140, 252, 0.76) 5.5%,
+      transparent 5.5%,
+      transparent 11%,
+      rgba(155, 105, 230, 0.62) 11%,
+      rgba(155, 105, 230, 0.62) 11.4%,
+      transparent 11.4%,
+      transparent 100%
+    ) 0 0 / var(--f-tex-reach) 20% no-repeat,
+    linear-gradient(
+      128deg,
+      transparent 0 38%,
+      rgba(180, 130, 250, 0.55) 39% 41%,
+      transparent 42% 100%
+    ) 0 0 / 14% var(--f-tex-reach) no-repeat,
+    /* ── top-right: main bolt along top (leftward) + branch down right + fork ── */
+    linear-gradient(
+      270deg,
+      rgba(188, 138, 252, 0.8) 0%,
+      rgba(188, 138, 252, 0.8) 0.45%,
+      transparent 0.45%,
+      transparent 4%,
+      rgba(172, 122, 246, 0.7) 4%,
+      rgba(172, 122, 246, 0.7) 4.55%,
+      transparent 4.55%,
+      transparent 9%,
+      rgba(198, 148, 255, 0.76) 9%,
+      rgba(198, 148, 255, 0.76) 9.5%,
+      transparent 9.5%,
+      transparent 15%,
+      rgba(162, 112, 238, 0.66) 15%,
+      rgba(162, 112, 238, 0.66) 15.45%,
+      transparent 15.45%,
+      transparent 22%,
+      rgba(178, 128, 248, 0.72) 22%,
+      rgba(178, 128, 248, 0.72) 22.6%,
+      transparent 22.6%,
+      transparent 100%
+    ) 100% 0 / 30% var(--f-tex-reach) no-repeat,
+    linear-gradient(
+      180deg,
+      rgba(182, 132, 250, 0.68) 0%,
+      rgba(182, 132, 250, 0.68) 0.5%,
+      transparent 0.5%,
       transparent 6%,
-      rgba(130, 92, 210, 0.18) 7.5%,
-      rgba(155, 110, 235, 0.48) 9.5%,
-      rgba(135, 96, 215, 0.32) 11.5%,
+      rgba(168, 118, 242, 0.74) 6%,
+      rgba(168, 118, 242, 0.74) 6.45%,
+      transparent 6.45%,
+      transparent 100%
+    ) 100% 0 / var(--f-tex-reach) 18% no-repeat,
+    linear-gradient(
+      52deg,
+      transparent 0 36%,
+      rgba(175, 125, 248, 0.52) 37.5% 39.5%,
+      transparent 41% 100%
+    ) 100% 0 / 12% var(--f-tex-reach) no-repeat,
+    /* ── bottom-left: bolt along bottom + branch up left + fork ── */
+    linear-gradient(
+      90deg,
+      rgba(178, 128, 248, 0.78) 0%,
+      rgba(178, 128, 248, 0.78) 0.45%,
+      transparent 0.45%,
+      transparent 5%,
+      rgba(192, 142, 254, 0.74) 5%,
+      rgba(192, 142, 254, 0.74) 5.55%,
+      transparent 5.55%,
+      transparent 11%,
+      rgba(158, 108, 232, 0.64) 11%,
+      rgba(158, 108, 232, 0.64) 11.45%,
+      transparent 11.45%,
+      transparent 17%,
+      rgba(170, 120, 244, 0.7) 17%,
+      rgba(170, 120, 244, 0.7) 17.5%,
+      transparent 17.5%,
+      transparent 100%
+    ) 0 100% / 28% var(--f-tex-reach) no-repeat,
+    linear-gradient(
+      0deg,
+      rgba(184, 134, 252, 0.72) 0%,
+      rgba(184, 134, 252, 0.72) 0.5%,
+      transparent 0.5%,
+      transparent 7%,
+      rgba(166, 116, 240, 0.66) 7%,
+      rgba(166, 116, 240, 0.66) 7.4%,
+      transparent 7.4%,
+      transparent 100%
+    ) 0 100% / var(--f-tex-reach) 16% no-repeat,
+    linear-gradient(
+      38deg,
+      transparent 0 34%,
+      rgba(172, 122, 246, 0.5) 35.5% 37.5%,
+      transparent 39% 100%
+    ) 0 100% / 13% var(--f-tex-reach) no-repeat,
+    /* ── bottom-right: bolt along bottom (leftward) + branch up right + fork ── */
+    linear-gradient(
+      270deg,
+      rgba(186, 136, 254, 0.76) 0%,
+      rgba(186, 136, 254, 0.76) 0.5%,
+      transparent 0.5%,
+      transparent 6%,
+      rgba(174, 124, 248, 0.7) 6%,
+      rgba(174, 124, 248, 0.7) 6.5%,
+      transparent 6.5%,
       transparent 13%,
-      transparent 19%,
-      rgba(140, 100, 220, 0.22) 20.5%,
-      rgba(160, 115, 240, 0.52) 22%,
-      rgba(128, 90, 205, 0.28) 23.5%,
-      transparent 25%
-    ),
+      rgba(196, 146, 255, 0.74) 13%,
+      rgba(196, 146, 255, 0.74) 13.45%,
+      transparent 13.45%,
+      transparent 20%,
+      rgba(160, 110, 236, 0.64) 20%,
+      rgba(160, 110, 236, 0.64) 20.55%,
+      transparent 20.55%,
+      transparent 100%
+    ) 100% 100% / 26% var(--f-tex-reach) no-repeat,
     linear-gradient(
-      48deg,
-      transparent 0%,
-      transparent 32%,
-      rgba(125, 88, 205, 0.16) 33.5%,
-      rgba(148, 105, 228, 0.44) 35%,
-      transparent 36.5%,
-      transparent 44%,
-      rgba(132, 94, 212, 0.2) 45.5%,
-      rgba(152, 108, 232, 0.4) 47%,
-      transparent 48.5%
-    ),
+      0deg,
+      rgba(180, 130, 250, 0.7) 0%,
+      rgba(180, 130, 250, 0.7) 0.45%,
+      transparent 0.45%,
+      transparent 8%,
+      rgba(164, 114, 238, 0.62) 8%,
+      rgba(164, 114, 238, 0.62) 8.45%,
+      transparent 8.45%,
+      transparent 100%
+    ) 100% 100% / var(--f-tex-reach) 15% no-repeat,
     linear-gradient(
-      158deg,
-      transparent 0%,
-      transparent 54%,
-      rgba(118, 82, 195, 0.14) 55.5%,
-      rgba(142, 98, 222, 0.46) 57%,
-      rgba(122, 86, 200, 0.26) 58.5%,
-      transparent 60%,
-      transparent 68%,
-      rgba(135, 95, 218, 0.18) 69.5%,
-      rgba(158, 112, 238, 0.38) 71%,
-      transparent 72.5%
-    );
+      142deg,
+      transparent 0 32%,
+      rgba(176, 126, 246, 0.48) 33.5% 35.5%,
+      transparent 37% 100%
+    ) 100% 100% / 11% var(--f-tex-reach) no-repeat;
 }
 
 /* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
