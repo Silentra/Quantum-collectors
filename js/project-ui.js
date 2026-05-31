@@ -43,6 +43,7 @@ import { recordBreakthroughEarned, recordProjectOutcome } from './achievements.j
 
 import { renderMiniCardArtHtml } from './card-art.js';
 import { renderPackCardWrapper } from './card-render.js';
+import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import { confirmAction } from './ui.js';
 
@@ -188,7 +189,12 @@ function showBreakthroughCardReveal(card) {
 
   const needsClick = ['rare', 'epic', 'legendary'].includes(card.rarity);
 
-  cardsContainer.innerHTML = renderPackCardWrapper(card, 0);
+  const session = auth.getSession();
+  const borderRenderEffectId = session && session.username !== '__admin__'
+    ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
+    : null;
+
+  cardsContainer.innerHTML = renderPackCardWrapper(card, 0, { borderRenderEffectId });
 
   overlay.classList.remove('hidden');
 
