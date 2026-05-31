@@ -24,7 +24,6 @@ export const COSMETIC_BORDER_EFFECT_IDS = [
   'carbon_weave',
   'stone_slate',
   'marble_inlay',
-  'storm',
 ];
 
 /** All ids recognized by the border renderer. */

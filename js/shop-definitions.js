@@ -351,19 +351,6 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'marble_inlay',
   },
 
-  border_storm: {
-    id: 'border_storm',
-    name: 'Storm Border',
-    description: 'Deep navy composite with embedded violet anomaly traces — contained, not conjured.',
-    type: ITEM_TYPES.COSMETIC,
-    category: ITEM_CATEGORIES.BORDER,
-    rarity: ITEM_RARITIES.LEGENDARY,
-    price: 440,
-    weight: 3,
-    enabled: true,
-    renderEffectId: 'storm',
-  },
-
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {
