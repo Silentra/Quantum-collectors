@@ -3256,10 +3256,46 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-border="spectrum"].rarity-legendary:hover { box-shadow: 0 4px 18px rgba(245, 158, 11, 0.22); }
 
 /*
- * Material borders — pattern layered on existing frame stack (box-shadow unchanged).
- * Textures use low-contrast repeating/static gradients on ::before background only.
- * No animation, blur, or glow. Geometry/bleed/thickness tokens unchanged.
+ * Material borders — textures on ::after ABOVE opaque frame shadows (Proposal B).
+ * Investigation: patterns on ::before background were fully buried under
+ * near-opaque inset box-shadow body caps (~88–96% alpha). Relocated to ::after
+ * with mask clipping to the material body band only (lip/rim remain shadow-only).
  */
+
+/* Shared texture mount — ring from outer edge to body-edge inset */
+.sci-card[data-card-border="diamond_etched"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="diamond_etched"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="diamond_etched"] .card-cosmetic-effects::after,
+.sci-card[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after,
+.sci-card[data-card-border="leather_stitch"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="leather_stitch"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="leather_stitch"] .card-cosmetic-effects::after,
+.sci-card[data-card-border="carbon_weave"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="carbon_weave"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="carbon_weave"] .card-cosmetic-effects::after,
+.sci-card[data-card-border="stone_slate"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="stone_slate"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="stone_slate"] .card-cosmetic-effects::after,
+.sci-card[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
+.sci-card[data-card-border="storm"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+  padding: var(--card-frame-body-edge);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+}
 
 /* ── Diamond Etched Metal — engraved steel, darker than silver ── */
 .sci-card[data-card-border="diamond_etched"] .card-cosmetic-effects::before,
@@ -3282,10 +3318,16 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="diamond_etched"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="diamond_etched"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="diamond_etched"] .card-cosmetic-effects::after {
+  --f-tex-cell: clamp(3px, 2.8cqw, 5px);
   background:
-    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.07) 0 1px, transparent 1px 4px),
-    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 4px),
-    linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.14) 0 1px, transparent 1px var(--f-tex-cell)),
+    repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.08) 0 1px, transparent 1px var(--f-tex-cell));
 }
 
 /* ── Brushed Aluminum — fine vertical striations ── */
@@ -3309,9 +3351,22 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after {
+  --f-tex-stroke: clamp(2px, 1.8cqw, 3px);
+  --f-tex-period: clamp(4px, 3.6cqw, 6px);
   background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.045) 0 1px, transparent 1px 3px, rgba(0, 0, 0, 0.035) 3px 4px, transparent 4px 6px),
-    linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.09) 0 1px,
+      transparent 1px var(--f-tex-stroke),
+      rgba(0, 0, 0, 0.08) var(--f-tex-stroke) calc(var(--f-tex-stroke) + 1px),
+      transparent calc(var(--f-tex-stroke) + 1px) var(--f-tex-period)
+    );
 }
 
 /* ── Matte Leather Stitching — dark journal leather, outer stitch ticks ── */
@@ -3335,12 +3390,18 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(155deg, var(--f-grad-a) 0%, transparent 42%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="leather_stitch"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="leather_stitch"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="leather_stitch"] .card-cosmetic-effects::after {
+  --f-tex-stitch: clamp(4px, 3.6cqw, 7px);
+  --f-tex-row: clamp(8px, 7.2cqw, 14px);
   background:
-    repeating-linear-gradient(0deg, rgba(120, 92, 68, 0.14) 0 1px, transparent 1px 7px),
-    repeating-linear-gradient(90deg, rgba(120, 92, 68, 0.14) 0 1px, transparent 1px 7px),
-    repeating-linear-gradient(0deg, rgba(90, 68, 50, 0.06) 0 2px, transparent 2px 14px),
-    linear-gradient(155deg, var(--f-grad-a) 0%, transparent 42%, var(--f-grad-b) 100%);
-  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+    repeating-linear-gradient(0deg, rgba(160, 120, 88, 0.22) 0 1px, transparent 1px var(--f-tex-stitch)),
+    repeating-linear-gradient(90deg, rgba(160, 120, 88, 0.22) 0 1px, transparent 1px var(--f-tex-stitch)),
+    repeating-linear-gradient(0deg, rgba(110, 82, 58, 0.1) 0 2px, transparent 2px var(--f-tex-row));
 }
 
 /* ── Carbon Fiber Weave — low-contrast scientific composite ── */
@@ -3364,10 +3425,16 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="carbon_weave"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="carbon_weave"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="carbon_weave"] .card-cosmetic-effects::after {
+  --f-tex-cell: clamp(2px, 2cqw, 4px);
   background:
-    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px),
-    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.06) 0 1px, transparent 1px 3px),
-    linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.055) 0 1px, transparent 1px var(--f-tex-cell)),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.12) 0 1px, transparent 1px var(--f-tex-cell));
 }
 
 /* ── Stone Slate — faint mineral variation ── */
@@ -3391,11 +3458,20 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="stone_slate"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="stone_slate"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="stone_slate"] .card-cosmetic-effects::after {
+  --f-tex-fault: clamp(7px, 6.5cqw, 12px);
+  --f-tex-fault-b: clamp(9px, 8.5cqw, 15px);
   background:
-    radial-gradient(ellipse 120% 80% at 20% 30%, rgba(90, 98, 108, 0.12) 0%, transparent 55%),
-    radial-gradient(ellipse 90% 70% at 75% 65%, rgba(50, 54, 60, 0.14) 0%, transparent 50%),
-    radial-gradient(ellipse 60% 50% at 50% 80%, rgba(70, 74, 80, 0.08) 0%, transparent 45%),
-    linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+    repeating-linear-gradient(118deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px var(--f-tex-fault)),
+    repeating-linear-gradient(28deg, rgba(255, 255, 255, 0.06) 0 1px, transparent 1px var(--f-tex-fault-b)),
+    radial-gradient(ellipse 120% 80% at 20% 30%, rgba(90, 98, 108, 0.2) 0%, transparent 55%),
+    radial-gradient(ellipse 90% 70% at 75% 65%, rgba(50, 54, 60, 0.22) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 50% at 50% 80%, rgba(70, 74, 80, 0.14) 0%, transparent 45%);
 }
 
 /* ── Marble Inlay — sparse archival veining ── */
@@ -3419,11 +3495,31 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="marble_inlay"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="marble_inlay"] .card-cosmetic-effects::after {
+  --f-tex-vein-a: clamp(10px, 9cqw, 16px);
+  --f-tex-vein-b: clamp(14px, 12cqw, 22px);
   background:
-    linear-gradient(118deg, transparent 42%, rgba(100, 96, 90, 0.14) 46%, transparent 50%),
-    linear-gradient(162deg, transparent 58%, rgba(88, 84, 78, 0.1) 61%, transparent 64%),
-    linear-gradient(72deg, transparent 72%, rgba(96, 92, 86, 0.08) 74%, transparent 76%),
-    linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
+    repeating-linear-gradient(
+      125deg,
+      transparent 0,
+      transparent calc(var(--f-tex-vein-a) - 1px),
+      rgba(92, 88, 82, 0.22) calc(var(--f-tex-vein-a) - 1px),
+      rgba(92, 88, 82, 0.22) var(--f-tex-vein-a),
+      transparent var(--f-tex-vein-a) var(--f-tex-vein-b)
+    ),
+    repeating-linear-gradient(
+      68deg,
+      transparent 0,
+      transparent calc(var(--f-tex-vein-a) + 2px),
+      rgba(78, 74, 68, 0.14) calc(var(--f-tex-vein-a) + 2px),
+      rgba(78, 74, 68, 0.14) calc(var(--f-tex-vein-a) + 3px),
+      transparent calc(var(--f-tex-vein-a) + 3px) calc(var(--f-tex-vein-b) + 4px)
+    );
 }
 
 /* ── Storm — deep navy stock + embedded violet streaks (Phase 1: darker than Sapphire) ── */
@@ -3447,11 +3543,32 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--card-frame-inner-edge) var(--f-inner-sep),
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
+  background: linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+}
+
+.sci-card[data-card-border="storm"] .card-cosmetic-effects::after,
+.card-detail-frame[data-card-border="storm"] .card-cosmetic-effects::after,
+.shop-cosmetic-preview--border[data-card-border="storm"] .card-cosmetic-effects::after {
+  --f-tex-scar-a: clamp(8px, 7.5cqw, 14px);
+  --f-tex-scar-b: clamp(12px, 11cqw, 20px);
   background:
-    linear-gradient(128deg, transparent 30%, rgba(72, 52, 118, 0.15) 34%, transparent 40%),
-    linear-gradient(148deg, transparent 52%, rgba(58, 38, 100, 0.13) 58%, transparent 64%),
-    linear-gradient(112deg, transparent 68%, rgba(82, 58, 130, 0.11) 74%, transparent 80%),
-    linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
+    repeating-linear-gradient(
+      128deg,
+      transparent 0,
+      transparent calc(var(--f-tex-scar-a) - 2px),
+      rgba(88, 62, 140, 0.24) calc(var(--f-tex-scar-a) - 2px),
+      rgba(88, 62, 140, 0.24) var(--f-tex-scar-a),
+      transparent var(--f-tex-scar-a) var(--f-tex-scar-b)
+    ),
+    repeating-linear-gradient(
+      152deg,
+      transparent 0,
+      transparent calc(var(--f-tex-scar-a) + 1px),
+      rgba(68, 48, 112, 0.18) calc(var(--f-tex-scar-a) + 1px),
+      rgba(68, 48, 112, 0.18) calc(var(--f-tex-scar-a) + 2px),
+      transparent calc(var(--f-tex-scar-a) + 2px) calc(var(--f-tex-scar-b) + 3px)
+    ),
+    linear-gradient(128deg, transparent 30%, rgba(72, 52, 118, 0.12) 34%, transparent 40%);
 }
 
 /* ===================== PHASE 4C — LOCKED CARD INDICATOR =====================
