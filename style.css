@@ -3029,8 +3029,8 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(18deg, rgba(198, 204, 214, 0.016) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(-14deg, rgba(12, 16, 24, 0.014) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(18deg, rgba(198, 204, 214, 0.6) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-14deg, rgba(12, 16, 24, 0.4) 0 1px, transparent 1px 7px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 40%, var(--f-grad-b) 100%);
 }
 
@@ -3056,8 +3056,8 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(16deg, rgba(238, 241, 245, 0.018) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(-12deg, rgba(64, 74, 88, 0.015) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(16deg, rgba(238, 241, 245, 0.6) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-12deg, rgba(64, 74, 88, 0.4) 0 1px, transparent 1px 7px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
@@ -3083,8 +3083,8 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(17deg, rgba(176, 186, 180, 0.018) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(-15deg, rgba(14, 52, 38, 0.014) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(17deg, rgba(176, 186, 180, 0.6) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-15deg, rgba(14, 52, 38, 0.4) 0 1px, transparent 1px 7px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 42%, var(--f-grad-b) 100%);
 }
 
@@ -3110,8 +3110,8 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(19deg, rgba(174, 183, 197, 0.018) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(-13deg, rgba(12, 34, 68, 0.014) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(19deg, rgba(174, 183, 197, 0.6) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-13deg, rgba(12, 34, 68, 0.4) 0 1px, transparent 1px 7px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
 }
 
@@ -3137,8 +3137,8 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(17deg, rgba(186, 178, 200, 0.018) 0 1px, transparent 1px 6px),
-    repeating-linear-gradient(-16deg, rgba(30, 12, 58, 0.014) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(17deg, rgba(186, 178, 200, 0.6) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(-16deg, rgba(30, 12, 58, 0.4) 0 1px, transparent 1px 7px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 38%, var(--f-grad-b) 100%);
 }
 
@@ -3169,7 +3169,7 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(17deg, rgba(196, 202, 210, 0.016) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(17deg, rgba(196, 202, 210, 0.5) 0 1px, transparent 1px 6px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
@@ -3193,7 +3193,7 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(18deg, rgba(178, 188, 182, 0.017) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(18deg, rgba(178, 188, 182, 0.5) 0 1px, transparent 1px 6px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
@@ -3217,7 +3217,7 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(18deg, rgba(176, 185, 198, 0.017) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(18deg, rgba(176, 185, 198, 0.5) 0 1px, transparent 1px 6px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
@@ -3241,7 +3241,7 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(17deg, rgba(188, 180, 200, 0.017) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(17deg, rgba(188, 180, 200, 0.5) 0 1px, transparent 1px 6px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
@@ -3265,7 +3265,7 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 var(--frame-band) var(--f-outer),
     inset 0 0 0 calc(var(--frame-band) + var(--card-frame-rim)) var(--f-rim);
   background:
-    repeating-linear-gradient(16deg, rgba(220, 198, 142, 0.018) 0 1px, transparent 1px 6px),
+    repeating-linear-gradient(16deg, rgba(220, 198, 142, 0.5) 0 1px, transparent 1px 6px),
     linear-gradient(150deg, var(--f-grad-a) 0%, transparent 36%, var(--f-grad-b) 100%);
 }
 
