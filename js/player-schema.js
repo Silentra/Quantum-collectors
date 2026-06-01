@@ -28,7 +28,7 @@ import {
   createDiscountApplied,
 } from './shop-state.js';
 import { getCosmeticDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
-import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
+import { INTERNAL_DEFAULT_BORDER_ITEM_ID, ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { ensureAchievementStats } from './achievement-stats.js';
 import {
   IDENTITY_ACCENT_DEFAULT,
@@ -515,6 +515,16 @@ export function normalizePlayerSchema(username) {
       patched = true;
     }
     if (player.profile?.equippedBorder === 'border_quantum') {
+      db.set(`players/${username}/profile/equippedBorder`, null);
+      patched = true;
+    }
+    // Graphite is internal default frame only — not an ownable cosmetic
+    if (player.cosmetics?.owned?.[INTERNAL_DEFAULT_BORDER_ITEM_ID] === true) {
+      db.remove(`players/${username}/cosmetics/owned/${INTERNAL_DEFAULT_BORDER_ITEM_ID}`);
+      delete owned[INTERNAL_DEFAULT_BORDER_ITEM_ID];
+      patched = true;
+    }
+    if (player.profile?.equippedBorder === INTERNAL_DEFAULT_BORDER_ITEM_ID) {
       db.set(`players/${username}/profile/equippedBorder`, null);
       patched = true;
     }

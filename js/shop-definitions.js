@@ -33,6 +33,9 @@ export const ITEM_RARITIES = Object.freeze({
   LEGENDARY: 'legendary',
 });
 
+/** Retired item id — graphite renders via card-border fallback, not inventory/shop. */
+export const INTERNAL_DEFAULT_BORDER_ITEM_ID = 'border_graphite';
+
 // ── Aura Render Effects ─────────────────────────────────────────────────────
 // Maps renderEffectId → static effect descriptor.
 // Actual render implementations belong in a future render layer, not here.
@@ -232,19 +235,6 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 10,
     enabled: true,
     renderEffectId: 'emerald',
-  },
-
-  border_graphite: {
-    id: 'border_graphite',
-    name: 'Graphite Border',
-    description: 'Matte graphite stock — the standard collector frame with laminated depth.',
-    type: ITEM_TYPES.COSMETIC,
-    category: ITEM_CATEGORIES.BORDER,
-    rarity: ITEM_RARITIES.COMMON,
-    price: 100,
-    weight: 10,
-    enabled: true,
-    renderEffectId: 'graphite',
   },
 
   border_violet: {

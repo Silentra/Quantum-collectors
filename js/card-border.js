@@ -6,13 +6,15 @@
  */
 
 import { getEquippedBorder } from './profile-ui.js';
+import { INTERNAL_DEFAULT_BORDER_ITEM_ID } from './shop-definitions.js';
+
+export { INTERNAL_DEFAULT_BORDER_ITEM_ID };
 
 /** Virtual default — matte graphite frame when no cosmetic border is equipped. */
 export const DEFAULT_BORDER_EFFECT_ID = 'graphite';
 
-/** Purchasable CSS border effect ids (includes graphite + premium spectrum). */
+/** Player-ownable / purchasable border effect ids (excludes internal default graphite). */
 export const COSMETIC_BORDER_EFFECT_IDS = [
-  'graphite',
   'silver',
   'sapphire',
   'emerald',
@@ -26,8 +28,8 @@ export const COSMETIC_BORDER_EFFECT_IDS = [
   'marble_inlay',
 ];
 
-/** All ids recognized by the border renderer. */
-export const BORDER_EFFECT_IDS = [...COSMETIC_BORDER_EFFECT_IDS];
+/** All ids recognized by the border renderer (default + purchasable). */
+export const BORDER_EFFECT_IDS = [DEFAULT_BORDER_EFFECT_ID, ...COSMETIC_BORDER_EFFECT_IDS];
 
 /**
  * Resolve equipped border definition → data-card-border effect id.
@@ -37,6 +39,9 @@ export const BORDER_EFFECT_IDS = [...COSMETIC_BORDER_EFFECT_IDS];
  */
 export function resolveBorderRenderEffectId(borderDefinition) {
   const id = borderDefinition?.renderEffectId;
+  if (id === DEFAULT_BORDER_EFFECT_ID) {
+    return DEFAULT_BORDER_EFFECT_ID;
+  }
   if (id && COSMETIC_BORDER_EFFECT_IDS.includes(id)) {
     return id;
   }

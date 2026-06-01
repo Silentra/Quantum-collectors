@@ -8,11 +8,16 @@
 
 import * as db from './database.js';
 import {
+  INTERNAL_DEFAULT_BORDER_ITEM_ID,
   ITEM_CATEGORIES,
   ITEM_DEFINITIONS,
   ITEM_RARITIES,
   ITEM_TYPES,
 } from './shop-definitions.js';
+
+function isInternalDefaultBorderItemId(itemId) {
+  return itemId === INTERNAL_DEFAULT_BORDER_ITEM_ID;
+}
 
 export const COSMETIC_DEFINITIONS_PATH = 'config/cosmetics/definitions';
 
@@ -193,6 +198,7 @@ export function getMergedItemDefinitions() {
  */
 export function getItemDefinition(itemId) {
   if (!itemId || typeof itemId !== 'string') return null;
+  if (isInternalDefaultBorderItemId(itemId)) return null;
   const def = getMergedItemDefinitions()[itemId];
   if (!def || def.deleted === true) return null;
   return applyItemGovernanceOverride(def);
@@ -253,6 +259,7 @@ export function isCosmeticAchievementRewardEligible(definition) {
  */
 export function isCosmeticGrantable(definition) {
   if (!definition) return false;
+  if (isInternalDefaultBorderItemId(definition.id)) return false;
   if (definition.deleted === true) return false;
   if (definition.type !== ITEM_TYPES.COSMETIC) return false;
   return true;
