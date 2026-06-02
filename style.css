@@ -2849,7 +2849,7 @@ body.app-mode-game #screen-game.screen.active {
 .card-cosmetic-effects {
   position: absolute;
   inset: calc(-1 * var(--card-bleed, 0px));
-  z-index: 1;
+  z-index: 0;
   pointer-events: none;
   border-radius: inherit;
   overflow: visible;
@@ -2864,7 +2864,7 @@ body.app-mode-game #screen-game.screen.active {
   z-index: 1;
 }
 
-/* Phase 3 — content above aura ::after (tier 3 inner pulse, z-index: 1) */
+/* Phase 3 — content above legacy aura halo (z1); tier-3 face veil promoted to z3 on .sci-card */
 /* Phase A — proportional grid (header / art / divider / body) */
 .card-detail-inner {
   position: relative;
@@ -4765,10 +4765,10 @@ body.app-mode-game #screen-game.screen.active {
 
 /* ===================== AURA SYSTEM ===================== */
 /*
- * Stacking (border v1): shell bg + structural edge → aura ::before z0 →
- * .card-cosmetic-effects z1 (outward bleed via --card-bleed) → border ::before →
- * tier-3 ::after z1 → .card-detail-inner z2 → .sci-card-aura-dots z5 → badges z10.
- * Shell overflow:visible — glow not clipped; inner overflow:hidden clips art/text.
+ * Stacking (legacy Prismatic recovery, collection .sci-card): shell bg →
+ * .card-cosmetic-effects z0 (Proposal B border) → aura ::before halo z1 →
+ * .card-detail-inner z2 → tier-3 ::after face veil z3 → dots z5 → badges z10.
+ * Shell overflow:visible — halo not clipped; inner overflow:hidden clips art/text.
  */
 
 /* Aura overlay — a pseudo-element on the card */
@@ -4781,7 +4781,7 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   inset: -1px;
   border-radius: 0.65rem;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   opacity: 0.4;
 }
@@ -4793,7 +4793,7 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   inset: -1px;
   border-radius: 0.65rem;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   opacity: 0.6;
 }
@@ -4805,7 +4805,7 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   inset: -2px;
   border-radius: 0.7rem;
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   opacity: 0.8;
   animation: auraShimmer 3s ease-in-out infinite;
@@ -4815,7 +4815,7 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   inset: 0;
   border-radius: 0.6rem;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
   opacity: 0.08;
   animation: auraInnerPulse 4s ease-in-out infinite;
