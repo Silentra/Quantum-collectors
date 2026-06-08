@@ -65,7 +65,7 @@ js/
 ### Phase 3 Card Schema
 - **Legacy fields** preserved: `type`, `effect`, `image`, `flavor` — still read/written for backward compat
 - **New Phase 3 fields**: `imageUrl` (= image), `keyFact` (= flavor), `auraType` (none|holographic|prismatic|shadow|radiant|cosmic), `enabled` (bool)
-- **Phase 1D**: `auraType` is now a **legacy DB field** — no longer admin-controlled or read by the render pipeline. Visual aura for all cards is resolved via `resolveVisualAura()` → `DEFAULT_VISUAL_AURA` (`'default_prismatic'`). The field is preserved in the DB for backward compat and potential future migration.
+- **Phase 1D**: `auraType` is a **legacy DB field** — not admin-controlled or read by the render pipeline. Legacy shell aura visuals (`aura-prismatic`, etc.) are **retired**; see Aura Tier System section.
 - `auraLevel` removed from card schema — aura tier is derived from player duplicate count at render time
 - `normalizeCard()` in cards.js ensures all fields present with safe defaults; falls back legacy→new
 - `createCard()` and `updateCard()` both keep legacy+new fields in sync
@@ -133,25 +133,40 @@ js/
 - **Admin telemetry**: Persistent admin accounts additionally see "Refresh interval: Xh" in the status bar. `__admin__` standalone sessions do not reach the research projects tab (unchanged behavior).
 - **Admin Balance editor**: "Project Refresh Cadence" section added as the first subsection, with `bal-refresh-hours` input. Collected and persisted via `collectBalanceValues()` → `saveProjectConfig()`.
 
-### Aura Tier System (Phase 3 + Phase 1D Normalization)
+### Aura Tier System (Mathematical Aura — gameplay progression)
+
+**Mathematical Aura** is the duplicate-based progression system (tiers 0–3). It drives project scaling, card strength, and UI tier indicators. It is **not** a visual effect category.
+
 - `getAuraTier(rarity, quantity)` in cards.js computes tier 0–3 from duplicate ownership count
 - Thresholds per rarity: legendary [1,2,3], epic [1,3,5], rare [2,4,6], uncommon [2,5,8], common [3,7,10]
-- **Phase 1D**: ALL cards now always render with a default visual aura (`DEFAULT_VISUAL_AURA = 'default_prismatic'` in cards.js)
-- Legacy per-card `auraType` field preserved in DB for backward compat but **no longer read by the render pipeline** — visual aura is resolved via `resolveVisualAura(profileCosmeticOverride)` which currently always returns `'default_prismatic'`
-- **Admin aura controls removed**: `new-card-auraType` selector, `edit-card-auraType` selector, aura label in admin card list — all removed
-- `AURA_CSS_MAP` in cards.js maps visual aura identifiers to CSS class suffixes (e.g. `default_prismatic → prismatic`)
-- `getAuraCSSClass(visualAura)` returns the full CSS class name (e.g. `aura-prismatic`)
-- **Future profile cosmetics**: `resolveVisualAura()` accepts a profile cosmetic override parameter (holographic, radiant, shadow, cosmic) — not yet wired to any profile data
-- Tier 0 = no aura visible; tiers 1–3 = subtle → noticeable glow via CSS `::before`/`::after` pseudo-elements
-- Aura dots shown on card corners when tier > 0; detail modal always shows pip bar + next-tier hint
-- **Gameplay aura scaling** (project-engine.js, quest-config.js, project-config.js) is **unchanged** — `auraLevel` on enriched card objects still drives gameplay math via `config.auraScaling[level]`
+- `data-aura-tier` on collection `.sci-card` shells reflects Mathematical Aura tier (render pipeline only; no cosmetic visuals tied to tier yet)
+- Aura dots + modal pip bar show tier when tier > 0; detail modal shows next-tier hint + helper copy
+- **Gameplay aura scaling** (project-engine.js, quest-config.js, project-config.js) is **unchanged** — `auraLevel` on enriched card objects drives gameplay math via `config.auraScaling[level]`
+
+#### Legacy shell aura visuals (RETIRED)
+
+Historical **Legacy Aura** used `.sci-card.aura-*` classes (e.g. `aura-prismatic`) with shell `::before`/`::after` pseudos for perimeter halo + tier-3 face veil. Retired after forensic review and recovery evaluation (2026): pre-dates Proposal B borders and modern card layout; insufficient value vs modernization cost.
+
+- **Not applied in production** — `getAuraCSSClass()` returns `''`; no `aura-*` classes on cards
+- **CSS archived** in `style.css` block `LEGACY_SHELL_AURA_VISUALS` (commented); full copy in `reference/legacy-code-only/style.css`
+- **JS stubs retained** in cards.js: `DEFAULT_VISUAL_AURA`, `AURA_CSS_MAP`, `resolveVisualAura()`, `getAuraCSSClass()` — `@deprecated`, compatibility only
+- Legacy per-card `auraType` DB field preserved but not read by render pipeline
+
+#### Future cosmetics (not yet implemented)
+
+| System | Purpose | Default id (planned) | Runtime category |
+|--------|---------|----------------------|------------------|
+| **Shimmer** | Card-surface / border effects | `shimmer_prismatic` | *(future)* |
+| **Glow** | Perimeter / outside-card effects | shop items e.g. `aura_void` | `aura` (runtime; admin label: Glow) |
+
+Shimmer and Glow render only when Mathematical Aura tier ≥ 1 (product rule). Prismatic **concept** remains the intended default Shimmer identity — implemented fresh, not via legacy `aura-prismatic` shell pseudos.
 
 ### Player-Facing Card Renderer (Phase 3 + normalization Phase 1)
-- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal), `renderPackCardWrapper()` / `variant: 'pack-reveal'` (pack + breakthrough). **FX module**: `js/pack-reveal-effects.js` (`spawnRevealParticles`). Inert `.card-cosmetic-effects` host (Phase 3). **Overflow contract**: `.sci-card` `overflow: visible`; inner clips at `z-index: 2`. Pack reveals: `data-aura-tier="0"`, no duplicate-tier aura class.
+- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal), `renderPackCardWrapper()` / `variant: 'pack-reveal'` (pack + breakthrough). **FX module**: `js/pack-reveal-effects.js` (`spawnRevealParticles`). Inert `.card-cosmetic-effects` host (Phase 3). **Overflow contract**: `.sci-card` `overflow: visible`; inner clips at `z-index: 2`. Pack reveals: `data-aura-tier="0"`, no legacy shell aura classes.
 - **Phase A geometry**: `.card-detail-inner` uses CSS Grid (`12fr / 55fr / 2px / 31fr` rows, art `minmax(32px,…)`). Concept label inside `.card-detail-header`. Art `object-position: center top`. Shell `container-type: size`.
 - **Phase B typography**: `clamp()` + `cqw`/`cqh` on `.sci-card` / `.card-detail-frame` descendants; removed duplicate `.sci-card` font-size overrides; emoji via `.card-detail-art-emoji`. `@supports not (container-type: size)` retains legacy rem fallback.
 - **Unified card structure**: collection grid, pack opening, and detail modal all share the same `card-detail-*` internal HTML (header → art → divider → body). The modal proportions are the visual reference standard.
-- **Collection grid**: `renderPlayerCard()` → `card-render.js` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, aura visuals, click behavior). CSS overrides (`.sci-card .card-detail-*`) scale down font sizes and padding for grid context. keyFact text uses `.grid-clamp` class for line-clamping.
+- **Collection grid**: `renderPlayerCard()` → `card-render.js` wraps `card-detail-*` internals in a `.sci-card` shell (5:7 aspect ratio, rarity borders, Mathematical Aura tier dots, click behavior). No legacy shell aura classes.
 - **Pack opening**: `renderPackCardWrapper()` — flip shell + canonical `renderPackRevealSciCard()` (`pack-reveal` variant, tier 0)
 - **Detail modal**: `renderCardDetailView()` — `.card-detail-asset` (frame only, 240px max) + `.card-detail-meta` below (aura pips, helper text, concept flavor, ownership). Card body excludes supplemental metadata.
 - **Pack/breakthrough reveal**: `.pack-opening-cards` grid prefers ~220px (`13.75rem`) per card, shrinks via `auto-fit` + `minmax` on narrow viewports.
@@ -335,7 +350,7 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
 - **Schema subsystems** added to every player record:
   - `currencies` — `{ currentResearchPoints: 0 }`. Separate from lifetime RP (leaderboard) and seasonal RP. No mutation logic added.
-  - `cosmetics` — `{ owned: { }, equipped: { aura: 'default_prismatic', border: null, title: null, profileBanner: null } }`. `default_prismatic` is the **cosmetic** aura — completely separate from the gameplay aura multiplier system. **Banner default:** no equipped banner (`profile.equippedBanner` null) → default chrome (`data-banner="default"`); not a cosmetic item.
+  - `cosmetics` — `{ owned: { }, equipped: { aura: null, border: null, title: null, profileBanner: null } }`. `equipped.aura` is for future **Glow** cosmetics (runtime category `aura`). **Banner default:** no equipped banner (`profile.equippedBanner` null) → default chrome (`data-banner="default"`); not a cosmetic item.
   - `items` — consumable inventory: `{ reroll_token, cosmetic_reroll_token, aura_reroll_token, border_reroll_token, discount_chip, freeze_token, research_proposal }`. All default 0, stackable. No usage logic.
   - `shopUsage` — `{ rerollsUsedThisRotation: 0, frozenSlotsUsedThisRotation: 0 }`. Rotation-scoped tracking. No shop generation added.
   - `shop` — Phase 2B persistent rotation storage. See Phase 2B section below. No runtime shop behavior added.

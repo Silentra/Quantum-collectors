@@ -2849,7 +2849,7 @@ body.app-mode-game #screen-game.screen.active {
 .card-cosmetic-effects {
   position: absolute;
   inset: calc(-1 * var(--card-bleed, 0px));
-  z-index: 0;
+  z-index: 1;
   pointer-events: none;
   border-radius: inherit;
   overflow: visible;
@@ -2864,7 +2864,7 @@ body.app-mode-game #screen-game.screen.active {
   z-index: 1;
 }
 
-/* Phase 3 — content above legacy aura halo (z1); tier-3 face veil promoted to z3 on .sci-card */
+/* Phase 3 — content above retired legacy shell aura pseudos */
 /* Phase A — proportional grid (header / art / divider / body) */
 .card-detail-inner {
   position: relative;
@@ -4763,156 +4763,15 @@ body.app-mode-game #screen-game.screen.active {
   letter-spacing: 0.05em;
 }
 
-/* ===================== AURA SYSTEM ===================== */
+/* ===================== MATHEMATICAL AURA (tier indicators) ===================== */
 /*
- * Stacking (legacy Prismatic recovery, collection .sci-card): shell bg →
- * .card-cosmetic-effects z0 (Proposal B border) → aura ::before halo z1 →
- * .card-detail-inner z2 → tier-3 ::after face veil z3 → dots z5 → badges z10.
- * Shell overflow:visible — halo not clipped; inner overflow:hidden clips art/text.
+ * Mathematical Aura = duplicate-based progression (tiers 0–3). Gameplay + UI only.
+ * Legacy shell aura visuals (aura-prismatic, ::before/::after halos) are RETIRED —
+ * archived below as LEGACY_SHELL_AURA_VISUALS. Future surface/perimeter cosmetics:
+ * Shimmer (e.g. shimmer_prismatic) and Glow (runtime category: aura).
  */
 
-/* Aura overlay — a pseudo-element on the card */
-.sci-card[data-aura-tier="0"] { /* no aura */ }
-
-/* --- TIER 1: Subtle border glow --- */
-.sci-card[data-aura-tier="1"] { position: relative; }
-.sci-card[data-aura-tier="1"]::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 0.65rem;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.4;
-}
-
-/* --- TIER 2: Stronger glow + animated shimmer --- */
-.sci-card[data-aura-tier="2"] { position: relative; }
-.sci-card[data-aura-tier="2"]::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 0.65rem;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.6;
-}
-
-/* --- TIER 3: Full aura with animated shimmer --- */
-.sci-card[data-aura-tier="3"] { position: relative; }
-.sci-card[data-aura-tier="3"]::before {
-  content: '';
-  position: absolute;
-  inset: -2px;
-  border-radius: 0.7rem;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0.8;
-  animation: auraShimmer 3s ease-in-out infinite;
-}
-.sci-card[data-aura-tier="3"]::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 0.6rem;
-  z-index: 3;
-  pointer-events: none;
-  opacity: 0.08;
-  animation: auraInnerPulse 4s ease-in-out infinite;
-}
-
-/* Aura Type Colors */
-/* Holographic — rainbow shifting */
-.sci-card.aura-holographic[data-aura-tier="1"]::before {
-  background: linear-gradient(135deg, rgba(236,72,153,0.3), rgba(59,130,246,0.3), rgba(34,197,94,0.3));
-  box-shadow: 0 0 8px rgba(168,85,247,0.2);
-}
-.sci-card.aura-holographic[data-aura-tier="2"]::before {
-  background: linear-gradient(135deg, rgba(236,72,153,0.4), rgba(59,130,246,0.4), rgba(34,197,94,0.4));
-  box-shadow: 0 0 14px rgba(168,85,247,0.3);
-  animation: auraShimmer 4s ease-in-out infinite;
-}
-.sci-card.aura-holographic[data-aura-tier="3"]::before {
-  background: linear-gradient(135deg, rgba(236,72,153,0.5), rgba(59,130,246,0.5), rgba(34,197,94,0.5), rgba(245,158,11,0.5));
-  box-shadow: 0 0 20px rgba(168,85,247,0.4);
-}
-.sci-card.aura-holographic[data-aura-tier="3"]::after {
-  background: linear-gradient(135deg, rgba(236,72,153,0.1), rgba(59,130,246,0.1), rgba(34,197,94,0.1));
-}
-
-/* Prismatic — white/diamond sparkle */
-.sci-card.aura-prismatic[data-aura-tier="1"]::before {
-  background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(200,220,255,0.2));
-  box-shadow: 0 0 8px rgba(200,220,255,0.2);
-}
-.sci-card.aura-prismatic[data-aura-tier="2"]::before {
-  background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(200,220,255,0.3));
-  box-shadow: 0 0 14px rgba(200,220,255,0.3);
-  animation: auraShimmer 4s ease-in-out infinite;
-}
-.sci-card.aura-prismatic[data-aura-tier="3"]::before {
-  background: linear-gradient(135deg, rgba(255,255,255,0.35), rgba(200,220,255,0.4), rgba(180,200,255,0.3));
-  box-shadow: 0 0 20px rgba(200,220,255,0.4);
-}
-.sci-card.aura-prismatic[data-aura-tier="3"]::after {
-  background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(200,220,255,0.08));
-}
-
-/* Shadow — dark purple/black */
-.sci-card.aura-shadow[data-aura-tier="1"]::before {
-  background: linear-gradient(135deg, rgba(88,28,135,0.3), rgba(30,20,60,0.4));
-  box-shadow: 0 0 8px rgba(88,28,135,0.3);
-}
-.sci-card.aura-shadow[data-aura-tier="2"]::before {
-  background: linear-gradient(135deg, rgba(88,28,135,0.4), rgba(30,20,60,0.5));
-  box-shadow: 0 0 14px rgba(88,28,135,0.4);
-  animation: auraShimmer 4s ease-in-out infinite;
-}
-.sci-card.aura-shadow[data-aura-tier="3"]::before {
-  background: linear-gradient(135deg, rgba(88,28,135,0.5), rgba(30,20,60,0.6), rgba(147,51,234,0.3));
-  box-shadow: 0 0 20px rgba(88,28,135,0.5);
-}
-.sci-card.aura-shadow[data-aura-tier="3"]::after {
-  background: linear-gradient(135deg, rgba(88,28,135,0.1), rgba(30,20,60,0.08));
-}
-
-/* Radiant — golden/warm */
-.sci-card.aura-radiant[data-aura-tier="1"]::before {
-  background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.2));
-  box-shadow: 0 0 8px rgba(245,158,11,0.2);
-}
-.sci-card.aura-radiant[data-aura-tier="2"]::before {
-  background: linear-gradient(135deg, rgba(245,158,11,0.35), rgba(251,191,36,0.3));
-  box-shadow: 0 0 14px rgba(245,158,11,0.3);
-  animation: auraShimmer 4s ease-in-out infinite;
-}
-.sci-card.aura-radiant[data-aura-tier="3"]::before {
-  background: linear-gradient(135deg, rgba(245,158,11,0.45), rgba(251,191,36,0.4), rgba(252,211,77,0.3));
-  box-shadow: 0 0 20px rgba(245,158,11,0.4);
-}
-.sci-card.aura-radiant[data-aura-tier="3"]::after {
-  background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(251,191,36,0.08));
-}
-
-/* Cosmic — deep blue/starfield */
-.sci-card.aura-cosmic[data-aura-tier="1"]::before {
-  background: linear-gradient(135deg, rgba(30,58,138,0.3), rgba(88,28,135,0.2));
-  box-shadow: 0 0 8px rgba(30,58,138,0.25);
-}
-.sci-card.aura-cosmic[data-aura-tier="2"]::before {
-  background: linear-gradient(135deg, rgba(30,58,138,0.4), rgba(88,28,135,0.3), rgba(59,130,246,0.2));
-  box-shadow: 0 0 14px rgba(30,58,138,0.35);
-  animation: auraShimmer 4s ease-in-out infinite;
-}
-.sci-card.aura-cosmic[data-aura-tier="3"]::before {
-  background: linear-gradient(135deg, rgba(30,58,138,0.5), rgba(88,28,135,0.4), rgba(59,130,246,0.3));
-  box-shadow: 0 0 20px rgba(30,58,138,0.5);
-}
-.sci-card.aura-cosmic[data-aura-tier="3"]::after {
-  background: linear-gradient(135deg, rgba(30,58,138,0.1), rgba(88,28,135,0.08));
-}
-
-/* Aura tier indicator dots */
+/* Collection grid — tier pip + rarity dot (tier > 0 only, via card-render.js) */
 .sci-card-aura-dots {
   position: absolute;
   bottom: 0.3rem;
@@ -4921,6 +4780,9 @@ body.app-mode-game #screen-game.screen.active {
   align-items: center;
   gap: 3px;
   z-index: 5;
+}
+.sci-card[data-aura-tier]:not([data-aura-tier="0"]) .sci-card-aura-dots {
+  color: #e0e7ff;
 }
 .sci-card-rarity-dot {
   width: 7px;
@@ -4946,14 +4808,142 @@ body.app-mode-game #screen-game.screen.active {
   background: currentColor;
 }
 
-/* Aura dot colors by type */
+/*
+ * ----- BEGIN LEGACY_SHELL_AURA_VISUALS (retired, forensic archive) -----
+ * Historical shell pseudo-element system: aura-prismatic, aura-holographic, etc.
+ * on .sci-card ::before (halo) and ::after (tier-3 face veil). Not applied in production.
+ * Full copy also in reference/legacy-code-only/style.css. Do not re-enable without Shimmer/Glow architecture.
+ *
+ * Stacking (last recovery attempt): .card-cosmetic-effects z0 → aura ::before z1 →
+ * .card-detail-inner z2 → tier-3 ::after z3.
+ *
+.sci-card[data-aura-tier="0"] { }
+.sci-card[data-aura-tier="1"] { position: relative; }
+.sci-card[data-aura-tier="1"]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.65rem;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.4;
+}
+.sci-card[data-aura-tier="2"] { position: relative; }
+.sci-card[data-aura-tier="2"]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 0.65rem;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.6;
+}
+.sci-card[data-aura-tier="3"] { position: relative; }
+.sci-card[data-aura-tier="3"]::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 0.7rem;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.8;
+  animation: auraShimmer 3s ease-in-out infinite;
+}
+.sci-card[data-aura-tier="3"]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 0.6rem;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0.08;
+  animation: auraInnerPulse 4s ease-in-out infinite;
+}
+.sci-card.aura-holographic[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(236,72,153,0.3), rgba(59,130,246,0.3), rgba(34,197,94,0.3));
+  box-shadow: 0 0 8px rgba(168,85,247,0.2);
+}
+.sci-card.aura-holographic[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(236,72,153,0.4), rgba(59,130,246,0.4), rgba(34,197,94,0.4));
+  box-shadow: 0 0 14px rgba(168,85,247,0.3);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-holographic[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(236,72,153,0.5), rgba(59,130,246,0.5), rgba(34,197,94,0.5), rgba(245,158,11,0.5));
+  box-shadow: 0 0 20px rgba(168,85,247,0.4);
+}
+.sci-card.aura-holographic[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(236,72,153,0.1), rgba(59,130,246,0.1), rgba(34,197,94,0.1));
+}
+.sci-card.aura-prismatic[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(200,220,255,0.2));
+  box-shadow: 0 0 8px rgba(200,220,255,0.2);
+}
+.sci-card.aura-prismatic[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.25), rgba(200,220,255,0.3));
+  box-shadow: 0 0 14px rgba(200,220,255,0.3);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-prismatic[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(255,255,255,0.35), rgba(200,220,255,0.4), rgba(180,200,255,0.3));
+  box-shadow: 0 0 20px rgba(200,220,255,0.4);
+}
+.sci-card.aura-prismatic[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(200,220,255,0.08));
+}
+.sci-card.aura-shadow[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(88,28,135,0.3), rgba(30,20,60,0.4));
+  box-shadow: 0 0 8px rgba(88,28,135,0.3);
+}
+.sci-card.aura-shadow[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(88,28,135,0.4), rgba(30,20,60,0.5));
+  box-shadow: 0 0 14px rgba(88,28,135,0.4);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-shadow[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(88,28,135,0.5), rgba(30,20,60,0.6), rgba(147,51,234,0.3));
+  box-shadow: 0 0 20px rgba(88,28,135,0.5);
+}
+.sci-card.aura-shadow[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(88,28,135,0.1), rgba(30,20,60,0.08));
+}
+.sci-card.aura-radiant[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(245,158,11,0.2), rgba(251,191,36,0.2));
+  box-shadow: 0 0 8px rgba(245,158,11,0.2);
+}
+.sci-card.aura-radiant[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(245,158,11,0.35), rgba(251,191,36,0.3));
+  box-shadow: 0 0 14px rgba(245,158,11,0.3);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-radiant[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(245,158,11,0.45), rgba(251,191,36,0.4), rgba(252,211,77,0.3));
+  box-shadow: 0 0 20px rgba(245,158,11,0.4);
+}
+.sci-card.aura-radiant[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(245,158,11,0.1), rgba(251,191,36,0.08));
+}
+.sci-card.aura-cosmic[data-aura-tier="1"]::before {
+  background: linear-gradient(135deg, rgba(30,58,138,0.3), rgba(88,28,135,0.2));
+  box-shadow: 0 0 8px rgba(30,58,138,0.25);
+}
+.sci-card.aura-cosmic[data-aura-tier="2"]::before {
+  background: linear-gradient(135deg, rgba(30,58,138,0.4), rgba(88,28,135,0.3), rgba(59,130,246,0.2));
+  box-shadow: 0 0 14px rgba(30,58,138,0.35);
+  animation: auraShimmer 4s ease-in-out infinite;
+}
+.sci-card.aura-cosmic[data-aura-tier="3"]::before {
+  background: linear-gradient(135deg, rgba(30,58,138,0.5), rgba(88,28,135,0.4), rgba(59,130,246,0.3));
+  box-shadow: 0 0 20px rgba(30,58,138,0.5);
+}
+.sci-card.aura-cosmic[data-aura-tier="3"]::after {
+  background: linear-gradient(135deg, rgba(30,58,138,0.1), rgba(88,28,135,0.08));
+}
 .aura-holographic .sci-card-aura-dots { color: #c084fc; }
 .aura-prismatic   .sci-card-aura-dots { color: #e0e7ff; }
 .aura-shadow      .sci-card-aura-dots { color: #a855f7; }
 .aura-radiant     .sci-card-aura-dots { color: #fbbf24; }
 .aura-cosmic      .sci-card-aura-dots { color: #60a5fa; }
-
-/* Animations */
 @keyframes auraShimmer {
   0%, 100% { opacity: 0.5; }
   50% { opacity: 0.9; }
@@ -4961,6 +4951,103 @@ body.app-mode-game #screen-game.screen.active {
 @keyframes auraInnerPulse {
   0%, 100% { opacity: 0.05; }
   50% { opacity: 0.12; }
+}
+ * ----- END LEGACY_SHELL_AURA_VISUALS -----
+ */
+
+/* ===================== CARD SHIMMER (face surface effects) ===================== */
+/*
+ * Mount: .card-detail-art > .card-shimmer--face (z2, above img z1, below concept chip z3)
+ * Shell: data-card-shimmer + data-aura-tier on .sci-card / .card-detail-frame
+ * Gate: Mathematical Aura tier >= 1 only (card-shimmer.js + card-render.js)
+ */
+
+.card-shimmer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.card-detail-art .card-shimmer--face {
+  z-index: 2;
+}
+
+/* shimmer_prismatic — conservative diagonal sweep (fresh implementation) */
+.sci-card[data-card-shimmer="prismatic"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="prismatic"] .card-shimmer--face::after {
+  content: '';
+  position: absolute;
+  top: -25%;
+  bottom: -25%;
+  left: -70%;
+  width: 42%;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 38%,
+    rgba(200, 220, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 62%,
+    transparent 100%
+  );
+  animation: shimmerPrismaticSweep 4.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.sci-card[data-card-shimmer="prismatic"][data-aura-tier="1"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="1"] .card-shimmer--face::after {
+  opacity: 0.5;
+  animation-duration: 5.8s;
+}
+
+.sci-card[data-card-shimmer="prismatic"][data-aura-tier="2"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="2"] .card-shimmer--face::after {
+  opacity: 0.72;
+  animation-duration: 4.8s;
+}
+
+.sci-card[data-card-shimmer="prismatic"][data-aura-tier="3"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="3"] .card-shimmer--face::after {
+  opacity: 0.95;
+  animation-duration: 3.9s;
+}
+
+.sci-card[data-card-shimmer="prismatic"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="prismatic"] .card-shimmer--face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.02) 0%,
+    rgba(200, 220, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0.02) 100%
+  );
+  pointer-events: none;
+}
+
+.sci-card[data-card-shimmer="prismatic"][data-aura-tier="1"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="1"] .card-shimmer--face::before {
+  opacity: 0.55;
+}
+
+.sci-card[data-card-shimmer="prismatic"][data-aura-tier="2"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="2"] .card-shimmer--face::before {
+  opacity: 0.85;
+}
+
+.sci-card[data-card-shimmer="prismatic"][data-aura-tier="3"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="3"] .card-shimmer--face::before {
+  opacity: 1;
+}
+
+@keyframes shimmerPrismaticSweep {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
 /* ===================== CARD DETAIL MODAL (ENLARGED CARD) ===================== */
