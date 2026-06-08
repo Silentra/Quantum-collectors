@@ -83,7 +83,7 @@ export function renderCosmeticPreviewSurface(item, escapeHtml, options = {}) {
 
   if (item.category === ITEM_CATEGORIES.AURA) {
 
-    return `<div class="shop-cosmetic-preview shop-cosmetic-preview--aura aura-prismatic${expandedClass}" data-aura-tier="2" role="img" aria-label="Glow preview"></div>`;
+    return `<div class="shop-cosmetic-preview shop-cosmetic-preview--aura${expandedClass}" role="img" aria-label="Glow preview"></div>`;
 
   }
 

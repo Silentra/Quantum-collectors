@@ -7,17 +7,17 @@
  *   id, name, rarity, type, field, effect, image, flavor, created
  *   + imageUrl, keyFact, auraType, enabled
  *
- * NOTE: auraLevel is player-owned progression data, NOT part of the card schema.
+ * NOTE: auraLevel is player-owned progression data (Mathematical Aura), NOT part of the card schema.
  *       auraType on the card definition is DEPRECATED for admin control (Phase 1D).
- *       All cards now render with a default visual aura ("default_prismatic").
- *       Future cosmetic auras will be PROFILE-WIDE selections, not per-card.
+ *       Legacy shell aura visuals (aura-prismatic, etc.) are RETIRED — see ARCHITECTURE.md.
+ *       Future card-surface effects use Shimmer; perimeter effects use Glow (runtime category: aura).
  *
  * Legacy fields (type, effect, image, flavor) preserved for backward compat.
  * New cards should use the Phase 3 fields.
  *
  * Rarities: common, uncommon, rare, epic, legendary
  * Types: scientist, concept
- * Visual Aura Types (cosmetic only): holographic, prismatic, shadow, radiant, cosmic
+ * auraType (DB legacy): holographic, prismatic, shadow, radiant, cosmic — not read by render pipeline
  */
 
 import * as db from './database.js';
@@ -26,14 +26,15 @@ export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 export const CARD_TYPES = ['scientist', 'concept'];
 export const AURA_TYPES = ['none', 'holographic', 'prismatic', 'shadow', 'radiant', 'cosmic'];
 
-// ─── Phase 1D: Visual Aura Normalization ────────────────────────────────────
-// DEFAULT_VISUAL_AURA is the permanent baseline visual for ALL cards.
-// Future profile-wide cosmetic overrides (holographic, radiant, shadow, cosmic)
-// will replace this default. Until then, every card renders with this aura.
+// ─── Legacy shell aura visuals (RETIRED) ─────────────────────────────────────
+// Preserved as compatibility stubs only. Do not use for new rendering.
+// Forensic CSS archive: style.css LEGACY_SHELL_AURA_VISUALS block.
+// Future default surface effect id: shimmer_prismatic (not yet implemented).
+
+/** @deprecated Legacy shell aura id — retired from render pipeline */
 export const DEFAULT_VISUAL_AURA = 'default_prismatic';
 
-// Maps a visual aura identifier to the CSS class suffix used by the render pipeline.
-// 'default_prismatic' → 'prismatic' CSS rules. Future cosmetic types map 1:1.
+/** @deprecated Legacy aura-* CSS class map — retired from render pipeline */
 export const AURA_CSS_MAP = {
   default_prismatic: 'prismatic',
   holographic: 'holographic',
@@ -44,26 +45,21 @@ export const AURA_CSS_MAP = {
 };
 
 /**
- * Resolve a visual aura identifier to the active render aura for a card.
- * If no profile cosmetic override is provided, returns DEFAULT_VISUAL_AURA.
- * @param {string|null} profileCosmeticAura - future profile cosmetic override (null = use default)
- * @returns {string} resolved visual aura identifier
+ * @deprecated Legacy shell aura resolver — retired. Returns historical id only.
+ * @param {string|null} _profileCosmeticAura
+ * @returns {string}
  */
-export function resolveVisualAura(profileCosmeticAura = null) {
-  if (profileCosmeticAura && AURA_CSS_MAP[profileCosmeticAura]) {
-    return profileCosmeticAura;
-  }
+export function resolveVisualAura(_profileCosmeticAura = null) {
   return DEFAULT_VISUAL_AURA;
 }
 
 /**
- * Get the CSS class name for a visual aura identifier.
- * @param {string} visualAura - e.g. 'default_prismatic', 'holographic'
- * @returns {string} CSS class name, e.g. 'aura-prismatic'
+ * @deprecated Legacy aura-* CSS class — retired. Always returns empty string.
+ * @param {string} [_visualAura]
+ * @returns {string}
  */
-export function getAuraCSSClass(visualAura) {
-  const suffix = AURA_CSS_MAP[visualAura] || AURA_CSS_MAP[DEFAULT_VISUAL_AURA];
-  return `aura-${suffix}`;
+export function getAuraCSSClass(_visualAura) {
+  return '';
 }
 
 /**
@@ -158,7 +154,7 @@ function normalizeCard(data) {
     imageUrl: data.imageUrl || data.image || '',
     keyFact: data.keyFact || data.flavor || '',
     // Phase 1D: auraType preserved in DB for backward compat but no longer admin-controlled.
-    // Visual aura is now always DEFAULT_VISUAL_AURA; this field is legacy.
+    // auraType: legacy DB field only — not used by render pipeline
     auraType: AURA_TYPES.includes(data.auraType) ? data.auraType : 'none',
     enabled: data.enabled !== undefined ? !!data.enabled : true,
   };

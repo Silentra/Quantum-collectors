@@ -4,47 +4,43 @@
  * Phase 1: collection grid (.sci-card)
  * Phase 2: detail modal (.card-detail-frame + modal extras)
  * Phase 3: overflow/layering contract (.card-cosmetic-effects host, inner clip, z-index)
- * Phase 4: pack/breakthrough reveal via variant pack-reveal (tier 0, no duplicate aura)
+ * Phase 4: pack/breakthrough reveal via variant pack-reveal (tier 0, no duplicate-tier indicators on face)
  * Phase A: proportional CSS Grid on .card-detail-inner (geometry only)
  * Phase B: container-query typography (clamp + cqw/cqh); geometry unchanged
  *
- * Dependencies: cards.js, card-art.js (no ui.js / project-ui.js imports).
+ * Dependencies: cards.js, card-art.js, card-border.js, card-shimmer.js (no ui.js / project-ui.js imports).
  */
 
 import { renderCardDetailArtHtml, resolveCardArt } from './card-art.js';
 import {
-  AURA_CSS_MAP,
   AURA_THRESHOLDS,
   CONCEPT_EFFECT_LABELS,
   CONCEPT_FLAVOR_TEXT,
   TYPE_EMOJIS,
-  getAuraCSSClass,
   getAuraTier,
-  resolveVisualAura,
 } from './cards.js';
 import {
   DEFAULT_BORDER_EFFECT_ID,
   resolveBorderRenderEffectId,
 } from './card-border.js';
+import {
+  formatCardShimmerAttr,
+  renderShimmerFaceLayerHtml,
+  resolveShimmerRenderEffectId,
+} from './card-shimmer.js';
 
 /** Cosmetic mount — equipped border paints on .card-cosmetic-effects::before (v1). */
 const CARD_COSMETIC_HOST_HTML = '<div class="card-cosmetic-effects" aria-hidden="true"></div>';
 
-/** Pip colors for modal aura tier bar (keyed by AURA_CSS_MAP suffix). */
-const MODAL_AURA_PIP_COLORS = {
-  holographic: '#c084fc',
-  prismatic: '#e0e7ff',
-  shadow: '#a855f7',
-  radiant: '#fbbf24',
-  cosmic: '#60a5fa',
-};
+/** Pip color for Mathematical Aura tier indicators (modal + collection dots). */
+const MATH_AURA_TIER_PIP_COLOR = '#e0e7ff';
 
 /**
  * @typedef {Object} CardRenderOptions
  * @property {number} [quantity=1]
  * @property {boolean} [isLocked=false]
  * @property {boolean} [isUndiscovered=false]
- * @property {string|null} [profileCosmeticAura=null] - future profile override for resolveVisualAura
+ * @property {string|null} [profileCosmeticAura=null] - reserved for future Glow equip (unused)
  * @property {string|null} [borderRenderEffectId=null] - resolved data-card-border id; null → graphite default
  * @property {object|null} [equippedBorderDefinition=null] - cosmetic definition; resolved when borderRenderEffectId omitted
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
@@ -62,7 +58,6 @@ export function buildCardRenderModel(card, options = {}) {
     quantity = 1,
     isLocked = false,
     isUndiscovered = false,
-    profileCosmeticAura = null,
     borderRenderEffectId = null,
     equippedBorderDefinition = null,
     variant = 'collection',
@@ -79,17 +74,11 @@ export function buildCardRenderModel(card, options = {}) {
   const art = resolveCardArt(card);
   const keyFact = card.keyFact || card.flavor || '';
   const field = card.field || 'General';
-  const visualAura = resolveVisualAura(profileCosmeticAura);
-  const auraCssKey = AURA_CSS_MAP[visualAura] || 'prismatic';
-
   let auraTier;
-  let auraClass;
   if (isPackReveal) {
     auraTier = 0;
-    auraClass = '';
   } else {
     auraTier = isUndiscovered ? 0 : getAuraTier(card.rarity, quantity);
-    auraClass = auraTier > 0 ? getAuraCSSClass(visualAura) : '';
   }
 
   const emoji = TYPE_EMOJIS[card.type] || '\uD83D\uDD2C';
@@ -106,6 +95,8 @@ export function buildCardRenderModel(card, options = {}) {
     : '';
   const showOnCardConceptChip = !isModal && !isPackReveal && !!conceptEffectLabel;
 
+  const shimmerRenderEffectId = resolveShimmerRenderEffectId({ auraTier });
+
   return {
     cardId: card.id,
     name: card.name,
@@ -121,9 +112,6 @@ export function buildCardRenderModel(card, options = {}) {
     emoji,
     quantity,
     auraTier,
-    auraClass,
-    auraCssKey,
-    visualAura,
     variant,
     isLocked,
     isUndiscovered,
@@ -142,6 +130,8 @@ export function buildCardRenderModel(card, options = {}) {
     rarityDotClass: `rarity-dot-${card.rarity || 'common'}`,
     nameScaleClass,
     borderRenderEffectId: resolvedBorderRenderEffectId,
+    shimmerRenderEffectId,
+    showShimmerFace: shimmerRenderEffectId != null,
   };
 }
 
@@ -167,6 +157,8 @@ export function renderCardContent(model) {
     ? `<div class="${keyFactClass}">${model.keyFact}</div>`
     : '';
 
+  const shimmerFaceHtml = model.showShimmerFace ? renderShimmerFaceLayerHtml() : '';
+
   return `
       <div class="card-detail-inner">
         <div class="card-detail-header">
@@ -176,6 +168,7 @@ export function renderCardContent(model) {
         </div>
         <div class="card-detail-art">
           ${artHtml}
+          ${shimmerFaceHtml}
           ${conceptOverlayHtml}
         </div>
         <div class="card-detail-divider"></div>
@@ -202,7 +195,7 @@ export function renderModalAuraInfoHtml(model, card) {
     nextTierInfo = `<span class="text-amber-400/70 text-[0.6rem]">Max tier!</span>`;
   }
 
-  const pipColor = MODAL_AURA_PIP_COLORS[model.auraCssKey] || '#94a3b8';
+  const pipColor = MATH_AURA_TIER_PIP_COLOR;
 
   return `
     <div class="card-detail-aura-info">
@@ -278,8 +271,9 @@ export function renderCardDetailOwnershipLine(quantity) {
  */
 export function renderDetailFrame(model) {
   const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
+  const shimmerAttr = formatCardShimmerAttr(model.shimmerRenderEffectId);
   return `
-    <div class="card-detail-frame rarity-${model.rarity}" data-card-border="${borderEffect}">
+    <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}>
       ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
     </div>
@@ -313,14 +307,12 @@ export function renderCardDetailMeta(card, model, quantity) {
 export function renderCardDetailView(card, options = {}) {
   const {
     quantity = 1,
-    profileCosmeticAura = null,
     borderRenderEffectId = null,
     equippedBorderDefinition = null,
   } = options;
   const model = buildCardRenderModel(card, {
     quantity,
     variant: 'modal',
-    profileCosmeticAura,
     borderRenderEffectId,
     equippedBorderDefinition,
   });
@@ -363,9 +355,10 @@ export function renderSciCard(model) {
     : '';
 
   const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
+  const shimmerAttr = formatCardShimmerAttr(model.shimmerRenderEffectId);
 
   return `
-    <div class="sci-card rarity-${model.rarity} ${model.auraClass} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}">
+    <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}>
       ${qtyBadge}
       ${lockedBadge}
       ${undiscoveredBadge}

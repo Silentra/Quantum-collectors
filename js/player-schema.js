@@ -54,7 +54,7 @@ export const DEFAULT_CURRENCIES = Object.freeze({
 export const DEFAULT_COSMETICS = Object.freeze({
   owned: Object.freeze({}),
   equipped: Object.freeze({
-    aura: 'default_prismatic',
+    aura: null,
     border: null,
     title: null,
     profileBanner: null,
