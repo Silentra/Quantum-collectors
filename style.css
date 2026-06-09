@@ -5054,6 +5054,89 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
+/* shimmer_holographic — static iridescent foil (no animation) */
+.sci-card[data-card-shimmer="holographic"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="holographic"] .card-shimmer--face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: conic-gradient(
+    from 125deg at 42% 38%,
+    rgba(255, 120, 180, 0.05) 0deg,
+    rgba(140, 200, 255, 0.07) 72deg,
+    rgba(180, 255, 200, 0.05) 144deg,
+    rgba(255, 220, 140, 0.06) 216deg,
+    rgba(190, 150, 255, 0.07) 288deg,
+    rgba(255, 120, 180, 0.05) 360deg
+  );
+  mix-blend-mode: soft-light;
+  pointer-events: none;
+}
+
+.sci-card[data-card-shimmer="holographic"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="holographic"] .card-shimmer--face::after {
+  content: '';
+  position: absolute;
+  inset: -8%;
+  background: repeating-linear-gradient(
+    118deg,
+    transparent 0px,
+    transparent 10px,
+    rgba(255, 255, 255, 0.02) 10px,
+    rgba(200, 220, 255, 0.045) 14px,
+    rgba(255, 200, 240, 0.03) 18px,
+    transparent 22px
+  );
+  pointer-events: none;
+}
+
+.sci-card[data-card-shimmer="holographic"][data-aura-tier="1"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="1"] .card-shimmer--face::before {
+  opacity: 0.55;
+}
+
+.sci-card[data-card-shimmer="holographic"][data-aura-tier="2"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="2"] .card-shimmer--face::before {
+  opacity: 0.78;
+}
+
+.sci-card[data-card-shimmer="holographic"][data-aura-tier="3"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="3"] .card-shimmer--face::before {
+  opacity: 0.95;
+}
+
+.sci-card[data-card-shimmer="holographic"][data-aura-tier="1"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="1"] .card-shimmer--face::after {
+  opacity: 0.45;
+}
+
+.sci-card[data-card-shimmer="holographic"][data-aura-tier="2"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="2"] .card-shimmer--face::after {
+  opacity: 0.68;
+}
+
+.sci-card[data-card-shimmer="holographic"][data-aura-tier="3"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="3"] .card-shimmer--face::after {
+  opacity: 0.88;
+}
+
+/* Shop / modal — full-card shimmer cosmetic preview */
+.shop-cosmetic-preview--shimmer {
+  width: 100%;
+  min-height: 2.65rem;
+  margin: 0;
+  border: none;
+  background: transparent;
+  overflow: visible;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.cosmetic-preview-stage .shop-cosmetic-preview--shimmer.cosmetic-preview--expanded .shop-card-preview-slot .sci-card {
+  max-width: 11rem;
+}
+
 /* ===================== CARD DETAIL MODAL (ENLARGED CARD) ===================== */
 
 .card-detail-frame {
