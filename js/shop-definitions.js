@@ -17,6 +17,7 @@ export const ITEM_CATEGORIES = Object.freeze({
   UTILITY:        'utility',        // reroll tokens, freeze tokens, discount chips
   AURA:           'aura',           // profile card aura effects
   BORDER:         'border',         // profile card border styles
+  SHIMMER:        'shimmer',        // card-face shimmer effects (inside .card-detail-inner)
   PROFILE_BANNER: 'profile_banner', // profile banner cosmetics
   SHELL_BACKGROUND: 'shell_background', // gameplay shell backdrop (below tabs)
   TITLE:          'title',          // display title cosmetics
@@ -339,6 +340,21 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 5,
     enabled: true,
     renderEffectId: 'marble_inlay',
+  },
+
+  // ── Cosmetics — Shimmer (card-face; prismatic is automatic default, not sold) ──
+
+  shimmer_holographic: {
+    id: 'shimmer_holographic',
+    name: 'Holographic Shimmer',
+    description: 'A static iridescent foil finish across the card face — premium collector sheen.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHIMMER,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 420,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'holographic',
   },
 
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
@@ -923,6 +939,7 @@ function fallbackEmoji(definition) {
   if (definition.type === ITEM_TYPES.COSMETIC) {
     if (definition.category === ITEM_CATEGORIES.AURA) return '✦';
     if (definition.category === ITEM_CATEGORIES.BORDER) return '▣';
+    if (definition.category === ITEM_CATEGORIES.SHIMMER) return '✧';
     if (definition.category === ITEM_CATEGORIES.PROFILE_BANNER) return '▰';
     if (definition.category === ITEM_CATEGORIES.SHELL_BACKGROUND) return '▮';
     if (definition.category === ITEM_CATEGORIES.TITLE) return '★';

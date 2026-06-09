@@ -97,6 +97,7 @@ const COSMETIC_REWARD_CATEGORIES = Object.freeze([
   ITEM_CATEGORIES.SHELL_BACKGROUND,
   ITEM_CATEGORIES.AURA,
   ITEM_CATEGORIES.BORDER,
+  ITEM_CATEGORIES.SHIMMER,
 ]);
 
 function listCosmeticRewardOptions(category = null) {

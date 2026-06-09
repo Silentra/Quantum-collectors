@@ -36,6 +36,7 @@ const PROFILE_FEATURED_CARD_LIMIT = 3;
 const EQUIPPED_FIELDS = Object.freeze({
   [ITEM_CATEGORIES.AURA]: 'equippedAura',
   [ITEM_CATEGORIES.BORDER]: 'equippedBorder',
+  [ITEM_CATEGORIES.SHIMMER]: 'equippedShimmer',
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'equippedBanner',
   [ITEM_CATEGORIES.SHELL_BACKGROUND]: 'equippedBackground',
   [ITEM_CATEGORIES.TITLE]: 'equippedTitle',
@@ -44,6 +45,7 @@ const EQUIPPED_FIELDS = Object.freeze({
 const EQUIPPED_LABELS = Object.freeze({
   [ITEM_CATEGORIES.AURA]: 'Glow',
   [ITEM_CATEGORIES.BORDER]: 'Border',
+  [ITEM_CATEGORIES.SHIMMER]: 'Shimmer',
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'Banner',
   [ITEM_CATEGORIES.SHELL_BACKGROUND]: 'Background',
   [ITEM_CATEGORIES.TITLE]: 'Title',
@@ -55,6 +57,7 @@ const COSMETIC_CATEGORY_ORDER = [
   ITEM_CATEGORIES.TITLE,
   ITEM_CATEGORIES.AURA,
   ITEM_CATEGORIES.BORDER,
+  ITEM_CATEGORIES.SHIMMER,
 ];
 
 function getOwnedCosmetics(playerData) {
@@ -113,6 +116,10 @@ export function getEquippedBorder(playerData) {
   return resolveEquippedCosmetic(playerData, 'equippedBorder', ITEM_CATEGORIES.BORDER);
 }
 
+export function getEquippedShimmer(playerData) {
+  return resolveEquippedCosmetic(playerData, 'equippedShimmer', ITEM_CATEGORIES.SHIMMER);
+}
+
 export function getEquippedBanner(playerData) {
   return resolveEquippedCosmetic(playerData, 'equippedBanner', ITEM_CATEGORIES.PROFILE_BANNER);
 }
@@ -130,6 +137,7 @@ export function getProfileIdentityState(playerData) {
   return {
     aura: getEquippedAura(playerData),
     border: getEquippedBorder(playerData),
+    shimmer: getEquippedShimmer(playerData),
     banner: getEquippedBanner(playerData),
     background: getEquippedBackground(playerData),
     title: getEquippedTitle(playerData),

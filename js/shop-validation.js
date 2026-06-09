@@ -58,6 +58,7 @@ const SUPPORTED_CONSUMABLE_BEHAVIORS = Object.freeze([
 const COSMETIC_CATEGORY_FIELDS = Object.freeze({
   [ITEM_CATEGORIES.AURA]: 'equippedAura',
   [ITEM_CATEGORIES.BORDER]: 'equippedBorder',
+  [ITEM_CATEGORIES.SHIMMER]: 'equippedShimmer',
   [ITEM_CATEGORIES.PROFILE_BANNER]: 'equippedBanner',
   banner: 'equippedBanner',
   profileBanner: 'equippedBanner',

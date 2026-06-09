@@ -18,6 +18,7 @@ const MAX_AURA_TIER = 3;
 const EQUIPPED_COSMETIC_SLOTS = Object.freeze([
   { profileField: 'equippedAura', category: ITEM_CATEGORIES.AURA },
   { profileField: 'equippedBorder', category: ITEM_CATEGORIES.BORDER },
+  { profileField: 'equippedShimmer', category: ITEM_CATEGORIES.SHIMMER },
   { profileField: 'equippedBanner', category: ITEM_CATEGORIES.PROFILE_BANNER },
   { profileField: 'equippedBackground', category: ITEM_CATEGORIES.SHELL_BACKGROUND },
   { profileField: 'equippedTitle', category: ITEM_CATEGORIES.TITLE },

@@ -103,6 +103,7 @@ export const MAX_FEATURED_ACHIEVEMENTS = 5;
 export const DEFAULT_PROFILE = Object.freeze({
   equippedAura: null,
   equippedBorder: null,
+  equippedShimmer: null,
   equippedBanner: null,
   equippedBackground: null,
   equippedTitle: null,
@@ -233,6 +234,9 @@ function createProfileDefaultsFromLegacy(player = {}) {
   return {
     equippedAura: isOwnedValidCosmetic(equipped.aura, owned, ITEM_CATEGORIES.AURA) ? equipped.aura : null,
     equippedBorder: isOwnedValidCosmetic(equipped.border, owned, ITEM_CATEGORIES.BORDER) ? equipped.border : null,
+    equippedShimmer: isOwnedValidCosmetic(player.profile?.equippedShimmer, owned, ITEM_CATEGORIES.SHIMMER)
+      ? player.profile.equippedShimmer
+      : null,
     equippedBanner: isOwnedValidCosmetic(equipped.profileBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER)
       ? equipped.profileBanner
       : null,
@@ -276,6 +280,7 @@ export function getPhase2ADefaults() {
     profile: {
       equippedAura: null,
       equippedBorder: null,
+      equippedShimmer: null,
       equippedBanner: null,
       equippedBackground: null,
       equippedTitle: null,
@@ -480,6 +485,7 @@ export function normalizePlayerSchema(username) {
     const equippedFields = {
       equippedAura: ITEM_CATEGORIES.AURA,
       equippedBorder: ITEM_CATEGORIES.BORDER,
+      equippedShimmer: ITEM_CATEGORIES.SHIMMER,
       equippedBanner: ITEM_CATEGORIES.PROFILE_BANNER,
       equippedBackground: ITEM_CATEGORIES.SHELL_BACKGROUND,
       equippedTitle: ITEM_CATEGORIES.TITLE,

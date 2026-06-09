@@ -26,6 +26,7 @@ const STATIC_CATEGORY_INTRO = Object.freeze({
   backgrounds: 'Background visuals are code/CSS-authored (solid colors in CSS). Edit acquisition/governance fields here.',
   glow: 'Glow cosmetics use runtime category aura. Visuals are code-authored; edit governance fields here.',
   borders: 'Border visuals are code-authored. Edit acquisition/governance fields here.',
+  shimmer: 'Shimmer visuals are code-authored (card-face, inside .card-detail-inner). Prismatic is automatic at aura tier 1+ and is not sold. Edit governance for premium shimmers here.',
 });
 
 function escapeHtml(value) {
@@ -361,14 +362,6 @@ function renderCategoryContent(container) {
   if (activeCategory === 'titles') {
     content.innerHTML = titlesPanelHtml();
     wireTitlesPanel(container);
-    return;
-  }
-
-  if (activeCategory === 'shimmer') {
-    content.innerHTML = placeholderPanel(
-      'Shimmer',
-      'Shimmer is a future card effect category. Not available in admin yet.'
-    );
     return;
   }
 

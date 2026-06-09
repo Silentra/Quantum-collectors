@@ -47,6 +47,7 @@ export const ADMIN_STATIC_COSMETIC_TAB_MAP = Object.freeze({
   backgrounds: ITEM_CATEGORIES.SHELL_BACKGROUND,
   glow: ITEM_CATEGORIES.AURA,
   borders: ITEM_CATEGORIES.BORDER,
+  shimmer: ITEM_CATEGORIES.SHIMMER,
 });
 
 /**
@@ -58,7 +59,7 @@ export const ADMIN_COSMETIC_GRANT_CATEGORY_NAV = Object.freeze([
   { id: 'backgrounds', label: 'Backgrounds', kind: 'static', category: ITEM_CATEGORIES.SHELL_BACKGROUND },
   { id: 'glow', label: 'Glow', kind: 'static', category: ITEM_CATEGORIES.AURA },
   { id: 'borders', label: 'Borders', kind: 'static', category: ITEM_CATEGORIES.BORDER },
-  { id: 'shimmer', label: 'Shimmer', kind: 'placeholder' },
+  { id: 'shimmer', label: 'Shimmer', kind: 'static', category: ITEM_CATEGORIES.SHIMMER },
 ]);
 
 /**
@@ -465,6 +466,7 @@ export function listStaticCosmeticsByCategory(category) {
 export function getCosmeticCategoryAdminLabel(category) {
   if (category === ITEM_CATEGORIES.AURA) return 'Glow';
   if (category === ITEM_CATEGORIES.BORDER) return 'Border';
+  if (category === ITEM_CATEGORIES.SHIMMER) return 'Shimmer';
   if (category === ITEM_CATEGORIES.PROFILE_BANNER) return 'Banner';
   if (category === ITEM_CATEGORIES.SHELL_BACKGROUND) return 'Background';
   if (category === ITEM_CATEGORIES.TITLE) return 'Title';

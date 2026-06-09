@@ -29,7 +29,7 @@ export const AURA_TYPES = ['none', 'holographic', 'prismatic', 'shadow', 'radian
 // ─── Legacy shell aura visuals (RETIRED) ─────────────────────────────────────
 // Preserved as compatibility stubs only. Do not use for new rendering.
 // Forensic CSS archive: style.css LEGACY_SHELL_AURA_VISUALS block.
-// Future default surface effect id: shimmer_prismatic (not yet implemented).
+// Default surface shimmer: prismatic (automatic at Mathematical Aura tier 1+).
 
 /** @deprecated Legacy shell aura id — retired from render pipeline */
 export const DEFAULT_VISUAL_AURA = 'default_prismatic';

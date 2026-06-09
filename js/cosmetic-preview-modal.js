@@ -30,6 +30,7 @@ function getCategoryLabel(category) {
   if (category === ITEM_CATEGORIES.PROFILE_BANNER) return 'Banner';
   if (category === ITEM_CATEGORIES.TITLE) return 'Title';
   if (category === ITEM_CATEGORIES.BORDER) return 'Border';
+  if (category === ITEM_CATEGORIES.SHIMMER) return 'Shimmer';
   if (category === ITEM_CATEGORIES.AURA) return 'Glow';
   return formatLabel(category);
 }
@@ -41,7 +42,7 @@ export function closeCosmeticPreviewModal() {
 /**
  * @param {object|null|undefined} item — shop item shape (id, name, description, type, category, rarity)
  */
-export function openCosmeticPreviewModal(item) {
+export function openCosmeticPreviewModal(item, options = {}) {
   if (!item || item.type !== ITEM_TYPES.COSMETIC) return;
 
   const modal = document.getElementById('cosmetic-preview-modal');
@@ -51,7 +52,7 @@ export function openCosmeticPreviewModal(item) {
   const descriptionEl = document.getElementById('cosmetic-preview-description');
   if (!modal || !titleEl || !metaEl || !stageEl || !descriptionEl) return;
 
-  const previewHtml = renderExpandedCosmeticPreview(item, escapeHtml);
+  const previewHtml = renderExpandedCosmeticPreview(item, escapeHtml, options);
   if (!previewHtml) return;
 
   titleEl.textContent = item.name || item.id || 'Cosmetic';

@@ -249,9 +249,17 @@ function renderShopCardPreview(item) {
   `;
 }
 
+function getPlayerBorderRenderEffectId() {
+  const session = auth.getSession();
+  if (!session || session.username === '__admin__') return null;
+  return resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
+}
+
 function renderSlotPreview(item) {
   if (item?.type === ITEM_TYPES.COSMETIC) {
-    return renderShopCosmeticPreview(item, escapeHtml);
+    return renderShopCosmeticPreview(item, escapeHtml, {
+      borderRenderEffectId: getPlayerBorderRenderEffectId(),
+    });
   }
   if (item?.type === ITEM_TYPES.CARD) {
     return renderShopCardPreview(item);
@@ -491,7 +499,9 @@ function handleShopPreviewClick(previewButton) {
     const itemId = previewButton.dataset.cosmeticItemId;
     if (!itemId) return;
     const item = getSafeItem({ itemId });
-    openCosmeticPreviewModal(item);
+    openCosmeticPreviewModal(item, {
+      borderRenderEffectId: getPlayerBorderRenderEffectId(),
+    });
   }
 }
 

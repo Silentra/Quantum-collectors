@@ -1,17 +1,24 @@
 /**
  * card-shimmer.js — Shimmer cosmetic render resolution (card-face surface effects).
  *
- * Phase 1–2: automatic default shimmer (prismatic) when Mathematical Aura tier >= 1.
- * No equip/shop/registry in this module yet.
+ * Tier 1+ cards receive face shimmer. Default = prismatic (not a shop item).
+ * Equipped premium shimmer overrides default when owned.
  *
  * @see card-render.js — inner mount inside .card-detail-inner (full card interior)
  */
 
-/** Default face shimmer for tier 1+ cards (shimmer_prismatic concept). */
+import { getEquippedShimmer } from './profile-ui.js';
+
+/** Default face shimmer for tier 1+ cards when no premium shimmer is equipped. */
 export const DEFAULT_SHIMMER_EFFECT_ID = 'prismatic';
 
-/** Recognized shimmer effect ids for CSS [data-card-shimmer]. */
-export const SHIMMER_EFFECT_IDS = [DEFAULT_SHIMMER_EFFECT_ID];
+/** Player-ownable / purchasable shimmer effect ids (excludes automatic prismatic default). */
+export const COSMETIC_SHIMMER_EFFECT_IDS = [
+  'holographic',
+];
+
+/** All ids recognized by the shimmer renderer (default + purchasable). */
+export const SHIMMER_EFFECT_IDS = [DEFAULT_SHIMMER_EFFECT_ID, ...COSMETIC_SHIMMER_EFFECT_IDS];
 
 /**
  * @param {number} auraTier - Mathematical Aura tier (0–3)
@@ -22,19 +29,31 @@ export function shouldRenderShimmer(auraTier) {
 }
 
 /**
- * Resolve active shimmer effect id from Mathematical Aura tier.
+ * Resolve active shimmer effect id from Mathematical Aura tier + optional equip.
  * @param {object} [options]
  * @param {number} options.auraTier
- * @param {object|null} [options.shimmerDefinition] - reserved for future equip override
+ * @param {object|null} [options.shimmerDefinition] - equipped shimmer cosmetic definition
  * @returns {string|null} effect id or null when tier 0
  */
 export function resolveShimmerRenderEffectId({ auraTier, shimmerDefinition = null } = {}) {
   if (!shouldRenderShimmer(auraTier)) return null;
 
   const id = shimmerDefinition?.renderEffectId;
-  if (id && SHIMMER_EFFECT_IDS.includes(id)) return id;
+  if (id && COSMETIC_SHIMMER_EFFECT_IDS.includes(id)) return id;
 
   return DEFAULT_SHIMMER_EFFECT_ID;
+}
+
+/**
+ * @param {object|null|undefined} playerData
+ * @param {number} auraTier
+ * @returns {string|null}
+ */
+export function resolveShimmerRenderEffectIdForCard(playerData, auraTier) {
+  return resolveShimmerRenderEffectId({
+    auraTier,
+    shimmerDefinition: getEquippedShimmer(playerData)?.definition,
+  });
 }
 
 /**

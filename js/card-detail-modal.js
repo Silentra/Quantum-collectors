@@ -6,6 +6,7 @@ import * as auth from './auth.js';
 import * as cards from './cards.js';
 import * as player from './player.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
+import { getEquippedShimmer } from './profile-ui.js';
 import { renderCardDetailView } from './card-render.js';
 
 /**
@@ -32,14 +33,18 @@ export function openCardDetailModal(cardId, quantity = 1) {
   if (!modal || !content) return;
 
   let borderRenderEffectId = null;
+  let equippedShimmerDefinition = null;
   if (session && session.username !== '__admin__') {
-    borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
+    const playerData = player.getPlayer(session.username);
+    borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(playerData);
+    equippedShimmerDefinition = getEquippedShimmer(playerData)?.definition ?? null;
   }
 
   content.innerHTML = renderCardDetailView(card, {
     quantity: resolvedQty,
     profileCosmeticAura: null,
     borderRenderEffectId,
+    equippedShimmerDefinition,
   });
   modal.classList.remove('hidden');
 }

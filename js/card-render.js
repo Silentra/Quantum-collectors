@@ -43,6 +43,9 @@ const MATH_AURA_TIER_PIP_COLOR = '#e0e7ff';
  * @property {string|null} [profileCosmeticAura=null] - reserved for future Glow equip (unused)
  * @property {string|null} [borderRenderEffectId=null] - resolved data-card-border id; null → graphite default
  * @property {object|null} [equippedBorderDefinition=null] - cosmetic definition; resolved when borderRenderEffectId omitted
+ * @property {object|null} [equippedShimmerDefinition=null] - equipped shimmer; resolved when shimmerRenderEffectId omitted
+ * @property {string|null} [shimmerRenderEffectId=null] - explicit data-card-shimmer id (preview overrides)
+ * @property {number|null} [auraTierOverride=null] - force Mathematical Aura tier (shimmer preview only)
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
  * @property {'collection'|'modal'|'pack-reveal'} [variant='collection'] - layout/context preset
  */
@@ -60,6 +63,9 @@ export function buildCardRenderModel(card, options = {}) {
     isUndiscovered = false,
     borderRenderEffectId = null,
     equippedBorderDefinition = null,
+    equippedShimmerDefinition = null,
+    shimmerRenderEffectId: shimmerRenderEffectIdOption = null,
+    auraTierOverride = null,
     variant = 'collection',
   } = options;
 
@@ -75,7 +81,9 @@ export function buildCardRenderModel(card, options = {}) {
   const keyFact = card.keyFact || card.flavor || '';
   const field = card.field || 'General';
   let auraTier;
-  if (isPackReveal) {
+  if (auraTierOverride != null) {
+    auraTier = auraTierOverride;
+  } else if (isPackReveal) {
     auraTier = 0;
   } else {
     auraTier = isUndiscovered ? 0 : getAuraTier(card.rarity, quantity);
@@ -95,7 +103,9 @@ export function buildCardRenderModel(card, options = {}) {
     : '';
   const showOnCardConceptChip = !isModal && !isPackReveal && !!conceptEffectLabel;
 
-  const shimmerRenderEffectId = resolveShimmerRenderEffectId({ auraTier });
+  const shimmerRenderEffectId = shimmerRenderEffectIdOption != null
+    ? resolveShimmerRenderEffectId({ auraTier, shimmerDefinition: { renderEffectId: shimmerRenderEffectIdOption } })
+    : resolveShimmerRenderEffectId({ auraTier, shimmerDefinition: equippedShimmerDefinition });
 
   return {
     cardId: card.id,
@@ -309,12 +319,18 @@ export function renderCardDetailView(card, options = {}) {
     quantity = 1,
     borderRenderEffectId = null,
     equippedBorderDefinition = null,
+    equippedShimmerDefinition = null,
+    shimmerRenderEffectId = null,
+    auraTierOverride = null,
   } = options;
   const model = buildCardRenderModel(card, {
     quantity,
     variant: 'modal',
     borderRenderEffectId,
     equippedBorderDefinition,
+    equippedShimmerDefinition,
+    shimmerRenderEffectId,
+    auraTierOverride,
   });
 
   return `

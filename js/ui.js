@@ -56,7 +56,7 @@ import {
 } from './project-ui.js';
 
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
-import { renderProfile } from './profile-ui.js';
+import { getEquippedShimmer, renderProfile } from './profile-ui.js';
 import { renderShop, cleanupShop } from './shop-ui.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
@@ -402,8 +402,14 @@ function renderCollection() {
  */
 function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered = false) {
   const session = auth.getSession();
-  const borderRenderEffectId = session && session.username !== '__admin__'
-    ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
+  const playerData = session && session.username !== '__admin__'
+    ? player.getPlayer(session.username)
+    : null;
+  const borderRenderEffectId = playerData
+    ? resolveBorderRenderEffectIdFromPlayer(playerData)
+    : null;
+  const equippedShimmerDefinition = playerData
+    ? getEquippedShimmer(playerData)?.definition ?? null
     : null;
 
   const model = buildCardRenderModel(card, {
@@ -413,6 +419,7 @@ function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered =
     variant: 'collection',
     profileCosmeticAura: null,
     borderRenderEffectId,
+    equippedShimmerDefinition,
   });
   return renderSciCard(model);
 }
