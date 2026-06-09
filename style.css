@@ -2906,12 +2906,12 @@ body.app-mode-game #screen-game.screen.active {
   flex-shrink: 0;
 }
 
-/* On-card concept chip — overlays artwork (collection/grid only; modal uses metadata region) */
-.card-detail-art .card-detail-concept-chip {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+/* On-card concept chip — overlays artwork row (collection/grid only; modal uses metadata region) */
+.card-detail-inner > .card-detail-concept-chip {
+  grid-row: 2;
+  align-self: start;
+  justify-self: stretch;
+  position: relative;
   z-index: 3;
   display: flex;
   justify-content: center;
@@ -2925,7 +2925,7 @@ body.app-mode-game #screen-game.screen.active {
   );
 }
 
-.card-detail-art .card-detail-concept-chip .concept-effect-label {
+.card-detail-inner > .card-detail-concept-chip .concept-effect-label {
   margin: 0;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
@@ -4957,7 +4957,8 @@ body.app-mode-game #screen-game.screen.active {
 
 /* ===================== CARD SHIMMER (face surface effects) ===================== */
 /*
- * Mount: .card-detail-art > .card-shimmer--face (z2, above img z1, below concept chip z3)
+ * Mount: .card-detail-inner > .card-shimmer--face (full interior, z2)
+ *        concept chip grid-row 2, z3 (above shimmer)
  * Shell: data-card-shimmer + data-aura-tier on .sci-card / .card-detail-frame
  * Gate: Mathematical Aura tier >= 1 only (card-shimmer.js + card-render.js)
  */
@@ -4969,8 +4970,9 @@ body.app-mode-game #screen-game.screen.active {
   overflow: hidden;
 }
 
-.card-detail-art .card-shimmer--face {
+.card-detail-inner > .card-shimmer--face {
   z-index: 2;
+  border-radius: inherit;
 }
 
 /* shimmer_prismatic — conservative diagonal sweep (fresh implementation) */
