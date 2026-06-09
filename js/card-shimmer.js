@@ -4,7 +4,7 @@
  * Phase 1–2: automatic default shimmer (prismatic) when Mathematical Aura tier >= 1.
  * No equip/shop/registry in this module yet.
  *
- * @see card-render.js — face mount inside .card-detail-art
+ * @see card-render.js — inner mount inside .card-detail-inner (full card interior)
  */
 
 /** Default face shimmer for tier 1+ cards (shimmer_prismatic concept). */
@@ -56,7 +56,7 @@ export function formatCardShimmerAttr(shimmerEffectId) {
   return value ? ` data-card-shimmer="${value}"` : '';
 }
 
-/** Face shimmer layer HTML — mount inside .card-detail-art (above art, below concept chip). */
+/** Face shimmer layer HTML — mount inside .card-detail-inner (covers header, art, divider, body). */
 export function renderShimmerFaceLayerHtml() {
   return '<div class="card-shimmer card-shimmer--face" aria-hidden="true"></div>';
 }

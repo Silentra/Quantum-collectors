@@ -168,8 +168,6 @@ export function renderCardContent(model) {
         </div>
         <div class="card-detail-art">
           ${artHtml}
-          ${shimmerFaceHtml}
-          ${conceptOverlayHtml}
         </div>
         <div class="card-detail-divider"></div>
         <div class="card-detail-body">
@@ -177,6 +175,8 @@ export function renderCardContent(model) {
           ${keyFactHtml}
           ${model.extraBodyHtml || ''}
         </div>
+        ${shimmerFaceHtml}
+        ${conceptOverlayHtml}
       </div>`;
 }
 
