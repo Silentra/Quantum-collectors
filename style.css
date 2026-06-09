@@ -2909,6 +2909,7 @@ body.app-mode-game #screen-game.screen.active {
 /* On-card concept chip — overlays artwork row (collection/grid only; modal uses metadata region) */
 .card-detail-inner > .card-detail-concept-chip {
   grid-row: 2;
+  grid-column: 1;
   align-self: start;
   justify-self: stretch;
   position: relative;
