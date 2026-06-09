@@ -2910,9 +2910,10 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-inner > .card-detail-concept-chip {
   grid-row: 2;
   grid-column: 1;
-  align-self: start;
-  justify-self: stretch;
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 3;
   display: flex;
   justify-content: center;
