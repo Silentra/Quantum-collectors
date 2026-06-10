@@ -4994,26 +4994,26 @@ body.app-mode-game #screen-game.screen.active {
     rgba(255, 255, 255, 0.05) 62%,
     transparent 100%
   );
-  animation: shimmerPrismaticSweep 4.8s ease-in-out infinite;
+  animation: shimmerPrismaticSweep 9.6s ease-in-out infinite;
   will-change: transform;
 }
 
 .sci-card[data-card-shimmer="prismatic"][data-aura-tier="1"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="1"] .card-shimmer--face::after {
   opacity: 0.5;
-  animation-duration: 5.8s;
+  animation-duration: 11.6s;
 }
 
 .sci-card[data-card-shimmer="prismatic"][data-aura-tier="2"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="2"] .card-shimmer--face::after {
   opacity: 0.72;
-  animation-duration: 4.8s;
+  animation-duration: 9.6s;
 }
 
 .sci-card[data-card-shimmer="prismatic"][data-aura-tier="3"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="prismatic"][data-aura-tier="3"] .card-shimmer--face::after {
   opacity: 0.95;
-  animation-duration: 3.9s;
+  animation-duration: 7.8s;
 }
 
 .sci-card[data-card-shimmer="prismatic"] .card-shimmer--face::before,
@@ -5046,7 +5046,7 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 @keyframes shimmerPrismaticSweep {
-  0% {
+  0%, 50% {
     transform: translateX(0);
   }
   100% {
