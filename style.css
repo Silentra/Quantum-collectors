@@ -5054,21 +5054,53 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
-/* shimmer_holographic — static iridescent foil (no animation) */
+/* shimmer_holographic — static premium foil laminate (no sweep / no animation) */
+/*
+ * Layer stack (bottom → top):
+ *   .card-shimmer--face       — micro sparkle (sparse foil glints)
+ *   ::before                  — foil film (broad iridescent wash)
+ *   ::after                   — reflective highlights (diffuse gloss regions)
+ */
+
+.sci-card[data-card-shimmer="holographic"] .card-shimmer--face,
+.card-detail-frame[data-card-shimmer="holographic"] .card-shimmer--face {
+  background:
+    radial-gradient(circle at 21% 26%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 0.45%, transparent 0.55%),
+    radial-gradient(circle at 71% 19%, rgba(34, 211, 238, 0.32) 0%, rgba(34, 211, 238, 0.06) 0.5%, transparent 0.62%),
+    radial-gradient(circle at 86% 54%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.05) 0.4%, transparent 0.52%),
+    radial-gradient(circle at 41% 73%, rgba(167, 139, 250, 0.3) 0%, rgba(167, 139, 250, 0.05) 0.48%, transparent 0.58%),
+    radial-gradient(circle at 57% 43%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.04) 0.38%, transparent 0.48%),
+    radial-gradient(circle at 14% 61%, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0.04) 0.42%, transparent 0.52%);
+  background-repeat: no-repeat;
+}
+
 .sci-card[data-card-shimmer="holographic"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="holographic"] .card-shimmer--face::before {
   content: '';
   position: absolute;
   inset: 0;
-  background: conic-gradient(
-    from 125deg at 42% 38%,
-    rgba(255, 120, 180, 0.05) 0deg,
-    rgba(140, 200, 255, 0.07) 72deg,
-    rgba(180, 255, 200, 0.05) 144deg,
-    rgba(255, 220, 140, 0.06) 216deg,
-    rgba(190, 150, 255, 0.07) 288deg,
-    rgba(255, 120, 180, 0.05) 360deg
-  );
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      132deg,
+      rgba(34, 211, 238, 0.055) 0%,
+      rgba(59, 130, 246, 0.07) 18%,
+      rgba(129, 140, 248, 0.065) 36%,
+      rgba(168, 85, 247, 0.06) 52%,
+      rgba(236, 72, 153, 0.05) 68%,
+      rgba(52, 211, 153, 0.055) 84%,
+      rgba(56, 189, 248, 0.05) 100%
+    ),
+    conic-gradient(
+      from 210deg at 48% 42%,
+      rgba(56, 189, 248, 0.035) 0deg,
+      rgba(99, 102, 241, 0.055) 55deg,
+      rgba(168, 85, 247, 0.05) 115deg,
+      rgba(236, 72, 153, 0.04) 175deg,
+      rgba(52, 211, 153, 0.045) 235deg,
+      rgba(34, 211, 238, 0.04) 295deg,
+      rgba(56, 189, 248, 0.035) 360deg
+    );
   mix-blend-mode: soft-light;
   pointer-events: none;
 }
@@ -5077,16 +5109,13 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="holographic"] .card-shimmer--face::after {
   content: '';
   position: absolute;
-  inset: -8%;
-  background: repeating-linear-gradient(
-    118deg,
-    transparent 0px,
-    transparent 10px,
-    rgba(255, 255, 255, 0.02) 10px,
-    rgba(200, 220, 255, 0.045) 14px,
-    rgba(255, 200, 240, 0.03) 18px,
-    transparent 22px
-  );
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(ellipse 88% 72% at 16% 10%, rgba(255, 255, 255, 0.16) 0%, rgba(220, 235, 255, 0.06) 38%, transparent 68%),
+    radial-gradient(ellipse 76% 58% at 82% 36%, rgba(186, 210, 255, 0.11) 0%, rgba(160, 180, 255, 0.04) 42%, transparent 66%),
+    radial-gradient(ellipse 92% 54% at 46% 90%, rgba(200, 175, 255, 0.09) 0%, rgba(180, 160, 240, 0.03) 40%, transparent 62%);
+  mix-blend-mode: soft-light;
   pointer-events: none;
 }
 
