@@ -19,6 +19,7 @@ import * as player from './player.js';
 import * as toast from './toast.js';
 import { renderCollectionCard } from './card-render.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
+import { getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
 import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
 import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
@@ -249,16 +250,22 @@ function renderShopCardPreview(item) {
   `;
 }
 
-function getPlayerBorderRenderEffectId() {
+function getPlayerCardFacePreviewContext() {
   const session = auth.getSession();
-  if (!session || session.username === '__admin__') return null;
-  return resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
+  if (!session || session.username === '__admin__') {
+    return { borderRenderEffectId: null, equippedShimmerDefinition: null };
+  }
+  const playerData = player.getPlayer(session.username);
+  return {
+    borderRenderEffectId: resolveBorderRenderEffectIdFromPlayer(playerData),
+    equippedShimmerDefinition: getEquippedShimmer(playerData)?.definition ?? null,
+  };
 }
 
 function renderSlotPreview(item) {
   if (item?.type === ITEM_TYPES.COSMETIC) {
     return renderShopCosmeticPreview(item, escapeHtml, {
-      borderRenderEffectId: getPlayerBorderRenderEffectId(),
+      playerContext: getPlayerCardFacePreviewContext(),
     });
   }
   if (item?.type === ITEM_TYPES.CARD) {
@@ -500,7 +507,7 @@ function handleShopPreviewClick(previewButton) {
     if (!itemId) return;
     const item = getSafeItem({ itemId });
     openCosmeticPreviewModal(item, {
-      borderRenderEffectId: getPlayerBorderRenderEffectId(),
+      playerContext: getPlayerCardFacePreviewContext(),
     });
   }
 }
