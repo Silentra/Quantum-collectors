@@ -5121,18 +5121,23 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 /* Shop / modal — unified real-card cosmetic preview (Border, Shimmer, future Glow) */
-.shop-cosmetic-preview--card {
+.shop-cosmetic-preview.shop-cosmetic-preview--card {
   width: 100%;
   height: auto;
   min-height: 0;
   margin: 0;
   border: none;
   background: transparent;
+  background-image: none;
   overflow: visible;
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: stretch;
   flex-shrink: 0;
+}
+
+.shop-cosmetic-preview.shop-cosmetic-preview--card .shop-card-preview-slot {
+  width: 100%;
 }
 
 .shop-cosmetic-preview--card.shop-cosmetic-preview--unavailable {
@@ -5149,8 +5154,21 @@ body.app-mode-game #screen-game.screen.active {
   padding: 0.5rem;
 }
 
+.cosmetic-preview-stage .shop-cosmetic-preview.shop-cosmetic-preview--card.cosmetic-preview--expanded {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
 .cosmetic-preview-stage .shop-cosmetic-preview--card.cosmetic-preview--expanded .shop-card-preview-slot .sci-card {
   max-width: 11rem;
+}
+
+@media (max-width: 480px) {
+  .cosmetic-preview-stage .shop-cosmetic-preview.shop-cosmetic-preview--card.cosmetic-preview--expanded {
+    height: auto;
+    min-height: 0;
+  }
 }
 
 /* ===================== CARD DETAIL MODAL (ENLARGED CARD) ===================== */
