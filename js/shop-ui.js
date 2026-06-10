@@ -17,7 +17,6 @@ import * as cards from './cards.js';
 import * as db from './database.js';
 import * as player from './player.js';
 import * as toast from './toast.js';
-import { renderCollectionCard } from './card-render.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
@@ -28,7 +27,7 @@ import {
   getItemDefinition as getRegistryItemDefinition,
   getMergedItemDefinitions,
 } from './cosmetic-definitions.js';
-import { renderShopCosmeticPreview } from './cosmetic-preview.js';
+import { renderShopCardPreviewSlot, renderShopCosmeticPreview } from './cosmetic-preview.js';
 import { ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
 import {
@@ -231,7 +230,7 @@ function renderShopCardPreview(item) {
     ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
     : null;
 
-  const cardHtml = renderCollectionCard(card, {
+  const slotHtml = renderShopCardPreviewSlot(card, {
     quantity: 1,
     variant: 'collection',
     profileCosmeticAura: null,
@@ -245,7 +244,7 @@ function renderShopCardPreview(item) {
       data-shop-preview="card"
       data-card-id="${escapeHtml(parsed.sourceId)}"
       aria-label="View ${label} details">
-      <div class="shop-card-preview-slot">${cardHtml}</div>
+      ${slotHtml}
     </button>
   `;
 }

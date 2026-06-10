@@ -3,7 +3,8 @@
  * Inline shop tiles and expanded modal share the same helpers.
  */
 
-import { getEnabledCards } from './cards.js';
+import * as cards from './cards.js';
+import * as db from './database.js';
 import { renderCollectionCard } from './card-render.js';
 import { COSMETIC_SHIMMER_EFFECT_IDS } from './card-shimmer.js';
 import { COSMETIC_BORDER_EFFECT_IDS, DEFAULT_BORDER_EFFECT_ID } from './card-border.js';
@@ -39,17 +40,35 @@ const CARD_FACE_PREVIEW_CATEGORIES = new Set([
 
 /**
  * First enabled card by rarity descent, alphabetical within tier.
+ * Hydrates via cards.getCard(id) — same path as shop card-item previews.
  * @returns {object|null}
  */
 export function resolveCosmeticPreviewCard() {
-  const enabled = getEnabledCards();
+  const enabled = db.getChildren('cards').filter(({ value }) => value?.enabled !== false);
+
   for (const rarity of PREVIEW_CARD_RARITIES) {
-    const match = enabled
-      .filter(card => card.rarity === rarity)
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))[0];
-    if (match) return match;
+    const tierMatches = enabled
+      .filter(({ value }) => value?.rarity === rarity)
+      .sort((a, b) => (a.value.name || '').localeCompare(b.value.name || ''));
+
+    for (const { key, value } of tierMatches) {
+      const cardId = value?.id ?? key;
+      const card = cards.getCard(cardId);
+      if (!card || !(card.name || '').trim()) continue;
+      return card;
+    }
   }
   return null;
+}
+
+/**
+ * Shared shop preview slot wrapper — same markup as card-item shop previews.
+ * @param {object} card
+ * @param {import('./card-render.js').CardRenderOptions} [options]
+ * @returns {string}
+ */
+export function renderShopCardPreviewSlot(card, options = {}) {
+  return `<div class="shop-card-preview-slot">${renderCollectionCard(card, options)}</div>`;
 }
 
 /**
@@ -144,7 +163,7 @@ export function renderCardFaceCosmeticPreview(item, escapeHtml, options = {}) {
       </div>`;
   }
 
-  const cardHtml = renderCollectionCard(
+  const slotHtml = renderShopCardPreviewSlot(
     previewCard,
     buildCardFacePreviewOptions(item, options.playerContext)
   );
@@ -152,7 +171,7 @@ export function renderCardFaceCosmeticPreview(item, escapeHtml, options = {}) {
   const label = escapeHtml(item.name || 'Cosmetic');
   return `
     <div class="shop-cosmetic-preview shop-cosmetic-preview--card${expandedClass}" data-preview-category="${escapeHtml(item.category)}" role="img" aria-label="${label} preview">
-      <div class="shop-card-preview-slot">${cardHtml}</div>
+      ${slotHtml}
     </div>`;
 }
 
