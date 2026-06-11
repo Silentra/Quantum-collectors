@@ -346,7 +346,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   shimmer_holographic: {
     id: 'shimmer_holographic',
-    name: 'Holographic Shimmer',
+    name: 'Iridescent Shimmer',
     description: 'A static iridescent foil finish across the card face — premium collector sheen.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
