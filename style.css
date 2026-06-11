@@ -5108,9 +5108,9 @@ body.app-mode-game #screen-game.screen.active {
   inset: 0;
   border-radius: inherit;
   background:
-    radial-gradient(ellipse 88% 72% at 16% 10%, rgba(255, 255, 255, 0.34) 0%, rgba(220, 235, 255, 0.14) 34%, transparent 68%),
-    radial-gradient(ellipse 76% 58% at 82% 36%, rgba(255, 255, 255, 0.28) 0%, rgba(186, 210, 255, 0.11) 38%, transparent 66%),
-    radial-gradient(ellipse 92% 54% at 46% 90%, rgba(255, 255, 255, 0.22) 0%, rgba(200, 175, 255, 0.09) 36%, transparent 62%);
+    radial-gradient(ellipse 62% 50% at 16% 10%, rgba(255, 255, 255, 0.4) 0%, rgba(220, 235, 255, 0.1) 20%, transparent 46%),
+    radial-gradient(ellipse 54% 40% at 82% 36%, rgba(255, 255, 255, 0.33) 0%, rgba(186, 210, 255, 0.08) 22%, transparent 44%),
+    radial-gradient(ellipse 64% 38% at 46% 90%, rgba(255, 255, 255, 0.26) 0%, rgba(200, 175, 255, 0.07) 18%, transparent 42%);
   background-repeat: no-repeat;
   mix-blend-mode: screen;
   pointer-events: none;
