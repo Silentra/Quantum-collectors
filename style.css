@@ -5149,27 +5149,22 @@ body.app-mode-game #screen-game.screen.active {
 /* shimmer_voltaic — periodic electrical discharge (10s: 8s idle / 2s active) */
 /*
  * Layer stack (bottom → top):
- *   .card-shimmer--face       — isolation + localized strike illumination
- *   ::before                  — primary bolt masks (screen)
+ *   .card-shimmer--face       — isolation context only
+ *   ::before                  — primary bolt core + path-derived corona (screen)
  *   ::after                   — secondary bolts + branch (screen; tier 2+)
  *
- * Bolt masks (4): UL→LM, UL→RM, TM→LR, LM→BM
+ * V2: thin core masks (sw ~2.2), miter joins, butt caps, small forks.
+ * Corona via drop-shadow on masked pseudos — no fixed radial hotspots.
  */
 
 .sci-card[data-card-shimmer="voltaic"] .card-shimmer--face,
 .card-detail-frame[data-card-shimmer="voltaic"] .card-shimmer--face {
-  --voltaic-mask-ul-lm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' d='M10 8 L24 22 L16 34 L30 48 L22 58 L36 72 L28 82'/%3E%3C/svg%3E");
-  --voltaic-mask-ul-rm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' d='M8 14 L22 20 L18 32 L34 38 L28 50 L48 52 L58 46'/%3E%3C/svg%3E");
-  --voltaic-mask-tm-lr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' d='M48 6 L52 22 L44 28 L56 42 L48 56 L62 68 L54 78 L72 88'/%3E%3C/svg%3E");
-  --voltaic-mask-lm-bm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' d='M6 38 L20 44 L14 56 L28 62 L22 74 L36 82 L32 92'/%3E%3C/svg%3E");
-  --voltaic-mask-branch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='6' stroke-linecap='round' d='M26 44 L34 50'/%3E%3Cpath fill='none' stroke='white' stroke-width='7' stroke-linecap='round' stroke-linejoin='round' d='M30 38 L38 52 L34 64'/%3E%3C/svg%3E");
+  --voltaic-mask-ul-lm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M10 8 L20 18 L14 26 L24 38 L18 48 L28 58 L22 68 L32 80'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M24 38 L32 30'/%3E%3C/svg%3E");
+  --voltaic-mask-ul-rm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M8 12 L18 18 L14 28 L26 34 L22 44 L38 46 L54 44'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M26 34 L36 28'/%3E%3C/svg%3E");
+  --voltaic-mask-tm-lr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M50 6 L46 18 L54 24 L44 36 L52 48 L48 60 L58 72 L68 84'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M52 48 L62 42'/%3E%3C/svg%3E");
+  --voltaic-mask-lm-bm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M6 36 L16 42 L12 52 L22 58 L18 68 L28 76 L24 88'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M22 58 L30 52'/%3E%3C/svg%3E");
+  --voltaic-mask-branch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.5' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M28 40 L36 46 L32 56'/%3E%3C/svg%3E");
   isolation: isolate;
-  background:
-    radial-gradient(ellipse 44% 38% at 26% 36%, rgba(233, 213, 255, 0.95) 0%, rgba(167, 139, 250, 0.35) 42%, transparent 72%),
-    radial-gradient(ellipse 40% 36% at 54% 58%, rgba(221, 214, 254, 0.9) 0%, rgba(196, 181, 253, 0.3) 45%, transparent 70%),
-    radial-gradient(ellipse 38% 34% at 68% 72%, rgba(196, 181, 253, 0.88) 0%, rgba(168, 85, 247, 0.28) 48%, transparent 68%);
-  background-repeat: no-repeat;
-  opacity: 0;
   pointer-events: none;
 }
 
@@ -5183,7 +5178,11 @@ body.app-mode-game #screen-game.screen.active {
   border-radius: inherit;
   pointer-events: none;
   mix-blend-mode: screen;
-  background: linear-gradient(148deg, #ffffff 0%, #f5f3ff 28%, #ddd6fe 48%, #c4b5fd 62%, #a855f7 88%);
+  background: #ffffff;
+  filter:
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 4px rgba(196, 181, 253, 0.8))
+    drop-shadow(0 0 9px rgba(168, 85, 247, 0.52));
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: contain;
@@ -5192,11 +5191,6 @@ body.app-mode-game #screen-game.screen.active {
   mask-size: contain;
   opacity: 0;
   will-change: opacity;
-}
-
-.sci-card[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face,
-.card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face {
-  animation: voltaicIlluminateT1 10s linear infinite;
 }
 
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face::before,
@@ -5209,11 +5203,6 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face::after {
   content: none;
-}
-
-.sci-card[data-card-shimmer="voltaic"][data-aura-tier="2"] .card-shimmer--face,
-.card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="2"] .card-shimmer--face {
-  animation: voltaicIlluminateT2 10s linear infinite;
 }
 
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="2"] .card-shimmer--face::before,
@@ -5230,11 +5219,6 @@ body.app-mode-game #screen-game.screen.active {
   animation: voltaicSecondaryT2 10s linear infinite;
 }
 
-.sci-card[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face,
-.card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face {
-  animation: voltaicIlluminateT3 10s linear infinite;
-}
-
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::before {
   animation: voltaicPrimaryT3 10s linear infinite;
@@ -5243,41 +5227,6 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::after {
   animation: voltaicSecondaryT3 10s linear infinite;
-}
-
-@keyframes voltaicIlluminateT1 {
-  0%, 79.5% { opacity: 0; }
-  79.8% { opacity: 0.25; }
-  81.8% { opacity: 0.72; }
-  83% { opacity: 0; }
-  100% { opacity: 0; }
-}
-
-@keyframes voltaicIlluminateT2 {
-  0%, 79.5% { opacity: 0; }
-  79.8% { opacity: 0.22; }
-  81.8% { opacity: 0.68; }
-  83% { opacity: 0; }
-  84.5% { opacity: 0.18; }
-  84.8% { opacity: 0.75; }
-  86% { opacity: 0; }
-  100% { opacity: 0; }
-}
-
-@keyframes voltaicIlluminateT3 {
-  0%, 79.5% { opacity: 0; }
-  79.6% { opacity: 0.2; }
-  79.9% { opacity: 0.35; }
-  80.2% { opacity: 0.15; }
-  81.8% { opacity: 0.78; }
-  83% { opacity: 0; }
-  84.8% { opacity: 0.8; }
-  86% { opacity: 0; }
-  87.8% { opacity: 0.82; }
-  89% { opacity: 0; }
-  90.2% { opacity: 0.65; }
-  91.2% { opacity: 0; }
-  100% { opacity: 0; }
 }
 
 @keyframes voltaicPrimaryT1 {
@@ -5372,9 +5321,7 @@ body.app-mode-game #screen-game.screen.active {
 @media (prefers-reduced-motion: reduce) {
   .sci-card[data-card-shimmer="voltaic"] .card-shimmer--face,
   .card-detail-frame[data-card-shimmer="voltaic"] .card-shimmer--face {
-    animation: none;
-    opacity: 0.06;
-    background: radial-gradient(ellipse 50% 45% at 32% 40%, rgba(167, 139, 250, 0.5) 0%, transparent 72%);
+    opacity: 1;
   }
 
   .sci-card[data-card-shimmer="voltaic"] .card-shimmer--face::before,
@@ -5383,6 +5330,7 @@ body.app-mode-game #screen-game.screen.active {
   .card-detail-frame[data-card-shimmer="voltaic"] .card-shimmer--face::after {
     animation: none;
     opacity: 0;
+    filter: none;
   }
 }
 
