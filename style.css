@@ -5057,21 +5057,14 @@ body.app-mode-game #screen-game.screen.active {
 /* shimmer_holographic — static premium foil laminate (no sweep / no animation) */
 /*
  * Layer stack (bottom → top):
- *   .card-shimmer--face       — micro sparkle (sparse foil glints)
- *   ::before                  — foil film (broad iridescent wash)
- *   ::after                   — reflective highlights (diffuse gloss regions)
+ *   .card-shimmer--face       — isolation context (blend contained to card face)
+ *   ::before                  — foil film (iridescent color shift, soft-light)
+ *   ::after                   — gloss highlights + micro sparkles (screen)
  */
 
 .sci-card[data-card-shimmer="holographic"] .card-shimmer--face,
 .card-detail-frame[data-card-shimmer="holographic"] .card-shimmer--face {
-  background:
-    radial-gradient(circle at 21% 26%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 0.45%, transparent 0.55%),
-    radial-gradient(circle at 71% 19%, rgba(34, 211, 238, 0.32) 0%, rgba(34, 211, 238, 0.06) 0.5%, transparent 0.62%),
-    radial-gradient(circle at 86% 54%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.05) 0.4%, transparent 0.52%),
-    radial-gradient(circle at 41% 73%, rgba(167, 139, 250, 0.3) 0%, rgba(167, 139, 250, 0.05) 0.48%, transparent 0.58%),
-    radial-gradient(circle at 57% 43%, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.04) 0.38%, transparent 0.48%),
-    radial-gradient(circle at 14% 61%, rgba(34, 211, 238, 0.2) 0%, rgba(34, 211, 238, 0.04) 0.42%, transparent 0.52%);
-  background-repeat: no-repeat;
+  isolation: isolate;
 }
 
 .sci-card[data-card-shimmer="holographic"] .card-shimmer--face::before,
@@ -5112,10 +5105,17 @@ body.app-mode-game #screen-game.screen.active {
   inset: 0;
   border-radius: inherit;
   background:
-    radial-gradient(ellipse 88% 72% at 16% 10%, rgba(255, 255, 255, 0.16) 0%, rgba(220, 235, 255, 0.06) 38%, transparent 68%),
-    radial-gradient(ellipse 76% 58% at 82% 36%, rgba(186, 210, 255, 0.11) 0%, rgba(160, 180, 255, 0.04) 42%, transparent 66%),
-    radial-gradient(ellipse 92% 54% at 46% 90%, rgba(200, 175, 255, 0.09) 0%, rgba(180, 160, 240, 0.03) 40%, transparent 62%);
-  mix-blend-mode: soft-light;
+    radial-gradient(ellipse 88% 72% at 16% 10%, rgba(255, 255, 255, 0.34) 0%, rgba(220, 235, 255, 0.14) 34%, transparent 68%),
+    radial-gradient(ellipse 76% 58% at 82% 36%, rgba(255, 255, 255, 0.28) 0%, rgba(186, 210, 255, 0.11) 38%, transparent 66%),
+    radial-gradient(ellipse 92% 54% at 46% 90%, rgba(255, 255, 255, 0.22) 0%, rgba(200, 175, 255, 0.09) 36%, transparent 62%),
+    radial-gradient(circle 1.75px at 21% 26%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.25) 50%, transparent 100%),
+    radial-gradient(circle 1.5px at 71% 19%, rgba(34, 211, 238, 0.85) 0%, rgba(34, 211, 238, 0.2) 50%, transparent 100%),
+    radial-gradient(circle 1.65px at 86% 54%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%),
+    radial-gradient(circle 1.55px at 41% 73%, rgba(167, 139, 250, 0.8) 0%, rgba(167, 139, 250, 0.18) 50%, transparent 100%),
+    radial-gradient(circle 1.45px at 57% 43%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.16) 50%, transparent 100%),
+    radial-gradient(circle 1.6px at 14% 61%, rgba(34, 211, 238, 0.7) 0%, rgba(34, 211, 238, 0.15) 50%, transparent 100%);
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
   pointer-events: none;
 }
 
@@ -5136,17 +5136,17 @@ body.app-mode-game #screen-game.screen.active {
 
 .sci-card[data-card-shimmer="holographic"][data-aura-tier="1"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="1"] .card-shimmer--face::after {
-  opacity: 0.45;
+  opacity: 0.58;
 }
 
 .sci-card[data-card-shimmer="holographic"][data-aura-tier="2"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="2"] .card-shimmer--face::after {
-  opacity: 0.68;
+  opacity: 0.74;
 }
 
 .sci-card[data-card-shimmer="holographic"][data-aura-tier="3"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="holographic"][data-aura-tier="3"] .card-shimmer--face::after {
-  opacity: 0.88;
+  opacity: 0.86;
 }
 
 /* Shop / modal — unified real-card cosmetic preview (Border, Shimmer, future Glow) */
