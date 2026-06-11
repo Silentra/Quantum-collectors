@@ -357,6 +357,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'holographic',
   },
 
+  shimmer_voltaic: {
+    id: 'shimmer_voltaic',
+    name: 'Voltaic',
+    description: 'Periodic violet lightning discharges across the card face — charged collector energy.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHIMMER,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 450,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'voltaic',
+  },
+
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {

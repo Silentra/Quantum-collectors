@@ -15,6 +15,7 @@ export const DEFAULT_SHIMMER_EFFECT_ID = 'prismatic';
 /** Player-ownable / purchasable shimmer effect ids (excludes automatic prismatic default). */
 export const COSMETIC_SHIMMER_EFFECT_IDS = [
   'holographic',
+  'voltaic',
 ];
 
 /** All ids recognized by the shimmer renderer (default + purchasable). */
