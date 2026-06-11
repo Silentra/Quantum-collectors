@@ -5059,7 +5059,7 @@ body.app-mode-game #screen-game.screen.active {
  * Layer stack (bottom → top):
  *   .card-shimmer--face       — isolation context (blend contained to card face)
  *   ::before                  — foil film (iridescent color shift, soft-light)
- *   ::after                   — gloss highlights + micro sparkles (screen)
+ *   ::after                   — gloss highlights + sparse foil glints (screen)
  */
 
 .sci-card[data-card-shimmer="holographic"] .card-shimmer--face,
@@ -5076,23 +5076,23 @@ body.app-mode-game #screen-game.screen.active {
   background:
     linear-gradient(
       132deg,
-      rgba(34, 211, 238, 0.055) 0%,
-      rgba(59, 130, 246, 0.07) 18%,
-      rgba(129, 140, 248, 0.065) 36%,
-      rgba(168, 85, 247, 0.06) 52%,
-      rgba(236, 72, 153, 0.05) 68%,
-      rgba(52, 211, 153, 0.055) 84%,
-      rgba(56, 189, 248, 0.05) 100%
+      rgba(34, 211, 238, 0.063) 0%,
+      rgba(59, 130, 246, 0.081) 18%,
+      rgba(129, 140, 248, 0.075) 36%,
+      rgba(168, 85, 247, 0.069) 52%,
+      rgba(236, 72, 153, 0.058) 68%,
+      rgba(52, 211, 153, 0.063) 84%,
+      rgba(56, 189, 248, 0.058) 100%
     ),
     conic-gradient(
       from 210deg at 48% 42%,
-      rgba(56, 189, 248, 0.035) 0deg,
-      rgba(99, 102, 241, 0.055) 55deg,
-      rgba(168, 85, 247, 0.05) 115deg,
-      rgba(236, 72, 153, 0.04) 175deg,
-      rgba(52, 211, 153, 0.045) 235deg,
-      rgba(34, 211, 238, 0.04) 295deg,
-      rgba(56, 189, 248, 0.035) 360deg
+      rgba(56, 189, 248, 0.04) 0deg,
+      rgba(99, 102, 241, 0.063) 55deg,
+      rgba(168, 85, 247, 0.058) 115deg,
+      rgba(236, 72, 153, 0.046) 175deg,
+      rgba(52, 211, 153, 0.052) 235deg,
+      rgba(34, 211, 238, 0.046) 295deg,
+      rgba(56, 189, 248, 0.04) 360deg
     );
   mix-blend-mode: soft-light;
   pointer-events: none;
@@ -5108,12 +5108,10 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(ellipse 88% 72% at 16% 10%, rgba(255, 255, 255, 0.34) 0%, rgba(220, 235, 255, 0.14) 34%, transparent 68%),
     radial-gradient(ellipse 76% 58% at 82% 36%, rgba(255, 255, 255, 0.28) 0%, rgba(186, 210, 255, 0.11) 38%, transparent 66%),
     radial-gradient(ellipse 92% 54% at 46% 90%, rgba(255, 255, 255, 0.22) 0%, rgba(200, 175, 255, 0.09) 36%, transparent 62%),
-    radial-gradient(circle 1.75px at 21% 26%, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.25) 50%, transparent 100%),
-    radial-gradient(circle 1.5px at 71% 19%, rgba(34, 211, 238, 0.85) 0%, rgba(34, 211, 238, 0.2) 50%, transparent 100%),
-    radial-gradient(circle 1.65px at 86% 54%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.22) 50%, transparent 100%),
-    radial-gradient(circle 1.55px at 41% 73%, rgba(167, 139, 250, 0.8) 0%, rgba(167, 139, 250, 0.18) 50%, transparent 100%),
-    radial-gradient(circle 1.45px at 57% 43%, rgba(255, 255, 255, 0.75) 0%, rgba(255, 255, 255, 0.16) 50%, transparent 100%),
-    radial-gradient(circle 1.6px at 14% 61%, rgba(34, 211, 238, 0.7) 0%, rgba(34, 211, 238, 0.15) 50%, transparent 100%);
+    radial-gradient(circle clamp(3.5px, 2.4cqw, 5.25px) at 23% 30%, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.42) 38%, transparent 72%),
+    radial-gradient(circle clamp(3.25px, 2.2cqw, 4.75px) at 76% 24%, rgba(34, 211, 238, 0.95) 0%, rgba(34, 211, 238, 0.38) 40%, transparent 74%),
+    radial-gradient(circle clamp(3.75px, 2.6cqw, 5.5px) at 54% 56%, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.36) 42%, transparent 75%),
+    radial-gradient(circle clamp(3px, 2cqw, 4.5px) at 19% 68%, rgba(167, 139, 250, 0.9) 0%, rgba(167, 139, 250, 0.32) 40%, transparent 72%);
   background-repeat: no-repeat;
   mix-blend-mode: screen;
   pointer-events: none;
