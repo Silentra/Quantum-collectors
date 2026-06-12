@@ -5153,17 +5153,17 @@ body.app-mode-game #screen-game.screen.active {
  *   ::before                  — primary bolt core + path-derived corona (screen)
  *   ::after                   — secondary bolts + branch (screen; tier 2+)
  *
- * V2: thin core masks (sw ~2.2), miter joins, butt caps, small forks.
+ * V3: filament cores (sw ~1.1), edge-to-edge travel, prominent dual forks per bolt.
  * Corona via drop-shadow on masked pseudos — no fixed radial hotspots.
  */
 
 .sci-card[data-card-shimmer="voltaic"] .card-shimmer--face,
 .card-detail-frame[data-card-shimmer="voltaic"] .card-shimmer--face {
-  --voltaic-mask-ul-lm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M10 8 L20 18 L14 26 L24 38 L18 48 L28 58 L22 68 L32 80'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M24 38 L32 30'/%3E%3C/svg%3E");
-  --voltaic-mask-ul-rm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M8 12 L18 18 L14 28 L26 34 L22 44 L38 46 L54 44'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M26 34 L36 28'/%3E%3C/svg%3E");
-  --voltaic-mask-tm-lr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M50 6 L46 18 L54 24 L44 36 L52 48 L48 60 L58 72 L68 84'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M52 48 L62 42'/%3E%3C/svg%3E");
-  --voltaic-mask-lm-bm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='2.2' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M6 36 L16 42 L12 52 L22 58 L18 68 L28 76 L24 88'/%3E%3Cpath fill='none' stroke='white' stroke-width='1.6' stroke-linecap='butt' stroke-linejoin='miter' d='M22 58 L30 52'/%3E%3C/svg%3E");
-  --voltaic-mask-branch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.5' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M28 40 L36 46 L32 56'/%3E%3C/svg%3E");
+  --voltaic-mask-ul-lm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.1' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M4 4 L14 16 L8 28 L20 40 L12 52 L26 64 L18 76 L34 92 L40 96'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M20 40 L32 30 L44 22'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M26 64 L38 54 L52 46'/%3E%3C/svg%3E");
+  --voltaic-mask-ul-rm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.1' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M2 6 L14 12 L8 24 L22 30 L14 42 L28 48 L22 40 L38 44 L56 46 L74 48 L96 50'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M28 48 L40 36 L54 26'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M14 42 L22 54 L14 68'/%3E%3C/svg%3E");
+  --voltaic-mask-tm-lr: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.1' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M50 2 L44 14 L56 22 L42 34 L54 46 L46 58 L60 70 L52 82 L68 90 L94 96'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M54 46 L68 36 L80 28'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M60 70 L74 60 L86 68'/%3E%3C/svg%3E");
+  --voltaic-mask-lm-bm: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.1' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M2 40 L12 46 L6 56 L20 62 L14 72 L26 80 L20 88 L40 96'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M20 62 L32 52 L44 44'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M26 80 L38 70 L50 76'/%3E%3C/svg%3E");
+  --voltaic-mask-branch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath fill='none' stroke='white' stroke-width='1.1' stroke-linecap='butt' stroke-linejoin='miter' stroke-miterlimit='4' d='M4 48 L16 54 L10 64 L24 72 L18 82 L34 94'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M24 72 L38 62 L52 54'/%3E%3Cpath fill='none' stroke='white' stroke-width='1' stroke-linecap='butt' stroke-linejoin='miter' d='M10 64 L6 76 L12 86'/%3E%3C/svg%3E");
   isolation: isolate;
   pointer-events: none;
 }
@@ -5180,9 +5180,11 @@ body.app-mode-game #screen-game.screen.active {
   mix-blend-mode: screen;
   background: #ffffff;
   filter:
-    drop-shadow(0 0 1px rgba(255, 255, 255, 0.95))
-    drop-shadow(0 0 4px rgba(196, 181, 253, 0.8))
-    drop-shadow(0 0 9px rgba(168, 85, 247, 0.52));
+    drop-shadow(0 0 1px rgba(255, 255, 255, 0.92))
+    drop-shadow(0 0 3px rgba(221, 214, 254, 0.95))
+    drop-shadow(0 0 7px rgba(196, 181, 253, 0.88))
+    drop-shadow(0 0 13px rgba(168, 85, 247, 0.68))
+    drop-shadow(0 0 20px rgba(139, 92, 246, 0.42));
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: contain;
