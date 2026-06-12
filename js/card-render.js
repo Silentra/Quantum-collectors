@@ -25,6 +25,7 @@ import {
 } from './card-border.js';
 import {
   formatCardShimmerAttr,
+  formatVoltaicPhaseStyleAttr,
   renderShimmerFaceLayerHtml,
   resolveShimmerRenderEffectId,
 } from './card-shimmer.js';
@@ -282,8 +283,10 @@ export function renderCardDetailOwnershipLine(quantity) {
 export function renderDetailFrame(model) {
   const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
   const shimmerAttr = formatCardShimmerAttr(model.shimmerRenderEffectId);
+  const voltaicPhaseStyle = formatVoltaicPhaseStyleAttr(model.cardId, model.shimmerRenderEffectId);
+
   return `
-    <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}>
+    <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}${voltaicPhaseStyle}>
       ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
     </div>
@@ -372,9 +375,10 @@ export function renderSciCard(model) {
 
   const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
   const shimmerAttr = formatCardShimmerAttr(model.shimmerRenderEffectId);
+  const voltaicPhaseStyle = formatVoltaicPhaseStyleAttr(model.cardId, model.shimmerRenderEffectId);
 
   return `
-    <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}>
+    <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}${voltaicPhaseStyle}>
       ${qtyBadge}
       ${lockedBadge}
       ${undiscoveredBadge}
