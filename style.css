@@ -5154,6 +5154,7 @@ body.app-mode-game #screen-game.screen.active {
  *   ::after                   — secondary bolt art (screen; tier 2+)
  *
  * V5: pre-colored SVG bolt art (violet / lavender / white stacked strokes, ~1.5 max sw).
+ * Per-card phase: --voltaic-phase-delay from card ID hash (card-render.js / card-shimmer.js).
  * No luminance masks — color lives in the SVG. Path-attached drop-shadow corona unchanged.
  */
 
@@ -5198,6 +5199,7 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face::before {
   background-image: var(--voltaic-art-ul-lm);
   animation: voltaicPrimaryT1 10s linear infinite;
+  animation-delay: var(--voltaic-phase-delay, 0s);
 }
 
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="1"] .card-shimmer--face::after,
@@ -5209,22 +5211,26 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="2"] .card-shimmer--face::before {
   background-image: var(--voltaic-art-ul-lm);
   animation: voltaicPrimaryT2 10s linear infinite;
+  animation-delay: var(--voltaic-phase-delay, 0s);
 }
 
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="2"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="2"] .card-shimmer--face::after {
   background-image: var(--voltaic-art-ul-rm);
   animation: voltaicSecondaryT2 10s linear infinite;
+  animation-delay: var(--voltaic-phase-delay, 0s);
 }
 
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::before {
   animation: voltaicPrimaryT3 10s linear infinite;
+  animation-delay: var(--voltaic-phase-delay, 0s);
 }
 
 .sci-card[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="voltaic"][data-aura-tier="3"] .card-shimmer--face::after {
   animation: voltaicSecondaryT3 10s linear infinite;
+  animation-delay: var(--voltaic-phase-delay, 0s);
 }
 
 @keyframes voltaicPrimaryT1 {
