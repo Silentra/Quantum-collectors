@@ -5325,6 +5325,347 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
+/* shimmer_emberglow — slow-breathing hearth + thermal ember lift (30s cycle) */
+/*
+ * Layer stack (bottom → top):
+ *   .card-shimmer--face       — isolation + optional floor warmth wash
+ *   ::before                  — hearth glow (layered radials, screen, 30s breath)
+ *   .emberglow-ember (×6)     — CSS-only rise/fade slots (tier-gated count)
+ *
+ * Not fire, flame, smoke, or sparks — stored thermal energy only.
+ * Ember spans: static HTML from card-shimmer.js (Emberglow mount only).
+ */
+
+.sci-card[data-card-shimmer="emberglow"] .card-shimmer--face,
+.card-detail-frame[data-card-shimmer="emberglow"] .card-shimmer--face {
+  isolation: isolate;
+  background: linear-gradient(
+    to top,
+    rgba(127, 29, 29, 0.055) 0%,
+    rgba(154, 52, 18, 0.028) 18%,
+    transparent 34%
+  );
+}
+
+.sci-card[data-card-shimmer="emberglow"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="emberglow"] .card-shimmer--face::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+  background:
+    radial-gradient(ellipse 92% 46% at 50% 102%, rgba(127, 29, 29, 0.26) 0%, transparent 66%),
+    radial-gradient(ellipse 108% 54% at 50% 100%, rgba(194, 65, 12, 0.18) 0%, transparent 70%),
+    radial-gradient(ellipse 132% 38% at 50% 106%, rgba(234, 88, 12, 0.12) 0%, transparent 62%),
+    radial-gradient(ellipse 150% 32% at 50% 108%, rgba(245, 158, 11, 0.07) 0%, transparent 58%);
+  mix-blend-mode: screen;
+  animation: emberglowHearthBreathT2 30s ease-in-out infinite;
+}
+
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="1"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="1"] .card-shimmer--face::before {
+  animation-name: emberglowHearthBreathT1;
+}
+
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="2"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="2"] .card-shimmer--face::before {
+  animation-name: emberglowHearthBreathT2;
+}
+
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="3"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="3"] .card-shimmer--face::before {
+  animation-name: emberglowHearthBreathT3;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="emberglow"] .card-shimmer--face::after {
+  content: none;
+}
+
+/* Ember pool — tier 1: slots 1–4 (~12/cycle); tier 2: 1–5 (~15); tier 3: 1–6 (~24) */
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember {
+  position: absolute;
+  bottom: 20%;
+  width: clamp(3px, 1.35cqw, 6px);
+  height: clamp(3px, 1.35cqw, 6px);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    rgba(253, 186, 116, 0.92) 0%,
+    rgba(249, 115, 22, 0.82) 38%,
+    rgba(194, 65, 12, 0.45) 62%,
+    transparent 100%
+  );
+  animation: emberglowEmberRise3 30s linear infinite;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember--1,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember--1 {
+  left: 19%;
+  animation-delay: -1.5s;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember--2,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember--2 {
+  left: 34%;
+  animation-delay: -9s;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember--3,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember--3 {
+  left: 48%;
+  animation-delay: -16.5s;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember--4,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember--4 {
+  left: 63%;
+  animation-delay: -23s;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember--5,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember--5 {
+  left: 76%;
+  animation-delay: -5.5s;
+  display: none;
+}
+
+.sci-card[data-card-shimmer="emberglow"] .emberglow-ember--6,
+.card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember--6 {
+  left: 41%;
+  animation-delay: -12.5s;
+  display: none;
+}
+
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="2"] .emberglow-ember--5,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="2"] .emberglow-ember--5,
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="3"] .emberglow-ember--5,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="3"] .emberglow-ember--5 {
+  display: block;
+}
+
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="3"] .emberglow-ember,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="3"] .emberglow-ember {
+  animation-name: emberglowEmberRise4;
+}
+
+.sci-card[data-card-shimmer="emberglow"][data-aura-tier="3"] .emberglow-ember--6,
+.card-detail-frame[data-card-shimmer="emberglow"][data-aura-tier="3"] .emberglow-ember--6 {
+  display: block;
+}
+
+@keyframes emberglowHearthBreathT1 {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1) translateY(0);
+  }
+  25% {
+    opacity: 0.42;
+    transform: scale(1.028) translateY(-0.45%);
+  }
+  50% {
+    opacity: 0.52;
+    transform: scale(1.058) translateY(-0.9%);
+  }
+  75% {
+    opacity: 0.38;
+    transform: scale(1.022) translateY(-0.38%);
+  }
+}
+
+@keyframes emberglowHearthBreathT2 {
+  0%, 100% {
+    opacity: 0.34;
+    transform: scale(1) translateY(0);
+  }
+  25% {
+    opacity: 0.48;
+    transform: scale(1.028) translateY(-0.45%);
+  }
+  50% {
+    opacity: 0.62;
+    transform: scale(1.058) translateY(-0.9%);
+  }
+  75% {
+    opacity: 0.44;
+    transform: scale(1.022) translateY(-0.38%);
+  }
+}
+
+@keyframes emberglowHearthBreathT3 {
+  0%, 100% {
+    opacity: 0.38;
+    transform: scale(1) translateY(0);
+  }
+  25% {
+    opacity: 0.54;
+    transform: scale(1.028) translateY(-0.45%);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1.058) translateY(-0.9%);
+  }
+  75% {
+    opacity: 0.5;
+    transform: scale(1.022) translateY(-0.38%);
+  }
+}
+
+/* 3 rises / 30s — tier 1 (×4 slots ≈12) and tier 2 (×5 slots ≈15) */
+@keyframes emberglowEmberRise3 {
+  0%, 6.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  7.5% {
+    opacity: 0.76;
+    transform: translate(0, 0) scale(1);
+  }
+  10% {
+    opacity: 0.42;
+    transform: translate(3px, -34px) scale(0.86);
+  }
+  11.8% {
+    opacity: 0;
+    transform: translate(4px, -42px) scale(0.48);
+  }
+
+  22%, 29.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  30.5% {
+    opacity: 0.8;
+    transform: translate(-1px, 0) scale(1);
+  }
+  33.2% {
+    opacity: 0.48;
+    transform: translate(-5px, -44px) scale(0.84);
+  }
+  35.5% {
+    opacity: 0;
+    transform: translate(-6px, -50px) scale(0.46);
+  }
+
+  52%, 59.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  60.5% {
+    opacity: 0.74;
+    transform: translate(1px, 0) scale(0.96);
+  }
+  63.5% {
+    opacity: 0.38;
+    transform: translate(5px, -38px) scale(0.78);
+  }
+  65.8% {
+    opacity: 0;
+    transform: translate(6px, -46px) scale(0.42);
+  }
+
+  66%, 100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+}
+
+/* 4 rises / 30s — tier 3 (×6 slots ≈24) */
+@keyframes emberglowEmberRise4 {
+  0%, 4.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  5.5% {
+    opacity: 0.78;
+    transform: translate(0, 0) scale(1);
+  }
+  8% {
+    opacity: 0.44;
+    transform: translate(2px, -36px) scale(0.88);
+  }
+  9.8% {
+    opacity: 0;
+    transform: translate(3px, -44px) scale(0.48);
+  }
+
+  18%, 25.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  26.5% {
+    opacity: 0.82;
+    transform: translate(-2px, 0) scale(1);
+  }
+  29.2% {
+    opacity: 0.5;
+    transform: translate(-5px, -42px) scale(0.85);
+  }
+  31.5% {
+    opacity: 0;
+    transform: translate(-7px, -48px) scale(0.46);
+  }
+
+  42%, 47.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  48.5% {
+    opacity: 0.84;
+    transform: translate(1px, 0) scale(1);
+  }
+  51.5% {
+    opacity: 0.46;
+    transform: translate(6px, -48px) scale(0.82);
+  }
+  54% {
+    opacity: 0;
+    transform: translate(7px, -55px) scale(0.44);
+  }
+
+  64%, 71.5% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+  72.5% {
+    opacity: 0.72;
+    transform: translate(-1px, 0) scale(0.94);
+  }
+  75.5% {
+    opacity: 0.36;
+    transform: translate(4px, -35px) scale(0.76);
+  }
+  78% {
+    opacity: 0;
+    transform: translate(5px, -41px) scale(0.4);
+  }
+
+  78%, 100% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.52);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sci-card[data-card-shimmer="emberglow"] .card-shimmer--face::before,
+  .card-detail-frame[data-card-shimmer="emberglow"] .card-shimmer--face::before {
+    animation: none;
+    opacity: 0.52;
+    transform: none;
+  }
+
+  .sci-card[data-card-shimmer="emberglow"] .emberglow-ember,
+  .card-detail-frame[data-card-shimmer="emberglow"] .emberglow-ember {
+    animation: none;
+    opacity: 0;
+  }
+}
+
 /* Shop / modal — unified real-card cosmetic preview (Border, Shimmer, future Glow) */
 .shop-cosmetic-preview.shop-cosmetic-preview--card {
   width: 100%;
