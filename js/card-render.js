@@ -167,7 +167,9 @@ export function renderCardContent(model) {
     ? `<div class="${keyFactClass}">${model.keyFact}</div>`
     : '';
 
-  const shimmerFaceHtml = model.showShimmerFace ? renderShimmerFaceLayerHtml() : '';
+  const shimmerFaceHtml = model.showShimmerFace
+    ? renderShimmerFaceLayerHtml(model.shimmerRenderEffectId)
+    : '';
 
   return `
       <div class="card-detail-inner">

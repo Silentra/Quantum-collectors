@@ -370,6 +370,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'voltaic',
   },
 
+  shimmer_emberglow: {
+    id: 'shimmer_emberglow',
+    name: 'Emberglow',
+    description: 'A slow-breathing ember hearth at the card base with glowing fragments lifting on thermal currents — stored heat, not flame.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHIMMER,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 440,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'emberglow',
+  },
+
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {

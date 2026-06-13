@@ -16,6 +16,7 @@ export const DEFAULT_SHIMMER_EFFECT_ID = 'prismatic';
 export const COSMETIC_SHIMMER_EFFECT_IDS = [
   'holographic',
   'voltaic',
+  'emberglow',
 ];
 
 /** All ids recognized by the shimmer renderer (default + purchasable). */
@@ -76,7 +77,22 @@ export function formatCardShimmerAttr(shimmerEffectId) {
   return value ? ` data-card-shimmer="${value}"` : '';
 }
 
-/** Face shimmer layer HTML — mount inside .card-detail-inner (covers header, art, divider, body). */
-export function renderShimmerFaceLayerHtml() {
+/** Ember pool size for Emberglow (tier gates visible slots in CSS). */
+const EMBERGLOW_EMBER_SLOT_COUNT = 6;
+
+/**
+ * Face shimmer layer HTML — mount inside .card-detail-inner (covers header, art, divider, body).
+ * Emberglow adds static ember spans for CSS-only rise cycles (no JS animation).
+ * @param {string|null|undefined} shimmerEffectId
+ * @returns {string}
+ */
+export function renderShimmerFaceLayerHtml(shimmerEffectId = null) {
+  if (shimmerEffectId === 'emberglow') {
+    const embers = Array.from({ length: EMBERGLOW_EMBER_SLOT_COUNT }, (_, i) => {
+      const n = i + 1;
+      return `<span class="emberglow-ember emberglow-ember--${n}" aria-hidden="true"></span>`;
+    }).join('');
+    return `<div class="card-shimmer card-shimmer--face card-shimmer--emberglow" aria-hidden="true">${embers}</div>`;
+  }
   return '<div class="card-shimmer card-shimmer--face" aria-hidden="true"></div>';
 }
