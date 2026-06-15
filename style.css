@@ -5666,14 +5666,14 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
-/* shimmer_nebuladrift — void-first nebula gas (V3: faster drift, cloud personalities, scale breath) */
+/* shimmer_nebuladrift — panoramic nebula environment (V4: 4× strip, 45s / 60s pan) */
 /*
  * Layer stack (bottom → top):
- *   .card-shimmer--face       — corner space vignette; center void
- *   ::before                  — Cloud A violet + Cloud B magenta (+ T3 faint haze); 14s drift
- *   ::after                   — magenta pocket + cyan streak (tier 2+); 20s counter-drift
+ *   .card-shimmer--face       — static viewport vignette (card window frame)
+ *   ::before                  — 4× primary strip: 5 violet complexes + tier haze/magenta
+ *   ::after                   — 4× depth strip: magenta pockets + cyan streams (tier 2+)
  *
- * V3: motion + hue separation. No architecture change. Void preserved.
+ * V4: pan oversized environment at V3 px/s. Soft falloffs, reduced scale breath.
  */
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face,
@@ -5685,38 +5685,64 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(ellipse 55% 45% at 100% 0%, rgba(0, 0, 0, 0.18) 0%, transparent 58%);
 }
 
+/* Shared panoramic canvas geometry (424% × 216% = 4× env + ~62% side overscan) */
+.sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
+.card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
+.sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::after,
+.card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::after {
+  background-repeat: no-repeat;
+}
+
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before {
   content: '';
   position: absolute;
-  inset: -30%;
+  left: -62%;
+  top: -58%;
+  width: 424%;
+  height: 216%;
   border-radius: inherit;
   pointer-events: none;
-  transform-origin: 24% 74%;
   mix-blend-mode: plus-lighter;
+  /* Tier 1: complexes A + B, one magenta pocket */
   background:
-    radial-gradient(ellipse 70% 54% at 20% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.26) 34%, transparent 60%),
-    radial-gradient(ellipse 46% 36% at 82% 26%, rgba(192, 38, 211, 0.44) 0%, rgba(162, 28, 175, 0.18) 36%, transparent 58%);
-  animation: nebuladriftPrimary 14s linear infinite;
+    radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 10% 8% at 22% 54%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%);
+  animation: nebuladriftPrimary 45s linear infinite;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="1"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="1"] .card-shimmer--face::before {
-  opacity: 0.88;
+  opacity: 0.9;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::before {
-  opacity: 0.95;
+  opacity: 0.96;
+  /* Tier 2: complexes A–C, two magenta pockets */
+  background:
+    radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 46% 70%, rgba(124, 58, 237, 0.46) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
+    radial-gradient(ellipse 10% 8% at 22% 54%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 52% 48%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%);
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before {
   opacity: 1;
+  /* Tier 3: 5 violet complexes + void-corridor haze + two magenta pockets */
   background:
-    radial-gradient(ellipse 70% 54% at 20% 72%, rgba(124, 58, 237, 0.54) 0%, rgba(91, 33, 182, 0.28) 34%, transparent 60%),
-    radial-gradient(ellipse 46% 36% at 82% 26%, rgba(192, 38, 211, 0.46) 0%, rgba(162, 28, 175, 0.2) 36%, transparent 58%),
-    radial-gradient(ellipse 90% 28% at 52% 86%, rgba(139, 92, 246, 0.16) 0%, rgba(124, 58, 237, 0.06) 42%, transparent 58%);
+    radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.5) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 46% 70%, rgba(124, 58, 237, 0.48) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 64% 30%, rgba(109, 40, 217, 0.46) 0%, rgba(76, 29, 149, 0.18) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 82% 66%, rgba(124, 58, 237, 0.44) 0%, rgba(91, 33, 182, 0.16) 46%, transparent 78%),
+    radial-gradient(ellipse 24% 8% at 36% 58%, rgba(139, 92, 246, 0.14) 0%, rgba(124, 58, 237, 0.05) 48%, transparent 78%),
+    radial-gradient(ellipse 24% 8% at 74% 42%, rgba(139, 92, 246, 0.12) 0%, rgba(124, 58, 237, 0.04) 48%, transparent 78%),
+    radial-gradient(ellipse 10% 8% at 24% 52%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 58% 46%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%);
 }
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::after,
@@ -5730,28 +5756,36 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
   content: '';
   position: absolute;
-  inset: -28%;
+  left: -62%;
+  top: -58%;
+  width: 424%;
+  height: 216%;
   border-radius: inherit;
   pointer-events: none;
-  transform-origin: 72% 28%;
   mix-blend-mode: normal;
+  /* Tier 2: one magenta pocket + one cyan stream */
   background:
-    radial-gradient(ellipse 38% 32% at 52% 54%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 40%, transparent 60%),
-    radial-gradient(ellipse 54% 16% at 86% 18%, rgba(34, 211, 238, 0.38) 0%, rgba(8, 145, 178, 0.14) 42%, transparent 62%);
-  animation: nebuladriftDepth 20s linear infinite;
-  animation-delay: -4s;
-  opacity: 0.48;
+    radial-gradient(ellipse 10% 8% at 38% 56%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
+    radial-gradient(ellipse 14% 5% at 18% 22%, rgba(34, 211, 238, 0.36) 0%, rgba(8, 145, 178, 0.12) 42%, transparent 74%);
+  animation: nebuladriftDepth 60s linear infinite;
+  animation-delay: -8s;
+  opacity: 0.5;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
   mix-blend-mode: screen;
-  opacity: 0.52;
+  opacity: 0.54;
+  /* Tier 3: three magenta pockets + three cyan streams */
   background:
-    radial-gradient(ellipse 40% 34% at 50% 52%, rgba(192, 38, 211, 0.46) 0%, rgba(162, 28, 175, 0.16) 38%, transparent 58%),
-    radial-gradient(ellipse 58% 18% at 84% 16%, rgba(34, 211, 238, 0.44) 0%, rgba(8, 145, 178, 0.16) 40%, transparent 60%);
-  animation: nebuladriftDepth 20s linear infinite;
-  animation-delay: -4s;
+    radial-gradient(ellipse 10% 8% at 28% 58%, rgba(192, 38, 211, 0.44) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 52% 44%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 78% 62%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%),
+    radial-gradient(ellipse 14% 5% at 18% 24%, rgba(34, 211, 238, 0.4) 0%, rgba(8, 145, 178, 0.14) 42%, transparent 74%),
+    radial-gradient(ellipse 14% 5% at 46% 18%, rgba(34, 211, 238, 0.34) 0%, rgba(8, 145, 178, 0.1) 42%, transparent 74%),
+    radial-gradient(ellipse 14% 5% at 72% 28%, rgba(34, 211, 238, 0.32) 0%, rgba(8, 145, 178, 0.1) 42%, transparent 74%);
+  animation: nebuladriftDepth 60s linear infinite;
+  animation-delay: -8s;
 }
 
 @keyframes nebuladriftPrimary {
@@ -5759,13 +5793,13 @@ body.app-mode-game #screen-game.screen.active {
     transform: translate(0, 0) scale(1);
   }
   25% {
-    transform: translate(21%, 10%) scale(1.04);
+    transform: translate(-27%, 6%) scale(1.02);
   }
   50% {
-    transform: translate(42%, 20%) scale(1.08);
+    transform: translate(-54%, 12%) scale(1.04);
   }
   75% {
-    transform: translate(21%, 10%) scale(1.04);
+    transform: translate(-27%, 6%) scale(1.02);
   }
 }
 
@@ -5774,13 +5808,13 @@ body.app-mode-game #screen-game.screen.active {
     transform: translate(0, 0) scale(1);
   }
   25% {
-    transform: translate(-19%, -11%) scale(1.04);
+    transform: translate(21%, -5%) scale(1.02);
   }
   50% {
-    transform: translate(-38%, -22%) scale(1.08);
+    transform: translate(42%, -10%) scale(1.03);
   }
   75% {
-    transform: translate(-19%, -11%) scale(1.04);
+    transform: translate(21%, -5%) scale(1.02);
   }
 }
 
@@ -5788,7 +5822,7 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
   .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before {
     animation: none;
-    transform: translate(21%, 10%) scale(1.04);
+    transform: translate(-27%, 6%) scale(1.02);
   }
 
   .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::after,
@@ -5796,8 +5830,8 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after,
   .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
     animation: none;
-    transform: translate(-19%, -11%) scale(1.04);
-    opacity: 0.5;
+    transform: translate(21%, -5%) scale(1.02);
+    opacity: 0.52;
   }
 }
 
