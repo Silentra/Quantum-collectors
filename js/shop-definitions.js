@@ -383,6 +383,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'emberglow',
   },
 
+  shimmer_nebuladrift: {
+    id: 'shimmer_nebuladrift',
+    name: 'Nebula Drift',
+    description: 'Slow-drifting cosmic gas surrounds the card face — violet nebula depth with parallax atmosphere.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHIMMER,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 460,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'nebuladrift',
+  },
+
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {

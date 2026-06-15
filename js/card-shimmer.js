@@ -17,6 +17,7 @@ export const COSMETIC_SHIMMER_EFFECT_IDS = [
   'holographic',
   'voltaic',
   'emberglow',
+  'nebuladrift',
 ];
 
 /** All ids recognized by the shimmer renderer (default + purchasable). */
