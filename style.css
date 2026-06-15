@@ -5666,79 +5666,56 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
-/* shimmer_nebuladrift — slow volumetric nebula atmosphere (90s / 120s drift) */
+/* shimmer_nebuladrift — void-first nebula gas (V2: sparse clouds, 45s / 60s drift) */
 /*
  * Layer stack (bottom → top):
- *   .card-shimmer--face       — deep-space foundation wash
- *   ::before                  — primary nebula gas mass (soft-light, 90s drift)
- *   ::after                   — depth deck + T3 accents (tier 2+, 120s counter-drift)
+ *   .card-shimmer--face       — corner space vignette only (multiply); center stays void
+ *   ::before                  — 2–3 separated violet cloud masses (plus-lighter, 45s drift)
+ *   ::after                   — magenta + cyan accent pockets only (tier 2+, 60s counter-drift)
  *
- * V1 visibility-forward. No stars, particles, SVG, or JS animation.
+ * V2: structure over tint. No full-card wash, no soft-light homogenization.
  */
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face,
 .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face {
   isolation: isolate;
-  background: linear-gradient(
-    148deg,
-    rgba(30, 27, 75, 0.52) 0%,
-    rgba(76, 29, 149, 0.38) 38%,
-    rgba(49, 46, 129, 0.28) 62%,
-    rgba(12, 18, 32, 0.14) 100%
-  );
-}
-
-.sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="1"] .card-shimmer--face,
-.card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="1"] .card-shimmer--face {
-  opacity: 0.84;
-}
-
-.sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face,
-.card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face {
-  opacity: 0.94;
-}
-
-.sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face,
-.card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face {
-  opacity: 1;
+  background:
+    radial-gradient(ellipse 95% 75% at 50% 50%, transparent 48%, rgba(0, 0, 0, 0.28) 100%),
+    radial-gradient(ellipse 55% 45% at 0% 100%, rgba(0, 0, 0, 0.22) 0%, transparent 58%),
+    radial-gradient(ellipse 55% 45% at 100% 0%, rgba(0, 0, 0, 0.18) 0%, transparent 58%);
 }
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before {
   content: '';
   position: absolute;
-  inset: -32%;
+  inset: -26%;
   border-radius: inherit;
   pointer-events: none;
-  mix-blend-mode: soft-light;
+  mix-blend-mode: plus-lighter;
   background:
-    radial-gradient(ellipse 148% 52% at 28% 68%, rgba(124, 58, 237, 0.36) 0%, rgba(91, 33, 182, 0.14) 42%, transparent 72%),
-    radial-gradient(ellipse 118% 44% at 74% 38%, rgba(109, 40, 217, 0.32) 0%, rgba(76, 29, 149, 0.12) 38%, transparent 68%),
-    radial-gradient(ellipse 132% 38% at 52% 82%, rgba(147, 51, 234, 0.28) 0%, transparent 58%),
-    radial-gradient(ellipse 96% 56% at 18% 42%, rgba(67, 56, 202, 0.26) 0%, transparent 62%),
-    radial-gradient(ellipse 88% 34% at 62% 52%, rgba(139, 92, 246, 0.22) 0%, rgba(109, 40, 217, 0.08) 45%, transparent 70%),
-    linear-gradient(
-      128deg,
-      rgba(49, 46, 129, 0.18) 0%,
-      rgba(124, 58, 237, 0.24) 45%,
-      rgba(76, 29, 149, 0.16) 100%
-    );
-  animation: nebuladriftPrimary 90s linear infinite;
+    radial-gradient(ellipse 64% 50% at 22% 70%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.24) 36%, transparent 62%),
+    radial-gradient(ellipse 58% 46% at 78% 28%, rgba(109, 40, 217, 0.46) 0%, rgba(76, 29, 149, 0.2) 34%, transparent 58%);
+  animation: nebuladriftPrimary 45s linear infinite;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="1"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="1"] .card-shimmer--face::before {
-  opacity: 0.94;
+  opacity: 0.86;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::before {
-  opacity: 0.96;
+  opacity: 0.94;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before {
   opacity: 1;
+  background:
+    radial-gradient(ellipse 64% 50% at 22% 70%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.26) 36%, transparent 62%),
+    radial-gradient(ellipse 58% 46% at 78% 28%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.22) 34%, transparent 58%),
+    radial-gradient(ellipse 52% 40% at 54% 82%, rgba(139, 92, 246, 0.42) 0%, rgba(124, 58, 237, 0.16) 38%, transparent 60%);
 }
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::after,
@@ -5752,30 +5729,27 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
   content: '';
   position: absolute;
-  inset: -28%;
+  inset: -22%;
   border-radius: inherit;
   pointer-events: none;
-  mix-blend-mode: soft-light;
+  mix-blend-mode: normal;
   background:
-    radial-gradient(ellipse 112% 46% at 58% 58%, rgba(192, 38, 211, 0.2) 0%, rgba(162, 28, 175, 0.08) 40%, transparent 68%),
-    radial-gradient(ellipse 104% 40% at 34% 72%, rgba(124, 58, 237, 0.22) 0%, transparent 60%),
-    radial-gradient(ellipse 92% 36% at 78% 32%, rgba(8, 145, 178, 0.16) 0%, rgba(34, 211, 238, 0.06) 35%, transparent 65%);
-  animation: nebuladriftDepth 120s linear infinite;
-  opacity: 0.68;
+    radial-gradient(ellipse 44% 38% at 58% 52%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 42%, transparent 62%),
+    radial-gradient(ellipse 40% 34% at 84% 20%, rgba(34, 211, 238, 0.34) 0%, rgba(8, 145, 178, 0.1) 38%, transparent 58%);
+  animation: nebuladriftDepth 60s linear infinite;
+  opacity: 0.44;
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
   mix-blend-mode: screen;
+  opacity: 0.48;
   background:
-    radial-gradient(ellipse 108% 42% at 56% 54%, rgba(192, 38, 211, 0.26) 0%, rgba(162, 28, 175, 0.1) 38%, transparent 66%),
-    radial-gradient(ellipse 98% 38% at 32% 70%, rgba(147, 51, 234, 0.22) 0%, transparent 58%),
-    radial-gradient(ellipse 88% 34% at 80% 28%, rgba(34, 211, 238, 0.22) 0%, rgba(8, 145, 178, 0.1) 32%, transparent 62%),
-    radial-gradient(ellipse 76% 30% at 48% 38%, rgba(236, 72, 153, 0.12) 0%, transparent 55%);
-  opacity: 0.62;
+    radial-gradient(ellipse 46% 40% at 56% 50%, rgba(192, 38, 211, 0.44) 0%, rgba(162, 28, 175, 0.14) 40%, transparent 60%),
+    radial-gradient(ellipse 42% 36% at 82% 18%, rgba(34, 211, 238, 0.4) 0%, rgba(8, 145, 178, 0.12) 36%, transparent 56%);
   animation:
-    nebuladriftDepth 120s linear infinite,
-    nebuladriftAccentBreathe 90s ease-in-out infinite;
+    nebuladriftDepth 60s linear infinite,
+    nebuladriftAccentBreathe 60s ease-in-out infinite;
 }
 
 @keyframes nebuladriftPrimary {
@@ -5783,7 +5757,7 @@ body.app-mode-game #screen-game.screen.active {
     transform: translate(0, 0);
   }
   50% {
-    transform: translate(14%, 8%);
+    transform: translate(18%, 10%);
   }
 }
 
@@ -5792,16 +5766,16 @@ body.app-mode-game #screen-game.screen.active {
     transform: translate(0, 0);
   }
   50% {
-    transform: translate(-10%, -6%);
+    transform: translate(-12%, -7%);
   }
 }
 
 @keyframes nebuladriftAccentBreathe {
   0%, 100% {
-    opacity: 0.56;
+    opacity: 0.4;
   }
   50% {
-    opacity: 0.76;
+    opacity: 0.58;
   }
 }
 
@@ -5809,7 +5783,7 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
   .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before {
     animation: none;
-    transform: translate(7%, 4%);
+    transform: translate(9%, 5%);
   }
 
   .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::after,
@@ -5817,8 +5791,8 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after,
   .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
     animation: none;
-    transform: translate(-5%, -3%);
-    opacity: 0.64;
+    transform: translate(-6%, -3.5%);
+    opacity: 0.48;
   }
 }
 
