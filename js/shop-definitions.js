@@ -396,6 +396,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     renderEffectId: 'nebuladrift',
   },
 
+  shimmer_frostveins: {
+    id: 'shimmer_frostveins',
+    name: 'Frost Veins',
+    description: 'Crystalline frost grows across frozen glass — the scientist preserved behind branching ice veins and rimed edges.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.SHIMMER,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 480,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'frostveins',
+  },
+
   // ── Cosmetics — Profile Banners (BN-1 solid chrome; visuals in CSS only) ──
 
   profile_banner_deep_blue: {
