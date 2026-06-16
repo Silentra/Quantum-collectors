@@ -870,6 +870,13 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: auto;
 }
 
+/* Cosmetic preview modal — opaque panel parity with edit-card / player-detail modals */
+#cosmetic-preview-modal .cosmetic-preview-modal-panel,
+#cosmetic-preview-modal .global-modal-header,
+#cosmetic-preview-modal .cosmetic-preview-modal-body {
+  background-color: #0f172a;
+}
+
 /* Visual-only backdrop: fixed to shell viewport, does not scroll with gameplay */
 #game-shell-backdrop {
   position: absolute;
