@@ -5232,179 +5232,124 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 @keyframes voltaicPrimaryT1 {
-  0%, 50% {
+  0%, 8%, 10%, 36%, 38%, 50%, 100% {
     opacity: 0;
+  }
+  8%, 36% {
     background-image: var(--voltaic-art-ul-lm);
   }
-  8.4% {
+  9% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-lm);
   }
-  9.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-lm);
-  }
-  36.4% {
-    opacity: 0;
+  38%, 50%, 100% {
     background-image: var(--voltaic-art-ul-rm);
   }
   37% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-rm);
   }
-  37.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-rm);
-  }
-  100% { opacity: 0; }
 }
 
 @keyframes voltaicPrimaryT2 {
-  0%, 30% {
+  0%, 30%, 33%, 35%, 60%, 62%, 80%, 100% {
     opacity: 0;
+  }
+  33%, 60% {
     background-image: var(--voltaic-art-ul-lm);
   }
-  33.4% {
+  34% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-lm);
   }
-  34.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-lm);
-  }
-  60.4% {
-    opacity: 0;
+  62%, 80%, 100% {
     background-image: var(--voltaic-art-tm-lr);
   }
   61% {
     opacity: 1;
     background-image: var(--voltaic-art-tm-lr);
   }
-  61.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-tm-lr);
-  }
-  80%, 100% { opacity: 0; }
 }
 
 @keyframes voltaicSecondaryT2 {
-  0%, 30% {
+  0%, 30%, 47%, 49%, 72%, 74%, 80%, 100% {
     opacity: 0;
+  }
+  47%, 72% {
     background-image: var(--voltaic-art-ul-rm);
   }
-  47.4% {
+  48% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-rm);
   }
-  48.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-rm);
-  }
-  72.4% {
-    opacity: 0;
+  74%, 80%, 100% {
     background-image: var(--voltaic-art-lm-bm);
   }
   73% {
     opacity: 1;
     background-image: var(--voltaic-art-lm-bm);
   }
-  73.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-lm-bm);
-  }
-  80%, 100% { opacity: 0; }
 }
 
 @keyframes voltaicPrimaryT3 {
-  0%, 50% {
+  0%, 50%, 51%, 53%, 67%, 69%, 80%, 82%, 85%, 87%, 100% {
     opacity: 0;
+  }
+  51%, 53% {
     background-image: var(--voltaic-art-ul-lm);
   }
-  51.4% {
+  52% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-lm);
   }
-  52.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-lm);
-  }
-  67.4% {
-    opacity: 0;
+  67%, 69% {
     background-image: var(--voltaic-art-tm-lr);
   }
   68% {
     opacity: 1;
     background-image: var(--voltaic-art-tm-lr);
   }
-  68.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-tm-lr);
-  }
-  80.4% {
-    opacity: 0;
+  80%, 82% {
     background-image: var(--voltaic-art-lm-bm);
   }
   81% {
     opacity: 1;
     background-image: var(--voltaic-art-lm-bm);
   }
-  81.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-lm-bm);
-  }
-  85.4% {
-    opacity: 0;
+  85%, 87%, 100% {
     background-image: var(--voltaic-art-ul-rm);
   }
   86% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-rm);
   }
-  86.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-rm);
-  }
-  100% { opacity: 0; }
 }
 
 @keyframes voltaicSecondaryT3 {
-  0%, 50% {
+  0%, 50%, 54%, 56%, 82%, 84%, 93%, 95%, 100% {
     opacity: 0;
+  }
+  54%, 56% {
     background-image: var(--voltaic-art-ul-rm);
   }
-  54.4% {
+  55% {
     opacity: 1;
     background-image: var(--voltaic-art-ul-rm);
   }
-  55.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-ul-rm);
-  }
-  82.4% {
-    opacity: 0;
+  82%, 84% {
     background-image: var(--voltaic-art-branch);
   }
   83% {
-    opacity: 0.92;
+    opacity: 1;
     background-image: var(--voltaic-art-branch);
   }
-  83.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-branch);
-  }
-  93.4% {
-    opacity: 0;
+  93%, 95%, 100% {
     background-image: var(--voltaic-art-tm-lr);
   }
   94% {
     opacity: 1;
     background-image: var(--voltaic-art-tm-lr);
   }
-  94.6% {
-    opacity: 0;
-    background-image: var(--voltaic-art-tm-lr);
-  }
-  100% { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
