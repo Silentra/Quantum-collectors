@@ -186,7 +186,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   aura_void: {
     id: 'aura_void',
-    name: 'Void Aura',
+    name: 'Void',
     description: 'A dark, pulsing emptiness surrounds your profile card.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
@@ -201,7 +201,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_silver: {
     id: 'border_silver',
-    name: 'Silver Border',
+    name: 'Silver Frame',
     description: 'A clean brushed-silver frame with a soft metallic sheen.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -214,7 +214,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_sapphire: {
     id: 'border_sapphire',
-    name: 'Sapphire Border',
+    name: 'Sapphire Frame',
     description: 'A deep blue frame with restrained sapphire highlights.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -227,7 +227,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_emerald: {
     id: 'border_emerald',
-    name: 'Emerald Border',
+    name: 'Emerald Frame',
     description: 'A polished emerald-toned frame with subtle depth.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -240,7 +240,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_violet: {
     id: 'border_violet',
-    name: 'Violet Border',
+    name: 'Violet Frame',
     description: 'A deep violet frame with a soft satin finish.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -253,7 +253,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_spectrum: {
     id: 'border_spectrum',
-    name: 'Spectrum Border',
+    name: 'Spectrum Frame',
     description: 'A rarity-reactive chromatic frame — the classic high-energy collector look.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -266,7 +266,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_diamond_etched: {
     id: 'border_diamond_etched',
-    name: 'Diamond Etched Metal',
+    name: 'Diamond Etched Frame',
     description: 'Precision-machined steel with a restrained engraved diamond texture.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -279,7 +279,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_brushed_aluminum: {
     id: 'border_brushed_aluminum',
-    name: 'Brushed Aluminum',
+    name: 'Brushed Aluminum Frame',
     description: 'Fine directional striations — laboratory-grade machined aluminum.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -292,7 +292,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_leather_stitch: {
     id: 'border_leather_stitch',
-    name: 'Matte Leather Stitching',
+    name: 'Matte Leather Frame',
     description: 'Dark field-journal leather with a subtle stitched outer edge.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -305,7 +305,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   border_carbon_weave: {
     id: 'border_carbon_weave',
-    name: 'Carbon Fiber Weave',
+    name: 'Carbon Fiber Frame',
     description: 'Low-contrast composite weave — precision engineering, not racing chrome.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
@@ -346,7 +346,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   shimmer_holographic: {
     id: 'shimmer_holographic',
-    name: 'Iridescent Shimmer',
+    name: 'Iridescent',
     description: 'A static iridescent foil finish across the card face — premium collector sheen.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
