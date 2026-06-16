@@ -5670,7 +5670,7 @@ body.app-mode-game #screen-game.screen.active {
 /*
  * Layer stack (bottom → top):
  *   .card-shimmer--face       — static viewport vignette (card window frame)
- *   ::before                  — 4× primary strip: 5 violet complexes + tier haze/magenta
+ *   ::before                  — 4× primary strip: violet complexes + emerald accent + tier haze/magenta
  *   ::after                   — 4× depth strip: magenta pockets + cyan streams (tier 2+)
  *
  * V4: pan oversized environment at V3 px/s. Soft falloffs, reduced scale breath.
@@ -5732,12 +5732,12 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before {
   opacity: 1;
-  /* Tier 3: 5 violet complexes + void-corridor haze + two magenta pockets */
+  /* Tier 3: 4 violet + 1 emerald complex, void-corridor haze + two magenta pockets */
   background:
     radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
     radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.5) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
     radial-gradient(ellipse 20% 14% at 46% 70%, rgba(124, 58, 237, 0.48) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 64% 30%, rgba(109, 40, 217, 0.46) 0%, rgba(76, 29, 149, 0.18) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 64% 30%, rgba(20, 184, 166, 0.38) 0%, rgba(13, 148, 136, 0.14) 46%, transparent 78%),
     radial-gradient(ellipse 20% 14% at 82% 66%, rgba(124, 58, 237, 0.44) 0%, rgba(91, 33, 182, 0.16) 46%, transparent 78%),
     radial-gradient(ellipse 24% 8% at 36% 58%, rgba(139, 92, 246, 0.14) 0%, rgba(124, 58, 237, 0.05) 48%, transparent 78%),
     radial-gradient(ellipse 24% 8% at 74% 42%, rgba(139, 92, 246, 0.12) 0%, rgba(124, 58, 237, 0.04) 48%, transparent 78%),
@@ -5766,7 +5766,7 @@ body.app-mode-game #screen-game.screen.active {
   /* Tier 2: one magenta pocket + one cyan stream */
   background:
     radial-gradient(ellipse 10% 8% at 38% 56%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
-    radial-gradient(ellipse 14% 5% at 18% 22%, rgba(34, 211, 238, 0.36) 0%, rgba(8, 145, 178, 0.12) 42%, transparent 74%);
+    radial-gradient(ellipse 14% 5% at 18% 22%, rgba(34, 211, 238, 0.34) 0%, rgba(13, 148, 136, 0.11) 42%, transparent 74%);
   animation: nebuladriftDepth 60s linear infinite;
   animation-delay: -8s;
   opacity: 0.5;
@@ -5782,7 +5782,7 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(ellipse 10% 8% at 52% 44%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
     radial-gradient(ellipse 10% 8% at 78% 62%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%),
     radial-gradient(ellipse 14% 5% at 18% 24%, rgba(34, 211, 238, 0.4) 0%, rgba(8, 145, 178, 0.14) 42%, transparent 74%),
-    radial-gradient(ellipse 14% 5% at 46% 18%, rgba(34, 211, 238, 0.34) 0%, rgba(8, 145, 178, 0.1) 42%, transparent 74%),
+    radial-gradient(ellipse 14% 5% at 46% 18%, rgba(45, 212, 191, 0.3) 0%, rgba(20, 184, 166, 0.1) 42%, transparent 74%),
     radial-gradient(ellipse 14% 5% at 72% 28%, rgba(34, 211, 238, 0.32) 0%, rgba(8, 145, 178, 0.1) 42%, transparent 74%);
   animation: nebuladriftDepth 60s linear infinite;
   animation-delay: -8s;
