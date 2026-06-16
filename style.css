@@ -5707,7 +5707,7 @@ body.app-mode-game #screen-game.screen.active {
   /* Tier 1: anchor A + standard B, one magenta pocket */
   background:
     radial-gradient(ellipse 26% 17% at 7% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 20% 30%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 20% 40%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
     radial-gradient(ellipse 10% 8% at 14% 56%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%);
   animation: nebuladriftPrimary 45s linear infinite;
 }
@@ -5723,7 +5723,7 @@ body.app-mode-game #screen-game.screen.active {
   /* Tier 2: complexes A–C, two magenta pockets */
   background:
     radial-gradient(ellipse 26% 17% at 7% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 20% 30%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 20% 40%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
     radial-gradient(ellipse 20% 14% at 38% 74%, rgba(124, 58, 237, 0.46) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
     radial-gradient(ellipse 10% 8% at 14% 56%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
     radial-gradient(ellipse 10% 8% at 52% 48%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%);
@@ -5738,7 +5738,7 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(ellipse 26% 17% at 7% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
     radial-gradient(ellipse 26% 17% at 72% 68%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.2) 46%, transparent 78%),
     /* Standard complexes */
-    radial-gradient(ellipse 20% 14% at 20% 30%, rgba(109, 40, 217, 0.5) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 20% 40%, rgba(109, 40, 217, 0.5) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
     radial-gradient(ellipse 20% 14% at 48% 76%, rgba(124, 58, 237, 0.48) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
     radial-gradient(ellipse 20% 14% at 90% 30%, rgba(109, 40, 217, 0.44) 0%, rgba(76, 29, 149, 0.16) 46%, transparent 78%),
     /* Stretched cloud band */
@@ -5748,7 +5748,7 @@ body.app-mode-game #screen-game.screen.active {
     /* Fragmented formation */
     radial-gradient(ellipse 13% 10% at 84% 44%, rgba(109, 40, 217, 0.36) 0%, rgba(76, 29, 149, 0.12) 42%, transparent 74%),
     /* Teal complexes */
-    radial-gradient(ellipse 20% 14% at 40% 24%, rgba(20, 184, 166, 0.38) 0%, rgba(13, 148, 136, 0.14) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 40% 50%, rgba(20, 184, 166, 0.38) 0%, rgba(13, 148, 136, 0.14) 46%, transparent 78%),
     radial-gradient(ellipse 18% 13% at 78% 28%, rgba(20, 184, 166, 0.34) 0%, rgba(13, 148, 136, 0.12) 46%, transparent 78%),
     /* Wispy transition haze */
     radial-gradient(ellipse 28% 7% at 62% 58%, rgba(139, 92, 246, 0.14) 0%, rgba(124, 58, 237, 0.05) 48%, transparent 78%),
