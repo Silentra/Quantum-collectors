@@ -18,7 +18,7 @@ export const COSMETIC_SHIMMER_EFFECT_IDS = [
   'voltaic',
   'emberglow',
   'nebuladrift',
-  'frostveins',
+  'winterfrost',
 ];
 
 /** All ids recognized by the shimmer renderer (default + purchasable). */
