@@ -200,7 +200,7 @@ function staticCosmeticsPanelHtml(categoryKey, runtimeCategory) {
 
   if (!items.length) {
     return `
-      <section class="space-y-3">
+      <section class="bg-surface-900 rounded-xl border border-surface-700 p-6 space-y-3">
         <p class="text-sm text-surface-400">${escapeHtml(intro)}</p>
         <p class="text-surface-500 text-sm">No static ${escapeHtml(label.toLowerCase())} cosmetics defined yet.</p>
       </section>
@@ -233,11 +233,11 @@ function staticCosmeticsPanelHtml(categoryKey, runtimeCategory) {
   `).join('');
 
   return `
-    <section class="space-y-3">
+    <section class="bg-surface-900 rounded-xl border border-surface-700 p-6 space-y-3">
       <p class="text-sm text-surface-400">${escapeHtml(intro)}</p>
       <div class="overflow-x-auto border border-surface-700 rounded-lg">
         <table class="w-full text-left text-sm">
-          <thead class="text-xs text-surface-500 uppercase bg-surface-900/80">
+          <thead class="text-xs text-surface-500 uppercase bg-surface-900">
             <tr>
               <th class="p-3 pr-3">Cosmetic</th>
               <th class="p-3 pr-3">Enabled</th>
