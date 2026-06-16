@@ -5666,14 +5666,14 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
-/* shimmer_nebuladrift — panoramic nebula environment (V4: 4× strip, 45s / 60s pan) */
+/* shimmer_nebuladrift — panoramic nebula environment (V4.1: 6.5× strip, 45s / 60s pan) */
 /*
  * Layer stack (bottom → top):
  *   .card-shimmer--face       — static viewport vignette (card window frame)
- *   ::before                  — 4× primary strip: violet complexes + emerald accent + tier haze/magenta
- *   ::after                   — 4× depth strip: magenta pockets + cyan streams (tier 2+)
+ *   ::before                  — 6.5× primary strip: violet anchors + teal accents + haze/magenta
+ *   ::after                   — 6.5× depth strip: magenta pockets + cyan/teal streams (tier 2+)
  *
- * V4: pan oversized environment at V3 px/s. Soft falloffs, reduced scale breath.
+ * V4.1: wider terrain, same px/s (translate scaled to canvas width). Soft falloffs, void corridors.
  */
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face,
@@ -5685,7 +5685,7 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(ellipse 55% 45% at 100% 0%, rgba(0, 0, 0, 0.18) 0%, transparent 58%);
 }
 
-/* Shared panoramic canvas geometry (424% × 216% = 4× env + ~62% side overscan) */
+/* Shared panoramic canvas geometry (650% × 240% = 6.5× env + ~95% side overscan) */
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::after,
@@ -5697,18 +5697,18 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before {
   content: '';
   position: absolute;
-  left: -62%;
-  top: -58%;
-  width: 424%;
-  height: 216%;
+  left: -95%;
+  top: -70%;
+  width: 650%;
+  height: 240%;
   border-radius: inherit;
   pointer-events: none;
   mix-blend-mode: plus-lighter;
-  /* Tier 1: complexes A + B, one magenta pocket */
+  /* Tier 1: anchor A + standard B, one magenta pocket */
   background:
-    radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
-    radial-gradient(ellipse 10% 8% at 22% 54%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%);
+    radial-gradient(ellipse 26% 17% at 7% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 20% 30%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 10% 8% at 14% 56%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%);
   animation: nebuladriftPrimary 45s linear infinite;
 }
 
@@ -5722,27 +5722,42 @@ body.app-mode-game #screen-game.screen.active {
   opacity: 0.96;
   /* Tier 2: complexes A–C, two magenta pockets */
   background:
-    radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 46% 70%, rgba(124, 58, 237, 0.46) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
-    radial-gradient(ellipse 10% 8% at 22% 54%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
+    radial-gradient(ellipse 26% 17% at 7% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 20% 30%, rgba(109, 40, 217, 0.48) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 38% 74%, rgba(124, 58, 237, 0.46) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
+    radial-gradient(ellipse 10% 8% at 14% 56%, rgba(192, 38, 211, 0.42) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
     radial-gradient(ellipse 10% 8% at 52% 48%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%);
 }
 
 .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before,
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::before {
   opacity: 1;
-  /* Tier 3: 4 violet + 1 emerald complex, void-corridor haze + two magenta pockets */
+  /* Tier 3: 8 violet landmarks + 2 teal + 4 magenta + 2 haze (uneven spacing, void corridors) */
   background:
-    radial-gradient(ellipse 20% 14% at 10% 68%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 28% 32%, rgba(109, 40, 217, 0.5) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 46% 70%, rgba(124, 58, 237, 0.48) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 64% 30%, rgba(20, 184, 166, 0.38) 0%, rgba(13, 148, 136, 0.14) 46%, transparent 78%),
-    radial-gradient(ellipse 20% 14% at 82% 66%, rgba(124, 58, 237, 0.44) 0%, rgba(91, 33, 182, 0.16) 46%, transparent 78%),
-    radial-gradient(ellipse 24% 8% at 36% 58%, rgba(139, 92, 246, 0.14) 0%, rgba(124, 58, 237, 0.05) 48%, transparent 78%),
-    radial-gradient(ellipse 24% 8% at 74% 42%, rgba(139, 92, 246, 0.12) 0%, rgba(124, 58, 237, 0.04) 48%, transparent 78%),
-    radial-gradient(ellipse 10% 8% at 24% 52%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
-    radial-gradient(ellipse 10% 8% at 58% 46%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%);
+    /* Anchor complexes */
+    radial-gradient(ellipse 26% 17% at 7% 72%, rgba(124, 58, 237, 0.52) 0%, rgba(91, 33, 182, 0.22) 46%, transparent 78%),
+    radial-gradient(ellipse 26% 17% at 72% 68%, rgba(124, 58, 237, 0.5) 0%, rgba(91, 33, 182, 0.2) 46%, transparent 78%),
+    /* Standard complexes */
+    radial-gradient(ellipse 20% 14% at 20% 30%, rgba(109, 40, 217, 0.5) 0%, rgba(76, 29, 149, 0.2) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 48% 76%, rgba(124, 58, 237, 0.48) 0%, rgba(91, 33, 182, 0.18) 46%, transparent 78%),
+    radial-gradient(ellipse 20% 14% at 90% 30%, rgba(109, 40, 217, 0.44) 0%, rgba(76, 29, 149, 0.16) 46%, transparent 78%),
+    /* Stretched cloud band */
+    radial-gradient(ellipse 34% 6% at 30% 62%, rgba(109, 40, 217, 0.38) 0%, rgba(76, 29, 149, 0.14) 44%, transparent 76%),
+    /* Compact cluster */
+    radial-gradient(ellipse 16% 12% at 56% 34%, rgba(124, 58, 237, 0.44) 0%, rgba(91, 33, 182, 0.16) 44%, transparent 76%),
+    /* Fragmented formation */
+    radial-gradient(ellipse 13% 10% at 84% 44%, rgba(109, 40, 217, 0.36) 0%, rgba(76, 29, 149, 0.12) 42%, transparent 74%),
+    /* Teal complexes */
+    radial-gradient(ellipse 20% 14% at 40% 24%, rgba(20, 184, 166, 0.38) 0%, rgba(13, 148, 136, 0.14) 46%, transparent 78%),
+    radial-gradient(ellipse 18% 13% at 78% 28%, rgba(20, 184, 166, 0.34) 0%, rgba(13, 148, 136, 0.12) 46%, transparent 78%),
+    /* Wispy transition haze */
+    radial-gradient(ellipse 28% 7% at 62% 58%, rgba(139, 92, 246, 0.14) 0%, rgba(124, 58, 237, 0.05) 48%, transparent 78%),
+    radial-gradient(ellipse 26% 7% at 92% 64%, rgba(139, 92, 246, 0.12) 0%, rgba(124, 58, 237, 0.04) 48%, transparent 78%),
+    /* Magenta pockets */
+    radial-gradient(ellipse 10% 8% at 14% 56%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 44% 50%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.11) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 68% 50%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 82% 54%, rgba(192, 38, 211, 0.34) 0%, rgba(162, 28, 175, 0.09) 44%, transparent 76%);
 }
 
 .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::after,
@@ -5756,17 +5771,17 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
   content: '';
   position: absolute;
-  left: -62%;
-  top: -58%;
-  width: 424%;
-  height: 216%;
+  left: -95%;
+  top: -70%;
+  width: 650%;
+  height: 240%;
   border-radius: inherit;
   pointer-events: none;
   mix-blend-mode: normal;
-  /* Tier 2: one magenta pocket + one cyan stream */
+  /* Tier 2: one magenta pocket + one cyan/teal stream */
   background:
-    radial-gradient(ellipse 10% 8% at 38% 56%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
-    radial-gradient(ellipse 14% 5% at 18% 22%, rgba(34, 211, 238, 0.34) 0%, rgba(13, 148, 136, 0.11) 42%, transparent 74%);
+    radial-gradient(ellipse 10% 8% at 34% 54%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
+    radial-gradient(ellipse 14% 5% at 12% 20%, rgba(34, 211, 238, 0.34) 0%, rgba(13, 148, 136, 0.11) 42%, transparent 74%);
   animation: nebuladriftDepth 60s linear infinite;
   animation-delay: -8s;
   opacity: 0.5;
@@ -5776,14 +5791,17 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
   mix-blend-mode: screen;
   opacity: 0.54;
-  /* Tier 3: three magenta pockets + three cyan streams */
+  /* Tier 3: five magenta pockets + four cyan/teal streams */
   background:
-    radial-gradient(ellipse 10% 8% at 28% 58%, rgba(192, 38, 211, 0.44) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
-    radial-gradient(ellipse 10% 8% at 52% 44%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
-    radial-gradient(ellipse 10% 8% at 78% 62%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%),
-    radial-gradient(ellipse 14% 5% at 18% 24%, rgba(34, 211, 238, 0.4) 0%, rgba(8, 145, 178, 0.14) 42%, transparent 74%),
-    radial-gradient(ellipse 14% 5% at 46% 18%, rgba(45, 212, 191, 0.3) 0%, rgba(20, 184, 166, 0.1) 42%, transparent 74%),
-    radial-gradient(ellipse 14% 5% at 72% 28%, rgba(34, 211, 238, 0.32) 0%, rgba(8, 145, 178, 0.1) 42%, transparent 74%);
+    radial-gradient(ellipse 10% 8% at 10% 58%, rgba(192, 38, 211, 0.44) 0%, rgba(162, 28, 175, 0.14) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 34% 46%, rgba(192, 38, 211, 0.4) 0%, rgba(162, 28, 175, 0.12) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 54% 60%, rgba(192, 38, 211, 0.38) 0%, rgba(162, 28, 175, 0.11) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 72% 44%, rgba(192, 38, 211, 0.36) 0%, rgba(162, 28, 175, 0.1) 44%, transparent 76%),
+    radial-gradient(ellipse 10% 8% at 88% 58%, rgba(192, 38, 211, 0.34) 0%, rgba(162, 28, 175, 0.09) 44%, transparent 76%),
+    radial-gradient(ellipse 14% 5% at 6% 18%, rgba(34, 211, 238, 0.4) 0%, rgba(8, 145, 178, 0.14) 42%, transparent 74%),
+    radial-gradient(ellipse 14% 5% at 28% 14%, rgba(45, 212, 191, 0.3) 0%, rgba(20, 184, 166, 0.1) 42%, transparent 74%),
+    radial-gradient(ellipse 14% 5% at 56% 20%, rgba(34, 211, 238, 0.34) 0%, rgba(8, 145, 178, 0.1) 42%, transparent 74%),
+    radial-gradient(ellipse 14% 5% at 82% 16%, rgba(34, 211, 238, 0.32) 0%, rgba(13, 148, 136, 0.1) 42%, transparent 74%);
   animation: nebuladriftDepth 60s linear infinite;
   animation-delay: -8s;
 }
@@ -5793,13 +5811,13 @@ body.app-mode-game #screen-game.screen.active {
     transform: translate(0, 0) scale(1);
   }
   25% {
-    transform: translate(-27%, 6%) scale(1.02);
+    transform: translate(-18%, 4%) scale(1.02);
   }
   50% {
-    transform: translate(-54%, 12%) scale(1.04);
+    transform: translate(-35%, 8%) scale(1.04);
   }
   75% {
-    transform: translate(-27%, 6%) scale(1.02);
+    transform: translate(-18%, 4%) scale(1.02);
   }
 }
 
@@ -5808,13 +5826,13 @@ body.app-mode-game #screen-game.screen.active {
     transform: translate(0, 0) scale(1);
   }
   25% {
-    transform: translate(21%, -5%) scale(1.02);
+    transform: translate(14%, -3%) scale(1.02);
   }
   50% {
-    transform: translate(42%, -10%) scale(1.03);
+    transform: translate(27%, -7%) scale(1.03);
   }
   75% {
-    transform: translate(21%, -5%) scale(1.02);
+    transform: translate(14%, -3%) scale(1.02);
   }
 }
 
@@ -5822,7 +5840,7 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-shimmer="nebuladrift"] .card-shimmer--face::before,
   .card-detail-frame[data-card-shimmer="nebuladrift"] .card-shimmer--face::before {
     animation: none;
-    transform: translate(-27%, 6%) scale(1.02);
+    transform: translate(-18%, 4%) scale(1.02);
   }
 
   .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="2"] .card-shimmer--face::after,
@@ -5830,7 +5848,7 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after,
   .card-detail-frame[data-card-shimmer="nebuladrift"][data-aura-tier="3"] .card-shimmer--face::after {
     animation: none;
-    transform: translate(21%, -5%) scale(1.02);
+    transform: translate(14%, -3%) scale(1.02);
     opacity: 0.52;
   }
 }
