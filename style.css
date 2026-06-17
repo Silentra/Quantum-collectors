@@ -2898,26 +2898,26 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: none;
 }
 
-/* aura_void validation — perimeter violet halo (not final Void design) */
+/* aura_void — perimeter violet halo (production intensity; geometry unchanged) */
 .sci-card[data-card-glow="void"][data-aura-tier="1"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="void"][data-aura-tier="1"] .card-glow--halo::before {
   box-shadow:
-    0 0 6px 1px rgba(124, 58, 237, 0.22),
-    0 0 10px 2px rgba(91, 33, 182, 0.14);
+    0 0 6px 1px rgba(124, 58, 237, 0.40),
+    0 0 10px 2px rgba(91, 33, 182, 0.26);
 }
 
 .sci-card[data-card-glow="void"][data-aura-tier="2"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="void"][data-aura-tier="2"] .card-glow--halo::before {
   box-shadow:
-    0 0 8px 2px rgba(124, 58, 237, 0.32),
-    0 0 12px 3px rgba(91, 33, 182, 0.2);
+    0 0 8px 2px rgba(124, 58, 237, 0.52),
+    0 0 12px 3px rgba(91, 33, 182, 0.34);
 }
 
 .sci-card[data-card-glow="void"][data-aura-tier="3"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="void"][data-aura-tier="3"] .card-glow--halo::before {
   box-shadow:
-    0 0 10px 2px rgba(124, 58, 237, 0.42),
-    0 0 14px 4px rgba(91, 33, 182, 0.26);
+    0 0 10px 2px rgba(124, 58, 237, 0.62),
+    0 0 14px 4px rgba(91, 33, 182, 0.42);
 }
 
 @media (prefers-reduced-motion: reduce) {
