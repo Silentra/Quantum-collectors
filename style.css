@@ -2890,10 +2890,11 @@ body.app-mode-game #screen-game.screen.active {
   overflow: visible;
 }
 
-.card-glow--halo::before {
+.card-glow--halo::before,
+.card-glow--halo::after {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: var(--card-glow-paint-inset, 0px);
   border-radius: inherit;
   pointer-events: none;
 }
@@ -2901,11 +2902,6 @@ body.app-mode-game #screen-game.screen.active {
 /* aura_void V2 — darkness consuming light (perimeter halo; geometry unchanged) */
 .sci-card[data-card-glow="void"] .card-glow--halo::after,
 .card-detail-frame[data-card-glow="void"] .card-glow--halo::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
   filter: blur(1.25px);
   mix-blend-mode: multiply;
 }
@@ -3159,6 +3155,8 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame {
   --card-frame-inner-edge: calc(var(--card-bleed) + var(--card-inner-inset));
   --card-frame-body-edge: calc(var(--card-frame-inner-edge) - var(--card-frame-lip));
+  /* Align glow paint origin with border host outer edge (eliminates glow↔border seam) */
+  --card-glow-paint-inset: max(0px, calc(var(--card-glow-bleed, 6px) - var(--card-bleed, 0px)));
 }
 
 /* Premium spectrum uses wider band — bleed recalculates on shells below */
