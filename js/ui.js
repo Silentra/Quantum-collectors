@@ -56,7 +56,7 @@ import {
 } from './project-ui.js';
 
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
-import { getEquippedShimmer, renderProfile } from './profile-ui.js';
+import { getEquippedAura, getEquippedShimmer, renderProfile } from './profile-ui.js';
 import { renderShop, cleanupShop } from './shop-ui.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
@@ -411,15 +411,18 @@ function renderPlayerCard(card, quantity = 1, isLocked = false, isUndiscovered =
   const equippedShimmerDefinition = playerData
     ? getEquippedShimmer(playerData)?.definition ?? null
     : null;
+  const equippedGlowDefinition = playerData
+    ? getEquippedAura(playerData)?.definition ?? null
+    : null;
 
   const model = buildCardRenderModel(card, {
     quantity,
     isLocked,
     isUndiscovered,
     variant: 'collection',
-    profileCosmeticAura: null,
     borderRenderEffectId,
     equippedShimmerDefinition,
+    equippedGlowDefinition,
   });
   return renderSciCard(model);
 }

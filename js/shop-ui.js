@@ -18,7 +18,7 @@ import * as db from './database.js';
 import * as player from './player.js';
 import * as toast from './toast.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
-import { getEquippedShimmer } from './profile-ui.js';
+import { getEquippedAura, getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
 import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
 import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
@@ -226,15 +226,22 @@ function renderShopCardPreview(item) {
   if (!card) return '';
 
   const session = auth.getSession();
-  const borderRenderEffectId = session && session.username !== '__admin__'
-    ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
-    : null;
+  let borderRenderEffectId = null;
+  let equippedShimmerDefinition = null;
+  let equippedGlowDefinition = null;
+  if (session && session.username !== '__admin__') {
+    const playerData = player.getPlayer(session.username);
+    borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(playerData);
+    equippedShimmerDefinition = getEquippedShimmer(playerData)?.definition ?? null;
+    equippedGlowDefinition = getEquippedAura(playerData)?.definition ?? null;
+  }
 
   const slotHtml = renderShopCardPreviewSlot(card, {
     quantity: 1,
     variant: 'collection',
-    profileCosmeticAura: null,
     borderRenderEffectId,
+    equippedShimmerDefinition,
+    equippedGlowDefinition,
   });
 
   const label = escapeHtml(card.name || parsed.sourceId);
@@ -252,12 +259,17 @@ function renderShopCardPreview(item) {
 function getPlayerCardFacePreviewContext() {
   const session = auth.getSession();
   if (!session || session.username === '__admin__') {
-    return { borderRenderEffectId: null, equippedShimmerDefinition: null };
+    return {
+      borderRenderEffectId: null,
+      equippedShimmerDefinition: null,
+      equippedGlowDefinition: null,
+    };
   }
   const playerData = player.getPlayer(session.username);
   return {
     borderRenderEffectId: resolveBorderRenderEffectIdFromPlayer(playerData),
     equippedShimmerDefinition: getEquippedShimmer(playerData)?.definition ?? null,
+    equippedGlowDefinition: getEquippedAura(playerData)?.definition ?? null,
   };
 }
 

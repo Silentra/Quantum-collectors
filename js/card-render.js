@@ -8,7 +8,7 @@
  * Phase A: proportional CSS Grid on .card-detail-inner (geometry only)
  * Phase B: container-query typography (clamp + cqw/cqh); geometry unchanged
  *
- * Dependencies: cards.js, card-art.js, card-border.js, card-shimmer.js (no ui.js / project-ui.js imports).
+ * Dependencies: cards.js, card-art.js, card-border.js, card-glow.js, card-shimmer.js (no ui.js / project-ui.js imports).
  */
 
 import { renderCardDetailArtHtml, resolveCardArt } from './card-art.js';
@@ -24,12 +24,17 @@ import {
   resolveBorderRenderEffectId,
 } from './card-border.js';
 import {
+  formatCardGlowAttr,
+  renderGlowHaloLayerHtml,
+  resolveGlowRenderEffectIdFromOptions,
+} from './card-glow.js';
+import {
   formatCardShimmerAttr,
   renderShimmerFaceLayerHtml,
   resolveShimmerRenderEffectId,
 } from './card-shimmer.js';
 
-/** Cosmetic mount — equipped border paints on .card-cosmetic-effects::before (v1). */
+/** Border mount — equipped border paints on .card-cosmetic-effects::before (v1). */
 const CARD_COSMETIC_HOST_HTML = '<div class="card-cosmetic-effects" aria-hidden="true"></div>';
 
 /** Pip color for Mathematical Aura tier indicators (modal + collection dots). */
@@ -40,10 +45,11 @@ const MATH_AURA_TIER_PIP_COLOR = '#e0e7ff';
  * @property {number} [quantity=1]
  * @property {boolean} [isLocked=false]
  * @property {boolean} [isUndiscovered=false]
- * @property {string|null} [profileCosmeticAura=null] - reserved for future Glow equip (unused)
  * @property {string|null} [borderRenderEffectId=null] - resolved data-card-border id; null → graphite default
  * @property {object|null} [equippedBorderDefinition=null] - cosmetic definition; resolved when borderRenderEffectId omitted
+ * @property {object|null} [equippedGlowDefinition=null] - equipped glow; resolved when glowRenderEffectId omitted
  * @property {object|null} [equippedShimmerDefinition=null] - equipped shimmer; resolved when shimmerRenderEffectId omitted
+ * @property {string|null} [glowRenderEffectId=null] - explicit data-card-glow id (preview overrides)
  * @property {string|null} [shimmerRenderEffectId=null] - explicit data-card-shimmer id (preview overrides)
  * @property {number|null} [auraTierOverride=null] - force Mathematical Aura tier (shimmer preview only)
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
@@ -63,7 +69,9 @@ export function buildCardRenderModel(card, options = {}) {
     isUndiscovered = false,
     borderRenderEffectId = null,
     equippedBorderDefinition = null,
+    equippedGlowDefinition = null,
     equippedShimmerDefinition = null,
+    glowRenderEffectId: glowRenderEffectIdOption = null,
     shimmerRenderEffectId: shimmerRenderEffectIdOption = null,
     auraTierOverride = null,
     variant = 'collection',
@@ -107,6 +115,13 @@ export function buildCardRenderModel(card, options = {}) {
     ? resolveShimmerRenderEffectId({ auraTier, shimmerDefinition: { renderEffectId: shimmerRenderEffectIdOption } })
     : resolveShimmerRenderEffectId({ auraTier, shimmerDefinition: equippedShimmerDefinition });
 
+  const glowRenderEffectId = glowRenderEffectIdOption != null
+    ? resolveGlowRenderEffectIdFromOptions({
+      auraTier,
+      glowDefinition: { renderEffectId: glowRenderEffectIdOption },
+    })
+    : resolveGlowRenderEffectIdFromOptions({ auraTier, glowDefinition: equippedGlowDefinition });
+
   return {
     cardId: card.id,
     name: card.name,
@@ -140,6 +155,8 @@ export function buildCardRenderModel(card, options = {}) {
     rarityDotClass: `rarity-dot-${card.rarity || 'common'}`,
     nameScaleClass,
     borderRenderEffectId: resolvedBorderRenderEffectId,
+    glowRenderEffectId,
+    showGlowHalo: glowRenderEffectId != null,
     shimmerRenderEffectId,
     showShimmerFace: shimmerRenderEffectId != null,
   };
@@ -283,9 +300,14 @@ export function renderCardDetailOwnershipLine(quantity) {
  */
 export function renderDetailFrame(model) {
   const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
+  const glowAttr = formatCardGlowAttr(model.glowRenderEffectId);
   const shimmerAttr = formatCardShimmerAttr(model.shimmerRenderEffectId);
+  const glowHaloHtml = model.showGlowHalo
+    ? renderGlowHaloLayerHtml(model.glowRenderEffectId)
+    : '';
   return `
-    <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}>
+    <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
+      ${glowHaloHtml}
       ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
     </div>
@@ -321,7 +343,9 @@ export function renderCardDetailView(card, options = {}) {
     quantity = 1,
     borderRenderEffectId = null,
     equippedBorderDefinition = null,
+    equippedGlowDefinition = null,
     equippedShimmerDefinition = null,
+    glowRenderEffectId = null,
     shimmerRenderEffectId = null,
     auraTierOverride = null,
   } = options;
@@ -330,7 +354,9 @@ export function renderCardDetailView(card, options = {}) {
     variant: 'modal',
     borderRenderEffectId,
     equippedBorderDefinition,
+    equippedGlowDefinition,
     equippedShimmerDefinition,
+    glowRenderEffectId,
     shimmerRenderEffectId,
     auraTierOverride,
   });
@@ -373,13 +399,18 @@ export function renderSciCard(model) {
     : '';
 
   const borderEffect = model.borderRenderEffectId || DEFAULT_BORDER_EFFECT_ID;
+  const glowAttr = formatCardGlowAttr(model.glowRenderEffectId);
   const shimmerAttr = formatCardShimmerAttr(model.shimmerRenderEffectId);
+  const glowHaloHtml = model.showGlowHalo
+    ? renderGlowHaloLayerHtml(model.glowRenderEffectId)
+    : '';
 
   return `
-    <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${shimmerAttr}>
+    <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
       ${qtyBadge}
       ${lockedBadge}
       ${undiscoveredBadge}
+      ${glowHaloHtml}
       ${CARD_COSMETIC_HOST_HTML}
       ${renderCardContent(model)}
       ${auraDots}

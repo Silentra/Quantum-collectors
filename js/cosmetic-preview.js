@@ -1,11 +1,12 @@
 /**
- * Cosmetic previews — shell slug stubs + unified card-face previews (Border / Shimmer / future Glow).
+ * Cosmetic previews — shell slug stubs + unified card-face previews (Border / Shimmer / Glow).
  * Inline shop tiles and expanded modal share the same helpers.
  */
 
 import * as cards from './cards.js';
 import * as db from './database.js';
 import { renderCollectionCard } from './card-render.js';
+import { COSMETIC_GLOW_EFFECT_IDS } from './card-glow.js';
 import { COSMETIC_SHIMMER_EFFECT_IDS } from './card-shimmer.js';
 import { COSMETIC_BORDER_EFFECT_IDS, DEFAULT_BORDER_EFFECT_ID } from './card-border.js';
 import { getCosmeticDefinition } from './cosmetic-definitions.js';
@@ -29,13 +30,15 @@ export const SHIMMER_PREVIEW_AURA_TIER = CARD_FACE_PREVIEW_AURA_TIER;
 const CARD_FACE_PREVIEW_CATEGORIES = new Set([
   ITEM_CATEGORIES.BORDER,
   ITEM_CATEGORIES.SHIMMER,
+  ITEM_CATEGORIES.AURA,
 ]);
 
 /**
  * @typedef {Object} CardFacePreviewPlayerContext
  * @property {string|null} [borderRenderEffectId] - player's equipped border for context
  * @property {object|null} [equippedShimmerDefinition] - player's equipped shimmer for context
- * @property {string|null} [glowRenderEffectId] - reserved for future Glow equip override
+ * @property {object|null} [equippedGlowDefinition] - player's equipped glow for context
+ * @property {string|null} [glowRenderEffectId] - explicit glow preview override
  */
 
 /**
@@ -113,6 +116,7 @@ export function buildCardFacePreviewOptions(item, playerContext = {}) {
     variant: 'collection',
     auraTierOverride: CARD_FACE_PREVIEW_AURA_TIER,
     borderRenderEffectId: ctx.borderRenderEffectId ?? null,
+    equippedGlowDefinition: ctx.equippedGlowDefinition ?? null,
     equippedShimmerDefinition: ctx.equippedShimmerDefinition ?? null,
   };
 
@@ -135,16 +139,20 @@ export function buildCardFacePreviewOptions(item, playerContext = {}) {
     }
   }
 
-  // Reserved for future Glow — glowRenderEffectId on ctx when card-glow ships
-  if (item.category === ITEM_CATEGORIES.AURA && ctx.glowRenderEffectId) {
-    options.glowRenderEffectId = ctx.glowRenderEffectId;
+  if (item.category === ITEM_CATEGORIES.AURA) {
+    if (effectId && COSMETIC_GLOW_EFFECT_IDS.includes(effectId)) {
+      options.glowRenderEffectId = effectId;
+    }
+    if (options.borderRenderEffectId == null) {
+      options.borderRenderEffectId = DEFAULT_BORDER_EFFECT_ID;
+    }
   }
 
   return options;
 }
 
 /**
- * Unified real-card preview for Border / Shimmer (future Glow uses same path).
+ * Unified real-card preview for Border / Shimmer / Glow.
  * @param {object} item - normalized cosmetic item
  * @param {(value: string) => string} escapeHtml
  * @param {{ expanded?: boolean, playerContext?: CardFacePreviewPlayerContext }} [options]
@@ -201,7 +209,7 @@ export function renderCosmeticPreviewSurface(item, escapeHtml, options = {}) {
 
   const expandedClass = options.expanded ? ' cosmetic-preview--expanded' : '';
   const slug = getCosmeticPreviewSlug(normalized);
-  if (!slug && normalized.category !== ITEM_CATEGORIES.TITLE && normalized.category !== ITEM_CATEGORIES.AURA) {
+  if (!slug && normalized.category !== ITEM_CATEGORIES.TITLE) {
     return '';
   }
 
@@ -212,10 +220,6 @@ export function renderCosmeticPreviewSurface(item, escapeHtml, options = {}) {
   if (normalized.category === ITEM_CATEGORIES.TITLE) {
     const label = escapeHtml(normalized.name || 'Title');
     return `<div class="shop-cosmetic-preview shop-cosmetic-preview--title${expandedClass}" role="img" aria-label="Title preview"><span class="shop-cosmetic-preview-title-text">${label}</span></div>`;
-  }
-
-  if (normalized.category === ITEM_CATEGORIES.AURA) {
-    return `<div class="shop-cosmetic-preview shop-cosmetic-preview--aura${expandedClass}" role="img" aria-label="Glow preview"></div>`;
   }
 
   if (normalized.category === ITEM_CATEGORIES.PROFILE_BANNER) {
