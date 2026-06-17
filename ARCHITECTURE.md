@@ -152,17 +152,22 @@ Historical **Legacy Aura** used `.sci-card.aura-*` classes (e.g. `aura-prismatic
 - **JS stubs retained** in cards.js: `DEFAULT_VISUAL_AURA`, `AURA_CSS_MAP`, `resolveVisualAura()`, `getAuraCSSClass()` — `@deprecated`, compatibility only
 - Legacy per-card `auraType` DB field preserved but not read by render pipeline
 
-#### Future cosmetics (not yet implemented)
+#### Cosmetic render modules (Shimmer + Glow)
 
-| System | Purpose | Default id (planned) | Runtime category |
-|--------|---------|----------------------|------------------|
-| **Shimmer** | Card-surface / border effects | `shimmer_prismatic` | *(future)* |
-| **Glow** | Perimeter / outside-card effects | shop items e.g. `aura_void` | `aura` (runtime; admin label: Glow) |
+| System | Module | Shell attribute | Mount | Gate |
+|--------|--------|-----------------|-------|------|
+| **Border** | `js/card-border.js` | `data-card-border` | `.card-cosmetic-effects::before` (z1) | always (default `graphite`) |
+| **Glow** | `js/card-glow.js` | `data-card-glow` | `.card-glow--halo` (z0, behind border) | Mathematical Aura tier ≥ 1; suppressed on `variant: 'pack-reveal'` |
+| **Shimmer** | `js/card-shimmer.js` | `data-card-shimmer` | `.card-shimmer--face` inside `.card-detail-inner` | Mathematical Aura tier ≥ 1 |
+
+**Layer stack (bottom → top):** `.card-glow--halo` (z0) → `.card-cosmetic-effects` border host (z1) → `.card-detail-inner` clipped content (z2) → shimmer face layer inside inner.
+
+**Mathematical Aura** (`data-aura-tier`, pip dots, gameplay scaling) is separate from **Glow** (equipped cosmetic perimeter effect, e.g. `aura_void` → `renderEffectId: 'void'`). Legacy shell aura visuals remain retired (`LEGACY_SHELL_AURA_VISUALS`).
 
 Shimmer and Glow render only when Mathematical Aura tier ≥ 1 (product rule). Prismatic **concept** remains the intended default Shimmer identity — implemented fresh, not via legacy `aura-prismatic` shell pseudos.
 
 ### Player-Facing Card Renderer (Phase 3 + normalization Phase 1)
-- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal), `renderPackCardWrapper()` / `variant: 'pack-reveal'` (pack + breakthrough). **FX module**: `js/pack-reveal-effects.js` (`spawnRevealParticles`). Inert `.card-cosmetic-effects` host (Phase 3). **Overflow contract**: `.sci-card` `overflow: visible`; inner clips at `z-index: 2`. Pack reveals: `data-aura-tier="0"`, no legacy shell aura classes.
+- **Canonical module**: `js/card-render.js` — `buildCardRenderModel()`, `renderCardContent()`, `renderSciCard()` (collection), `renderDetailFrame()`, `renderCardDetailView()` (modal), `renderPackCardWrapper()` / `variant: 'pack-reveal'` (pack + breakthrough). **FX modules**: `js/pack-reveal-effects.js` (`spawnRevealParticles`); **cosmetic resolvers**: `card-border.js`, `card-glow.js`, `card-shimmer.js`. Inert `.card-cosmetic-effects` host (Phase 3) — `::before`/`::after` reserved for borders only; glow uses dedicated `.card-glow--halo`. **Overflow contract**: `.sci-card` `overflow: visible`; inner clips at `z-index: 2`; `--card-glow-bleed` (~6px collection, ~8px modal). Pack reveals: `data-aura-tier="0"`, no glow/shimmer tier effects, no legacy shell aura classes.
 - **Phase A geometry**: `.card-detail-inner` uses CSS Grid (`12fr / 55fr / 2px / 31fr` rows, art `minmax(32px,…)`). Concept label inside `.card-detail-header`. Art `object-position: center top`. Shell `container-type: size`.
 - **Phase B typography**: `clamp()` + `cqw`/`cqh` on `.sci-card` / `.card-detail-frame` descendants; removed duplicate `.sci-card` font-size overrides; emoji via `.card-detail-art-emoji`. `@supports not (container-type: size)` retains legacy rem fallback.
 - **Unified card structure**: collection grid, pack opening, and detail modal all share the same `card-detail-*` internal HTML (header → art → divider → body). The modal proportions are the visual reference standard.

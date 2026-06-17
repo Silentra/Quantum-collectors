@@ -2871,6 +2871,62 @@ body.app-mode-game #screen-game.screen.active {
   z-index: 1;
 }
 
+/* Phase 3 — perimeter glow halo (z0; behind border host at z1) */
+.sci-card,
+.card-detail-frame {
+  --card-glow-bleed: 6px;
+}
+
+.card-detail-frame {
+  --card-glow-bleed: 8px;
+}
+
+.card-glow--halo {
+  position: absolute;
+  inset: calc(-1 * var(--card-glow-bleed, 6px));
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: visible;
+}
+
+.card-glow--halo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* aura_void validation — perimeter violet halo (not final Void design) */
+.sci-card[data-card-glow="void"][data-aura-tier="1"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="void"][data-aura-tier="1"] .card-glow--halo::before {
+  box-shadow:
+    0 0 6px 1px rgba(124, 58, 237, 0.22),
+    0 0 10px 2px rgba(91, 33, 182, 0.14);
+}
+
+.sci-card[data-card-glow="void"][data-aura-tier="2"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="void"][data-aura-tier="2"] .card-glow--halo::before {
+  box-shadow:
+    0 0 8px 2px rgba(124, 58, 237, 0.32),
+    0 0 12px 3px rgba(91, 33, 182, 0.2);
+}
+
+.sci-card[data-card-glow="void"][data-aura-tier="3"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="void"][data-aura-tier="3"] .card-glow--halo::before {
+  box-shadow:
+    0 0 10px 2px rgba(124, 58, 237, 0.42),
+    0 0 14px 4px rgba(91, 33, 182, 0.26);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sci-card[data-card-glow] .card-glow--halo::before,
+  .card-detail-frame[data-card-glow] .card-glow--halo::before {
+    animation: none;
+  }
+}
+
 /* Phase 3 — content above retired legacy shell aura pseudos */
 /* Phase A — proportional grid (header / art / divider / body) */
 .card-detail-inner {
@@ -4776,7 +4832,7 @@ body.app-mode-game #screen-game.screen.active {
 /*
  * Mathematical Aura = duplicate-based progression (tiers 0–3). Gameplay + UI only.
  * Legacy shell aura visuals (aura-prismatic, ::before/::after halos) are RETIRED —
- * archived below as LEGACY_SHELL_AURA_VISUALS. Future surface/perimeter cosmetics:
+ * archived below as LEGACY_SHELL_AURA_VISUALS. Perimeter Glow: data-card-glow on shell + .card-glow--halo.
  * Shimmer (e.g. shimmer_prismatic) and Glow (runtime category: aura).
  */
 
@@ -5994,7 +6050,12 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 
-/* Shop / modal — unified real-card cosmetic preview (Border, Shimmer, future Glow) */
+/* Shop / modal — unified real-card cosmetic preview (Border, Shimmer, Glow) */
+.shop-preview-expand--cosmetic,
+.shop-cosmetic-preview.shop-cosmetic-preview--card {
+  overflow: visible;
+}
+
 .shop-cosmetic-preview.shop-cosmetic-preview--card {
   width: 100%;
   height: auto;
