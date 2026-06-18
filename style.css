@@ -3031,92 +3031,92 @@ body.app-mode-game #screen-game.screen.active {
 /* ── Rarity Glow — per-card emission via shell .rarity-* (matches RARITY_COLORS) ── */
 .sci-card.rarity-common,
 .card-detail-frame.rarity-common {
-  --rarity-glow-core-rgb: 196, 200, 208;
+  --rarity-glow-core-rgb: 228, 230, 238;
   --rarity-glow-body-rgb: 156, 163, 175;
   --rarity-glow-falloff-rgb: 75, 85, 99;
-  --rarity-glow-t1-core-a: 0.14;
-  --rarity-glow-t1-body-a: 0.16;
-  --rarity-glow-t1-falloff-a: 0.10;
-  --rarity-glow-t2-core-a: 0.18;
-  --rarity-glow-t2-body-a: 0.20;
-  --rarity-glow-t2-falloff-a: 0.13;
-  --rarity-glow-t3-core-a: 0.22;
-  --rarity-glow-t3-body-a: 0.24;
-  --rarity-glow-t3-falloff-a: 0.15;
-  --rarity-glow-bloom-a: 0.10;
-  --rarity-glow-corona-a: 0.14;
+  --rarity-glow-t1-core-a: 0.22;
+  --rarity-glow-t1-body-a: 0.24;
+  --rarity-glow-t1-falloff-a: 0.16;
+  --rarity-glow-t2-core-a: 0.28;
+  --rarity-glow-t2-body-a: 0.30;
+  --rarity-glow-t2-falloff-a: 0.20;
+  --rarity-glow-t3-core-a: 0.36;
+  --rarity-glow-t3-body-a: 0.38;
+  --rarity-glow-t3-falloff-a: 0.24;
+  --rarity-glow-bloom-a: 0.18;
+  --rarity-glow-corona-a: 0.24;
 }
 
 .sci-card.rarity-uncommon,
 .card-detail-frame.rarity-uncommon {
-  --rarity-glow-core-rgb: 134, 239, 172;
+  --rarity-glow-core-rgb: 175, 255, 205;
   --rarity-glow-body-rgb: 34, 197, 94;
   --rarity-glow-falloff-rgb: 21, 128, 61;
-  --rarity-glow-t1-core-a: 0.18;
-  --rarity-glow-t1-body-a: 0.20;
-  --rarity-glow-t1-falloff-a: 0.12;
-  --rarity-glow-t2-core-a: 0.24;
-  --rarity-glow-t2-body-a: 0.26;
-  --rarity-glow-t2-falloff-a: 0.16;
-  --rarity-glow-t3-core-a: 0.30;
-  --rarity-glow-t3-body-a: 0.32;
-  --rarity-glow-t3-falloff-a: 0.19;
-  --rarity-glow-bloom-a: 0.14;
-  --rarity-glow-corona-a: 0.18;
+  --rarity-glow-t1-core-a: 0.26;
+  --rarity-glow-t1-body-a: 0.28;
+  --rarity-glow-t1-falloff-a: 0.18;
+  --rarity-glow-t2-core-a: 0.32;
+  --rarity-glow-t2-body-a: 0.34;
+  --rarity-glow-t2-falloff-a: 0.22;
+  --rarity-glow-t3-core-a: 0.40;
+  --rarity-glow-t3-body-a: 0.42;
+  --rarity-glow-t3-falloff-a: 0.26;
+  --rarity-glow-bloom-a: 0.22;
+  --rarity-glow-corona-a: 0.28;
 }
 
 .sci-card.rarity-rare,
 .card-detail-frame.rarity-rare {
-  --rarity-glow-core-rgb: 147, 197, 253;
+  --rarity-glow-core-rgb: 200, 225, 255;
   --rarity-glow-body-rgb: 59, 130, 246;
   --rarity-glow-falloff-rgb: 29, 78, 216;
-  --rarity-glow-t1-core-a: 0.22;
-  --rarity-glow-t1-body-a: 0.24;
-  --rarity-glow-t1-falloff-a: 0.14;
-  --rarity-glow-t2-core-a: 0.28;
-  --rarity-glow-t2-body-a: 0.30;
-  --rarity-glow-t2-falloff-a: 0.18;
-  --rarity-glow-t3-core-a: 0.34;
-  --rarity-glow-t3-body-a: 0.36;
-  --rarity-glow-t3-falloff-a: 0.22;
-  --rarity-glow-bloom-a: 0.16;
-  --rarity-glow-corona-a: 0.22;
+  --rarity-glow-t1-core-a: 0.30;
+  --rarity-glow-t1-body-a: 0.32;
+  --rarity-glow-t1-falloff-a: 0.20;
+  --rarity-glow-t2-core-a: 0.36;
+  --rarity-glow-t2-body-a: 0.38;
+  --rarity-glow-t2-falloff-a: 0.24;
+  --rarity-glow-t3-core-a: 0.44;
+  --rarity-glow-t3-body-a: 0.46;
+  --rarity-glow-t3-falloff-a: 0.28;
+  --rarity-glow-bloom-a: 0.26;
+  --rarity-glow-corona-a: 0.32;
 }
 
 .sci-card.rarity-epic,
 .card-detail-frame.rarity-epic {
-  --rarity-glow-core-rgb: 216, 180, 254;
+  --rarity-glow-core-rgb: 238, 215, 255;
   --rarity-glow-body-rgb: 168, 85, 247;
   --rarity-glow-falloff-rgb: 126, 34, 206;
-  --rarity-glow-t1-core-a: 0.26;
-  --rarity-glow-t1-body-a: 0.28;
-  --rarity-glow-t1-falloff-a: 0.16;
-  --rarity-glow-t2-core-a: 0.32;
-  --rarity-glow-t2-body-a: 0.34;
-  --rarity-glow-t2-falloff-a: 0.20;
-  --rarity-glow-t3-core-a: 0.38;
-  --rarity-glow-t3-body-a: 0.40;
-  --rarity-glow-t3-falloff-a: 0.24;
-  --rarity-glow-bloom-a: 0.18;
-  --rarity-glow-corona-a: 0.26;
+  --rarity-glow-t1-core-a: 0.34;
+  --rarity-glow-t1-body-a: 0.36;
+  --rarity-glow-t1-falloff-a: 0.22;
+  --rarity-glow-t2-core-a: 0.40;
+  --rarity-glow-t2-body-a: 0.42;
+  --rarity-glow-t2-falloff-a: 0.26;
+  --rarity-glow-t3-core-a: 0.48;
+  --rarity-glow-t3-body-a: 0.50;
+  --rarity-glow-t3-falloff-a: 0.30;
+  --rarity-glow-bloom-a: 0.28;
+  --rarity-glow-corona-a: 0.36;
 }
 
 .sci-card.rarity-legendary,
 .card-detail-frame.rarity-legendary {
-  --rarity-glow-core-rgb: 253, 230, 138;
+  --rarity-glow-core-rgb: 255, 245, 165;
   --rarity-glow-body-rgb: 245, 158, 11;
   --rarity-glow-falloff-rgb: 180, 83, 9;
-  --rarity-glow-t1-core-a: 0.30;
-  --rarity-glow-t1-body-a: 0.32;
-  --rarity-glow-t1-falloff-a: 0.18;
-  --rarity-glow-t2-core-a: 0.36;
-  --rarity-glow-t2-body-a: 0.38;
-  --rarity-glow-t2-falloff-a: 0.22;
-  --rarity-glow-t3-core-a: 0.44;
-  --rarity-glow-t3-body-a: 0.46;
-  --rarity-glow-t3-falloff-a: 0.28;
-  --rarity-glow-bloom-a: 0.22;
-  --rarity-glow-corona-a: 0.32;
+  --rarity-glow-t1-core-a: 0.38;
+  --rarity-glow-t1-body-a: 0.40;
+  --rarity-glow-t1-falloff-a: 0.24;
+  --rarity-glow-t2-core-a: 0.44;
+  --rarity-glow-t2-body-a: 0.46;
+  --rarity-glow-t2-falloff-a: 0.28;
+  --rarity-glow-t3-core-a: 0.52;
+  --rarity-glow-t3-body-a: 0.54;
+  --rarity-glow-t3-falloff-a: 0.32;
+  --rarity-glow-bloom-a: 0.30;
+  --rarity-glow-corona-a: 0.40;
 }
 
 /* aura_rarity_glow — luminous perimeter emission (Void-matched geometry) */
@@ -3144,7 +3144,7 @@ body.app-mode-game #screen-game.screen.active {
   mix-blend-mode: screen;
   background:
     radial-gradient(ellipse 90% 82% at 50% 48%, rgba(var(--rarity-glow-body-rgb), var(--rarity-glow-bloom-a)) 0%, transparent 70%);
-  opacity: 0.58;
+  opacity: 0.68;
 }
 
 .sci-card[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::before,
@@ -3164,7 +3164,7 @@ body.app-mode-game #screen-game.screen.active {
   background:
     radial-gradient(ellipse 92% 85% at 50% 50%, rgba(var(--rarity-glow-core-rgb), var(--rarity-glow-corona-a)) 0%, transparent 42%),
     radial-gradient(ellipse 88% 78% at 50% 48%, rgba(var(--rarity-glow-body-rgb), var(--rarity-glow-bloom-a)) 0%, transparent 68%);
-  opacity: 0.72;
+  opacity: 0.82;
 }
 
 @keyframes rarityGlowBreathT3 {
