@@ -13,6 +13,7 @@ import { getEquippedAura } from './profile-ui.js';
 export const COSMETIC_GLOW_EFFECT_IDS = [
   'void',
   'rarity',
+  'molten',
 ];
 
 /**

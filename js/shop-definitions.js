@@ -53,6 +53,12 @@ export const AURA_EFFECTS = Object.freeze({
     description: 'Each card radiates light in the color of its rarity.',
     colorHint: '#f59e0b',
   },
+  molten: {
+    renderEffectId: 'molten',
+    label: 'Molten Glow',
+    description: 'Restless furnace heat circulates around the card perimeter like molten metal.',
+    colorHint: '#ea580c',
+  },
   quantum: {
     renderEffectId: 'quantum',
     label: 'Quantum Flux',
@@ -214,6 +220,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 5,
     enabled: true,
     renderEffectId: 'rarity',
+  },
+
+  aura_molten_glow: {
+    id: 'aura_molten_glow',
+    name: 'Molten Glow',
+    description: 'Restless furnace heat circulates around your cards — molten metal under pressure, not flame.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.AURA,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 520,
+    weight: 4,
+    enabled: true,
+    renderEffectId: 'molten',
   },
 
   // ── Cosmetics — Borders ────────────────────────────────────────────────
