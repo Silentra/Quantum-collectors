@@ -3173,6 +3173,161 @@ body.app-mode-game #screen-game.screen.active {
   75%       { opacity: 0.96; }
 }
 
+/* ── Molten Glow — restless perimeter heat (Void-matched geometry) ── */
+@property --molten-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.sci-card[data-card-glow="molten"] .card-glow--halo,
+.card-detail-frame[data-card-glow="molten"] .card-glow--halo {
+  --molten-ring-pad: 2px;
+}
+
+.sci-card[data-card-glow="molten"] .card-glow--halo::after,
+.card-detail-frame[data-card-glow="molten"] .card-glow--halo::after {
+  mix-blend-mode: screen;
+  filter: blur(1.5px);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  padding: var(--molten-ring-pad);
+}
+
+/* T1 — warm base + slow 2-peak conic (20s) */
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .card-glow--halo::before {
+  box-shadow:
+    0 0 6px 1px rgba(69, 10, 10, 0.58),
+    0 0 6px 1px rgba(253, 186, 116, 0.38),
+    0 0 10px 2px rgba(127, 29, 29, 0.48),
+    0 0 10px 2px rgba(249, 115, 22, 0.32);
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .card-glow--halo::after,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .card-glow--halo::after {
+  --molten-angle: 0deg;
+  background: conic-gradient(
+    from var(--molten-angle),
+    rgba(41, 37, 36, 0.42) 0deg,
+    rgba(251, 191, 36, 0.72) 55deg,
+    rgba(249, 115, 22, 0.58) 110deg,
+    rgba(69, 10, 10, 0.48) 180deg,
+    rgba(253, 230, 138, 0.78) 235deg,
+    rgba(234, 88, 12, 0.52) 290deg,
+    rgba(41, 37, 36, 0.42) 360deg
+  );
+  opacity: 0.72;
+  animation: moltenAngleSpinT1 20s linear infinite;
+}
+
+/* T2 — stronger base + 3-peak conic (14s) + wobble (16s) */
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .card-glow--halo::before {
+  box-shadow:
+    0 0 8px 2px rgba(69, 10, 10, 0.68),
+    0 0 8px 2px rgba(253, 186, 116, 0.44),
+    0 0 8px 2px rgba(251, 191, 36, 0.28),
+    0 0 12px 3px rgba(127, 29, 29, 0.55),
+    0 0 12px 3px rgba(249, 115, 22, 0.38);
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .card-glow--halo::after,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .card-glow--halo::after {
+  background: conic-gradient(
+    from var(--molten-angle),
+    rgba(41, 37, 36, 0.52) 0deg,
+    rgba(253, 230, 138, 0.82) 40deg,
+    rgba(249, 115, 22, 0.62) 85deg,
+    rgba(69, 10, 10, 0.55) 130deg,
+    rgba(251, 191, 36, 0.76) 175deg,
+    rgba(234, 88, 12, 0.58) 220deg,
+    rgba(127, 29, 29, 0.5) 265deg,
+    rgba(253, 186, 116, 0.7) 310deg,
+    rgba(41, 37, 36, 0.52) 360deg
+  );
+  opacity: 0.82;
+  animation:
+    moltenAngleSpinT2 14s linear infinite,
+    moltenWobbleT2 16s ease-in-out infinite;
+}
+
+/* T3 — full stack + 4-peak conic (10s) + wobble (12s) + heat breathe */
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .card-glow--halo::before {
+  box-shadow:
+    0 0 10px 2px rgba(69, 10, 10, 0.78),
+    0 0 10px 2px rgba(253, 186, 116, 0.52),
+    0 0 10px 2px rgba(251, 191, 36, 0.36),
+    0 0 14px 4px rgba(127, 29, 29, 0.62),
+    0 0 14px 4px rgba(249, 115, 22, 0.44);
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .card-glow--halo::after,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .card-glow--halo::after {
+  background: conic-gradient(
+    from var(--molten-angle),
+    rgba(41, 37, 36, 0.58) 0deg,
+    rgba(255, 247, 237, 0.88) 32deg,
+    rgba(251, 191, 36, 0.78) 68deg,
+    rgba(234, 88, 12, 0.65) 105deg,
+    rgba(69, 10, 10, 0.62) 145deg,
+    rgba(253, 230, 138, 0.85) 182deg,
+    rgba(249, 115, 22, 0.68) 218deg,
+    rgba(127, 29, 29, 0.58) 255deg,
+    rgba(251, 191, 36, 0.74) 292deg,
+    rgba(69, 10, 10, 0.55) 328deg,
+    rgba(41, 37, 36, 0.58) 360deg
+  );
+  opacity: 0.92;
+  animation:
+    moltenAngleSpinT3 10s linear infinite,
+    moltenWobbleT3 12s ease-in-out infinite,
+    moltenHeatBreatheT3 18s ease-in-out infinite;
+}
+
+@keyframes moltenAngleSpinT1 {
+  to { --molten-angle: 360deg; }
+}
+
+@keyframes moltenAngleSpinT2 {
+  to { --molten-angle: 360deg; }
+}
+
+@keyframes moltenAngleSpinT3 {
+  to { --molten-angle: 360deg; }
+}
+
+@keyframes moltenWobbleT2 {
+  0%, 100% { transform: scale(1, 1); transform-origin: 50% 0%; }
+  25%       { transform: scale(1.018, 0.986); transform-origin: 100% 50%; }
+  50%       { transform: scale(0.986, 1.018); transform-origin: 50% 100%; }
+  75%       { transform: scale(1.014, 0.988); transform-origin: 0% 50%; }
+}
+
+@keyframes moltenWobbleT3 {
+  0%, 100% { transform: scale(1, 1); transform-origin: 50% 0%; }
+  25%       { transform: scale(1.024, 0.982); transform-origin: 100% 50%; }
+  50%       { transform: scale(0.982, 1.024); transform-origin: 50% 100%; }
+  75%       { transform: scale(1.02, 0.984); transform-origin: 0% 50%; }
+}
+
+@keyframes moltenHeatBreatheT3 {
+  0%, 100% { opacity: 0.88; }
+  50%       { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sci-card[data-card-glow="molten"] .card-glow--halo::after,
+  .card-detail-frame[data-card-glow="molten"] .card-glow--halo::after {
+    animation: none;
+    --molten-angle: 0deg;
+    opacity: 0.75;
+  }
+}
+
 /* Phase 3 — content above retired legacy shell aura pseudos */
 /* Phase A — proportional grid (header / art / divider / body) */
 .card-detail-inner {
