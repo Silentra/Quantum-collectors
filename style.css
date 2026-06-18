@@ -3021,9 +3021,156 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-glow] .card-glow--halo::before,
   .card-detail-frame[data-card-glow] .card-glow--halo::before,
   .sci-card[data-card-glow="void"] .card-glow--halo::after,
-  .card-detail-frame[data-card-glow="void"] .card-glow--halo::after {
+  .card-detail-frame[data-card-glow="void"] .card-glow--halo::after,
+  .sci-card[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::before,
+  .card-detail-frame[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::before {
     animation: none;
   }
+}
+
+/* ── Rarity Glow — per-card emission via shell .rarity-* (matches RARITY_COLORS) ── */
+.sci-card.rarity-common,
+.card-detail-frame.rarity-common {
+  --rarity-glow-core-rgb: 196, 200, 208;
+  --rarity-glow-body-rgb: 156, 163, 175;
+  --rarity-glow-falloff-rgb: 75, 85, 99;
+  --rarity-glow-t1-core-a: 0.14;
+  --rarity-glow-t1-body-a: 0.16;
+  --rarity-glow-t1-falloff-a: 0.10;
+  --rarity-glow-t2-core-a: 0.18;
+  --rarity-glow-t2-body-a: 0.20;
+  --rarity-glow-t2-falloff-a: 0.13;
+  --rarity-glow-t3-core-a: 0.22;
+  --rarity-glow-t3-body-a: 0.24;
+  --rarity-glow-t3-falloff-a: 0.15;
+  --rarity-glow-bloom-a: 0.10;
+  --rarity-glow-corona-a: 0.14;
+}
+
+.sci-card.rarity-uncommon,
+.card-detail-frame.rarity-uncommon {
+  --rarity-glow-core-rgb: 134, 239, 172;
+  --rarity-glow-body-rgb: 34, 197, 94;
+  --rarity-glow-falloff-rgb: 21, 128, 61;
+  --rarity-glow-t1-core-a: 0.18;
+  --rarity-glow-t1-body-a: 0.20;
+  --rarity-glow-t1-falloff-a: 0.12;
+  --rarity-glow-t2-core-a: 0.24;
+  --rarity-glow-t2-body-a: 0.26;
+  --rarity-glow-t2-falloff-a: 0.16;
+  --rarity-glow-t3-core-a: 0.30;
+  --rarity-glow-t3-body-a: 0.32;
+  --rarity-glow-t3-falloff-a: 0.19;
+  --rarity-glow-bloom-a: 0.14;
+  --rarity-glow-corona-a: 0.18;
+}
+
+.sci-card.rarity-rare,
+.card-detail-frame.rarity-rare {
+  --rarity-glow-core-rgb: 147, 197, 253;
+  --rarity-glow-body-rgb: 59, 130, 246;
+  --rarity-glow-falloff-rgb: 29, 78, 216;
+  --rarity-glow-t1-core-a: 0.22;
+  --rarity-glow-t1-body-a: 0.24;
+  --rarity-glow-t1-falloff-a: 0.14;
+  --rarity-glow-t2-core-a: 0.28;
+  --rarity-glow-t2-body-a: 0.30;
+  --rarity-glow-t2-falloff-a: 0.18;
+  --rarity-glow-t3-core-a: 0.34;
+  --rarity-glow-t3-body-a: 0.36;
+  --rarity-glow-t3-falloff-a: 0.22;
+  --rarity-glow-bloom-a: 0.16;
+  --rarity-glow-corona-a: 0.22;
+}
+
+.sci-card.rarity-epic,
+.card-detail-frame.rarity-epic {
+  --rarity-glow-core-rgb: 216, 180, 254;
+  --rarity-glow-body-rgb: 168, 85, 247;
+  --rarity-glow-falloff-rgb: 126, 34, 206;
+  --rarity-glow-t1-core-a: 0.26;
+  --rarity-glow-t1-body-a: 0.28;
+  --rarity-glow-t1-falloff-a: 0.16;
+  --rarity-glow-t2-core-a: 0.32;
+  --rarity-glow-t2-body-a: 0.34;
+  --rarity-glow-t2-falloff-a: 0.20;
+  --rarity-glow-t3-core-a: 0.38;
+  --rarity-glow-t3-body-a: 0.40;
+  --rarity-glow-t3-falloff-a: 0.24;
+  --rarity-glow-bloom-a: 0.18;
+  --rarity-glow-corona-a: 0.26;
+}
+
+.sci-card.rarity-legendary,
+.card-detail-frame.rarity-legendary {
+  --rarity-glow-core-rgb: 253, 230, 138;
+  --rarity-glow-body-rgb: 245, 158, 11;
+  --rarity-glow-falloff-rgb: 180, 83, 9;
+  --rarity-glow-t1-core-a: 0.30;
+  --rarity-glow-t1-body-a: 0.32;
+  --rarity-glow-t1-falloff-a: 0.18;
+  --rarity-glow-t2-core-a: 0.36;
+  --rarity-glow-t2-body-a: 0.38;
+  --rarity-glow-t2-falloff-a: 0.22;
+  --rarity-glow-t3-core-a: 0.44;
+  --rarity-glow-t3-body-a: 0.46;
+  --rarity-glow-t3-falloff-a: 0.28;
+  --rarity-glow-bloom-a: 0.22;
+  --rarity-glow-corona-a: 0.32;
+}
+
+/* aura_rarity_glow — luminous perimeter emission (Void-matched geometry) */
+.sci-card[data-card-glow="rarity"][data-aura-tier="1"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="rarity"][data-aura-tier="1"] .card-glow--halo::before {
+  box-shadow:
+    0 0 6px 1px rgb(var(--rarity-glow-core-rgb) / var(--rarity-glow-t1-core-a)),
+    0 0 6px 1px rgb(var(--rarity-glow-body-rgb) / var(--rarity-glow-t1-body-a)),
+    0 0 10px 2px rgb(var(--rarity-glow-falloff-rgb) / var(--rarity-glow-t1-falloff-a)),
+    0 0 10px 2px rgb(var(--rarity-glow-body-rgb) / calc(var(--rarity-glow-t1-body-a) * 0.55));
+}
+
+.sci-card[data-card-glow="rarity"][data-aura-tier="2"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="rarity"][data-aura-tier="2"] .card-glow--halo::before {
+  box-shadow:
+    0 0 8px 2px rgb(var(--rarity-glow-core-rgb) / var(--rarity-glow-t2-core-a)),
+    0 0 8px 2px rgb(var(--rarity-glow-body-rgb) / var(--rarity-glow-t2-body-a)),
+    0 0 8px 2px rgb(var(--rarity-glow-core-rgb) / calc(var(--rarity-glow-t2-core-a) * 0.7)),
+    0 0 12px 3px rgb(var(--rarity-glow-falloff-rgb) / var(--rarity-glow-t2-falloff-a)),
+    0 0 12px 3px rgb(var(--rarity-glow-body-rgb) / calc(var(--rarity-glow-t2-body-a) * 0.6));
+}
+
+.sci-card[data-card-glow="rarity"][data-aura-tier="2"] .card-glow--halo::after,
+.card-detail-frame[data-card-glow="rarity"][data-aura-tier="2"] .card-glow--halo::after {
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(ellipse 90% 82% at 50% 48%, rgb(var(--rarity-glow-body-rgb) / var(--rarity-glow-bloom-a)) 0%, transparent 70%);
+  opacity: 0.58;
+}
+
+.sci-card[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::before,
+.card-detail-frame[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::before {
+  box-shadow:
+    0 0 10px 2px rgb(var(--rarity-glow-core-rgb) / var(--rarity-glow-t3-core-a)),
+    0 0 10px 2px rgb(var(--rarity-glow-body-rgb) / var(--rarity-glow-t3-body-a)),
+    0 0 10px 2px rgb(var(--rarity-glow-core-rgb) / calc(var(--rarity-glow-t3-core-a) * 0.75)),
+    0 0 14px 4px rgb(var(--rarity-glow-falloff-rgb) / var(--rarity-glow-t3-falloff-a)),
+    0 0 14px 4px rgb(var(--rarity-glow-body-rgb) / calc(var(--rarity-glow-t3-body-a) * 0.62));
+  animation: rarityGlowBreathT3 22s ease-in-out infinite;
+}
+
+.sci-card[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::after,
+.card-detail-frame[data-card-glow="rarity"][data-aura-tier="3"] .card-glow--halo::after {
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(ellipse 92% 85% at 50% 50%, rgb(var(--rarity-glow-core-rgb) / var(--rarity-glow-corona-a)) 0%, transparent 42%),
+    radial-gradient(ellipse 88% 78% at 50% 48%, rgb(var(--rarity-glow-body-rgb) / var(--rarity-glow-bloom-a)) 0%, transparent 68%);
+  opacity: 0.72;
+}
+
+@keyframes rarityGlowBreathT3 {
+  0%, 100% { opacity: 0.92; }
+  45%       { opacity: 1; }
+  75%       { opacity: 0.96; }
 }
 
 /* Phase 3 — content above retired legacy shell aura pseudos */

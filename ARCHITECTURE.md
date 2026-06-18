@@ -158,6 +158,11 @@ Historical **Legacy Aura** used `.sci-card.aura-*` classes (e.g. `aura-prismatic
 |--------|--------|-----------------|-------|------|
 | **Border** | `js/card-border.js` | `data-card-border` | `.card-cosmetic-effects::before` (z1) | always (default `graphite`) |
 | **Glow** | `js/card-glow.js` | `data-card-glow` | `.card-glow--halo` (z0, behind border) | Mathematical Aura tier ≥ 1; suppressed on `variant: 'pack-reveal'` |
+
+**Glow effect ids (registry):** `void`, `rarity` (`COSMETIC_GLOW_EFFECT_IDS` in `card-glow.js`).
+
+**Rarity Glow color resolution:** Equipped glow is global (`equippedAura` → `data-card-glow="rarity"`), but **emission hue is per card** via the shell class `rarity-${card.rarity}` already emitted by `renderSciCard()` / `renderDetailFrame()`. CSS maps `--rarity-glow-*` tokens on `.rarity-common` … `.rarity-legendary` to interleaved perimeter shadows + optional `screen` bloom (`::after` T2+). No rarity field on `data-card-glow`; shop preview color follows the preview card’s rarity.
+
 | **Shimmer** | `js/card-shimmer.js` | `data-card-shimmer` | `.card-shimmer--face` inside `.card-detail-inner` | Mathematical Aura tier ≥ 1 |
 
 **Layer stack (bottom → top):** `.card-glow--halo` (z0) → `.card-cosmetic-effects` border host (z1) → `.card-detail-inner` clipped content (z2) → shimmer face layer inside inner.
