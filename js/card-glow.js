@@ -12,6 +12,7 @@ import { getEquippedAura } from './profile-ui.js';
 /** Player-ownable / purchasable glow effect ids. */
 export const COSMETIC_GLOW_EFFECT_IDS = [
   'void',
+  'rarity',
 ];
 
 /**

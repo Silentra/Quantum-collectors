@@ -47,6 +47,12 @@ export const AURA_EFFECTS = Object.freeze({
     description: 'A dark, pulsing emptiness surrounds the card.',
     colorHint: '#1a0033',
   },
+  rarity: {
+    renderEffectId: 'rarity',
+    label: 'Rarity Glow',
+    description: 'Each card radiates light in the color of its rarity.',
+    colorHint: '#f59e0b',
+  },
   quantum: {
     renderEffectId: 'quantum',
     label: 'Quantum Flux',
@@ -195,6 +201,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 4,
     enabled: true,
     renderEffectId: 'void',
+  },
+
+  aura_rarity_glow: {
+    id: 'aura_rarity_glow',
+    name: 'Rarity Glow',
+    description: 'Each card radiates light in the color of its rarity — legendary gold, epic violet, and every tier between.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.AURA,
+    rarity: ITEM_RARITIES.RARE,
+    price: 450,
+    weight: 5,
+    enabled: true,
+    renderEffectId: 'rarity',
   },
 
   // ── Cosmetics — Borders ────────────────────────────────────────────────
