@@ -81,6 +81,9 @@ export function formatCardGlowAttr(glowEffectId) {
   return value ? ` data-card-glow="${value}"` : '';
 }
 
+/** Molten Glow — static ember slots (CSS-only appear/fade; no JS animation). */
+const MOLTEN_EMBER_SLOT_COUNT = 8;
+
 /**
  * Perimeter glow host — mount before .card-cosmetic-effects (z0).
  * @param {string|null|undefined} glowEffectId
@@ -88,5 +91,12 @@ export function formatCardGlowAttr(glowEffectId) {
  */
 export function renderGlowHaloLayerHtml(glowEffectId = null) {
   if (!glowEffectId || !COSMETIC_GLOW_EFFECT_IDS.includes(glowEffectId)) return '';
+  if (glowEffectId === 'molten') {
+    const embers = Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
+      const n = i + 1;
+      return `<span class="molten-ember molten-ember--${n}" aria-hidden="true"></span>`;
+    }).join('');
+    return `<div class="card-glow card-glow--halo card-glow--molten" aria-hidden="true">${embers}</div>`;
+  }
   return '<div class="card-glow card-glow--halo" aria-hidden="true"></div>';
 }
