@@ -26,6 +26,7 @@ import {
 import {
   formatCardGlowAttr,
   renderGlowHaloLayerHtml,
+  renderMoltenEmberLayerHtml,
   resolveGlowRenderEffectIdFromOptions,
 } from './card-glow.js';
 import {
@@ -305,10 +306,14 @@ export function renderDetailFrame(model) {
   const glowHaloHtml = model.showGlowHalo
     ? renderGlowHaloLayerHtml(model.glowRenderEffectId)
     : '';
+  const moltenEmberHtml = model.showGlowHalo
+    ? renderMoltenEmberLayerHtml(model.glowRenderEffectId)
+    : '';
   return `
     <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
       ${glowHaloHtml}
       ${CARD_COSMETIC_HOST_HTML}
+      ${moltenEmberHtml}
       ${renderCardContent(model)}
     </div>
   `;
@@ -404,6 +409,9 @@ export function renderSciCard(model) {
   const glowHaloHtml = model.showGlowHalo
     ? renderGlowHaloLayerHtml(model.glowRenderEffectId)
     : '';
+  const moltenEmberHtml = model.showGlowHalo
+    ? renderMoltenEmberLayerHtml(model.glowRenderEffectId)
+    : '';
 
   return `
     <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
@@ -412,6 +420,7 @@ export function renderSciCard(model) {
       ${undiscoveredBadge}
       ${glowHaloHtml}
       ${CARD_COSMETIC_HOST_HTML}
+      ${moltenEmberHtml}
       ${renderCardContent(model)}
       ${auraDots}
     </div>

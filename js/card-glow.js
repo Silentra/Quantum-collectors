@@ -4,7 +4,7 @@
  * Full-size cards only (.sci-card, .card-detail-frame). No default glow when unequipped.
  * Renders only when Mathematical Aura tier >= 1 (see shouldRenderGlow).
  *
- * @see card-render.js — .card-glow--halo mount (z0, behind .card-cosmetic-effects)
+ * @see card-render.js — .card-glow--halo mount (z0); .card-glow--molten-embers (z1, molten only)
  */
 
 import { getEquippedAura } from './profile-ui.js';
@@ -84,6 +84,13 @@ export function formatCardGlowAttr(glowEffectId) {
 /** Molten Glow — static ember slots (CSS-only appear/fade; no JS animation). */
 const MOLTEN_EMBER_SLOT_COUNT = 8;
 
+function renderMoltenEmberSpansHtml() {
+  return Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
+    const n = i + 1;
+    return `<span class="molten-ember molten-ember--${n}" aria-hidden="true"></span>`;
+  }).join('');
+}
+
 /**
  * Perimeter glow host — mount before .card-cosmetic-effects (z0).
  * @param {string|null|undefined} glowEffectId
@@ -92,11 +99,17 @@ const MOLTEN_EMBER_SLOT_COUNT = 8;
 export function renderGlowHaloLayerHtml(glowEffectId = null) {
   if (!glowEffectId || !COSMETIC_GLOW_EFFECT_IDS.includes(glowEffectId)) return '';
   if (glowEffectId === 'molten') {
-    const embers = Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
-      const n = i + 1;
-      return `<span class="molten-ember molten-ember--${n}" aria-hidden="true"></span>`;
-    }).join('');
-    return `<div class="card-glow card-glow--halo card-glow--molten" aria-hidden="true">${embers}</div>`;
+    return '<div class="card-glow card-glow--halo card-glow--molten" aria-hidden="true"></div>';
   }
   return '<div class="card-glow card-glow--halo" aria-hidden="true"></div>';
+}
+
+/**
+ * Molten ember host — mount after .card-cosmetic-effects (z1, above border paint).
+ * @param {string|null|undefined} glowEffectId
+ * @returns {string}
+ */
+export function renderMoltenEmberLayerHtml(glowEffectId = null) {
+  if (glowEffectId !== 'molten') return '';
+  return `<div class="card-glow card-glow--molten-embers" aria-hidden="true">${renderMoltenEmberSpansHtml()}</div>`;
 }
