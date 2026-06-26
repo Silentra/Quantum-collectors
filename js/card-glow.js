@@ -81,8 +81,8 @@ export function formatCardGlowAttr(glowEffectId) {
   return value ? ` data-card-glow="${value}"` : '';
 }
 
-/** Molten Glow — static ember slots (CSS-only appear/fade; no JS animation). */
-const MOLTEN_EMBER_SLOT_COUNT = 8;
+/** Molten Glow — static thermal hotspot slots (CSS-only; no JS animation). */
+const MOLTEN_EMBER_SLOT_COUNT = 14;
 
 function renderMoltenEmberSpansHtml() {
   return Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
