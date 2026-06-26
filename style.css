@@ -3177,7 +3177,7 @@ body.app-mode-game #screen-game.screen.active {
 /*
  * Layer stack:
  *   ::before / ::after on .card-glow--halo — static warm shadow + ambient ring (z0)
- *   .card-glow--molten-embers (×8 spans) — perimeter blooms above border, below content (z1)
+ *   .card-glow--molten-embers (×14 spans) — irregular thermal hotspots above border (z1)
  */
 
 .sci-card[data-card-glow="molten"] .card-glow--halo,
@@ -3210,7 +3210,7 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(ellipse 24% 16% at 4% 28%, rgba(234, 88, 12, 0.2) 0%, transparent 66%);
 }
 
-/* T1 — warm base + subtle ambient + 4 ember slots */
+/* T1 — warm base + subtle ambient + 7 hotspot slots */
 .sci-card[data-card-glow="molten"][data-aura-tier="1"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .card-glow--halo::before {
   box-shadow:
@@ -3226,18 +3226,24 @@ body.app-mode-game #screen-game.screen.active {
   animation: moltenAmbientBreatheT1 24s ease-in-out infinite;
 }
 
-.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--5,
-.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--6,
-.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--7,
 .sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--8,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--5,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--6,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--7,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--8 {
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--9,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--10,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--11,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--12,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--13,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--8,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--10,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--11,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--13,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--14 {
   display: none;
 }
 
-/* T2 — stronger base + 6 ember slots */
+/* T2 — stronger base + 10 hotspot slots */
 .sci-card[data-card-glow="molten"][data-aura-tier="2"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .card-glow--halo::before {
   box-shadow:
@@ -3254,14 +3260,18 @@ body.app-mode-game #screen-game.screen.active {
   animation: moltenAmbientBreatheT2 20s ease-in-out infinite;
 }
 
-.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--7,
-.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--8,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--7,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--8 {
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--11,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--12,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--13,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--11,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--13,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--14 {
   display: none;
 }
 
-/* T3 — full stack + 8 ember slots */
+/* T3 — full stack + 14 hotspot network */
 .sci-card[data-card-glow="molten"][data-aura-tier="3"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .card-glow--halo::before {
   box-shadow:
@@ -3289,7 +3299,7 @@ body.app-mode-game #screen-game.screen.active {
   overflow: visible;
 }
 
-/* Perimeter embers — halo edge + corners; desynced appear/fade (no orbit) */
+/* Perimeter thermal hotspots — irregular halo anchors; desynced heat cycles (no orbit) */
 .sci-card[data-card-glow="molten"] .molten-ember,
 .card-detail-frame[data-card-glow="molten"] .molten-ember {
   position: absolute;
@@ -3309,74 +3319,267 @@ body.app-mode-game #screen-game.screen.active {
   );
   filter: blur(0.6px);
   mix-blend-mode: screen;
-  animation-name: moltenEmberFlare;
+  animation-name: moltenPulseMedT2;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
   animation-fill-mode: none;
 }
 
-/* Cardinals + corners on exterior halo boundary (never over card face) */
-.sci-card[data-card-glow="molten"] .molten-ember--1,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--1 { top: 0; left: 50%; animation-duration: 11s; animation-delay: 0s; }
+/* Strength sizing — weak / medium / strong blooms */
 .sci-card[data-card-glow="molten"] .molten-ember--2,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--2 { top: 0; left: 100%; animation-duration: 13s; animation-delay: -2.4s; }
-.sci-card[data-card-glow="molten"] .molten-ember--3,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--3 { top: 50%; left: 100%; animation-duration: 17s; animation-delay: -5.1s; }
 .sci-card[data-card-glow="molten"] .molten-ember--4,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--4 { top: 100%; left: 100%; animation-duration: 19s; animation-delay: -7.8s; }
-.sci-card[data-card-glow="molten"] .molten-ember--5,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--5 { top: 100%; left: 50%; animation-duration: 23s; animation-delay: -3.2s; }
-.sci-card[data-card-glow="molten"] .molten-ember--6,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--6 { top: 100%; left: 0; animation-duration: 27s; animation-delay: -9.5s; }
 .sci-card[data-card-glow="molten"] .molten-ember--7,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--7 { top: 50%; left: 0; animation-duration: 31s; animation-delay: -12.1s; }
+.sci-card[data-card-glow="molten"] .molten-ember--10,
+.sci-card[data-card-glow="molten"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--2,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--4,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--7,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--10,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--14 {
+  width: clamp(6px, 1.85cqw, 9px);
+  height: clamp(6px, 1.85cqw, 9px);
+}
+
+.sci-card[data-card-glow="molten"] .molten-ember--1,
+.sci-card[data-card-glow="molten"] .molten-ember--6,
+.sci-card[data-card-glow="molten"] .molten-ember--9,
+.sci-card[data-card-glow="molten"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--1,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--6,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--12 {
+  width: clamp(8px, 2.4cqw, 12px);
+  height: clamp(8px, 2.4cqw, 12px);
+}
+
+/* Irregular perimeter anchors (5:7 ray-box; no compass symmetry) */
+.sci-card[data-card-glow="molten"] .molten-ember--1,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--1 { top: 0%; left: 59.84%; animation-duration: 11s; animation-delay: 0s; }
+.sci-card[data-card-glow="molten"] .molten-ember--2,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--2 { top: 0%; left: 93.74%; animation-duration: 13s; animation-delay: -2.1s; }
+.sci-card[data-card-glow="molten"] .molten-ember--3,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--3 { top: 30.2%; left: 100%; animation-duration: 17s; animation-delay: -5.4s; }
+.sci-card[data-card-glow="molten"] .molten-ember--4,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--4 { top: 53.75%; left: 100%; animation-duration: 19s; animation-delay: -8.7s; }
+.sci-card[data-card-glow="molten"] .molten-ember--5,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--5 { top: 77.9%; left: 100%; animation-duration: 23s; animation-delay: -3.6s; }
+.sci-card[data-card-glow="molten"] .molten-ember--6,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--6 { top: 100%; left: 84.14%; animation-duration: 27s; animation-delay: -11.3s; }
+.sci-card[data-card-glow="molten"] .molten-ember--7,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--7 { top: 100%; left: 41.41%; animation-duration: 29s; animation-delay: -6.8s; }
 .sci-card[data-card-glow="molten"] .molten-ember--8,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--8 { top: 0; left: 0; animation-duration: 37s; animation-delay: -15.7s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--8 { top: 100%; left: 2.78%; animation-duration: 31s; animation-delay: -14.2s; }
+.sci-card[data-card-glow="molten"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--9 { top: 65.9%; left: 0%; animation-duration: 37s; animation-delay: -9.5s; }
+.sci-card[data-card-glow="molten"] .molten-ember--10,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--10 { top: 44.34%; left: 0%; animation-duration: 41s; animation-delay: -16.7s; }
+.sci-card[data-card-glow="molten"] .molten-ember--11,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--11 { top: 23.09%; left: 0%; animation-duration: 43s; animation-delay: -4.3s; }
+.sci-card[data-card-glow="molten"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--12 { top: 0%; left: 18.83%; animation-duration: 47s; animation-delay: -12.9s; }
+.sci-card[data-card-glow="molten"] .molten-ember--13,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--13 { top: 0%; left: 78.28%; animation-duration: 53s; animation-delay: -7.1s; }
+.sci-card[data-card-glow="molten"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"] .molten-ember--14 { top: 100%; left: 58.59%; animation-duration: 59s; animation-delay: -18.4s; }
 
 .sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember,
 .card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember {
   width: clamp(6px, 1.9cqw, 9px);
   height: clamp(6px, 1.9cqw, 9px);
-  animation-name: moltenEmberFlareT1;
 }
 
-.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember {
-  animation-name: moltenEmberFlareT2;
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--1,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--6,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--9,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--1,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--6,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--12 {
+  width: clamp(7px, 2.1cqw, 10px);
+  height: clamp(7px, 2.1cqw, 10px);
 }
 
-.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember,
-.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember {
-  animation-name: moltenEmberFlareT3;
+/* T1 — smoldering: weak / med / strong pulse variants */
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--1,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--6,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--9,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--1,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--6,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--12 {
+  animation-name: moltenPulseStrongT1;
 }
 
-@keyframes moltenEmberFlareT1 {
-  0%, 48%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
-  7%              { opacity: 0.72; transform: translate(-50%, -50%) scale(1.05); }
-  14%             { opacity: 0.38; transform: translate(-50%, -50%) scale(0.88); }
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--2,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--4,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--7,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--10,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--2,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--4,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--7,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--10,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--14 {
+  animation-name: moltenPulseWeakT1;
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--3,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--5,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--8,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--11,
+.sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--13,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--3,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--5,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--8,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--11,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember--13 {
+  animation-name: moltenPulseMedT1;
+}
+
+/* T2 — active furnace */
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--1,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--6,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--9,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--1,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--6,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--12 {
+  animation-name: moltenPulseStrongT2;
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--2,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--4,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--7,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--10,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--2,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--4,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--7,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--10,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--14 {
+  animation-name: moltenPulseWeakT2;
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--3,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--5,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--8,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--11,
+.sci-card[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--13,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--3,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--5,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--8,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--11,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="2"] .molten-ember--13 {
+  animation-name: moltenPulseMedT2;
+}
+
+/* T3 — white-hot network */
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--1,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--6,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--9,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--12,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--1,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--6,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--9,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--12 {
+  animation-name: moltenPulseStrongT3;
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--2,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--4,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--7,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--10,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--14,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--2,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--4,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--7,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--10,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--14 {
+  animation-name: moltenPulseWeakT3;
+}
+
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--3,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--5,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--8,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--11,
+.sci-card[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--13,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--3,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--5,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--8,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--11,
+.card-detail-frame[data-card-glow="molten"][data-aura-tier="3"] .molten-ember--13 {
+  animation-name: moltenPulseMedT3;
+}
+
+/* Thermal pulse keyframes — idle → warm → white-hot → orange → cool → idle */
+@keyframes moltenPulseWeakT1 {
+  0%, 54%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  9%              { opacity: 0.42; transform: translate(-50%, -50%) scale(0.9); }
+  16%             { opacity: 0.22; transform: translate(-50%, -50%) scale(0.82); }
+  22%             { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
+}
+
+@keyframes moltenPulseMedT1 {
+  0%, 50%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
+  8%              { opacity: 0.58; transform: translate(-50%, -50%) scale(1); }
+  15%             { opacity: 0.32; transform: translate(-50%, -50%) scale(0.86); }
   24%             { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
 }
 
-@keyframes moltenEmberFlareT2 {
+@keyframes moltenPulseStrongT1 {
+  0%, 48%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  7%              { opacity: 0.68; transform: translate(-50%, -50%) scale(1.04); }
+  14%             { opacity: 0.36; transform: translate(-50%, -50%) scale(0.88); }
+  22%             { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+}
+
+@keyframes moltenPulseWeakT2 {
+  0%, 50%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
+  7%              { opacity: 0.52; transform: translate(-50%, -50%) scale(0.94); }
+  14%             { opacity: 0.28; transform: translate(-50%, -50%) scale(0.84); }
+  26%             { opacity: 0; transform: translate(-50%, -50%) scale(0.56); }
+}
+
+@keyframes moltenPulseMedT2 {
+  0%, 46%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
+  6%              { opacity: 0.76; transform: translate(-50%, -50%) scale(1.08); }
+  13%             { opacity: 0.42; transform: translate(-50%, -50%) scale(0.9); }
+  28%             { opacity: 0; transform: translate(-50%, -50%) scale(0.58); }
+}
+
+@keyframes moltenPulseStrongT2 {
   0%, 44%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
-  6%              { opacity: 0.88; transform: translate(-50%, -50%) scale(1.12); }
-  13%             { opacity: 0.48; transform: translate(-50%, -50%) scale(0.92); }
+  6%              { opacity: 0.86; transform: translate(-50%, -50%) scale(1.12); }
+  12%             { opacity: 0.48; transform: translate(-50%, -50%) scale(0.92); }
   30%             { opacity: 0; transform: translate(-50%, -50%) scale(0.58); }
 }
 
-@keyframes moltenEmberFlareT3 {
-  0%, 40%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
-  5%              { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
-  11%             { opacity: 0.58; transform: translate(-50%, -50%) scale(0.95); }
-  22%             { opacity: 0.28; transform: translate(-50%, -50%) scale(0.82); }
-  36%             { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+@keyframes moltenPulseWeakT3 {
+  0%, 48%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
+  6%              { opacity: 0.62; transform: translate(-50%, -50%) scale(0.98); }
+  12%             { opacity: 0.34; transform: translate(-50%, -50%) scale(0.86); }
+  24%             { opacity: 0.1; transform: translate(-50%, -50%) scale(0.74); }
+  32%             { opacity: 0; transform: translate(-50%, -50%) scale(0.58); }
 }
 
-@keyframes moltenEmberFlare {
-  0%, 42%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
-  6%              { opacity: 0.85; transform: translate(-50%, -50%) scale(1.1); }
-  13%             { opacity: 0.45; transform: translate(-50%, -50%) scale(0.9); }
-  32%             { opacity: 0; transform: translate(-50%, -50%) scale(0.56); }
+@keyframes moltenPulseMedT3 {
+  0%, 42%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
+  5%              { opacity: 0.88; transform: translate(-50%, -50%) scale(1.14); }
+  11%             { opacity: 0.52; transform: translate(-50%, -50%) scale(0.94); }
+  20%             { opacity: 0.24; transform: translate(-50%, -50%) scale(0.82); }
+  34%             { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+}
+
+@keyframes moltenPulseStrongT3 {
+  0%, 40%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
+  5%              { opacity: 1; transform: translate(-50%, -50%) scale(1.22); }
+  10%             { opacity: 0.58; transform: translate(-50%, -50%) scale(0.96); }
+  18%             { opacity: 0.32; transform: translate(-50%, -50%) scale(0.84); }
+  28%             { opacity: 0.12; transform: translate(-50%, -50%) scale(0.72); }
+  38%             { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
 }
 
 @keyframes moltenAmbientBreatheT1 {
