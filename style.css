@@ -3176,9 +3176,8 @@ body.app-mode-game #screen-game.screen.active {
 /* ── Molten Glow — pressurized perimeter heat (Void-matched geometry) ── */
 /*
  * Layer stack:
- *   ::before           — static warm interleaved box-shadow (unchanged footprint)
- *   ::after            — fixed radial heat pockets (ambient; no rotation)
- *   .molten-ember (×8) — localized white-hot blooms; appear / fade / reappear
+ *   ::before / ::after on .card-glow--halo — static warm shadow + ambient ring (z0)
+ *   .card-glow--molten-embers (×8 spans) — perimeter blooms above border, below content (z1)
  */
 
 .sci-card[data-card-glow="molten"] .card-glow--halo,
@@ -3279,11 +3278,21 @@ body.app-mode-game #screen-game.screen.active {
   animation: moltenAmbientBreatheT3 18s ease-in-out infinite;
 }
 
-/* Perimeter embers — fixed anchors; desynced appear/fade (no orbit) */
+/* Ember host — z1, after border paint; halo perimeter anchors only (exterior bleed) */
+.sci-card[data-card-glow="molten"] .card-glow--molten-embers,
+.card-detail-frame[data-card-glow="molten"] .card-glow--molten-embers {
+  position: absolute;
+  inset: calc(-1 * var(--card-glow-bleed, 6px));
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: visible;
+}
+
+/* Perimeter embers — halo edge + corners; desynced appear/fade (no orbit) */
 .sci-card[data-card-glow="molten"] .molten-ember,
 .card-detail-frame[data-card-glow="molten"] .molten-ember {
   position: absolute;
-  z-index: 1;
   width: clamp(7px, 2.2cqw, 11px);
   height: clamp(7px, 2.2cqw, 11px);
   border-radius: 50%;
@@ -3300,25 +3309,29 @@ body.app-mode-game #screen-game.screen.active {
   );
   filter: blur(0.6px);
   mix-blend-mode: screen;
-  animation: moltenEmberFlare 1 linear infinite;
+  animation-name: moltenEmberFlare;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: none;
 }
 
+/* Cardinals + corners on exterior halo boundary (never over card face) */
 .sci-card[data-card-glow="molten"] .molten-ember--1,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--1 { top: 0%; left: 50%; animation-duration: 11s; animation-delay: 0s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--1 { top: 0; left: 50%; animation-duration: 11s; animation-delay: 0s; }
 .sci-card[data-card-glow="molten"] .molten-ember--2,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--2 { top: 10%; left: 92%; animation-duration: 13s; animation-delay: -2.4s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--2 { top: 0; left: 100%; animation-duration: 13s; animation-delay: -2.4s; }
 .sci-card[data-card-glow="molten"] .molten-ember--3,
 .card-detail-frame[data-card-glow="molten"] .molten-ember--3 { top: 50%; left: 100%; animation-duration: 17s; animation-delay: -5.1s; }
 .sci-card[data-card-glow="molten"] .molten-ember--4,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--4 { top: 90%; left: 78%; animation-duration: 19s; animation-delay: -7.8s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--4 { top: 100%; left: 100%; animation-duration: 19s; animation-delay: -7.8s; }
 .sci-card[data-card-glow="molten"] .molten-ember--5,
 .card-detail-frame[data-card-glow="molten"] .molten-ember--5 { top: 100%; left: 50%; animation-duration: 23s; animation-delay: -3.2s; }
 .sci-card[data-card-glow="molten"] .molten-ember--6,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--6 { top: 88%; left: 14%; animation-duration: 27s; animation-delay: -9.5s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--6 { top: 100%; left: 0; animation-duration: 27s; animation-delay: -9.5s; }
 .sci-card[data-card-glow="molten"] .molten-ember--7,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--7 { top: 50%; left: 0%; animation-duration: 31s; animation-delay: -12.1s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--7 { top: 50%; left: 0; animation-duration: 31s; animation-delay: -12.1s; }
 .sci-card[data-card-glow="molten"] .molten-ember--8,
-.card-detail-frame[data-card-glow="molten"] .molten-ember--8 { top: 12%; left: 8%; animation-duration: 37s; animation-delay: -15.7s; }
+.card-detail-frame[data-card-glow="molten"] .molten-ember--8 { top: 0; left: 0; animation-duration: 37s; animation-delay: -15.7s; }
 
 .sci-card[data-card-glow="molten"][data-aura-tier="1"] .molten-ember,
 .card-detail-frame[data-card-glow="molten"][data-aura-tier="1"] .molten-ember {
@@ -3338,31 +3351,32 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 @keyframes moltenEmberFlareT1 {
-  0%, 72%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
-  8%              { opacity: 0.72; transform: translate(-50%, -50%) scale(1.05); }
-  16%             { opacity: 0.38; transform: translate(-50%, -50%) scale(0.88); }
+  0%, 48%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  7%              { opacity: 0.72; transform: translate(-50%, -50%) scale(1.05); }
+  14%             { opacity: 0.38; transform: translate(-50%, -50%) scale(0.88); }
   24%             { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
 }
 
 @keyframes moltenEmberFlareT2 {
-  0%, 68%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
-  7%              { opacity: 0.88; transform: translate(-50%, -50%) scale(1.12); }
-  14%             { opacity: 0.48; transform: translate(-50%, -50%) scale(0.92); }
-  22%             { opacity: 0; transform: translate(-50%, -50%) scale(0.58); }
+  0%, 44%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
+  6%              { opacity: 0.88; transform: translate(-50%, -50%) scale(1.12); }
+  13%             { opacity: 0.48; transform: translate(-50%, -50%) scale(0.92); }
+  30%             { opacity: 0; transform: translate(-50%, -50%) scale(0.58); }
 }
 
 @keyframes moltenEmberFlareT3 {
-  0%, 64%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
-  6%              { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
-  12%             { opacity: 0.58; transform: translate(-50%, -50%) scale(0.95); }
-  20%             { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  0%, 40%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.54); }
+  5%              { opacity: 1; transform: translate(-50%, -50%) scale(1.18); }
+  11%             { opacity: 0.58; transform: translate(-50%, -50%) scale(0.95); }
+  22%             { opacity: 0.28; transform: translate(-50%, -50%) scale(0.82); }
+  36%             { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
 }
 
 @keyframes moltenEmberFlare {
-  0%, 70%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
-  7%              { opacity: 0.85; transform: translate(-50%, -50%) scale(1.1); }
-  14%             { opacity: 0.45; transform: translate(-50%, -50%) scale(0.9); }
-  22%             { opacity: 0; transform: translate(-50%, -50%) scale(0.56); }
+  0%, 42%, 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.52); }
+  6%              { opacity: 0.85; transform: translate(-50%, -50%) scale(1.1); }
+  13%             { opacity: 0.45; transform: translate(-50%, -50%) scale(0.9); }
+  32%             { opacity: 0; transform: translate(-50%, -50%) scale(0.56); }
 }
 
 @keyframes moltenAmbientBreatheT1 {
