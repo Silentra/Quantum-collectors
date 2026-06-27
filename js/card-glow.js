@@ -105,6 +105,13 @@ function renderMoltenDriftSpansHtml() {
   }).join('');
 }
 
+function renderFrostWispSpansHtml() {
+  return Array.from({ length: FROST_WISP_SLOT_COUNT }, (_, i) => {
+    const n = i + 1;
+    return `<span class="frost-wisp frost-wisp--${n}" aria-hidden="true"></span>`;
+  }).join('');
+}
+
 /**
  * Perimeter glow host — mount before .card-cosmetic-effects (z0).
  * @param {string|null|undefined} glowEffectId
