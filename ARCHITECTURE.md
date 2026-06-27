@@ -163,11 +163,11 @@ Historical **Legacy Aura** used `.sci-card.aura-*` classes (e.g. `aura-prismatic
 
 **Rarity Glow color resolution:** Equipped glow is global (`equippedAura` → `data-card-glow="rarity"`), but **emission hue is per card** via the shell class `rarity-${card.rarity}` already emitted by `renderSciCard()` / `renderDetailFrame()`. CSS maps `--rarity-glow-*` tokens on `.rarity-common` … `.rarity-legendary` to interleaved perimeter shadows + optional `screen` bloom (`::after` T2+). No rarity field on `data-card-glow`; shop preview color follows the preview card’s rarity.
 
-**Molten Glow:** Fixed furnace palette (`data-card-glow="molten"`). `::before` = static warm interleaved box-shadow (Void geometry); `::after` = ring-masked rotating conic heat (`@property --molten-angle`) + tier-gated transform wobble. Motion at all tiers (20s / 14s / 10s rotation); no extra DOM. Distinct from Emberglow shimmer (face-interior hearth + ember spans).
+**Molten Glow:** Fixed furnace palette (`data-card-glow="molten"`). Three-layer stack: (1) `.card-glow--halo` — `::before` static warm interleaved box-shadow (Void geometry); `::after` ring-masked radial heat pockets (ambient breathe only); (2) `.card-glow--molten-embers` — fourteen static `.molten-ember` thermal hotspots (irregular perimeter anchors, weak/med/strong pulse variants; tier-gated T1=7, T2=10, T3=14); (3) `.card-glow--molten-drift` — eighteen static `.molten-drift` continuous thermal flecks (Emberglow-style span pool, 2–3s CSS leak cycles, mounted after artwork at z2; tier-gated T1=8, T2=12, T3=18). Distinct from Emberglow shimmer (face-interior hearth + rising embers).
 
 | **Shimmer** | `js/card-shimmer.js` | `data-card-shimmer` | `.card-shimmer--face` inside `.card-detail-inner` | Mathematical Aura tier ≥ 1 |
 
-**Layer stack (bottom → top):** `.card-glow--halo` (z0) → `.card-cosmetic-effects` border host (z1) → `.card-detail-inner` clipped content (z2) → shimmer face layer inside inner.
+**Layer stack (bottom → top):** `.card-glow--halo` (z0) → `.card-cosmetic-effects` border host (z1) → `.card-glow--molten-embers` hotspots (z1, molten only) → `.card-detail-inner` clipped content (z2) → `.card-glow--molten-drift` thermal flecks (z2, molten only, after inner) → shimmer face layer inside inner → badges (z5).
 
 **Mathematical Aura** (`data-aura-tier`, pip dots, gameplay scaling) is separate from **Glow** (equipped cosmetic perimeter effect, e.g. `aura_void` → `renderEffectId: 'void'`). Legacy shell aura visuals remain retired (`LEGACY_SHELL_AURA_VISUALS`).
 
