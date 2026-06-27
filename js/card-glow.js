@@ -4,7 +4,7 @@
  * Full-size cards only (.sci-card, .card-detail-frame). No default glow when unequipped.
  * Renders only when Mathematical Aura tier >= 1 (see shouldRenderGlow).
  *
- * @see card-render.js — .card-glow--halo mount (z0); .card-glow--molten-embers (z1, molten only)
+ * @see card-render.js — .card-glow--halo (z0); .card-glow--molten-embers (z1); .card-glow--molten-drift (z2)
  */
 
 import { getEquippedAura } from './profile-ui.js';
@@ -84,10 +84,20 @@ export function formatCardGlowAttr(glowEffectId) {
 /** Molten Glow — static thermal hotspot slots (CSS-only; no JS animation). */
 const MOLTEN_EMBER_SLOT_COUNT = 14;
 
+/** Molten Glow — continuous drift flecks (CSS-only; Emberglow-style span pool). */
+const MOLTEN_DRIFT_SLOT_COUNT = 18;
+
 function renderMoltenEmberSpansHtml() {
   return Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
     const n = i + 1;
     return `<span class="molten-ember molten-ember--${n}" aria-hidden="true"></span>`;
+  }).join('');
+}
+
+function renderMoltenDriftSpansHtml() {
+  return Array.from({ length: MOLTEN_DRIFT_SLOT_COUNT }, (_, i) => {
+    const n = i + 1;
+    return `<span class="molten-drift molten-drift--${n}" aria-hidden="true"></span>`;
   }).join('');
 }
 
@@ -112,4 +122,14 @@ export function renderGlowHaloLayerHtml(glowEffectId = null) {
 export function renderMoltenEmberLayerHtml(glowEffectId = null) {
   if (glowEffectId !== 'molten') return '';
   return `<div class="card-glow card-glow--molten-embers" aria-hidden="true">${renderMoltenEmberSpansHtml()}</div>`;
+}
+
+/**
+ * Molten drift host — mount after .card-detail-inner (z2, above artwork).
+ * @param {string|null|undefined} glowEffectId
+ * @returns {string}
+ */
+export function renderMoltenDriftLayerHtml(glowEffectId = null) {
+  if (glowEffectId !== 'molten') return '';
+  return `<div class="card-glow card-glow--molten-drift" aria-hidden="true">${renderMoltenDriftSpansHtml()}</div>`;
 }
