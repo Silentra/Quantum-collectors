@@ -61,7 +61,7 @@ export const AURA_EFFECTS = Object.freeze({
   },
   winterfrost: {
     renderEffectId: 'winterfrost',
-    label: 'Winter Frost Glow',
+    label: 'Arctic Mist',
     description: 'A silent cold radiates from the card — freezing air drifting from rim frost into the surrounding stillness.',
     colorHint: '#bae6fd',
   },
@@ -243,7 +243,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   aura_winterfrost_glow: {
     id: 'aura_winterfrost_glow',
-    name: 'Winter Frost Glow',
+    name: 'Arctic Mist',
     description: 'Your cards radiate a deep cold — pale frost at the rim and slow wisps of freezing air drifting into the silence.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
