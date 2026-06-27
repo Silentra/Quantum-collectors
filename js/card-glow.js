@@ -4,7 +4,7 @@
  * Full-size cards only (.sci-card, .card-detail-frame). No default glow when unequipped.
  * Renders only when Mathematical Aura tier >= 1 (see shouldRenderGlow).
  *
- * @see card-render.js — .card-glow--halo (z0); .card-glow--molten-embers (z1); .card-glow--molten-drift (z2)
+ * @see card-render.js — .card-glow--halo (z0); .card-glow--molten-embers (z1); .card-glow--molten-drift (z2); .card-glow--frost-wisps (z2)
  */
 
 import { getEquippedAura } from './profile-ui.js';
@@ -14,6 +14,7 @@ export const COSMETIC_GLOW_EFFECT_IDS = [
   'void',
   'rarity',
   'molten',
+  'winterfrost',
 ];
 
 /**
@@ -87,6 +88,9 @@ const MOLTEN_EMBER_SLOT_COUNT = 14;
 /** Molten Glow — continuous drift flecks (CSS-only; Emberglow-style span pool). */
 const MOLTEN_DRIFT_SLOT_COUNT = 18;
 
+/** Winter Frost Glow — slow vapor wisps (CSS-only span pool). */
+const FROST_WISP_SLOT_COUNT = 10;
+
 function renderMoltenEmberSpansHtml() {
   return Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
     const n = i + 1;
@@ -111,6 +115,9 @@ export function renderGlowHaloLayerHtml(glowEffectId = null) {
   if (glowEffectId === 'molten') {
     return '<div class="card-glow card-glow--halo card-glow--molten" aria-hidden="true"></div>';
   }
+  if (glowEffectId === 'winterfrost') {
+    return '<div class="card-glow card-glow--halo card-glow--winterfrost" aria-hidden="true"></div>';
+  }
   return '<div class="card-glow card-glow--halo" aria-hidden="true"></div>';
 }
 
@@ -132,4 +139,14 @@ export function renderMoltenEmberLayerHtml(glowEffectId = null) {
 export function renderMoltenDriftLayerHtml(glowEffectId = null) {
   if (glowEffectId !== 'molten') return '';
   return `<div class="card-glow card-glow--molten-drift" aria-hidden="true">${renderMoltenDriftSpansHtml()}</div>`;
+}
+
+/**
+ * Winter Frost wisp host — mount after .card-detail-inner (z2, may overlap artwork slightly).
+ * @param {string|null|undefined} glowEffectId
+ * @returns {string}
+ */
+export function renderFrostWispLayerHtml(glowEffectId = null) {
+  if (glowEffectId !== 'winterfrost') return '';
+  return `<div class="card-glow card-glow--frost-wisps" aria-hidden="true">${renderFrostWispSpansHtml()}</div>`;
 }

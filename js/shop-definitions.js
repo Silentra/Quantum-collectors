@@ -59,6 +59,12 @@ export const AURA_EFFECTS = Object.freeze({
     description: 'Restless furnace heat circulates around the card perimeter like molten metal.',
     colorHint: '#ea580c',
   },
+  winterfrost: {
+    renderEffectId: 'winterfrost',
+    label: 'Winter Frost Glow',
+    description: 'A silent cold radiates from the card — freezing air drifting from rim frost into the surrounding stillness.',
+    colorHint: '#bae6fd',
+  },
   quantum: {
     renderEffectId: 'quantum',
     label: 'Quantum Flux',
@@ -233,6 +239,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 4,
     enabled: true,
     renderEffectId: 'molten',
+  },
+
+  aura_winterfrost_glow: {
+    id: 'aura_winterfrost_glow',
+    name: 'Winter Frost Glow',
+    description: 'Your cards radiate a deep cold — pale frost at the rim and slow wisps of freezing air drifting into the silence.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.AURA,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 520,
+    weight: 4,
+    enabled: true,
+    renderEffectId: 'winterfrost',
   },
 
   // ── Cosmetics — Borders ────────────────────────────────────────────────

@@ -28,6 +28,7 @@ import {
   renderGlowHaloLayerHtml,
   renderMoltenEmberLayerHtml,
   renderMoltenDriftLayerHtml,
+  renderFrostWispLayerHtml,
   resolveGlowRenderEffectIdFromOptions,
 } from './card-glow.js';
 import {
@@ -313,6 +314,9 @@ export function renderDetailFrame(model) {
   const moltenDriftHtml = model.showGlowHalo
     ? renderMoltenDriftLayerHtml(model.glowRenderEffectId)
     : '';
+  const frostWispHtml = model.showGlowHalo
+    ? renderFrostWispLayerHtml(model.glowRenderEffectId)
+    : '';
   return `
     <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
       ${glowHaloHtml}
@@ -320,6 +324,7 @@ export function renderDetailFrame(model) {
       ${moltenEmberHtml}
       ${renderCardContent(model)}
       ${moltenDriftHtml}
+      ${frostWispHtml}
     </div>
   `;
 }
@@ -420,6 +425,9 @@ export function renderSciCard(model) {
   const moltenDriftHtml = model.showGlowHalo
     ? renderMoltenDriftLayerHtml(model.glowRenderEffectId)
     : '';
+  const frostWispHtml = model.showGlowHalo
+    ? renderFrostWispLayerHtml(model.glowRenderEffectId)
+    : '';
 
   return `
     <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
@@ -431,6 +439,7 @@ export function renderSciCard(model) {
       ${moltenEmberHtml}
       ${renderCardContent(model)}
       ${moltenDriftHtml}
+      ${frostWispHtml}
       ${auraDots}
     </div>
   `;
