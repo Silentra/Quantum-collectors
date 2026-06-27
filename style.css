@@ -3944,17 +3944,17 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="winterfrost"] .frost-wisp,
 .card-detail-frame[data-card-glow="winterfrost"] .frost-wisp {
   position: absolute;
-  width: clamp(12px, 3.2cqw, 18px);
-  height: clamp(7px, 1.8cqw, 11px);
+  width: clamp(18px, 4.8cqw, 27px);
+  height: clamp(10px, 2.7cqw, 16px);
   border-radius: 46% 54% 52% 48%;
   pointer-events: none;
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.82, 0.68);
   background: radial-gradient(
     ellipse 100% 82% at 48% 46%,
-    rgba(248, 250, 252, 0.68) 0%,
-    rgba(224, 242, 254, 0.42) 38%,
-    rgba(186, 230, 253, 0.18) 62%,
+    rgba(248, 250, 252, 0.72) 0%,
+    rgba(224, 242, 254, 0.46) 38%,
+    rgba(186, 230, 253, 0.20) 62%,
     transparent 78%
   );
   filter: blur(2.5px);
@@ -3965,17 +3965,17 @@ body.app-mode-game #screen-game.screen.active {
   animation-fill-mode: none;
 }
 
-/* Size profiles — small / medium / large vapor */
+/* Size profiles — small / medium / large vapor (+50% vs v1) */
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--1,
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--4,
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--6,
-.sci-card[data-card-glow="winterfrost"] .frost-wisp--9,
+.sci-card[data-card-glow="winterfrost"] .frost-wisp--8,
 .card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--1,
 .card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--4,
 .card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--6,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--9 {
-  width: clamp(9px, 2.6cqw, 14px);
-  height: clamp(5px, 1.4cqw, 8px);
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--8 {
+  width: clamp(14px, 3.9cqw, 21px);
+  height: clamp(8px, 2.1cqw, 12px);
   animation-name: frostWispDriftS;
 }
 
@@ -3983,33 +3983,33 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--10,
 .card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--5,
 .card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--10 {
-  width: clamp(15px, 3.8cqw, 22px);
-  height: clamp(8px, 2.2cqw, 13px);
+  width: clamp(22px, 5.7cqw, 33px);
+  height: clamp(12px, 3.3cqw, 19px);
   filter: blur(3px);
   animation-name: frostWispDriftL;
 }
 
-/* Hand-placed irregular anchors — no compass symmetry */
+/* Hand-placed irregular anchors — ~30% bottom / ~25% left / ~25% right / ~20% top */
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--1,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--1 { top: 97.8%; left: 13.6%; animation-duration: 19.7s; animation-delay: 0s; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--1 { top: 98.2%; left: 22.4%; animation-duration: 19.7s; animation-delay: 0s; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--2,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--2 { top: 38.7%; left: calc(0% - 4px); animation-duration: 31.6s; animation-delay: -7.3s; animation-name: frostWispDriftMRev; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--2 { top: 36.8%; left: calc(0% - 5px); animation-duration: 31.6s; animation-delay: -7.3s; animation-name: frostWispDriftMRev; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--3,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--3 { top: 61.2%; left: calc(100% + 4px); animation-duration: 27.1s; animation-delay: -14.8s; animation-name: frostWispDriftSRev; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--3 { top: 58.6%; left: calc(100% + 3px); animation-duration: 27.1s; animation-delay: -14.8s; animation-name: frostWispDriftSRev; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--4,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--4 { top: calc(0% + 2px); left: 28.9%; animation-duration: 41.5s; animation-delay: -22.4s; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--4 { top: calc(0% + 4px); left: 16.7%; animation-duration: 41.5s; animation-delay: -22.4s; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--5,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--5 { top: calc(100% + 5px); left: 58.3%; animation-duration: 23.4s; animation-delay: -11.6s; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--5 { top: calc(100% + 4px); left: 74.2%; animation-duration: 23.4s; animation-delay: -11.6s; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--6,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--6 { top: 7.1%; left: 71.6%; animation-duration: 48.3s; animation-delay: -33.7s; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--6 { top: 24.3%; left: calc(100% - 3px); animation-duration: 48.3s; animation-delay: -33.7s; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--7,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--7 { top: 67.4%; left: 3px; animation-duration: 34.8s; animation-delay: -19.2s; animation-name: frostWispDriftMRev; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--7 { top: 71.8%; left: 4px; animation-duration: 34.8s; animation-delay: -19.2s; animation-name: frostWispDriftMRev; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--8,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--8 { top: 93.1%; left: 82.4%; animation-duration: 44.9s; animation-delay: -28.1s; animation-name: frostWispDriftSRev; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--8 { top: 96.4%; left: 86.7%; animation-duration: 44.9s; animation-delay: -28.1s; animation-name: frostWispDriftSRev; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--9,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--9 { top: 19.8%; left: calc(100% - 2px); animation-duration: 38.2s; animation-delay: -5.9s; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--9 { top: 47.2%; left: calc(100% + 5px); animation-duration: 38.2s; animation-delay: -5.9s; }
 .sci-card[data-card-glow="winterfrost"] .frost-wisp--10,
-.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--10 { top: calc(0% - 3px); left: 47.3%; animation-duration: 52.7s; animation-delay: -41.2s; }
+.card-detail-frame[data-card-glow="winterfrost"] .frost-wisp--10 { top: calc(0% - 4px); left: 79.3%; animation-duration: 52.7s; animation-delay: -41.2s; }
 
 /* Tier density — T1: 4 slots (quiet); T2: 7; T3: 10 */
 .sci-card[data-card-glow="winterfrost"][data-aura-tier="1"] .frost-wisp--5,
@@ -4045,52 +4045,52 @@ body.app-mode-game #screen-game.screen.active {
 /* Wisp motion — one slow leak per cycle; ~2–4s visible; long idle gaps */
 @keyframes frostWispDriftS {
   0%, 26%, 100% { opacity: 0; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.72, 0.58); }
-  5%             { opacity: 0.14; transform: translate(-50%, -50%) translate(0px, 1px) scale(0.82, 0.66); }
-  9%             { opacity: 0.28; transform: translate(-50%, -50%) translate(1px, -2px) scale(0.92, 0.72); }
-  14%            { opacity: 0.34; transform: translate(-50%, -50%) translate(2px, -7px) scale(0.98, 0.76); }
-  19%            { opacity: 0.30; transform: translate(-50%, -50%) translate(-1px, -13px) scale(1, 0.78); }
-  23%            { opacity: 0.14; transform: translate(-50%, -50%) translate(1px, -18px) scale(0.94, 0.72); }
-  26%            { opacity: 0; transform: translate(-50%, -50%) translate(0px, -22px) scale(0.86, 0.64); }
+  5%             { opacity: 0.16; transform: translate(-50%, -50%) translate(0px, 1px) scale(0.82, 0.66); }
+  9%             { opacity: 0.32; transform: translate(-50%, -50%) translate(2px, -2px) scale(0.92, 0.72); }
+  14%            { opacity: 0.40; transform: translate(-50%, -50%) translate(4px, -7px) scale(0.98, 0.76); }
+  19%            { opacity: 0.36; transform: translate(-50%, -50%) translate(-2px, -13px) scale(1, 0.78); }
+  23%            { opacity: 0.18; transform: translate(-50%, -50%) translate(3px, -18px) scale(0.94, 0.72); }
+  26%            { opacity: 0; transform: translate(-50%, -50%) translate(1px, -22px) scale(0.86, 0.64); }
 }
 
 @keyframes frostWispDriftM {
   0%, 28%, 100% { opacity: 0; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.78, 0.64); }
-  4%             { opacity: 0.16; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.88, 0.72); }
-  8%             { opacity: 0.32; transform: translate(-50%, -50%) translate(2px, -3px) scale(0.96, 0.78); }
-  13%            { opacity: 0.40; transform: translate(-50%, -50%) translate(3px, -10px) scale(1.04, 0.82); }
-  18%            { opacity: 0.36; transform: translate(-50%, -50%) translate(1px, -17px) scale(1.06, 0.84); }
-  23%            { opacity: 0.20; transform: translate(-50%, -50%) translate(-2px, -24px) scale(1, 0.78); }
-  28%            { opacity: 0; transform: translate(-50%, -50%) translate(0px, -30px) scale(0.92, 0.70); }
+  4%             { opacity: 0.18; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.88, 0.72); }
+  8%             { opacity: 0.36; transform: translate(-50%, -50%) translate(3px, -3px) scale(0.96, 0.78); }
+  13%            { opacity: 0.46; transform: translate(-50%, -50%) translate(5px, -10px) scale(1.04, 0.82); }
+  18%            { opacity: 0.42; transform: translate(-50%, -50%) translate(2px, -17px) scale(1.06, 0.84); }
+  23%            { opacity: 0.24; transform: translate(-50%, -50%) translate(-3px, -24px) scale(1, 0.78); }
+  28%            { opacity: 0; transform: translate(-50%, -50%) translate(1px, -30px) scale(0.92, 0.70); }
 }
 
 @keyframes frostWispDriftL {
   0%, 30%, 100% { opacity: 0; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.82, 0.68); }
-  4%             { opacity: 0.18; transform: translate(-50%, -50%) translate(0px, 1px) scale(0.92, 0.76); }
-  9%             { opacity: 0.36; transform: translate(-50%, -50%) translate(-2px, -4px) scale(1.02, 0.84); }
-  15%            { opacity: 0.44; transform: translate(-50%, -50%) translate(2px, -12px) scale(1.1, 0.88); }
-  21%            { opacity: 0.38; transform: translate(-50%, -50%) translate(-1px, -20px) scale(1.12, 0.90); }
-  26%            { opacity: 0.22; transform: translate(-50%, -50%) translate(2px, -28px) scale(1.04, 0.82); }
-  30%            { opacity: 0; transform: translate(-50%, -50%) translate(0px, -34px) scale(0.94, 0.72); }
+  4%             { opacity: 0.20; transform: translate(-50%, -50%) translate(0px, 1px) scale(0.92, 0.76); }
+  9%             { opacity: 0.40; transform: translate(-50%, -50%) translate(-3px, -4px) scale(1.02, 0.84); }
+  15%            { opacity: 0.50; transform: translate(-50%, -50%) translate(4px, -12px) scale(1.1, 0.88); }
+  21%            { opacity: 0.44; transform: translate(-50%, -50%) translate(-2px, -20px) scale(1.12, 0.90); }
+  26%            { opacity: 0.26; transform: translate(-50%, -50%) translate(4px, -28px) scale(1.04, 0.82); }
+  30%            { opacity: 0; transform: translate(-50%, -50%) translate(1px, -34px) scale(0.94, 0.72); }
 }
 
 @keyframes frostWispDriftSRev {
   0%, 26%, 100% { opacity: 0; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.72, 0.58); }
-  5%             { opacity: 0.14; transform: translate(-50%, -50%) translate(0px, 1px) scale(0.82, 0.66); }
-  9%             { opacity: 0.28; transform: translate(-50%, -50%) translate(-1px, -2px) scale(0.92, 0.72); }
-  14%            { opacity: 0.34; transform: translate(-50%, -50%) translate(-2px, -7px) scale(0.98, 0.76); }
-  19%            { opacity: 0.30; transform: translate(-50%, -50%) translate(1px, -13px) scale(1, 0.78); }
-  23%            { opacity: 0.14; transform: translate(-50%, -50%) translate(-1px, -18px) scale(0.94, 0.72); }
-  26%            { opacity: 0; transform: translate(-50%, -50%) translate(0px, -22px) scale(0.86, 0.64); }
+  5%             { opacity: 0.16; transform: translate(-50%, -50%) translate(0px, 1px) scale(0.82, 0.66); }
+  9%             { opacity: 0.32; transform: translate(-50%, -50%) translate(-2px, -2px) scale(0.92, 0.72); }
+  14%            { opacity: 0.40; transform: translate(-50%, -50%) translate(-4px, -7px) scale(0.98, 0.76); }
+  19%            { opacity: 0.36; transform: translate(-50%, -50%) translate(2px, -13px) scale(1, 0.78); }
+  23%            { opacity: 0.18; transform: translate(-50%, -50%) translate(-3px, -18px) scale(0.94, 0.72); }
+  26%            { opacity: 0; transform: translate(-50%, -50%) translate(-1px, -22px) scale(0.86, 0.64); }
 }
 
 @keyframes frostWispDriftMRev {
   0%, 28%, 100% { opacity: 0; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.78, 0.64); }
-  4%             { opacity: 0.16; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.88, 0.72); }
-  8%             { opacity: 0.32; transform: translate(-50%, -50%) translate(-2px, -3px) scale(0.96, 0.78); }
-  13%            { opacity: 0.40; transform: translate(-50%, -50%) translate(-3px, -10px) scale(1.04, 0.82); }
-  18%            { opacity: 0.36; transform: translate(-50%, -50%) translate(-1px, -17px) scale(1.06, 0.84); }
-  23%            { opacity: 0.20; transform: translate(-50%, -50%) translate(2px, -24px) scale(1, 0.78); }
-  28%            { opacity: 0; transform: translate(-50%, -50%) translate(0px, -30px) scale(0.92, 0.70); }
+  4%             { opacity: 0.18; transform: translate(-50%, -50%) translate(0px, 0px) scale(0.88, 0.72); }
+  8%             { opacity: 0.36; transform: translate(-50%, -50%) translate(-3px, -3px) scale(0.96, 0.78); }
+  13%            { opacity: 0.46; transform: translate(-50%, -50%) translate(-5px, -10px) scale(1.04, 0.82); }
+  18%            { opacity: 0.42; transform: translate(-50%, -50%) translate(-2px, -17px) scale(1.06, 0.84); }
+  23%            { opacity: 0.24; transform: translate(-50%, -50%) translate(3px, -24px) scale(1, 0.78); }
+  28%            { opacity: 0; transform: translate(-50%, -50%) translate(-1px, -30px) scale(0.92, 0.70); }
 }
 
 @media (prefers-reduced-motion: reduce) {
