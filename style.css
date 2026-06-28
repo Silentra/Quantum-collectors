@@ -4093,20 +4093,24 @@ body.app-mode-game #screen-game.screen.active {
   28%            { opacity: 0; transform: translate(-50%, -50%) translate(-1px, -30px) scale(0.92, 0.70); }
 }
 
-/* ── Synchrotron Glow — circulating particle packets (detector palette) ── */
+/* ── Synchrotron Glow — motion-path particle packets (detector palette) ── */
 /*
  * Layer stack:
- *   .card-glow--halo::before — static accelerator ambient (z0)
- *   .synchrotron-ring — rotates 10s linear (parent transform)
- *     ::before — packet bodies + tails (monochrome arcs, 10–15% each)
- *     ::after  — packet heads (pulse: brightness + scale + blur bloom)
+ *   .card-glow--halo::before — static accelerator ambient (subtle, z0)
+ *   .synchrotron-track — positioning context + container queries
+ *   .sync-packet (×4 slots, tier-gated) — inset() perimeter via offset-path
+ *     ::before — tail + body (stable)
+ *     ::after  — leading head (brightness/bloom pulse only)
  *
- * No span pool. Explicit animation longhands only.
+ * Packets stay horizontally oriented (offset-rotate: 0deg). Explicit animation longhands only.
  */
 
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo {
-  --sync-ring-pad: 2px;
+  --sync-revolve-duration: 10s;
+  --sync-path-inset: 2px;
+  --sync-corner-r: 0.6rem;
+  --sync-packet-h: 2.5px;
   --sync-cyan: rgba(34, 211, 238, 1);
   --sync-emerald: rgba(5, 150, 105, 1);
   --sync-gold: rgba(234, 179, 8, 1);
@@ -4118,11 +4122,11 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo::before {
   z-index: 0;
   box-shadow:
-    0 0 8px 2px rgba(34, 211, 238, 0.08),
-    0 0 10px 2px rgba(5, 150, 105, 0.06),
-    0 0 12px 3px rgba(15, 23, 42, 0.42);
+    0 0 6px 1px rgba(34, 211, 238, 0.045),
+    0 0 8px 1px rgba(5, 150, 105, 0.035),
+    0 0 10px 2px rgba(15, 23, 42, 0.32);
   background:
-    radial-gradient(ellipse 88% 82% at 50% 50%, rgba(34, 211, 238, 0.035) 0%, transparent 68%);
+    radial-gradient(ellipse 88% 82% at 50% 50%, rgba(34, 211, 238, 0.022) 0%, transparent 68%);
 }
 
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo::after,
@@ -4130,265 +4134,257 @@ body.app-mode-game #screen-game.screen.active {
   content: none;
 }
 
-.sci-card[data-card-glow="synchrotron"] .synchrotron-ring,
-.card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring {
+.sci-card[data-card-glow="synchrotron"] .synchrotron-track,
+.card-detail-frame[data-card-glow="synchrotron"] .synchrotron-track {
   position: absolute;
   inset: var(--card-glow-paint-inset, 0px);
   border-radius: inherit;
   pointer-events: none;
-  transform-origin: 50% 50%;
-  animation-name: synchrotronRevolve;
-  animation-duration: 10s;
+  container-type: size;
+}
+
+.sci-card[data-card-glow="synchrotron"] .sync-packet,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--sync-packet-w, 36px);
+  height: var(--sync-packet-h, 2.5px);
+  margin: 0;
+  pointer-events: none;
+  offset-path: inset(var(--sync-path-inset, 2px) round var(--sync-corner-r, 0.6rem));
+  offset-distance: 0%;
+  offset-rotate: 0deg;
+  offset-anchor: center;
+  mix-blend-mode: screen;
+  animation-name: syncOrbit;
+  animation-duration: var(--sync-revolve-duration, 10s);
   animation-timing-function: linear;
   animation-iteration-count: infinite;
   animation-fill-mode: none;
 }
 
-.sci-card[data-card-glow="synchrotron"] .synchrotron-ring::before,
-.sci-card[data-card-glow="synchrotron"] .synchrotron-ring::after,
-.card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring::before,
-.card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring::after {
+.sci-card[data-card-glow="synchrotron"] .sync-packet::before,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet::before {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  padding: var(--sync-ring-pad);
-  mix-blend-mode: screen;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--sync-packet-color) 6%, transparent) 10%,
+    color-mix(in srgb, var(--sync-packet-color) 38%, transparent) 28%,
+    color-mix(in srgb, var(--sync-packet-color) 62%, transparent) 72%,
+    color-mix(in srgb, var(--sync-packet-color) 74%, transparent) 100%
+  );
+  filter: blur(0.35px);
 }
 
-.sci-card[data-card-glow="synchrotron"] .synchrotron-ring::before,
-.card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring::before {
-  filter: blur(0.55px);
-}
-
-.sci-card[data-card-glow="synchrotron"] .synchrotron-ring::after,
-.card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring::after {
-  transform-origin: 50% 50%;
-  animation-name: synchrotronHeadPulse;
-  animation-duration: 2.6s;
+.sci-card[data-card-glow="synchrotron"] .sync-packet::after,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 24%;
+  height: 140%;
+  transform: translateY(-50%);
+  transform-origin: 100% 50%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--sync-packet-color) 72%, transparent) 0%,
+    color-mix(in srgb, var(--sync-head-core) 88%, var(--sync-packet-color)) 55%,
+    var(--sync-head-core) 100%
+  );
+  box-shadow:
+    0 0 3px 1px color-mix(in srgb, var(--sync-packet-color) 55%, transparent),
+    0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
+  animation-name: syncHeadPulse;
+  animation-duration: 2.4s;
   animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
   animation-fill-mode: none;
 }
 
-/* T3 — four packets (10% / 14% / 11% / 15% arc); irregular gaps */
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .synchrotron-ring::before,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .synchrotron-ring::before {
-  opacity: 0.92;
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    transparent 6deg,
-    rgba(34, 211, 238, 0.82) 7deg,
-    rgba(34, 211, 238, 0.72) 10deg,
-    rgba(34, 211, 238, 0.68) 28deg,
-    rgba(34, 211, 238, 0.34) 35deg,
-    rgba(34, 211, 238, 0.06) 40deg,
-    transparent 42deg,
-    transparent 91deg,
-    rgba(5, 150, 105, 0.84) 92deg,
-    rgba(5, 150, 105, 0.74) 96deg,
-    rgba(5, 150, 105, 0.68) 122deg,
-    rgba(5, 150, 105, 0.32) 132deg,
-    rgba(5, 150, 105, 0.06) 139deg,
-    transparent 141deg,
-    transparent 186deg,
-    rgba(234, 179, 8, 0.8) 187deg,
-    rgba(234, 179, 8, 0.72) 191deg,
-    rgba(234, 179, 8, 0.66) 210deg,
-    rgba(234, 179, 8, 0.3) 218deg,
-    rgba(234, 179, 8, 0.05) 224deg,
-    transparent 226deg,
-    transparent 274deg,
-    rgba(192, 38, 211, 0.86) 275deg,
-    rgba(192, 38, 211, 0.76) 280deg,
-    rgba(192, 38, 211, 0.7) 308deg,
-    rgba(192, 38, 211, 0.34) 318deg,
-    rgba(192, 38, 211, 0.06) 326deg,
-    transparent 328deg,
-    transparent 360deg
-  );
+/* Slot colors + visual length variety (tuned, not perimeter-calculated) */
+.sci-card[data-card-glow="synchrotron"] .sync-packet--1,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--1 {
+  --sync-packet-color: var(--sync-cyan);
+  --sync-packet-w: clamp(32px, 13cqw, 58px);
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .synchrotron-ring::after,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .synchrotron-ring::after {
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    transparent 6deg,
-    rgba(240, 253, 255, 0.96) 7deg,
-    rgba(34, 211, 238, 0.88) 9.5deg,
-    transparent 10.5deg,
-    transparent 91deg,
-    rgba(240, 253, 255, 0.94) 92deg,
-    rgba(5, 150, 105, 0.86) 95deg,
-    transparent 96deg,
-    transparent 186deg,
-    rgba(255, 251, 235, 0.92) 187deg,
-    rgba(234, 179, 8, 0.84) 190deg,
-    transparent 191deg,
-    transparent 274deg,
-    rgba(250, 232, 255, 0.94) 275deg,
-    rgba(192, 38, 211, 0.86) 279deg,
-    transparent 280deg,
-    transparent 360deg
-  );
+.sci-card[data-card-glow="synchrotron"] .sync-packet--2,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--2 {
+  --sync-packet-color: var(--sync-emerald);
+  --sync-packet-w: clamp(26px, 10cqw, 46px);
 }
 
-/* T2 — three packets (12% / 15% / 10%) */
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .synchrotron-ring::before,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .synchrotron-ring::before {
-  opacity: 0.78;
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    transparent 5deg,
-    rgba(34, 211, 238, 0.78) 6deg,
-    rgba(34, 211, 238, 0.7) 10deg,
-    rgba(34, 211, 238, 0.64) 36deg,
-    rgba(34, 211, 238, 0.28) 42deg,
-    rgba(34, 211, 238, 0.05) 47deg,
-    transparent 48deg,
-    transparent 128deg,
-    rgba(234, 179, 8, 0.82) 129deg,
-    rgba(234, 179, 8, 0.74) 134deg,
-    rgba(234, 179, 8, 0.68) 168deg,
-    rgba(234, 179, 8, 0.32) 176deg,
-    rgba(234, 179, 8, 0.06) 181deg,
-    transparent 182deg,
-    transparent 248deg,
-    rgba(192, 38, 211, 0.76) 249deg,
-    rgba(192, 38, 211, 0.68) 253deg,
-    rgba(192, 38, 211, 0.62) 276deg,
-    rgba(192, 38, 211, 0.28) 282deg,
-    rgba(192, 38, 211, 0.05) 284deg,
-    transparent 285deg,
-    transparent 360deg
-  );
+.sci-card[data-card-glow="synchrotron"] .sync-packet--3,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--3 {
+  --sync-packet-color: var(--sync-gold);
+  --sync-packet-w: clamp(30px, 12cqw, 52px);
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .synchrotron-ring::after,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .synchrotron-ring::after {
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    transparent 5deg,
-    rgba(240, 253, 255, 0.92) 6deg,
-    rgba(34, 211, 238, 0.82) 9deg,
-    transparent 10deg,
-    transparent 128deg,
-    rgba(255, 251, 235, 0.9) 129deg,
-    rgba(234, 179, 8, 0.8) 133deg,
-    transparent 134deg,
-    transparent 248deg,
-    rgba(250, 232, 255, 0.9) 249deg,
-    rgba(192, 38, 211, 0.78) 252deg,
-    transparent 253deg,
-    transparent 360deg
-  );
+.sci-card[data-card-glow="synchrotron"] .sync-packet--4,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--4 {
+  --sync-packet-color: var(--sync-magenta);
+  --sync-packet-w: clamp(24px, 9cqw, 42px);
 }
 
-/* T1 — two packets (~opposite; 13% / 14%) */
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .synchrotron-ring::before,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .synchrotron-ring::before {
-  opacity: 0.62;
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    transparent 7deg,
-    rgba(34, 211, 238, 0.72) 8deg,
-    rgba(34, 211, 238, 0.64) 12deg,
-    rgba(34, 211, 238, 0.58) 40deg,
-    rgba(34, 211, 238, 0.26) 48deg,
-    rgba(34, 211, 238, 0.04) 53deg,
-    transparent 54deg,
-    transparent 187deg,
-    rgba(192, 38, 211, 0.74) 188deg,
-    rgba(192, 38, 211, 0.66) 193deg,
-    rgba(192, 38, 211, 0.6) 222deg,
-    rgba(192, 38, 211, 0.28) 232deg,
-    rgba(192, 38, 211, 0.04) 237deg,
-    transparent 238deg,
-    transparent 360deg
-  );
+/* T3 — four packets, even quarter-phase spacing */
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet {
+  opacity: 0.94;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .synchrotron-ring::after,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .synchrotron-ring::after {
-  background: conic-gradient(
-    from 0deg at 50% 50%,
-    transparent 0deg,
-    transparent 7deg,
-    rgba(240, 253, 255, 0.88) 8deg,
-    rgba(34, 211, 238, 0.76) 11deg,
-    transparent 12deg,
-    transparent 187deg,
-    rgba(250, 232, 255, 0.88) 188deg,
-    rgba(192, 38, 211, 0.74) 192deg,
-    transparent 193deg,
-    transparent 360deg
-  );
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--1 {
+  animation-delay: 0s;
 }
 
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--2 {
+  animation-delay: -2.5s;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--3 {
+  animation-delay: -5s;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--4 {
+  animation-delay: -7.5s;
+}
+
+/* T2 — three packets (cyan, emerald, gold) */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo {
-  --sync-ring-pad: 3px;
+  --sync-path-inset: 2.5px;
+  --sync-packet-h: 3px;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet {
+  opacity: 0.82;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4 {
+  visibility: hidden;
+  animation-name: none;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4::after,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4::after {
+  animation-name: none;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--1 {
+  animation-delay: 0s;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--2 {
+  animation-delay: -3.333s;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--3 {
+  animation-delay: -6.667s;
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo::before {
   box-shadow:
-    0 0 10px 2px rgba(34, 211, 238, 0.12),
-    0 0 10px 2px rgba(5, 150, 105, 0.08),
-    0 0 14px 3px rgba(15, 23, 42, 0.48);
+    0 0 7px 1px rgba(34, 211, 238, 0.055),
+    0 0 8px 1px rgba(5, 150, 105, 0.04),
+    0 0 11px 2px rgba(15, 23, 42, 0.36);
+}
+
+/* T1 — two packets (~opposite: cyan + magenta) */
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .card-glow--halo,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .card-glow--halo {
+  --sync-path-inset: 2px;
+  --sync-packet-h: 2.5px;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet {
+  opacity: 0.68;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2,
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--3 {
+  visibility: hidden;
+  animation-name: none;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2::after,
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--3::after,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2::after,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--3::after {
+  animation-name: none;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--1 {
+  animation-delay: 0s;
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--4 {
+  animation-delay: -5s;
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo {
-  --sync-ring-pad: 4px;
+  --sync-path-inset: 3px;
+  --sync-packet-h: 3.5px;
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo::before,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo::before {
   box-shadow:
-    0 0 12px 3px rgba(34, 211, 238, 0.16),
-    0 0 12px 3px rgba(5, 150, 105, 0.1),
-    0 0 16px 4px rgba(15, 23, 42, 0.52);
+    0 0 8px 2px rgba(34, 211, 238, 0.065),
+    0 0 8px 2px rgba(5, 150, 105, 0.045),
+    0 0 12px 3px rgba(15, 23, 42, 0.38);
   background:
-    radial-gradient(ellipse 90% 84% at 50% 50%, rgba(34, 211, 238, 0.05) 0%, transparent 70%);
+    radial-gradient(ellipse 90% 84% at 50% 50%, rgba(34, 211, 238, 0.028) 0%, transparent 70%);
 }
 
-@keyframes synchrotronRevolve {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+@keyframes syncOrbit {
+  from { offset-distance: 0%; }
+  to   { offset-distance: 100%; }
 }
 
-/* Head pulse — brighter + wider (scale) + softer bloom (blur); body unaffected */
-@keyframes synchrotronHeadPulse {
+/* Head pulse — density via brightness + bloom; minimal scale */
+@keyframes syncHeadPulse {
   0%, 100% {
-    transform: scale(1);
-    filter: brightness(1) blur(0.45px);
+    transform: translateY(-50%) scaleX(1);
+    filter: brightness(1) blur(0.3px);
+    box-shadow:
+      0 0 3px 1px color-mix(in srgb, var(--sync-packet-color) 55%, transparent),
+      0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
   }
-  20% {
-    transform: scale(1.065);
-    filter: brightness(1.18) blur(1.15px);
+  45% {
+    transform: translateY(-50%) scaleX(1.02);
+    filter: brightness(1.32) blur(0.75px);
+    box-shadow:
+      0 0 5px 2px color-mix(in srgb, var(--sync-packet-color) 72%, transparent),
+      0 0 10px 3px color-mix(in srgb, var(--sync-packet-color) 42%, transparent);
   }
-  40% {
-    transform: scale(1);
-    filter: brightness(1.06) blur(0.55px);
-  }
-  65% {
-    transform: scale(1.042);
-    filter: brightness(1.12) blur(0.92px);
-  }
-  85% {
-    transform: scale(1);
-    filter: brightness(1.04) blur(0.5px);
+  70% {
+    transform: translateY(-50%) scaleX(1.01);
+    filter: brightness(1.18) blur(0.55px);
+    box-shadow:
+      0 0 4px 1px color-mix(in srgb, var(--sync-packet-color) 62%, transparent),
+      0 0 8px 2px color-mix(in srgb, var(--sync-packet-color) 34%, transparent);
   }
 }
 
@@ -4418,17 +4414,36 @@ body.app-mode-game #screen-game.screen.active {
     opacity: 0;
   }
 
-  .sci-card[data-card-glow="synchrotron"] .synchrotron-ring,
-  .card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring {
-    animation: none;
-    transform: rotate(42deg);
+  .sci-card[data-card-glow="synchrotron"] .sync-packet,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet {
+    animation-name: none;
   }
 
-  .sci-card[data-card-glow="synchrotron"] .synchrotron-ring::after,
-  .card-detail-frame[data-card-glow="synchrotron"] .synchrotron-ring::after {
-    animation: none;
-    transform: scale(1);
-    filter: brightness(1) blur(0.45px);
+  .sci-card[data-card-glow="synchrotron"] .sync-packet--1,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--1 {
+    offset-distance: 8%;
+  }
+
+  .sci-card[data-card-glow="synchrotron"] .sync-packet--2,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--2 {
+    offset-distance: 38%;
+  }
+
+  .sci-card[data-card-glow="synchrotron"] .sync-packet--3,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--3 {
+    offset-distance: 62%;
+  }
+
+  .sci-card[data-card-glow="synchrotron"] .sync-packet--4,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--4 {
+    offset-distance: 86%;
+  }
+
+  .sci-card[data-card-glow="synchrotron"] .sync-packet::after,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet::after {
+    animation-name: none;
+    transform: translateY(-50%) scaleX(1);
+    filter: brightness(1) blur(0.3px);
   }
 }
 
