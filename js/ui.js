@@ -58,6 +58,7 @@ import {
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
 import { getEquippedAura, getEquippedShimmer, renderProfile } from './profile-ui.js';
 import { renderShop, cleanupShop } from './shop-ui.js';
+import { initVfxDebugPanel, onGameTabChanged } from './vfx-debug/index.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
 
@@ -127,6 +128,7 @@ function setupTabs() {
       if (el) el.classList.add('active');
       const gameScroll = document.getElementById('game-content-scroll');
       if (gameScroll) gameScroll.scrollTop = 0;
+      onGameTabChanged(tab);
       if (tab === 'collection') renderCollection();
       if (tab === 'packs') renderPacks();
       if (tab === 'research-projects') { renderResearchProjects(); startProjectHeartbeat(); }
@@ -287,6 +289,10 @@ export function enterGame() {
   });
 
   renderCollection();
+
+  if (_isPersistentAdmin()) {
+    initVfxDebugPanel();
+  }
 }
 
 // ===================== COLLECTION =====================
