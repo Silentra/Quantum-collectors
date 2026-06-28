@@ -4100,10 +4100,10 @@ body.app-mode-game #screen-game.screen.active {
  *   .synchrotron-track — positioning context + container queries
  *   .sync-packet (×4 slots, tier-gated) — inset() beam-pipe path via offset-path
  *     (--sync-path-inset-t/r/b/l calibrate path to card border rim)
- *     ::before — tail + body (stable)
- *     ::after  — leading head (brightness/bloom pulse only)
+ *     ::before — soft plasma tail + short body (55% / 20%)
+ *     ::after  — leading head (25%, brightness/bloom pulse)
  *
- * Packets stay horizontally oriented (offset-rotate: 0deg). Explicit animation longhands only.
+ * Packets follow path tangent (offset-rotate: auto). Explicit animation longhands only.
  */
 
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo,
@@ -4170,8 +4170,8 @@ body.app-mode-game #screen-game.screen.active {
     round var(--sync-corner-r, 0.6rem)
   );
   offset-distance: 0%;
-  offset-rotate: 0deg;
-  offset-anchor: center;
+  offset-rotate: auto;
+  offset-anchor: 88% 50%;
   mix-blend-mode: screen;
   animation-name: syncOrbit;
   animation-duration: var(--sync-revolve-duration, 10s);
@@ -4184,17 +4184,36 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-glow="synchrotron"] .sync-packet::before {
   content: '';
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 50%;
+  width: 75%;
+  height: 240%;
+  transform: translateY(-50%);
+  pointer-events: none;
   border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--sync-packet-color) 6%, transparent) 10%,
-    color-mix(in srgb, var(--sync-packet-color) 38%, transparent) 28%,
-    color-mix(in srgb, var(--sync-packet-color) 62%, transparent) 72%,
-    color-mix(in srgb, var(--sync-packet-color) 74%, transparent) 100%
-  );
-  filter: blur(0.35px);
+  background:
+    radial-gradient(
+      ellipse 85% 55% at 96% 50%,
+      color-mix(in srgb, var(--sync-packet-color) 42%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 18%, transparent) 42%,
+      transparent 78%
+    ),
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--sync-packet-color) 3%, transparent) 6%,
+      color-mix(in srgb, var(--sync-packet-color) 8%, transparent) 14%,
+      color-mix(in srgb, var(--sync-packet-color) 14%, transparent) 24%,
+      color-mix(in srgb, var(--sync-packet-color) 22%, transparent) 36%,
+      color-mix(in srgb, var(--sync-packet-color) 32%, transparent) 48%,
+      color-mix(in srgb, var(--sync-packet-color) 42%, transparent) 58%,
+      color-mix(in srgb, var(--sync-packet-color) 50%, transparent) 68%,
+      color-mix(in srgb, var(--sync-packet-color) 56%, transparent) 76%,
+      color-mix(in srgb, var(--sync-packet-color) 62%, transparent) 84%,
+      color-mix(in srgb, var(--sync-packet-color) 66%, transparent) 92%,
+      color-mix(in srgb, var(--sync-packet-color) 68%, transparent) 100%
+    );
+  filter: blur(0.7px);
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-packet::after,
@@ -4203,17 +4222,25 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   right: 0;
   top: 50%;
-  width: 24%;
-  height: 140%;
+  width: 25%;
+  height: 175%;
   transform: translateY(-50%);
   transform-origin: 100% 50%;
+  pointer-events: none;
   border-radius: 999px;
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--sync-packet-color) 72%, transparent) 0%,
-    color-mix(in srgb, var(--sync-head-core) 88%, var(--sync-packet-color)) 55%,
-    var(--sync-head-core) 100%
-  );
+  background:
+    radial-gradient(
+      ellipse 120% 90% at 78% 50%,
+      color-mix(in srgb, var(--sync-head-core) 95%, var(--sync-packet-color)) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 78%, transparent) 52%,
+      transparent 100%
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--sync-packet-color) 58%, transparent) 0%,
+      color-mix(in srgb, var(--sync-head-core) 82%, var(--sync-packet-color)) 42%,
+      var(--sync-head-core) 100%
+    );
   box-shadow:
     0 0 3px 1px color-mix(in srgb, var(--sync-packet-color) 55%, transparent),
     0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
