@@ -4,7 +4,7 @@
  * Full-size cards only (.sci-card, .card-detail-frame). No default glow when unequipped.
  * Renders only when Mathematical Aura tier >= 1 (see shouldRenderGlow).
  *
- * @see card-render.js — .card-glow--halo (z0); effect-specific hosts (molten, frost, synchrotron ring)
+ * @see card-render.js — .card-glow--halo (z0); effect-specific hosts (molten, frost, synchrotron track)
  */
 
 import { getEquippedAura } from './profile-ui.js';
@@ -92,6 +92,9 @@ const MOLTEN_DRIFT_SLOT_COUNT = 18;
 /** Winter Frost Glow — slow vapor wisps (CSS-only span pool). */
 const FROST_WISP_SLOT_COUNT = 10;
 
+/** Synchrotron Glow — perimeter motion-path packets (fixed slot pool, tier-gated in CSS). */
+const SYNCHROTRON_PACKET_SLOT_COUNT = 4;
+
 function renderMoltenEmberSpansHtml() {
   return Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
     const n = i + 1;
@@ -113,6 +116,13 @@ function renderFrostWispSpansHtml() {
   }).join('');
 }
 
+function renderSyncPacketSpansHtml() {
+  return Array.from({ length: SYNCHROTRON_PACKET_SLOT_COUNT }, (_, i) => {
+    const n = i + 1;
+    return `<span class="sync-packet sync-packet--${n}" aria-hidden="true"></span>`;
+  }).join('');
+}
+
 /**
  * Perimeter glow host — mount before .card-cosmetic-effects (z0).
  * @param {string|null|undefined} glowEffectId
@@ -127,7 +137,7 @@ export function renderGlowHaloLayerHtml(glowEffectId = null) {
     return '<div class="card-glow card-glow--halo card-glow--winterfrost" aria-hidden="true"></div>';
   }
   if (glowEffectId === 'synchrotron') {
-    return '<div class="card-glow card-glow--halo card-glow--synchrotron" aria-hidden="true"><div class="synchrotron-ring" aria-hidden="true"></div></div>';
+    return `<div class="card-glow card-glow--halo card-glow--synchrotron" aria-hidden="true"><div class="synchrotron-track" aria-hidden="true">${renderSyncPacketSpansHtml()}</div></div>`;
   }
   return '<div class="card-glow card-glow--halo" aria-hidden="true"></div>';
 }
