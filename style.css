@@ -4111,7 +4111,7 @@ body.app-mode-game #screen-game.screen.active {
   --sync-revolve-duration: 10s;
   /* Beam-pipe path — track-relative; negative = outward toward card border rim */
   --sync-path-inset-t: -1px;
-  --sync-path-inset-r: 4px;
+  --sync-path-inset-r: -1px; /* was 4px — horizontal-packet compensation; unified after tangent rotation */
   --sync-path-inset-b: -1px;
   --sync-path-inset-l: -1px;
   --sync-corner-r: 0.6rem;
@@ -4125,7 +4125,7 @@ body.app-mode-game #screen-game.screen.active {
 
 .card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo {
   --sync-corner-r: 0.75rem;
-  --sync-path-inset-r: 5px;
+  /* --sync-path-inset-r inherits -1px (was 5px detail override; removed with tangent rotation) */
 }
 
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo::before,
@@ -4164,7 +4164,7 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: none;
   offset-path: inset(
     var(--sync-path-inset-t, -1px)
-    var(--sync-path-inset-r, 4px)
+    var(--sync-path-inset-r, -1px)
     var(--sync-path-inset-b, -1px)
     var(--sync-path-inset-l, -1px)
     round var(--sync-corner-r, 0.6rem)
