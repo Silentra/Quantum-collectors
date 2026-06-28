@@ -4098,7 +4098,8 @@ body.app-mode-game #screen-game.screen.active {
  * Layer stack:
  *   .card-glow--halo::before — static accelerator ambient (subtle, z0)
  *   .synchrotron-track — positioning context + container queries
- *   .sync-packet (×4 slots, tier-gated) — inset() perimeter via offset-path
+ *   .sync-packet (×4 slots, tier-gated) — inset() beam-pipe path via offset-path
+ *     (--sync-path-inset-t/r/b/l calibrate path to card border rim)
  *     ::before — tail + body (stable)
  *     ::after  — leading head (brightness/bloom pulse only)
  *
@@ -4108,7 +4109,11 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo {
   --sync-revolve-duration: 10s;
-  --sync-path-inset: 2px;
+  /* Beam-pipe path — track-relative; negative = outward toward card border rim */
+  --sync-path-inset-t: -1px;
+  --sync-path-inset-r: 4px;
+  --sync-path-inset-b: -1px;
+  --sync-path-inset-l: -1px;
   --sync-corner-r: 0.6rem;
   --sync-packet-h: 2.5px;
   --sync-cyan: rgba(34, 211, 238, 1);
@@ -4116,6 +4121,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-gold: rgba(234, 179, 8, 1);
   --sync-magenta: rgba(192, 38, 211, 1);
   --sync-head-core: rgba(240, 253, 255, 1);
+}
+
+.card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo {
+  --sync-corner-r: 0.75rem;
+  --sync-path-inset-r: 5px;
 }
 
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo::before,
@@ -4152,7 +4162,13 @@ body.app-mode-game #screen-game.screen.active {
   height: var(--sync-packet-h, 2.5px);
   margin: 0;
   pointer-events: none;
-  offset-path: inset(var(--sync-path-inset, 2px) round var(--sync-corner-r, 0.6rem));
+  offset-path: inset(
+    var(--sync-path-inset-t, -1px)
+    var(--sync-path-inset-r, 4px)
+    var(--sync-path-inset-b, -1px)
+    var(--sync-path-inset-l, -1px)
+    round var(--sync-corner-r, 0.6rem)
+  );
   offset-distance: 0%;
   offset-rotate: 0deg;
   offset-anchor: center;
@@ -4262,7 +4278,6 @@ body.app-mode-game #screen-game.screen.active {
 /* T2 — three packets (cyan, emerald, gold) */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo {
-  --sync-path-inset: 2.5px;
   --sync-packet-h: 3px;
 }
 
@@ -4308,7 +4323,6 @@ body.app-mode-game #screen-game.screen.active {
 /* T1 — two packets (~opposite: cyan + magenta) */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .card-glow--halo {
-  --sync-path-inset: 2px;
   --sync-packet-h: 2.5px;
 }
 
@@ -4344,7 +4358,6 @@ body.app-mode-game #screen-game.screen.active {
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo {
-  --sync-path-inset: 3px;
   --sync-packet-h: 3.5px;
 }
 
