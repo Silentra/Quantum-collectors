@@ -4,7 +4,7 @@
  * Full-size cards only (.sci-card, .card-detail-frame). No default glow when unequipped.
  * Renders only when Mathematical Aura tier >= 1 (see shouldRenderGlow).
  *
- * @see card-render.js — .card-glow--halo (z0); .card-glow--molten-embers (z1); .card-glow--molten-drift (z2); .card-glow--frost-wisps (z2)
+ * @see card-render.js — .card-glow--halo (z0); effect-specific hosts (molten, frost, synchrotron ring)
  */
 
 import { getEquippedAura } from './profile-ui.js';
@@ -15,6 +15,7 @@ export const COSMETIC_GLOW_EFFECT_IDS = [
   'rarity',
   'molten',
   'winterfrost',
+  'synchrotron',
 ];
 
 /**
@@ -124,6 +125,9 @@ export function renderGlowHaloLayerHtml(glowEffectId = null) {
   }
   if (glowEffectId === 'winterfrost') {
     return '<div class="card-glow card-glow--halo card-glow--winterfrost" aria-hidden="true"></div>';
+  }
+  if (glowEffectId === 'synchrotron') {
+    return '<div class="card-glow card-glow--halo card-glow--synchrotron" aria-hidden="true"><div class="synchrotron-ring" aria-hidden="true"></div></div>';
   }
   return '<div class="card-glow card-glow--halo" aria-hidden="true"></div>';
 }

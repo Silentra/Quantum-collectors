@@ -65,6 +65,12 @@ export const AURA_EFFECTS = Object.freeze({
     description: 'A silent cold radiates from the card — freezing air drifting from rim frost into the surrounding stillness.',
     colorHint: '#bae6fd',
   },
+  synchrotron: {
+    renderEffectId: 'synchrotron',
+    label: 'Synchrotron',
+    description: 'Particle bunches circulate the card perimeter like a storage ring — detector-bright heads trailing into calibrated silence.',
+    colorHint: '#22d3ee',
+  },
   quantum: {
     renderEffectId: 'quantum',
     label: 'Quantum Flux',
@@ -252,6 +258,19 @@ export const ITEM_DEFINITIONS = Object.freeze({
     weight: 4,
     enabled: true,
     renderEffectId: 'winterfrost',
+  },
+
+  aura_synchrotron_glow: {
+    id: 'aura_synchrotron_glow',
+    name: 'Synchrotron',
+    description: 'Particle bunches trace the card rim — electric cyan, emerald, gold, and magenta packets circulating a miniature accelerator ring.',
+    type: ITEM_TYPES.COSMETIC,
+    category: ITEM_CATEGORIES.AURA,
+    rarity: ITEM_RARITIES.EPIC,
+    price: 540,
+    weight: 4,
+    enabled: true,
+    renderEffectId: 'synchrotron',
   },
 
   // ── Cosmetics — Borders ────────────────────────────────────────────────
