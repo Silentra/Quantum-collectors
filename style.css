@@ -4272,6 +4272,57 @@ body.app-mode-game #screen-game.screen.active {
   --sync-packet-w: clamp(24px, 9cqw, 42px);
 }
 
+/* Gold (slot 3) — blob-chain tail prototype; slots 1, 2, 4 keep ribbon tail */
+.sci-card[data-card-glow="synchrotron"] .sync-packet--3::before,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--3::before {
+  background:
+    radial-gradient(
+      ellipse 92% 62% at 94% 50%,
+      color-mix(in srgb, var(--sync-packet-color) 58%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 32%, transparent) 40%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 74% 56% at 76% 51%,
+      color-mix(in srgb, var(--sync-packet-color) 48%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 22%, transparent) 44%,
+      transparent 76%
+    ),
+    radial-gradient(
+      ellipse 64% 52% at 61% 48%,
+      color-mix(in srgb, var(--sync-packet-color) 36%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 16%, transparent) 42%,
+      transparent 75%
+    ),
+    radial-gradient(
+      ellipse 54% 48% at 47% 53%,
+      color-mix(in srgb, var(--sync-packet-color) 26%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 11%, transparent) 40%,
+      transparent 74%
+    ),
+    radial-gradient(
+      ellipse 46% 44% at 33% 49%,
+      color-mix(in srgb, var(--sync-packet-color) 18%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 7%, transparent) 38%,
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 38% 40% at 19% 51%,
+      color-mix(in srgb, var(--sync-packet-color) 11%, transparent) 0%,
+      color-mix(in srgb, var(--sync-packet-color) 4%, transparent) 36%,
+      transparent 70%
+    ),
+    linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--sync-packet-color) 3%, transparent) 18%,
+      color-mix(in srgb, var(--sync-packet-color) 8%, transparent) 42%,
+      color-mix(in srgb, var(--sync-packet-color) 16%, transparent) 68%,
+      color-mix(in srgb, var(--sync-packet-color) 24%, transparent) 88%,
+      color-mix(in srgb, var(--sync-packet-color) 30%, transparent) 100%
+    );
+}
+
 /* T3 — four packets, even quarter-phase spacing */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet {
