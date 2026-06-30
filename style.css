@@ -4101,7 +4101,7 @@ body.app-mode-game #screen-game.screen.active {
  *   .sync-packet (×4 slots, tier-gated) — inset() beam-pipe path via offset-path
  *     (--sync-path-inset-t/r/b/l calibrate path to card border rim)
  *     ::before — soft plasma tail + short body (55% / 20%)
- *     ::after  — leading head (25%, brightness/bloom pulse)
+ *     ::after  — static bright leading head (25%)
  *
  * Packets follow path tangent (offset-rotate: auto). Explicit animation longhands only.
  */
@@ -4215,7 +4215,6 @@ body.app-mode-game #screen-game.screen.active {
       color-mix(in srgb, var(--sync-packet-color) 66%, transparent) 92%,
       color-mix(in srgb, var(--sync-packet-color) 68%, transparent) 100%
     );
-  filter: blur(calc(0.7px * var(--vfx-sync-tail-blur-strength, 1)));
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-packet::after,
@@ -4246,11 +4245,6 @@ body.app-mode-game #screen-game.screen.active {
   box-shadow:
     0 0 3px 1px color-mix(in srgb, var(--sync-packet-color) 55%, transparent),
     0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
-  animation-name: var(--vfx-sync-head-anim-name, syncHeadPulse);
-  animation-duration: 2.4s;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-fill-mode: none;
 }
 
 /* Slot colors + visual length variety (tuned, not perimeter-calculated) */
@@ -4323,11 +4317,6 @@ body.app-mode-game #screen-game.screen.active {
   animation-name: none;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4::after,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4::after {
-  animation-name: none;
-}
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--1,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--1 {
   animation-delay: 0s;
@@ -4371,13 +4360,6 @@ body.app-mode-game #screen-game.screen.active {
   animation-name: none;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2::after,
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--3::after,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2::after,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--3::after {
-  animation-name: none;
-}
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--1,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--1 {
   animation-delay: 0s;
@@ -4406,33 +4388,6 @@ body.app-mode-game #screen-game.screen.active {
 @keyframes syncOrbit {
   from { offset-distance: 0%; }
   to   { offset-distance: 100%; }
-}
-
-/* Head pulse — density via brightness + bloom; minimal scale (VFX debug vars at 100% = shipping) */
-@keyframes syncHeadPulse {
-  0%, 100% {
-    transform: translateY(-50%) scaleX(calc(1 + 0 * var(--vfx-sync-head-anim-strength, 1)));
-    filter: brightness(1) blur(0.3px);
-    box-shadow:
-      0 0 3px 1px color-mix(in srgb, var(--sync-packet-color) 55%, transparent),
-      0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
-  }
-  45% {
-    transform: translateY(-50%) scaleX(calc(1 + 0.02 * var(--vfx-sync-head-anim-strength, 1)));
-    filter: brightness(calc(1 + 0.32 * var(--vfx-sync-head-anim-strength, 1)))
-      blur(calc(0.3px + 0.45px * var(--vfx-sync-head-blur-strength, 1) * var(--vfx-sync-head-anim-strength, 1)));
-    box-shadow:
-      0 0 calc(3px + 2px * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)) 1px color-mix(in srgb, var(--sync-packet-color) calc(55% + 17% * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)), transparent),
-      0 0 calc(6px + 4px * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)) 2px color-mix(in srgb, var(--sync-packet-color) calc(28% + 14% * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)), transparent);
-  }
-  70% {
-    transform: translateY(-50%) scaleX(calc(1 + 0.01 * var(--vfx-sync-head-anim-strength, 1)));
-    filter: brightness(calc(1 + 0.18 * var(--vfx-sync-head-anim-strength, 1)))
-      blur(calc(0.3px + 0.25px * var(--vfx-sync-head-blur-strength, 1) * var(--vfx-sync-head-anim-strength, 1)));
-    box-shadow:
-      0 0 calc(3px + 1px * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)) 1px color-mix(in srgb, var(--sync-packet-color) calc(55% + 7% * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)), transparent),
-      0 0 calc(6px + 2px * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)) 2px color-mix(in srgb, var(--sync-packet-color) calc(28% + 6% * var(--vfx-sync-shadow-strength, 1) * var(--vfx-sync-head-anim-strength, 1)), transparent);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -4484,13 +4439,6 @@ body.app-mode-game #screen-game.screen.active {
   .sci-card[data-card-glow="synchrotron"] .sync-packet--4,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--4 {
     offset-distance: 86%;
-  }
-
-  .sci-card[data-card-glow="synchrotron"] .sync-packet::after,
-  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet::after {
-    animation-name: none;
-    transform: translateY(-50%) scaleX(1);
-    filter: brightness(1) blur(0.3px);
   }
 }
 
