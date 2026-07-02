@@ -4309,20 +4309,20 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member::before {
   content: '';
   position: absolute;
-  left: -12%;
+  left: var(--sync-bunch-wake-left, 4%);
   top: 50%;
-  width: 98%;
-  height: 340%;
+  width: var(--sync-bunch-wake-width, 74%);
+  height: 365%;
   transform: translateY(-50%) scale(var(--sync-bunch-wake-scale, 1));
   transform-origin: 100% 50%;
   pointer-events: none;
   border-radius: 999px;
   opacity: var(--sync-bunch-wake-bright, 1);
   background: radial-gradient(
-    ellipse 92% 72% at 94% 50%,
+    ellipse 100% 78% at 86% 50%,
     color-mix(in srgb, var(--sync-packet-color) var(--sync-bunch-wake-peak, 48%), transparent) 0%,
-    color-mix(in srgb, var(--sync-packet-color) var(--sync-bunch-wake-mid, 20%), transparent) 44%,
-    transparent 78%
+    color-mix(in srgb, var(--sync-packet-color) var(--sync-bunch-wake-mid, 20%), transparent) 46%,
+    transparent 82%
   );
 }
 
@@ -4337,9 +4337,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(12.5px, 3.8cqw, 17px);
   --sync-bunch-h: 2.9px;
   --sync-bunch-wake-bright: 1;
-  --sync-bunch-wake-peak: 56%;
-  --sync-bunch-wake-mid: 26%;
-  --sync-bunch-wake-scale: 1.18;
+  --sync-bunch-wake-peak: 60%;
+  --sync-bunch-wake-mid: 28%;
+  --sync-bunch-wake-scale: 1.24;
+  --sync-bunch-wake-width: 76%;
+  --sync-bunch-wake-left: 2%;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1::after,
@@ -4367,9 +4369,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(11.5px, 3.65cqw, 16px);
   --sync-bunch-h: 2.8px;
   --sync-bunch-wake-bright: 0.92;
-  --sync-bunch-wake-peak: 52%;
-  --sync-bunch-wake-mid: 24%;
-  --sync-bunch-wake-scale: 1.14;
+  --sync-bunch-wake-peak: 56%;
+  --sync-bunch-wake-mid: 26%;
+  --sync-bunch-wake-scale: 1.2;
+  --sync-bunch-wake-width: 74%;
+  --sync-bunch-wake-left: 4%;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
@@ -4378,9 +4382,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(11px, 3.55cqw, 15.5px);
   --sync-bunch-h: 2.72px;
   --sync-bunch-wake-bright: 0.84;
-  --sync-bunch-wake-peak: 48%;
-  --sync-bunch-wake-mid: 22%;
-  --sync-bunch-wake-scale: 1.12;
+  --sync-bunch-wake-peak: 52%;
+  --sync-bunch-wake-mid: 24%;
+  --sync-bunch-wake-scale: 1.18;
+  --sync-bunch-wake-width: 73%;
+  --sync-bunch-wake-left: 5%;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
@@ -4389,9 +4395,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(10.5px, 3.45cqw, 15px);
   --sync-bunch-h: 2.65px;
   --sync-bunch-wake-bright: 0.74;
-  --sync-bunch-wake-peak: 42%;
-  --sync-bunch-wake-mid: 19%;
-  --sync-bunch-wake-scale: 1.1;
+  --sync-bunch-wake-peak: 46%;
+  --sync-bunch-wake-mid: 21%;
+  --sync-bunch-wake-scale: 1.16;
+  --sync-bunch-wake-width: 72%;
+  --sync-bunch-wake-left: 6%;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
@@ -4400,9 +4408,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(10px, 3.35cqw, 14.5px);
   --sync-bunch-h: 2.58px;
   --sync-bunch-wake-bright: 0.64;
-  --sync-bunch-wake-peak: 38%;
-  --sync-bunch-wake-mid: 17%;
-  --sync-bunch-wake-scale: 1.08;
+  --sync-bunch-wake-peak: 42%;
+  --sync-bunch-wake-mid: 19%;
+  --sync-bunch-wake-scale: 1.14;
+  --sync-bunch-wake-width: 71%;
+  --sync-bunch-wake-left: 7%;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--6,
@@ -4411,9 +4421,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(10px, 3.28cqw, 14px);
   --sync-bunch-h: 2.52px;
   --sync-bunch-wake-bright: 0.56;
-  --sync-bunch-wake-peak: 34%;
-  --sync-bunch-wake-mid: 15%;
-  --sync-bunch-wake-scale: 1.06;
+  --sync-bunch-wake-peak: 38%;
+  --sync-bunch-wake-mid: 17%;
+  --sync-bunch-wake-scale: 1.12;
+  --sync-bunch-wake-width: 70%;
+  --sync-bunch-wake-left: 8%;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--7,
@@ -4422,9 +4434,11 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-w: clamp(9.5px, 3.2cqw, 13.5px);
   --sync-bunch-h: 2.45px;
   --sync-bunch-wake-bright: 0.48;
-  --sync-bunch-wake-peak: 30%;
-  --sync-bunch-wake-mid: 13%;
-  --sync-bunch-wake-scale: 1.04;
+  --sync-bunch-wake-peak: 34%;
+  --sync-bunch-wake-mid: 15%;
+  --sync-bunch-wake-scale: 1.1;
+  --sync-bunch-wake-width: 69%;
+  --sync-bunch-wake-left: 9%;
 }
 
 /* T3 — four packets, even quarter-phase spacing */
