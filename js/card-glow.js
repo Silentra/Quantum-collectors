@@ -94,6 +94,14 @@ const FROST_WISP_SLOT_COUNT = 10;
 
 /** Synchrotron Glow — perimeter motion-path packets (fixed slot pool, tier-gated in CSS). */
 const SYNCHROTRON_PACKET_SLOT_COUNT = 4;
+const SYNCHROTRON_GOLD_BLOB_COUNT = 5;
+
+function renderSyncGoldTailBlobsHtml() {
+  return Array.from({ length: SYNCHROTRON_GOLD_BLOB_COUNT }, (_, i) => {
+    const n = i + 1;
+    return `<span class="sync-blob sync-blob--${n}" aria-hidden="true"></span>`;
+  }).join('');
+}
 
 function renderMoltenEmberSpansHtml() {
   return Array.from({ length: MOLTEN_EMBER_SLOT_COUNT }, (_, i) => {
@@ -119,6 +127,9 @@ function renderFrostWispSpansHtml() {
 function renderSyncPacketSpansHtml() {
   return Array.from({ length: SYNCHROTRON_PACKET_SLOT_COUNT }, (_, i) => {
     const n = i + 1;
+    if (n === 3) {
+      return `<span class="sync-packet sync-packet--${n}" aria-hidden="true"><span class="sync-tail" aria-hidden="true">${renderSyncGoldTailBlobsHtml()}</span></span>`;
+    }
     return `<span class="sync-packet sync-packet--${n}" aria-hidden="true"></span>`;
   }).join('');
 }
