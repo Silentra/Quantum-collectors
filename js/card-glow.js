@@ -94,7 +94,7 @@ const FROST_WISP_SLOT_COUNT = 10;
 
 /** Synchrotron Glow — perimeter motion-path packets (fixed slot pool, tier-gated in CSS). */
 const SYNCHROTRON_PACKET_SLOT_COUNT = 4;
-const SYNCHROTRON_GOLD_BUNCH_COUNT = 5;
+const SYNCHROTRON_GOLD_BUNCH_COUNT = 7;
 
 function renderSyncGoldBunchHtml() {
   return Array.from({ length: SYNCHROTRON_GOLD_BUNCH_COUNT }, (_, i) => {
