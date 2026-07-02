@@ -4126,12 +4126,12 @@ body.app-mode-game #screen-game.screen.active {
   --sync-longest-packet-cqw: 13;
   --sync-bunch-span-cqw: calc(var(--sync-longest-packet-cqw) * 2);
   --sync-bunch-perimeter-mult: 4.8;
-  --sync-bunch-leader-cqw: 4.25;
-  --sync-bunch-overlap: 0.32;
+  --sync-bunch-leader-cqw: 3.8;
+  --sync-bunch-overlap: 0.42;
   --sync-bunch-path-span: calc(var(--sync-bunch-span-cqw) / 100 / var(--sync-bunch-perimeter-mult));
   --sync-bunch-member-frac: calc(var(--sync-bunch-leader-cqw) / 100 / var(--sync-bunch-perimeter-mult));
-  --sync-bunch-end-extent: 1.35;
-  --sync-bunch-gap-count: 4;
+  --sync-bunch-end-extent: 1.28;
+  --sync-bunch-gap-count: 6;
   --sync-bunch-phase-step: calc(
     (
       var(--sync-bunch-path-span)
@@ -4309,10 +4309,10 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member::before {
   content: '';
   position: absolute;
-  left: -10%;
+  left: -12%;
   top: 50%;
-  width: 96%;
-  height: 375%;
+  width: 98%;
+  height: 340%;
   transform: translateY(-50%) scale(var(--sync-bunch-wake-scale, 1));
   transform-origin: 100% 50%;
   pointer-events: none;
@@ -4334,12 +4334,12 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1 {
   --sync-bunch-bright: 1.3;
-  --sync-bunch-w: clamp(14px, 4.25cqw, 19px);
-  --sync-bunch-h: 3.25px;
+  --sync-bunch-w: clamp(12.5px, 3.8cqw, 17px);
+  --sync-bunch-h: 2.9px;
   --sync-bunch-wake-bright: 1;
-  --sync-bunch-wake-peak: 58%;
-  --sync-bunch-wake-mid: 28%;
-  --sync-bunch-wake-scale: 1.32;
+  --sync-bunch-wake-peak: 56%;
+  --sync-bunch-wake-mid: 26%;
+  --sync-bunch-wake-scale: 1.18;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1::after,
@@ -4348,8 +4348,8 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   right: 0;
   top: 50%;
-  width: 42%;
-  height: 300%;
+  width: 40%;
+  height: 270%;
   transform: translateY(-50%);
   pointer-events: none;
   border-radius: 999px;
@@ -4364,45 +4364,67 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
   --sync-bunch-bright: 1;
-  --sync-bunch-w: clamp(12.5px, 4cqw, 17.5px);
-  --sync-bunch-h: 3.05px;
-  --sync-bunch-wake-bright: 0.9;
+  --sync-bunch-w: clamp(11.5px, 3.65cqw, 16px);
+  --sync-bunch-h: 2.8px;
+  --sync-bunch-wake-bright: 0.92;
   --sync-bunch-wake-peak: 52%;
   --sync-bunch-wake-mid: 24%;
-  --sync-bunch-wake-scale: 1.25;
+  --sync-bunch-wake-scale: 1.14;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
-  --sync-bunch-bright: 0.85;
-  --sync-bunch-w: clamp(12.5px, 3.9cqw, 17.5px);
-  --sync-bunch-h: 2.95px;
-  --sync-bunch-wake-bright: 0.75;
-  --sync-bunch-wake-peak: 44%;
-  --sync-bunch-wake-mid: 20%;
-  --sync-bunch-wake-scale: 1.22;
+  --sync-bunch-bright: 0.92;
+  --sync-bunch-w: clamp(11px, 3.55cqw, 15.5px);
+  --sync-bunch-h: 2.72px;
+  --sync-bunch-wake-bright: 0.84;
+  --sync-bunch-wake-peak: 48%;
+  --sync-bunch-wake-mid: 22%;
+  --sync-bunch-wake-scale: 1.12;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
-  --sync-bunch-bright: 0.65;
-  --sync-bunch-w: clamp(11px, 3.75cqw, 16px);
-  --sync-bunch-h: 2.8px;
-  --sync-bunch-wake-bright: 0.55;
-  --sync-bunch-wake-peak: 36%;
-  --sync-bunch-wake-mid: 16%;
-  --sync-bunch-wake-scale: 1.2;
+  --sync-bunch-bright: 0.84;
+  --sync-bunch-w: clamp(10.5px, 3.45cqw, 15px);
+  --sync-bunch-h: 2.65px;
+  --sync-bunch-wake-bright: 0.74;
+  --sync-bunch-wake-peak: 42%;
+  --sync-bunch-wake-mid: 19%;
+  --sync-bunch-wake-scale: 1.1;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
-  --sync-bunch-bright: 0.45;
-  --sync-bunch-w: clamp(11px, 3.6cqw, 16px);
-  --sync-bunch-h: 2.7px;
-  --sync-bunch-wake-bright: 0.35;
-  --sync-bunch-wake-peak: 28%;
-  --sync-bunch-wake-mid: 12%;
-  --sync-bunch-wake-scale: 1.18;
+  --sync-bunch-bright: 0.76;
+  --sync-bunch-w: clamp(10px, 3.35cqw, 14.5px);
+  --sync-bunch-h: 2.58px;
+  --sync-bunch-wake-bright: 0.64;
+  --sync-bunch-wake-peak: 38%;
+  --sync-bunch-wake-mid: 17%;
+  --sync-bunch-wake-scale: 1.08;
+}
+
+.sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--6 {
+  --sync-bunch-bright: 0.63;
+  --sync-bunch-w: clamp(10px, 3.28cqw, 14px);
+  --sync-bunch-h: 2.52px;
+  --sync-bunch-wake-bright: 0.56;
+  --sync-bunch-wake-peak: 34%;
+  --sync-bunch-wake-mid: 15%;
+  --sync-bunch-wake-scale: 1.06;
+}
+
+.sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--7 {
+  --sync-bunch-bright: 0.5;
+  --sync-bunch-w: clamp(9.5px, 3.2cqw, 13.5px);
+  --sync-bunch-h: 2.45px;
+  --sync-bunch-wake-bright: 0.48;
+  --sync-bunch-wake-peak: 30%;
+  --sync-bunch-wake-mid: 13%;
+  --sync-bunch-wake-scale: 1.04;
 }
 
 /* T3 — four packets, even quarter-phase spacing */
@@ -4450,6 +4472,16 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--5 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 4 * var(--sync-bunch-phase-step));
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--6 {
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 5 * var(--sync-bunch-phase-step));
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--7 {
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 6 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--4,
@@ -4514,6 +4546,16 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--5 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 4 * var(--sync-bunch-phase-step));
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--6 {
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 5 * var(--sync-bunch-phase-step));
+}
+
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--7 {
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 6 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo::before,
@@ -4633,22 +4675,32 @@ body.app-mode-game #screen-game.screen.active {
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
-    offset-distance: calc(62% - 1 * var(--sync-bunch-phase-pct, 1.1%));
+    offset-distance: calc(62% - 1 * var(--sync-bunch-phase-pct, 0.74%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
-    offset-distance: calc(62% - 2 * var(--sync-bunch-phase-pct, 1.1%));
+    offset-distance: calc(62% - 2 * var(--sync-bunch-phase-pct, 0.74%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
-    offset-distance: calc(62% - 3 * var(--sync-bunch-phase-pct, 1.1%));
+    offset-distance: calc(62% - 3 * var(--sync-bunch-phase-pct, 0.74%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
-    offset-distance: calc(62% - 4 * var(--sync-bunch-phase-pct, 1.1%));
+    offset-distance: calc(62% - 4 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+
+  .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--6,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--6 {
+    offset-distance: calc(62% - 5 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+
+  .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--7,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--7 {
+    offset-distance: calc(62% - 6 * var(--sync-bunch-phase-pct, 0.74%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-packet--4,
