@@ -4122,6 +4122,16 @@ body.app-mode-game #screen-game.screen.active {
   --sync-gold: rgba(234, 179, 8, 1);
   --sync-magenta: rgba(192, 38, 211, 1);
   --sync-head-core: rgba(240, 253, 255, 1);
+  /* Gold bunch — phase step from leader width vs estimated perimeter (5:7 rounded-rect heuristic) */
+  --sync-bunch-leader-cqw: 3.2;
+  --sync-bunch-perimeter-mult: 4.8;
+  --sync-bunch-overlap: 0.55;
+  --sync-bunch-path-frac: calc(var(--sync-bunch-leader-cqw) / 100 / var(--sync-bunch-perimeter-mult));
+  --sync-bunch-phase-step: calc(
+    var(--sync-bunch-path-frac) * (1 - var(--sync-bunch-overlap)) * var(--sync-revolve-duration, 10s)
+  );
+  --sync-bunch-phase-pct: calc(var(--sync-bunch-path-frac) * (1 - var(--sync-bunch-overlap)) * 100%);
+  --sync-gold-bunch-leader-phase: -5s;
 }
 
 .card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo {
@@ -4286,19 +4296,20 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member::before {
   content: '';
   position: absolute;
-  left: 0;
+  left: -8%;
   top: 50%;
-  width: 72%;
-  height: 280%;
+  width: 92%;
+  height: 300%;
   transform: translateY(-50%) scale(var(--sync-bunch-wake-scale, 1));
   transform-origin: 100% 50%;
   pointer-events: none;
   border-radius: 999px;
+  opacity: var(--sync-bunch-wake-bright, 1);
   background: radial-gradient(
-    ellipse 88% 68% at 88% 50%,
+    ellipse 92% 72% at 94% 50%,
     color-mix(in srgb, var(--sync-packet-color) var(--sync-bunch-wake-peak, 48%), transparent) 0%,
     color-mix(in srgb, var(--sync-packet-color) var(--sync-bunch-wake-mid, 20%), transparent) 44%,
-    transparent 76%
+    transparent 78%
   );
 }
 
@@ -4309,12 +4320,13 @@ body.app-mode-game #screen-game.screen.active {
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1 {
-  --sync-bunch-bright: 1;
-  --sync-bunch-w: clamp(10px, 3.2cqw, 14px);
-  --sync-bunch-h: 2.5px;
-  --sync-bunch-wake-peak: 52%;
-  --sync-bunch-wake-mid: 24%;
-  --sync-bunch-wake-scale: 1;
+  --sync-bunch-bright: 1.3;
+  --sync-bunch-w: clamp(11px, 3.4cqw, 15px);
+  --sync-bunch-h: 2.6px;
+  --sync-bunch-wake-bright: 1;
+  --sync-bunch-wake-peak: 58%;
+  --sync-bunch-wake-mid: 28%;
+  --sync-bunch-wake-scale: 1.06;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1::after,
@@ -4323,57 +4335,61 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   right: 0;
   top: 50%;
-  width: 38%;
-  height: 220%;
+  width: 42%;
+  height: 240%;
   transform: translateY(-50%);
   pointer-events: none;
   border-radius: 999px;
   background: radial-gradient(
-    ellipse 100% 78% at 72% 50%,
-    color-mix(in srgb, var(--sync-head-core) 82%, var(--sync-gold)) 0%,
-    color-mix(in srgb, var(--sync-gold) 55%, transparent) 48%,
-    transparent 78%
+    ellipse 100% 82% at 74% 50%,
+    color-mix(in srgb, var(--sync-head-core) 88%, var(--sync-gold)) 0%,
+    color-mix(in srgb, var(--sync-gold) 62%, transparent) 46%,
+    transparent 76%
   );
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
-  --sync-bunch-bright: 0.8;
-  --sync-bunch-w: clamp(9px, 2.9cqw, 13px);
-  --sync-bunch-h: 2.25px;
-  --sync-bunch-wake-peak: 42%;
-  --sync-bunch-wake-mid: 18%;
-  --sync-bunch-wake-scale: 0.94;
+  --sync-bunch-bright: 1;
+  --sync-bunch-w: clamp(10px, 3.2cqw, 14px);
+  --sync-bunch-h: 2.45px;
+  --sync-bunch-wake-bright: 0.9;
+  --sync-bunch-wake-peak: 52%;
+  --sync-bunch-wake-mid: 24%;
+  --sync-bunch-wake-scale: 1;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
-  --sync-bunch-bright: 0.6;
-  --sync-bunch-w: clamp(8px, 2.6cqw, 12px);
-  --sync-bunch-h: 2.1px;
-  --sync-bunch-wake-peak: 34%;
-  --sync-bunch-wake-mid: 14%;
-  --sync-bunch-wake-scale: 0.88;
+  --sync-bunch-bright: 0.85;
+  --sync-bunch-w: clamp(10px, 3.1cqw, 14px);
+  --sync-bunch-h: 2.35px;
+  --sync-bunch-wake-bright: 0.75;
+  --sync-bunch-wake-peak: 44%;
+  --sync-bunch-wake-mid: 20%;
+  --sync-bunch-wake-scale: 0.98;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
-  --sync-bunch-bright: 0.4;
-  --sync-bunch-w: clamp(7px, 2.3cqw, 11px);
-  --sync-bunch-h: 2px;
-  --sync-bunch-wake-peak: 26%;
-  --sync-bunch-wake-mid: 10%;
-  --sync-bunch-wake-scale: 0.82;
+  --sync-bunch-bright: 0.65;
+  --sync-bunch-w: clamp(9px, 3cqw, 13px);
+  --sync-bunch-h: 2.25px;
+  --sync-bunch-wake-bright: 0.55;
+  --sync-bunch-wake-peak: 36%;
+  --sync-bunch-wake-mid: 16%;
+  --sync-bunch-wake-scale: 0.96;
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
-  --sync-bunch-bright: 0.25;
-  --sync-bunch-w: clamp(6px, 2cqw, 10px);
-  --sync-bunch-h: 1.85px;
-  --sync-bunch-wake-peak: 18%;
-  --sync-bunch-wake-mid: 7%;
-  --sync-bunch-wake-scale: 0.76;
+  --sync-bunch-bright: 0.45;
+  --sync-bunch-w: clamp(9px, 2.9cqw, 13px);
+  --sync-bunch-h: 2.15px;
+  --sync-bunch-wake-bright: 0.35;
+  --sync-bunch-wake-peak: 28%;
+  --sync-bunch-wake-mid: 12%;
+  --sync-bunch-wake-scale: 0.94;
 }
 
 /* T3 — four packets, even quarter-phase spacing */
@@ -4400,27 +4416,27 @@ body.app-mode-game #screen-game.screen.active {
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--1 {
-  animation-delay: -5s;
+  animation-delay: var(--sync-gold-bunch-leader-phase, -5s);
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--2 {
-  animation-delay: -4.75s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--3 {
-  animation-delay: -4.5s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 2 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--4 {
-  animation-delay: -4.25s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 3 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--5 {
-  animation-delay: -4s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 4 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--4,
@@ -4432,6 +4448,7 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo {
   --sync-packet-h: 3px;
+  --sync-gold-bunch-leader-phase: -6.667s;
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet,
@@ -4463,27 +4480,27 @@ body.app-mode-game #screen-game.screen.active {
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--1 {
-  animation-delay: -6.667s;
+  animation-delay: var(--sync-gold-bunch-leader-phase, -6.667s);
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--2 {
-  animation-delay: -6.417s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--3 {
-  animation-delay: -6.167s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 2 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--4 {
-  animation-delay: -5.917s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 3 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--5 {
-  animation-delay: -5.667s;
+  animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 4 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo::before,
@@ -4603,22 +4620,22 @@ body.app-mode-game #screen-game.screen.active {
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
-    offset-distance: 59.5%;
+    offset-distance: calc(62% - 1 * var(--sync-bunch-phase-pct, 0.3%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
-    offset-distance: 57%;
+    offset-distance: calc(62% - 2 * var(--sync-bunch-phase-pct, 0.3%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
-    offset-distance: 54.5%;
+    offset-distance: calc(62% - 3 * var(--sync-bunch-phase-pct, 0.3%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
-    offset-distance: 52%;
+    offset-distance: calc(62% - 4 * var(--sync-bunch-phase-pct, 0.3%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-packet--4,
