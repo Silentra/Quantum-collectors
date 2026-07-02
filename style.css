@@ -4122,9 +4122,9 @@ body.app-mode-game #screen-game.screen.active {
   --sync-gold: rgba(234, 179, 8, 1);
   --sync-magenta: rgba(192, 38, 211, 1);
   --sync-head-core: rgba(240, 253, 255, 1);
-  /* Gold bunch — span targets 2× longest ribbon packet (cyan 13cqw); step derived from span */
+  /* Gold bunch — span ~1.6× cyan (80% of prior 2× target); step derived from span */
   --sync-longest-packet-cqw: 13;
-  --sync-bunch-span-cqw: calc(var(--sync-longest-packet-cqw) * 2);
+  --sync-bunch-span-cqw: calc(var(--sync-longest-packet-cqw) * 1.6);
   --sync-bunch-perimeter-mult: 4.8;
   --sync-bunch-leader-cqw: 3.8;
   --sync-bunch-overlap: 0.42;
@@ -4292,7 +4292,7 @@ body.app-mode-game #screen-game.screen.active {
   --sync-packet-w: clamp(24px, 9cqw, 42px);
 }
 
-/* Gold (slot 3) — Phase 1 paint on independent motion-path bunch; span frozen at 2× cyan */
+/* Gold (slot 3) — Phase 1 paint on independent motion-path bunch; span ~1.6× cyan */
 .sci-card[data-card-glow="synchrotron"] .sync-bunch-member,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member {
   --sync-packet-color: var(--sync-gold);
@@ -4309,10 +4309,10 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member::before {
   content: '';
   position: absolute;
-  left: -4%;
+  left: -2%;
   top: 50%;
-  width: 82%;
-  height: 260%;
+  width: 76%;
+  height: 245%;
   transform: translateY(-50%);
   transform-origin: 100% 50%;
   pointer-events: none;
@@ -4342,8 +4342,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1 {
   --sync-bunch-bright: 1.3;
-  --sync-bunch-w: clamp(14px, 4.4cqw, 20px);
-  --sync-bunch-h: 3px;
+  --sync-bunch-w: clamp(13px, 4.05cqw, 18.5px);
+  --sync-bunch-h: 2.85px;
   --sync-bunch-wake-bright: 1;
   --sync-bunch-wake-peak: 58%;
   --sync-bunch-wake-mid: 32%;
@@ -4385,8 +4385,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
   --sync-bunch-bright: 1;
-  --sync-bunch-w: clamp(13px, 4.2cqw, 18.5px);
-  --sync-bunch-h: 2.9px;
+  --sync-bunch-w: clamp(12px, 3.85cqw, 17px);
+  --sync-bunch-h: 2.75px;
   --sync-bunch-wake-bright: 0.92;
   --sync-bunch-wake-peak: 52%;
   --sync-bunch-wake-mid: 28%;
@@ -4398,8 +4398,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
   --sync-bunch-bright: 0.92;
-  --sync-bunch-w: clamp(12.5px, 4.1cqw, 18px);
-  --sync-bunch-h: 2.8px;
+  --sync-bunch-w: clamp(11.5px, 3.75cqw, 16.5px);
+  --sync-bunch-h: 2.65px;
   --sync-bunch-wake-bright: 0.84;
   --sync-bunch-wake-peak: 48%;
   --sync-bunch-wake-mid: 24%;
@@ -4411,8 +4411,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
   --sync-bunch-bright: 0.84;
-  --sync-bunch-w: clamp(12px, 4cqw, 17px);
-  --sync-bunch-h: 2.72px;
+  --sync-bunch-w: clamp(11px, 3.65cqw, 15.5px);
+  --sync-bunch-h: 2.55px;
   --sync-bunch-wake-bright: 0.74;
   --sync-bunch-wake-peak: 42%;
   --sync-bunch-wake-mid: 20%;
@@ -4424,8 +4424,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
   --sync-bunch-bright: 0.76;
-  --sync-bunch-w: clamp(11.5px, 3.85cqw, 17px);
-  --sync-bunch-h: 2.65px;
+  --sync-bunch-w: clamp(10.5px, 3.55cqw, 15.5px);
+  --sync-bunch-h: 2.48px;
   --sync-bunch-wake-bright: 0.64;
   --sync-bunch-wake-peak: 36%;
   --sync-bunch-wake-mid: 16%;
@@ -4437,8 +4437,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--6,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--6 {
   --sync-bunch-bright: 0.63;
-  --sync-bunch-w: clamp(11.5px, 3.75cqw, 16px);
-  --sync-bunch-h: 2.58px;
+  --sync-bunch-w: clamp(10.5px, 3.45cqw, 14.5px);
+  --sync-bunch-h: 2.42px;
   --sync-bunch-wake-bright: 0.56;
   --sync-bunch-wake-peak: 30%;
   --sync-bunch-wake-mid: 13%;
@@ -4450,8 +4450,8 @@ body.app-mode-game #screen-game.screen.active {
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--7,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--7 {
   --sync-bunch-bright: 0.5;
-  --sync-bunch-w: clamp(11px, 3.7cqw, 15.5px);
-  --sync-bunch-h: 2.5px;
+  --sync-bunch-w: clamp(10px, 3.4cqw, 14px);
+  --sync-bunch-h: 2.35px;
   --sync-bunch-wake-bright: 0.48;
   --sync-bunch-wake-peak: 26%;
   --sync-bunch-wake-mid: 11%;
