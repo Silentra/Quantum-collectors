@@ -4122,10 +4122,10 @@ body.app-mode-game #screen-game.screen.active {
   --sync-gold: rgba(234, 179, 8, 1);
   --sync-magenta: rgba(192, 38, 211, 1);
   --sync-head-core: rgba(240, 253, 255, 1);
-  /* Gold bunch — 2× cyan reference span; --sync-bunch-phase-pack tightens head→tail spacing only */
+  /* Gold bunch — 2× cyan reference span; phase-pack shortens head→tail so members slightly overlap */
   --sync-longest-packet-cqw: 13;
   --sync-bunch-span-cqw: calc(var(--sync-longest-packet-cqw) * 2);
-  --sync-bunch-phase-pack: 0.85;
+  --sync-bunch-phase-pack: 0.72;
   --sync-bunch-perimeter-mult: 4.8;
   --sync-bunch-leader-cqw: 3.8;
   --sync-bunch-overlap: 0.42;
