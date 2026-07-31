@@ -207,13 +207,16 @@ function showBreakthroughCardReveal(card) {
 
     if (!needsClick) {
       // common/uncommon — auto-flip
-      setTimeout(() => flipper.classList.add('flipped'), 250);
+      setTimeout(() => {
+        flipper.classList.add('flipped');
+        wrapper.classList.add('flipped');
+      }, 250);
     } else {
       // rare/epic/legendary — click to reveal
       const revealHandler = () => {
         if (flipper.classList.contains('flipped')) return;
         flipper.classList.add('flipped');
-        wrapper.classList.remove(`rarity-glow-${card.rarity}`);
+        wrapper.classList.add('flipped');
         if (card.rarity === 'epic' || card.rarity === 'legendary') {
           spawnRevealParticles(wrapper, card.rarity);
         }

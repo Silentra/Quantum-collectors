@@ -16,6 +16,7 @@ import {
   AURA_THRESHOLDS,
   CONCEPT_EFFECT_LABELS,
   CONCEPT_FLAVOR_TEXT,
+  RARITIES,
   TYPE_EMOJIS,
   getAuraTier,
 } from './cards.js';
@@ -471,8 +472,8 @@ export function renderPackRevealSciCard(card, options = {}) {
  * @returns {string}
  */
 export function renderPackCardWrapper(card, index, options = {}) {
-  const needsClick = ['rare', 'epic', 'legendary'].includes(card.rarity);
-  const glowClass = needsClick ? `rarity-glow-${card.rarity}` : '';
+  const rarity = RARITIES.includes(card.rarity) ? card.rarity : null;
+  const glowClass = rarity ? `rarity-glow-${rarity}` : '';
 
   return `
       <div class="pack-card-wrapper ${glowClass}" data-rarity="${card.rarity}" data-index="${index}">

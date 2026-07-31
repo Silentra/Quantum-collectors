@@ -518,6 +518,7 @@ function openPackUI(packId) {
       if (!needsClick) {
         setTimeout(() => {
           flipper.classList.add('flipped');
+          wrapper.classList.add('flipped');
         }, 250);
       }
     }, i * 125);
@@ -527,7 +528,7 @@ function openPackUI(packId) {
       const revealHandler = () => {
         if (flipper.classList.contains('flipped')) return;
         flipper.classList.add('flipped');
-        wrapper.classList.remove(`rarity-glow-${rarity}`);
+        wrapper.classList.add('flipped');
 
         // Spawn particles for epic/legendary
         if (rarity === 'epic' || rarity === 'legendary') {
