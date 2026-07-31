@@ -365,10 +365,13 @@ function renderCollection() {
 
     // Render each rarity as a separate row container
     grid.innerHTML = rarityGroups.map(({ rarity, entries: groupEntries }) => `
-      <div class="collection-rarity-group">
-        <div class="collection-rarity-label rarity-label-${rarity}">${rarity}</div>
-        <div class="collection-rarity-row">
-          ${groupEntries.map(({ card, quantity, undiscovered }) => renderPlayerCard(card, quantity, false, undiscovered)).join('')}
+      <div class="collection-rarity-group" data-rarity="${rarity}">
+        <div class="collection-rarity-marker" aria-hidden="true"></div>
+        <div class="collection-rarity-content">
+          <div class="collection-rarity-label rarity-label-${rarity}">${rarity}</div>
+          <div class="collection-rarity-row">
+            ${groupEntries.map(({ card, quantity, undiscovered }) => renderPlayerCard(card, quantity, false, undiscovered)).join('')}
+          </div>
         </div>
       </div>
     `).join('');
