@@ -94,10 +94,10 @@ const FROST_WISP_SLOT_COUNT = 10;
 
 /** Synchrotron Glow — color bunches (more members = longer train; tier-gated in CSS). */
 const SYNCHROTRON_BUNCH_COLORS = [
-  { id: 'cyan', count: 9 },
-  { id: 'emerald', count: 8 },
-  { id: 'gold', count: 7 },
-  { id: 'magenta', count: 5 },
+  { id: 'cyan', count: 7 },
+  { id: 'emerald', count: 6 },
+  { id: 'gold', count: 5 },
+  { id: 'magenta', count: 4 },
 ];
 
 function renderSyncBunchHtml(colorId, count) {
