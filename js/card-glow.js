@@ -92,14 +92,18 @@ const MOLTEN_DRIFT_SLOT_COUNT = 18;
 /** Winter Frost Glow — slow vapor wisps (CSS-only span pool). */
 const FROST_WISP_SLOT_COUNT = 10;
 
-/** Synchrotron Glow — perimeter motion-path packets (fixed slot pool, tier-gated in CSS). */
-const SYNCHROTRON_PACKET_SLOT_COUNT = 4;
-const SYNCHROTRON_GOLD_BUNCH_COUNT = 7;
+/** Synchrotron Glow — color bunches (more members = longer train; tier-gated in CSS). */
+const SYNCHROTRON_BUNCH_COLORS = [
+  { id: 'cyan', count: 9 },
+  { id: 'emerald', count: 8 },
+  { id: 'gold', count: 7 },
+  { id: 'magenta', count: 5 },
+];
 
-function renderSyncGoldBunchHtml() {
-  return Array.from({ length: SYNCHROTRON_GOLD_BUNCH_COUNT }, (_, i) => {
+function renderSyncBunchHtml(colorId, count) {
+  return Array.from({ length: count }, (_, i) => {
     const n = i + 1;
-    return `<span class="sync-bunch-member sync-gold-bunch--${n}" aria-hidden="true"></span>`;
+    return `<span class="sync-bunch-member sync-bunch--${colorId} sync-${colorId}-bunch--${n}" aria-hidden="true"></span>`;
   }).join('');
 }
 
@@ -125,13 +129,7 @@ function renderFrostWispSpansHtml() {
 }
 
 function renderSyncPacketSpansHtml() {
-  return Array.from({ length: SYNCHROTRON_PACKET_SLOT_COUNT }, (_, i) => {
-    const n = i + 1;
-    if (n === 3) {
-      return renderSyncGoldBunchHtml();
-    }
-    return `<span class="sync-packet sync-packet--${n}" aria-hidden="true"></span>`;
-  }).join('');
+  return SYNCHROTRON_BUNCH_COLORS.map(({ id, count }) => renderSyncBunchHtml(id, count)).join('');
 }
 
 /**
