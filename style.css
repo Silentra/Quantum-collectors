@@ -6771,7 +6771,9 @@ body.app-mode-game #screen-game.screen.active {
   width: 5px;
   border-radius: 999px;
   background: var(--collection-rarity-accent, #9ca3af);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--collection-rarity-accent, #9ca3af) 28%, transparent);
+  box-shadow:
+    0 0 4px color-mix(in srgb, var(--collection-rarity-accent, #9ca3af) 62%, transparent),
+    0 0 10px color-mix(in srgb, var(--collection-rarity-accent, #9ca3af) 30%, transparent);
   pointer-events: none;
 }
 
