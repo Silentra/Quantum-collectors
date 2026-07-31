@@ -4099,7 +4099,7 @@ body.app-mode-game #screen-game.screen.active {
  *   .card-glow--halo::before — static accelerator ambient (subtle, z0)
  *   .synchrotron-track — positioning context + container queries
  *   .sync-bunch-member — Phase 1 paint, independent offset-path members (tier-gated)
- *     Cyan ×9 / Emerald ×8 / Gold ×7 / Magenta ×5 (more blobs = longer train)
+ *     Cyan ×7 / Emerald ×6 / Gold ×5 / Magenta ×4 (more blobs = longer train)
  *     Shared phase-step keeps slight overlap; length scales with member count
  *     (--sync-path-inset-t/r/b/l calibrate path to card border rim)
  *     ::before — soft plasma blob + connective haze
