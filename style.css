@@ -8502,72 +8502,58 @@ body.app-mode-game #screen-game.screen.active {
 
 /*
  * Pack / breakthrough reveal rarity glows (presentation only).
- * Face-down: .pack-card-back (while wrapper not .flipped)
- * Face-up:   wrapper box-shadow (when wrapper.flipped) — avoids stacking with back glow
+ * Face-down: .pack-card-back border + halo (pulse via rarityRevealPulse)
+ * Face-up:   .pack-card-front .sci-card — same border + rest halo, static
+ * Shared --reveal-frame / --reveal-glow-* tokens keep both states matched.
  * Independent of equipped cosmetic glow / shimmer / Mathematical Aura.
- * Shared pulse keyframe used by face-down only; face-up is a static rest shadow.
  */
 @keyframes rarityRevealPulse {
   0%, 100% { box-shadow: var(--reveal-glow-rest); }
   50% { box-shadow: var(--reveal-glow-peak); }
 }
 
-.pack-card-wrapper.rarity-glow-common:not(.flipped) .pack-card-back {
-  border-color: #9ca3af;
+.pack-card-wrapper.rarity-glow-common {
+  --reveal-frame: #9ca3af;
   --reveal-glow-rest: 0 0 6px rgba(156,163,175,0.22), 0 0 12px rgba(156,163,175,0.08);
   --reveal-glow-peak: 0 0 10px rgba(156,163,175,0.32), 0 0 18px rgba(156,163,175,0.12);
-  box-shadow: var(--reveal-glow-rest);
-  animation: rarityRevealPulse 2.2s ease-in-out infinite;
+  --reveal-glow-duration: 2.2s;
 }
-.pack-card-wrapper.rarity-glow-uncommon:not(.flipped) .pack-card-back {
-  border-color: #22c55e;
+.pack-card-wrapper.rarity-glow-uncommon {
+  --reveal-frame: #22c55e;
   --reveal-glow-rest: 0 0 8px rgba(34,197,94,0.26), 0 0 16px rgba(34,197,94,0.09);
   --reveal-glow-peak: 0 0 12px rgba(34,197,94,0.36), 0 0 22px rgba(34,197,94,0.14);
-  box-shadow: var(--reveal-glow-rest);
-  animation: rarityRevealPulse 2.1s ease-in-out infinite;
+  --reveal-glow-duration: 2.1s;
 }
-.pack-card-wrapper.rarity-glow-rare:not(.flipped) .pack-card-back {
-  border-color: #3b82f6;
+.pack-card-wrapper.rarity-glow-rare {
+  --reveal-frame: #3b82f6;
   --reveal-glow-rest: 0 0 10px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.1);
   --reveal-glow-peak: 0 0 16px rgba(59,130,246,0.45), 0 0 30px rgba(59,130,246,0.18);
-  box-shadow: var(--reveal-glow-rest);
-  animation: rarityRevealPulse 2s ease-in-out infinite;
+  --reveal-glow-duration: 2s;
 }
-.pack-card-wrapper.rarity-glow-epic:not(.flipped) .pack-card-back {
-  border-color: #a855f7;
+.pack-card-wrapper.rarity-glow-epic {
+  --reveal-frame: #a855f7;
   --reveal-glow-rest: 0 0 12px rgba(168,85,247,0.35), 0 0 24px rgba(168,85,247,0.12);
   --reveal-glow-peak: 0 0 20px rgba(168,85,247,0.5), 0 0 36px rgba(168,85,247,0.2);
-  box-shadow: var(--reveal-glow-rest);
-  animation: rarityRevealPulse 2s ease-in-out infinite;
+  --reveal-glow-duration: 2s;
 }
-.pack-card-wrapper.rarity-glow-legendary:not(.flipped) .pack-card-back {
-  border-color: #f59e0b;
+.pack-card-wrapper.rarity-glow-legendary {
+  --reveal-frame: #f59e0b;
   --reveal-glow-rest: 0 0 14px rgba(245,158,11,0.4), 0 0 28px rgba(245,158,11,0.15);
   --reveal-glow-peak: 0 0 22px rgba(245,158,11,0.55), 0 0 40px rgba(245,158,11,0.22);
-  box-shadow: var(--reveal-glow-rest);
-  animation: rarityRevealPulse 1.8s ease-in-out infinite;
+  --reveal-glow-duration: 1.8s;
 }
 
-/* Persistent face-up rarity glow — static rest snapshot of face-down glow (no pulse) */
-.pack-card-wrapper.flipped.rarity-glow-common {
-  border-radius: 0.6rem;
-  box-shadow: 0 0 6px rgba(156,163,175,0.22), 0 0 12px rgba(156,163,175,0.08);
+/* Face-down: crisp rarity frame + pulsing halo on the card back */
+.pack-card-wrapper[class*="rarity-glow-"]:not(.flipped) .pack-card-back {
+  border-color: var(--reveal-frame);
+  box-shadow: var(--reveal-glow-rest);
+  animation: rarityRevealPulse var(--reveal-glow-duration) ease-in-out infinite;
 }
-.pack-card-wrapper.flipped.rarity-glow-uncommon {
-  border-radius: 0.6rem;
-  box-shadow: 0 0 8px rgba(34,197,94,0.26), 0 0 16px rgba(34,197,94,0.09);
-}
-.pack-card-wrapper.flipped.rarity-glow-rare {
-  border-radius: 0.6rem;
-  box-shadow: 0 0 10px rgba(59,130,246,0.3), 0 0 20px rgba(59,130,246,0.1);
-}
-.pack-card-wrapper.flipped.rarity-glow-epic {
-  border-radius: 0.6rem;
-  box-shadow: 0 0 12px rgba(168,85,247,0.35), 0 0 24px rgba(168,85,247,0.12);
-}
-.pack-card-wrapper.flipped.rarity-glow-legendary {
-  border-radius: 0.6rem;
-  box-shadow: 0 0 14px rgba(245,158,11,0.4), 0 0 28px rgba(245,158,11,0.15);
+
+/* Face-up: same frame + rest halo on the revealed card face (static) */
+.pack-card-wrapper.flipped[class*="rarity-glow-"] .pack-card-front .sci-card {
+  border-color: var(--reveal-frame);
+  box-shadow: var(--reveal-glow-rest);
 }
 
 @media (prefers-reduced-motion: reduce) {
