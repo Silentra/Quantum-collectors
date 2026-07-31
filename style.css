@@ -4093,16 +4093,17 @@ body.app-mode-game #screen-game.screen.active {
   28%            { opacity: 0; transform: translate(-50%, -50%) translate(-1px, -30px) scale(0.92, 0.70); }
 }
 
-/* ── Synchrotron Glow — motion-path particle packets (detector palette) ── */
+/* ── Synchrotron Glow — motion-path blob bunches (detector palette) ── */
 /*
  * Layer stack:
  *   .card-glow--halo::before — static accelerator ambient (subtle, z0)
  *   .synchrotron-track — positioning context + container queries
- *   .sync-packet (×4 slots, tier-gated) — inset() beam-pipe path via offset-path
- *     Gold slot 3 prototype: ×7 .sync-bunch-member (Phase 1 paint, independent phase-offset bunch)
+ *   .sync-bunch-member — Phase 1 paint, independent offset-path members (tier-gated)
+ *     Cyan ×9 / Emerald ×8 / Gold ×7 / Magenta ×5 (more blobs = longer train)
+ *     Shared phase-step keeps slight overlap; length scales with member count
  *     (--sync-path-inset-t/r/b/l calibrate path to card border rim)
- *     ::before — soft plasma tail + short body (55% / 20%)
- *     ::after  — static bright leading head (25%)
+ *     ::before — soft plasma blob + connective haze
+ *     ::after  — static bright leading head on --1 only
  *
  * Packets follow path tangent (offset-rotate: auto). Explicit animation longhands only.
  */
@@ -4122,7 +4123,7 @@ body.app-mode-game #screen-game.screen.active {
   --sync-gold: rgba(234, 179, 8, 1);
   --sync-magenta: rgba(192, 38, 211, 1);
   --sync-head-core: rgba(240, 253, 255, 1);
-  /* Gold bunch — 2× cyan reference span; phase-pack shortens head→tail so members slightly overlap */
+  /* Shared step from Gold density (7 members / gap 6 / pack 0.72); count drives length */
   --sync-longest-packet-cqw: 13;
   --sync-bunch-span-cqw: calc(var(--sync-longest-packet-cqw) * 2);
   --sync-bunch-phase-pack: 0.72;
@@ -4145,12 +4146,14 @@ body.app-mode-game #screen-game.screen.active {
       - var(--sync-bunch-member-frac) * var(--sync-bunch-end-extent)
     ) / var(--sync-bunch-gap-count) * 100 * var(--sync-bunch-phase-pack, 1)
   );
+  --sync-cyan-bunch-leader-phase: 0s;
+  --sync-emerald-bunch-leader-phase: -2.5s;
   --sync-gold-bunch-leader-phase: -5s;
+  --sync-magenta-bunch-leader-phase: -7.5s;
 }
 
 .card-detail-frame[data-card-glow="synchrotron"] .card-glow--halo {
   --sync-corner-r: 0.75rem;
-  /* --sync-path-inset-r inherits -1px (was 5px detail override; removed with tangent rotation) */
 }
 
 .sci-card[data-card-glow="synchrotron"] .card-glow--halo::before,
@@ -4178,15 +4181,13 @@ body.app-mode-game #screen-game.screen.active {
   container-type: size;
 }
 
-.sci-card[data-card-glow="synchrotron"] .sync-packet,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-packet,
 .sci-card[data-card-glow="synchrotron"] .sync-bunch-member,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member {
   position: absolute;
   top: 0;
   left: 0;
-  width: var(--sync-packet-w, 36px);
-  height: var(--sync-packet-h, 2.5px);
+  width: var(--sync-bunch-w, 10px);
+  height: var(--sync-bunch-h, 2px);
   margin: 0;
   pointer-events: none;
   offset-path: inset(
@@ -4200,7 +4201,11 @@ body.app-mode-game #screen-game.screen.active {
   offset-rotate: auto;
   offset-anchor: 88% 50%;
   mix-blend-mode: var(--vfx-sync-blend-mode, screen);
-  opacity: calc(var(--vfx-sync-tier-opacity, 1) * var(--vfx-sync-blend-opacity, 1));
+  opacity: calc(
+    var(--vfx-sync-tier-opacity, 1)
+    * var(--vfx-sync-blend-opacity, 1)
+    * var(--sync-bunch-bright, 1)
+  );
   animation-name: syncOrbit;
   animation-duration: calc(var(--sync-revolve-duration, 10s) * var(--vfx-sync-motion-duration-mult, 1));
   animation-timing-function: linear;
@@ -4209,101 +4214,24 @@ body.app-mode-game #screen-game.screen.active {
   animation-play-state: var(--vfx-sync-motion-play-state, running);
 }
 
-.sci-card[data-card-glow="synchrotron"] .sync-packet::before,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-packet::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 75%;
-  height: 240%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  border-radius: 999px;
-  background:
-    radial-gradient(
-      ellipse 85% 55% at 96% 50%,
-      color-mix(in srgb, var(--sync-packet-color) 42%, transparent) 0%,
-      color-mix(in srgb, var(--sync-packet-color) 18%, transparent) 42%,
-      transparent 78%
-    ),
-    linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--sync-packet-color) 3%, transparent) 6%,
-      color-mix(in srgb, var(--sync-packet-color) 8%, transparent) 14%,
-      color-mix(in srgb, var(--sync-packet-color) 14%, transparent) 24%,
-      color-mix(in srgb, var(--sync-packet-color) 22%, transparent) 36%,
-      color-mix(in srgb, var(--sync-packet-color) 32%, transparent) 48%,
-      color-mix(in srgb, var(--sync-packet-color) 42%, transparent) 58%,
-      color-mix(in srgb, var(--sync-packet-color) 50%, transparent) 68%,
-      color-mix(in srgb, var(--sync-packet-color) 56%, transparent) 76%,
-      color-mix(in srgb, var(--sync-packet-color) 62%, transparent) 84%,
-      color-mix(in srgb, var(--sync-packet-color) 66%, transparent) 92%,
-      color-mix(in srgb, var(--sync-packet-color) 68%, transparent) 100%
-    );
-}
-
-.sci-card[data-card-glow="synchrotron"] .sync-packet::after,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-packet::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 50%;
-  width: 25%;
-  height: 175%;
-  transform: translateY(-50%);
-  transform-origin: 100% 50%;
-  pointer-events: none;
-  border-radius: 999px;
-  background:
-    radial-gradient(
-      ellipse 120% 90% at 78% 50%,
-      color-mix(in srgb, var(--sync-head-core) 95%, var(--sync-packet-color)) 0%,
-      color-mix(in srgb, var(--sync-packet-color) 78%, transparent) 52%,
-      transparent 100%
-    ),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--sync-packet-color) 58%, transparent) 0%,
-      color-mix(in srgb, var(--sync-head-core) 82%, var(--sync-packet-color)) 42%,
-      var(--sync-head-core) 100%
-    );
-  box-shadow:
-    0 0 3px 1px color-mix(in srgb, var(--sync-packet-color) 55%, transparent),
-    0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
-}
-
-/* Slot colors + visual length variety (tuned, not perimeter-calculated) */
-.sci-card[data-card-glow="synchrotron"] .sync-packet--1,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--1 {
+.sci-card[data-card-glow="synchrotron"] .sync-bunch--cyan,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-bunch--cyan {
   --sync-packet-color: var(--sync-cyan);
-  --sync-packet-w: clamp(32px, 13cqw, 58px);
 }
 
-.sci-card[data-card-glow="synchrotron"] .sync-packet--2,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--2 {
+.sci-card[data-card-glow="synchrotron"] .sync-bunch--emerald,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-bunch--emerald {
   --sync-packet-color: var(--sync-emerald);
-  --sync-packet-w: clamp(26px, 10cqw, 46px);
 }
 
-.sci-card[data-card-glow="synchrotron"] .sync-packet--4,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-packet--4 {
-  --sync-packet-color: var(--sync-magenta);
-  --sync-packet-w: clamp(24px, 9cqw, 42px);
-}
-
-/* Gold (slot 3) — Phase 1 paint on independent motion-path bunch; span frozen at 2× cyan */
-.sci-card[data-card-glow="synchrotron"] .sync-bunch-member,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member {
+.sci-card[data-card-glow="synchrotron"] .sync-bunch--gold,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-bunch--gold {
   --sync-packet-color: var(--sync-gold);
-  width: var(--sync-bunch-w, 10px);
-  height: var(--sync-bunch-h, 2px);
-  opacity: calc(
-    var(--vfx-sync-tier-opacity, 1)
-    * var(--vfx-sync-blend-opacity, 1)
-    * var(--sync-bunch-bright, 1)
-  );
+}
+
+.sci-card[data-card-glow="synchrotron"] .sync-bunch--magenta,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-bunch--magenta {
+  --sync-packet-color: var(--sync-magenta);
 }
 
 .sci-card[data-card-glow="synchrotron"] .sync-bunch-member::before,
@@ -4340,8 +4268,15 @@ body.app-mode-game #screen-game.screen.active {
   content: none;
 }
 
+/* Shared brightness/size taper by slot index (all colors) */
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--1,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--1,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1 {
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1,
+.sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--1 {
   --sync-bunch-bright: 1.3;
   --sync-bunch-w: clamp(14px, 4.4cqw, 20px);
   --sync-bunch-h: 3px;
@@ -4353,8 +4288,14 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 30%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--1::after,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--1::after,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--1::after,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--1::after,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1::after,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1::after {
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1::after,
+.sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--1::after,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--1::after {
   content: '';
   position: absolute;
   right: 0;
@@ -4383,8 +4324,14 @@ body.app-mode-game #screen-game.screen.active {
     0 0 6px 2px color-mix(in srgb, var(--sync-packet-color) 28%, transparent);
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--2,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--2,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2,
+.sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--2 {
   --sync-bunch-bright: 1;
   --sync-bunch-w: clamp(13px, 4.2cqw, 18.5px);
   --sync-bunch-h: 2.9px;
@@ -4396,8 +4343,14 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 26%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--3,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--3,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3,
+.sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--3 {
   --sync-bunch-bright: 0.92;
   --sync-bunch-w: clamp(12.5px, 4.1cqw, 18px);
   --sync-bunch-h: 2.8px;
@@ -4409,8 +4362,14 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 22%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--4,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--4,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4,
+.sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--4 {
   --sync-bunch-bright: 0.84;
   --sync-bunch-w: clamp(12px, 4cqw, 17px);
   --sync-bunch-h: 2.72px;
@@ -4422,8 +4381,14 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 18%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--5,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--5,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
-.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
+.card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5,
+.sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--5 {
   --sync-bunch-bright: 0.76;
   --sync-bunch-w: clamp(11.5px, 3.85cqw, 17px);
   --sync-bunch-h: 2.65px;
@@ -4435,6 +4400,10 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 15%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--6,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--6,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--6,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--6 {
   --sync-bunch-bright: 0.63;
@@ -4448,6 +4417,10 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 12%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--7,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--7,
 .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--7,
 .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--7 {
   --sync-bunch-bright: 0.5;
@@ -4461,79 +4434,167 @@ body.app-mode-game #screen-game.screen.active {
   --sync-bunch-haze-end: 10%;
 }
 
-/* T3 — four packets, even quarter-phase spacing */
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet {
-  --vfx-sync-tier-opacity: 0.94;
-  opacity: calc(0.94 * var(--vfx-sync-blend-opacity, 1));
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--8,
+.sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--8 {
+  --sync-bunch-bright: 0.42;
+  --sync-bunch-w: clamp(10.5px, 3.55cqw, 15px);
+  --sync-bunch-h: 2.4px;
+  --sync-bunch-wake-bright: 0.4;
+  --sync-bunch-wake-peak: 22%;
+  --sync-bunch-wake-mid: 9%;
+  --sync-bunch-haze-start: 2%;
+  --sync-bunch-haze-mid: 6%;
+  --sync-bunch-haze-end: 8%;
 }
 
+.sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--9,
+.card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--9 {
+  --sync-bunch-bright: 0.35;
+  --sync-bunch-w: clamp(10px, 3.4cqw, 14.5px);
+  --sync-bunch-h: 2.3px;
+  --sync-bunch-wake-bright: 0.34;
+  --sync-bunch-wake-peak: 18%;
+  --sync-bunch-wake-mid: 8%;
+  --sync-bunch-haze-start: 2%;
+  --sync-bunch-haze-mid: 5%;
+  --sync-bunch-haze-end: 6%;
+}
+
+/* T3 — four bunches, even quarter-phase leader spacing */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-bunch-member,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-bunch-member {
   --vfx-sync-tier-opacity: 0.94;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--1,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--1 {
-  animation-delay: 0s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--1 {
+  animation-delay: var(--sync-cyan-bunch-leader-phase, 0s);
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--2 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--3 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--4 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--5 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 4 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--6 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 5 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--7 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 6 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--8 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 7 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--9,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-cyan-bunch--9 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 8 * var(--sync-bunch-phase-step));
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--2,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--2 {
-  animation-delay: -2.5s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--1 {
+  animation-delay: var(--sync-emerald-bunch-leader-phase, -2.5s);
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--2 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--3 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--4 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--5 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + 4 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--6 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + 5 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--7 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + 6 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-emerald-bunch--8 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -2.5s) + 7 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--1 {
   animation-delay: var(--sync-gold-bunch-leader-phase, -5s);
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--2 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--3 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 2 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--4 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 3 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--5 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 4 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--6,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--6 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 5 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--7,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-gold-bunch--7 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -5s) + 6 * var(--sync-bunch-phase-step));
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--4,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-packet--4 {
-  animation-delay: -7.5s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--1 {
+  animation-delay: var(--sync-magenta-bunch-leader-phase, -7.5s);
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--2 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -7.5s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--3 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -7.5s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--4 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -7.5s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="3"] .sync-magenta-bunch--5 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -7.5s) + 4 * var(--sync-bunch-phase-step));
 }
 
-/* T2 — three packets (cyan, emerald, gold) */
+/* T2 — three bunches (cyan, emerald, gold) */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .card-glow--halo {
   --sync-packet-h: 3px;
+  --sync-cyan-bunch-leader-phase: 0s;
+  --sync-emerald-bunch-leader-phase: -3.333s;
   --sync-gold-bunch-leader-phase: -6.667s;
-}
-
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet {
-  --vfx-sync-tier-opacity: 0.82;
-  opacity: calc(0.82 * var(--vfx-sync-blend-opacity, 1));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-bunch-member,
@@ -4541,52 +4602,106 @@ body.app-mode-game #screen-game.screen.active {
   --vfx-sync-tier-opacity: 0.82;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--4 {
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-bunch--magenta,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-bunch--magenta {
   visibility: hidden;
   animation-name: none;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--1,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--1 {
-  animation-delay: 0s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--1 {
+  animation-delay: var(--sync-cyan-bunch-leader-phase, 0s);
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--2 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--3 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--4 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--5 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 4 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--6 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 5 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--7 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 6 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--8 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 7 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--9,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-cyan-bunch--9 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 8 * var(--sync-bunch-phase-step));
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--2,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-packet--2 {
-  animation-delay: -3.333s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--1 {
+  animation-delay: var(--sync-emerald-bunch-leader-phase, -3.333s);
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--2 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--3 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--4 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--5 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + 4 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--6 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + 5 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--7 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + 6 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-emerald-bunch--8 {
+  animation-delay: calc(var(--sync-emerald-bunch-leader-phase, -3.333s) + 7 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--1,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--1 {
   animation-delay: var(--sync-gold-bunch-leader-phase, -6.667s);
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--2,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--2 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--3,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--3 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 2 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--4,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--4 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 3 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--5,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--5 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 4 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--6,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--6 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 5 * var(--sync-bunch-phase-step));
 }
-
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--7,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="2"] .sync-gold-bunch--7 {
   animation-delay: calc(var(--sync-gold-bunch-leader-phase, -6.667s) + 6 * var(--sync-bunch-phase-step));
@@ -4600,16 +4715,12 @@ body.app-mode-game #screen-game.screen.active {
     0 0 11px 2px rgba(15, 23, 42, 0.36);
 }
 
-/* T1 — two packets (~opposite: cyan + magenta) */
+/* T1 — two bunches (~opposite: cyan + magenta) */
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .card-glow--halo,
 .card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .card-glow--halo {
   --sync-packet-h: 2.5px;
-}
-
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet {
-  --vfx-sync-tier-opacity: 0.68;
-  opacity: calc(0.68 * var(--vfx-sync-blend-opacity, 1));
+  --sync-cyan-bunch-leader-phase: 0s;
+  --sync-magenta-bunch-leader-phase: -5s;
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch-member,
@@ -4617,26 +4728,70 @@ body.app-mode-game #screen-game.screen.active {
   --vfx-sync-tier-opacity: 0.68;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--2 {
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch--emerald,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch--emerald,
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch--gold,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch--gold {
   visibility: hidden;
   animation-name: none;
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch-member,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-bunch-member {
-  visibility: hidden;
-  animation-name: none;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--1 {
+  animation-delay: var(--sync-cyan-bunch-leader-phase, 0s);
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--2 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--3 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--4 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--5 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 4 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--6,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--6 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 5 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--7,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--7 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 6 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--8,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--8 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 7 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--9,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-cyan-bunch--9 {
+  animation-delay: calc(var(--sync-cyan-bunch-leader-phase, 0s) + 8 * var(--sync-bunch-phase-step));
 }
 
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--1,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--1 {
-  animation-delay: 0s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--1,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--1 {
+  animation-delay: var(--sync-magenta-bunch-leader-phase, -5s);
 }
-
-.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--4,
-.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-packet--4 {
-  animation-delay: -5s;
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--2,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--2 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -5s) + var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--3,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--3 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -5s) + 2 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--4,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--4 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -5s) + 3 * var(--sync-bunch-phase-step));
+}
+.sci-card[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--5,
+.card-detail-frame[data-card-glow="synchrotron"][data-aura-tier="1"] .sync-magenta-bunch--5 {
+  animation-delay: calc(var(--sync-magenta-bunch-leader-phase, -5s) + 4 * var(--sync-bunch-phase-step));
 }
 
 .sci-card[data-card-glow="synchrotron"][data-aura-tier="3"] .card-glow--halo,
@@ -4685,61 +4840,129 @@ body.app-mode-game #screen-game.screen.active {
     opacity: 0;
   }
 
-  .sci-card[data-card-glow="synchrotron"] .sync-packet,
-  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet,
   .sci-card[data-card-glow="synchrotron"] .sync-bunch-member,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-bunch-member {
     animation-name: none;
   }
 
-  .sci-card[data-card-glow="synchrotron"] .sync-packet--1,
-  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--1 {
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--1,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--1 {
     offset-distance: 8%;
   }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--2,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--2 {
+    offset-distance: calc(8% - 1 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--3,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--3 {
+    offset-distance: calc(8% - 2 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--4,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--4 {
+    offset-distance: calc(8% - 3 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--5,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--5 {
+    offset-distance: calc(8% - 4 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--6,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--6 {
+    offset-distance: calc(8% - 5 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--7,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--7 {
+    offset-distance: calc(8% - 6 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--8,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--8 {
+    offset-distance: calc(8% - 7 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-cyan-bunch--9,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-cyan-bunch--9 {
+    offset-distance: calc(8% - 8 * var(--sync-bunch-phase-pct, 0.74%));
+  }
 
-  .sci-card[data-card-glow="synchrotron"] .sync-packet--2,
-  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--2 {
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--1,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--1 {
     offset-distance: 38%;
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--2,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--2 {
+    offset-distance: calc(38% - 1 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--3,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--3 {
+    offset-distance: calc(38% - 2 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--4,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--4 {
+    offset-distance: calc(38% - 3 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--5,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--5 {
+    offset-distance: calc(38% - 4 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--6,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--6 {
+    offset-distance: calc(38% - 5 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--7,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--7 {
+    offset-distance: calc(38% - 6 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-emerald-bunch--8,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-emerald-bunch--8 {
+    offset-distance: calc(38% - 7 * var(--sync-bunch-phase-pct, 0.74%));
   }
 
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--1,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--1 {
     offset-distance: 62%;
   }
-
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--2,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--2 {
     offset-distance: calc(62% - 1 * var(--sync-bunch-phase-pct, 0.74%));
   }
-
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--3,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--3 {
     offset-distance: calc(62% - 2 * var(--sync-bunch-phase-pct, 0.74%));
   }
-
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--4,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--4 {
     offset-distance: calc(62% - 3 * var(--sync-bunch-phase-pct, 0.74%));
   }
-
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--5,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--5 {
     offset-distance: calc(62% - 4 * var(--sync-bunch-phase-pct, 0.74%));
   }
-
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--6,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--6 {
     offset-distance: calc(62% - 5 * var(--sync-bunch-phase-pct, 0.74%));
   }
-
   .sci-card[data-card-glow="synchrotron"] .sync-gold-bunch--7,
   .card-detail-frame[data-card-glow="synchrotron"] .sync-gold-bunch--7 {
     offset-distance: calc(62% - 6 * var(--sync-bunch-phase-pct, 0.74%));
   }
 
-  .sci-card[data-card-glow="synchrotron"] .sync-packet--4,
-  .card-detail-frame[data-card-glow="synchrotron"] .sync-packet--4 {
+  .sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--1,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--1 {
     offset-distance: 86%;
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--2,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--2 {
+    offset-distance: calc(86% - 1 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--3,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--3 {
+    offset-distance: calc(86% - 2 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--4,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--4 {
+    offset-distance: calc(86% - 3 * var(--sync-bunch-phase-pct, 0.74%));
+  }
+  .sci-card[data-card-glow="synchrotron"] .sync-magenta-bunch--5,
+  .card-detail-frame[data-card-glow="synchrotron"] .sync-magenta-bunch--5 {
+    offset-distance: calc(86% - 4 * var(--sync-bunch-phase-pct, 0.74%));
   }
 }
 
