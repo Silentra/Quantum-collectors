@@ -4978,7 +4978,8 @@ body.app-mode-game #screen-game.screen.active {
     2px
     minmax(0, var(--card-row-body, 31fr));
   height: 100%;
-  margin: var(--card-inner-inset, 4px);
+  /* Expand over recessed frame lip so face shimmer meets material body (tokens unchanged) */
+  margin: max(0px, calc(var(--card-inner-inset, 4px) - var(--card-frame-lip, 0px)));
   border-radius: 0.4rem;
   overflow: hidden;
   background: #111827;
@@ -5090,7 +5091,7 @@ body.app-mode-game #screen-game.screen.active {
   --card-bleed: max(0px, calc(var(--card-frame-band-active) + var(--card-frame-rim) - var(--card-inner-inset)));
 }
 
-/* Inner edge of frame paint aligns with card-detail-inner outer edge (host-relative) */
+/* Frame paint: inner-edge includes lip; content well margin subtracts lip so face occludes it */
 .sci-card,
 .card-detail-frame {
   --card-frame-inner-edge: calc(var(--card-bleed) + var(--card-inner-inset));
