@@ -8503,7 +8503,7 @@ body.app-mode-game #screen-game.screen.active {
 /*
  * Pack / breakthrough reveal rarity glows (presentation only).
  * Face-down: .pack-card-back border + halo (pulse via rarityRevealPulse)
- * Face-up:   .pack-card-front — same border + rest halo, static (outside cosmetic frame)
+ * Face-up:   outline on .sci-card offset past --card-bleed (just beyond cosmetic frame), static
  * Shared --reveal-frame / --reveal-glow-* tokens keep both states matched.
  * Independent of equipped cosmetic glow / shimmer / Mathematical Aura.
  */
@@ -8550,9 +8550,15 @@ body.app-mode-game #screen-game.screen.active {
   animation: rarityRevealPulse var(--reveal-glow-duration) ease-in-out infinite;
 }
 
-/* Face-up: same frame + rest halo on the flip face (static; outside cosmetic border) */
-.pack-card-wrapper.flipped[class*="rarity-glow-"] .pack-card-front {
-  border: 2.5px solid var(--reveal-frame);
+/*
+ * Face-up: static rarity rim just beyond the cosmetic frame.
+ * outline-offset clears the gap from the sci-card border-box to --card-bleed
+ * (cosmetic host outer edge), so the 2.5px outline sits outside the frame
+ * without layout shrink or fighting inset frame paint.
+ */
+.pack-card-wrapper.flipped[class*="rarity-glow-"] .pack-card-front .sci-card {
+  outline: 2.5px solid var(--reveal-frame);
+  outline-offset: max(0px, calc(var(--card-bleed, 0px) - 2.5px));
   box-shadow: var(--reveal-glow-rest);
 }
 
