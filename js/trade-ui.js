@@ -1465,6 +1465,12 @@ export function refreshIncomingTradesSection(username) {
 
   _wireDirectTradeActionButtons(username, incomingSection);
 }
+
+/**
+ * Refresh only the Outgoing Trades section.
+ * Toasts once when a response is newly detected.
+ */
+export function refreshOutgoingTradesSection(username) {
   if (!username) {
     const session = auth.getSession();
     if (!session || session.username === '__admin__') return;
@@ -1498,6 +1504,13 @@ export function refreshIncomingTradesSection(username) {
 
   _wireDirectTradeActionButtons(username, outgoingSection);
 }
+
+/**
+ * Refresh only the Available Listings section (other players' listings).
+ * Replaces #available-listings-section innerHTML.
+ * Preserves all form state in My Listings section and the new-trade form.
+ */
+export function refreshAvailableListingsSection(username) {
   if (!username) {
     const session = auth.getSession();
     if (!session || session.username === '__admin__') return;
