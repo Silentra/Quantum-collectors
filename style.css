@@ -2429,8 +2429,8 @@ body.app-mode-game #screen-game.screen.active {
 
 .profile-summary-layout {
   display: grid;
-  grid-template-columns: minmax(10.5rem, 13rem) minmax(0, 1fr);
-  gap: 0.75rem 1rem;
+  grid-template-columns: minmax(9.75rem, 11.25rem) minmax(0, 1fr);
+  gap: 0.75rem 0.65rem;
   align-items: start;
 }
 
@@ -2455,7 +2455,7 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .stat-card-compact {
-  padding: 0.35rem 0.45rem !important;
+  padding: 0.35rem 0.3rem !important;
 }
 
 .stat-card-compact .stat-value {
@@ -2468,9 +2468,11 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .profile-featured-showcase {
+  /* .card-detail-frame glow bleed is 8px/side; +3px dark separation between glow edges */
+  --showcase-glow-bleed: 8px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
+  gap: calc(2 * var(--showcase-glow-bleed) + 3px);
   align-items: start;
   min-width: 0;
 }
@@ -2702,7 +2704,6 @@ body.app-mode-game #screen-game.screen.active {
 
   .profile-featured-showcase {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.45rem;
   }
 
   .profile-achievements-aside {
