@@ -824,7 +824,9 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .nav-identity-name,
-.nav-player-title-slot {
+.nav-player-title-slot,
+.profile-identity-name,
+#game-content-scroll .profile-identity-name {
   color: var(--identity-accent);
 }
 
@@ -1313,7 +1315,15 @@ body.app-mode-game #screen-game.screen.active {
 #game-content-scroll .profile-panel-header h3,
 #game-content-scroll .shop-slot-title,
 #game-content-scroll .rp-card-title,
-#game-content-scroll .rp-assign-title {
+#game-content-scroll .rp-assign-title,
+#game-content-scroll .rp-cards-panel-title,
+#game-content-scroll .rp-cp-section-label,
+#game-content-scroll .trade-profile-toggle-title,
+#game-content-scroll .profile-compact-summary-label,
+#game-content-scroll .profile-consumable-label,
+#game-content-scroll .ach-row-title,
+#game-content-scroll #lb-table-title,
+#game-content-scroll .lb-name {
   color: var(--profile-header-text);
 }
 
@@ -1326,8 +1336,34 @@ body.app-mode-game #screen-game.screen.active {
 #game-content-scroll .shop-slot-description,
 #game-content-scroll .stat-label,
 #game-content-scroll .rp-card-meta,
-#game-content-scroll .rp-duration {
+#game-content-scroll .rp-duration,
+#game-content-scroll .rp-status-bar,
+#game-content-scroll .rp-status-bar strong,
+#game-content-scroll #rp-refresh-timer,
+#game-content-scroll .rp-weekly-pack-name,
+#game-content-scroll .profile-compact-summary-value,
+#game-content-scroll .profile-compact-hint,
+#game-content-scroll .profile-compact-option-meta,
+#game-content-scroll .profile-consumable-qty,
+#game-content-scroll .profile-consumables-hint,
+#game-content-scroll .profile-consumables-empty,
+#game-content-scroll .profile-achievements-meta,
+#game-content-scroll .profile-achievements-empty,
+#game-content-scroll .ach-row-desc,
+#game-content-scroll .ach-progress-label,
+#game-content-scroll .lb-value {
   color: var(--profile-body-text);
+}
+
+/* Preserve leaderboard self-row and podium accents over profile text remaps */
+#game-content-scroll .lb-name.text-primary-300 {
+  color: #c4b5fd;
+}
+#game-content-scroll .lb-value.text-primary-300 {
+  color: #c4b5fd;
+}
+#game-content-scroll .text-amber-400 {
+  color: #fbbf24;
 }
 
 /* Profile identity accent picker */
