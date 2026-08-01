@@ -8558,7 +8558,8 @@ body.app-mode-game #screen-game.screen.active {
  */
 .pack-card-wrapper.flipped[class*="rarity-glow-"] .pack-card-front .sci-card {
   outline: 2.5px solid var(--reveal-frame);
-  outline-offset: max(0px, calc(var(--card-bleed, 0px) - 2.5px));
+  /* +1.5px clears cosmetic corner overhang (same radius on larger bleed box) */
+  outline-offset: max(0px, calc(var(--card-bleed, 0px) - 2.5px + 1.5px));
   box-shadow: var(--reveal-glow-rest);
 }
 
