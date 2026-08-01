@@ -1,8 +1,8 @@
 /**
  * Trading Module
  *
- * Phase T-1: Pure validation helpers (STABLE — do NOT modify).
- * Phase T-2: Direct trade lifecycle (create, accept, decline, cancel).
+ * Phase T-1: Pure validation helpers.
+ * Phase T-2: Direct trade lifecycle (create, respond, confirm, decline, cancel).
  *
  * T-1 helpers are:
  *   - Pure (no side effects)
@@ -77,21 +77,68 @@ export function isCardTradable(cardDef) {
   return cardDef.tradable !== false;
 }
 
+// ─── validateDirectTradeOffer (create — no target inventory) ─────────────────
+
+/**
+ * Validate creating a one-card offer (Player A → Player B).
+ * Does not require or inspect the target player's inventory.
+ *
+ * @returns {{ valid: boolean, reason: string | null }}
+ */
+export function validateDirectTradeOffer({
+  offeringPlayerId,
+  targetPlayerId,
+  offeredCardId,
+  players,
+  cards,
+  excludeDirectTradeId = null,
+}) {
+  if (offeringPlayerId === targetPlayerId) return fail('SELF_TRADE');
+
+  const offering = players[offeringPlayerId];
+  if (!offering) return fail('OFFERING_PLAYER_NOT_FOUND');
+
+  const target = players[targetPlayerId];
+  if (!target) return fail('TARGET_PLAYER_NOT_FOUND');
+
+  if (!offering.groupId || !target.groupId || offering.groupId !== target.groupId) {
+    return fail('DIFFERENT_GROUPS');
+  }
+
+  if (offering.isTradeRestricted) return fail('OFFERING_PLAYER_TRADE_RESTRICTED');
+  if (target.isTradeRestricted) return fail('TARGET_PLAYER_TRADE_RESTRICTED');
+  if (target.isTradeProfileHidden) return fail('TARGET_PLAYER_HIDDEN');
+
+  const offeredCard = cards[offeredCardId];
+  if (!offeredCard) return fail('OFFERED_CARD_NOT_FOUND');
+  if (!isCardTradable(offeredCard)) return fail('OFFERED_CARD_NOT_TRADABLE');
+
+  const offeringInventory = offering.inventory || {};
+  if ((offeringInventory[offeredCardId] || 0) < 1) {
+    return fail('OFFERING_PLAYER_MISSING_OFFERED_CARD');
+  }
+
+  const excludeIds = excludeDirectTradeId ? [excludeDirectTradeId] : [];
+  const offeringSnapshot = buildAvailabilitySnapshot(offeringPlayerId, {
+    playerData: offering,
+    excludeDirectTradeIds: excludeIds,
+  });
+  if (!canOfferCardInTrade(offeringSnapshot, offeredCardId)) {
+    const reason = getAvailabilityFailureReason(offeringSnapshot, offeredCardId, 'offer');
+    return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
+  }
+
+  return pass();
+}
+
 // ─── validateDirectTrade ──────────────────────────────────────────────────────
 
 /**
- * Validate a direct (player-to-player) trade request.
+ * Validate a complete direct trade (both cards known).
+ * Used at respond-time (partially) and final execution.
  *
  * All data is passed in explicitly so this function is fully pure and can be
  * rerun safely immediately before completing a trade (stale UI state is fine).
- *
- * @param {object} params
- * @param {string}  params.offeringPlayerId   - Username of the player initiating the trade
- * @param {string}  params.targetPlayerId     - Username of the player receiving the trade
- * @param {string}  params.offeredCardId      - Card the offering player is giving
- * @param {string}  params.requestedCardId    - Card the offering player wants in return
- * @param {object}  params.players            - Map of { [username]: playerObject }
- * @param {object}  params.cards              - Map of { [cardId]: cardDefinitionObject }
  *
  * @returns {{ valid: boolean, reason: string | null }}
  */
@@ -103,6 +150,7 @@ export function validateDirectTrade({
   players,
   cards,
   excludeDirectTradeId = null,
+  skipHiddenTargetCheck = false,
 }) {
   // ── 1. Players must not be the same person ──────────────────────────────────
   if (offeringPlayerId === targetPlayerId) {
@@ -125,15 +173,16 @@ export function validateDirectTrade({
   if (offering.isTradeRestricted) return fail('OFFERING_PLAYER_TRADE_RESTRICTED');
   if (target.isTradeRestricted)   return fail('TARGET_PLAYER_TRADE_RESTRICTED');
 
-  // ── 5. Target player must not have hidden trade profile ──────────────────────
-  //    Hidden players cannot receive unsolicited direct trades.
-  //    (They MAY initiate trades themselves, which is handled elsewhere.)
-  if (target.isTradeProfileHidden) return fail('TARGET_PLAYER_HIDDEN');
+  // ── 5. Target hidden check (create/respond; optional skip at final if already in-flight)
+  if (!skipHiddenTargetCheck && target.isTradeProfileHidden) {
+    return fail('TARGET_PLAYER_HIDDEN');
+  }
 
   // ── 6. Both card definitions must exist ─────────────────────────────────────
   const offeredCard = cards[offeredCardId];
   if (!offeredCard) return fail('OFFERED_CARD_NOT_FOUND');
 
+  if (!requestedCardId) return fail('REQUESTED_CARD_NOT_FOUND');
   const requestedCard = cards[requestedCardId];
   if (!requestedCard) return fail('REQUESTED_CARD_NOT_FOUND');
 
@@ -399,28 +448,22 @@ function _migrateTradesStructure() {
 }
 
 /**
- * Create a direct trade offer.
- *
- * Pre-validates before writing, including cooldown check.
+ * Create a one-card direct trade offer (no requested card yet).
  *
  * @param {string} offeringPlayerId
  * @param {string} targetPlayerId
  * @param {string} offeredCardId
- * @param {string} requestedCardId
  * @returns {{ success: boolean, tradeId?: string, reason?: string }}
  */
-export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId) {
-  // Phase T-8: Global / direct toggle enforcement
+export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
-  // Cooldown check for sender
   const cooldown = getDirectTradeCooldown(offeringPlayerId);
   if (cooldown.onCooldown) {
     return { success: false, reason: 'SENDER_ON_COOLDOWN' };
   }
 
-  // Load fresh data
   const freshOffering = db.get(`players/${offeringPlayerId}`);
   const freshTarget = db.get(`players/${targetPlayerId}`);
   const allCards = db.get('cards') || {};
@@ -430,12 +473,10 @@ export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId
     [targetPlayerId]:   _normalizePlayer(freshTarget),
   };
 
-  // Pre-validate (copy-aware availability)
-  const validation = validateDirectTrade({
+  const validation = validateDirectTradeOffer({
     offeringPlayerId,
     targetPlayerId,
     offeredCardId,
-    requestedCardId,
     players,
     cards: allCards,
   });
@@ -444,34 +485,34 @@ export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId
     return { success: false, reason: validation.reason };
   }
 
-  // Check for duplicate pending trades (same pair + same cards)
+  // Duplicate: same offerer + same offered card already awaiting response/confirmation
   const existingTrades = db.get('trades/direct') || {};
   for (const t of Object.values(existingTrades)) {
-    if (t && t.status === 'pending' &&
-        t.offeringPlayerId === offeringPlayerId &&
-        t.targetPlayerId === targetPlayerId &&
-        t.offeredCardId === offeredCardId &&
-        t.requestedCardId === requestedCardId) {
+    if (
+      t &&
+      (t.status === 'awaiting_target_response' || t.status === 'awaiting_offerer_confirmation') &&
+      t.offeringPlayerId === offeringPlayerId &&
+      t.offeredCardId === offeredCardId
+    ) {
       return { success: false, reason: 'DUPLICATE_PENDING_TRADE' };
     }
   }
 
-  // Create trade record
   const tradeId = db.push('trades/direct', {
     offeringPlayerId,
     targetPlayerId,
     offeredCardId,
-    requestedCardId,
-    status: 'pending',
+    requestedCardId: null,
+    status: 'awaiting_target_response',
     createdAt: Date.now(),
     respondedAt: null,
+    completedAt: null,
   });
 
-  // Store id inside the record
   db.set(`trades/direct/${tradeId}/id`, tradeId);
 
   if (isDetailedLogging()) {
-    console.log(`[Trading][DETAIL] Trade ${tradeId} created: ${offeringPlayerId} → ${targetPlayerId}, offered=${offeredCardId}, requested=${requestedCardId}`);
+    console.log(`[Trading][DETAIL] Trade ${tradeId} created: ${offeringPlayerId} → ${targetPlayerId}, offered=${offeredCardId}`);
   } else {
     console.log(`[Trading] Trade ${tradeId} created: ${offeringPlayerId} → ${targetPlayerId}`);
   }
@@ -479,52 +520,143 @@ export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId
 }
 
 /**
- * Accept a pending trade offer. Delegates execution to trade-execution.js.
+ * Player B submits a same-rarity return card for an open offer.
  *
  * @param {string} tradeId
- * @param {string} acceptingPlayerId - Must be the trade's targetPlayerId
+ * @param {string} targetPlayerId
+ * @param {string} requestedCardId
  * @returns {{ success: boolean, reason?: string }}
  */
-export function acceptTrade(tradeId, acceptingPlayerId) {
-  // Phase T-8: Global / direct toggle enforcement
+export function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
-  if (trade.status !== 'pending') return { success: false, reason: 'TRADE_NOT_PENDING' };
-  if (trade.targetPlayerId !== acceptingPlayerId) return { success: false, reason: 'NOT_TARGET_PLAYER' };
-
-  // Cooldown check for accepter
-  const cooldown = getDirectTradeCooldown(acceptingPlayerId);
-  if (cooldown.onCooldown) {
-    return { success: false, reason: 'ACCEPTER_ON_COOLDOWN' };
+  if (trade.status !== 'awaiting_target_response') {
+    return { success: false, reason: 'TRADE_NOT_AWAITING_TARGET' };
+  }
+  if (trade.targetPlayerId !== targetPlayerId) {
+    return { success: false, reason: 'NOT_TARGET_PLAYER' };
   }
 
-  // Delegate to atomic execution helper
+  const cooldown = getDirectTradeCooldown(targetPlayerId);
+  if (cooldown.onCooldown) {
+    return { success: false, reason: 'RESPONDER_ON_COOLDOWN' };
+  }
+
+  const freshOffering = db.get(`players/${trade.offeringPlayerId}`);
+  const freshTarget = db.get(`players/${targetPlayerId}`);
+  const allCards = db.get('cards') || {};
+
+  const players = {
+    [trade.offeringPlayerId]: _normalizePlayer(freshOffering),
+    [targetPlayerId]:         _normalizePlayer(freshTarget),
+  };
+
+  if (players[targetPlayerId]?.isTradeRestricted) {
+    return { success: false, reason: 'TARGET_PLAYER_TRADE_RESTRICTED' };
+  }
+
+  const validation = validateDirectTrade({
+    offeringPlayerId: trade.offeringPlayerId,
+    targetPlayerId,
+    offeredCardId: trade.offeredCardId,
+    requestedCardId,
+    players,
+    cards: allCards,
+    excludeDirectTradeId: tradeId,
+  });
+
+  if (!validation.valid) {
+    return { success: false, reason: validation.reason };
+  }
+
+  // Re-check status to avoid double-respond races
+  const freshTrade = db.get(`trades/direct/${tradeId}`);
+  if (!freshTrade || freshTrade.status !== 'awaiting_target_response') {
+    return { success: false, reason: 'TRADE_NOT_AWAITING_TARGET' };
+  }
+
+  const now = Date.now();
+  db.update(`trades/direct/${tradeId}`, {
+    requestedCardId,
+    status: 'awaiting_offerer_confirmation',
+    respondedAt: now,
+  });
+
+  if (isDetailedLogging()) {
+    console.log(`[Trading][DETAIL] Trade ${tradeId} response: ${targetPlayerId} offered return ${requestedCardId}`);
+  } else {
+    console.log(`[Trading] Trade ${tradeId} response submitted by ${targetPlayerId}`);
+  }
+  return { success: true };
+}
+
+/**
+ * Player A confirms the completed proposal. Delegates to executeDirectTrade().
+ *
+ * @param {string} tradeId
+ * @param {string} offeringPlayerId
+ * @returns {{ success: boolean, reason?: string }}
+ */
+export function confirmTrade(tradeId, offeringPlayerId) {
+  if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
+  if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
+
+  const trade = db.get(`trades/direct/${tradeId}`);
+  if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
+  if (trade.status !== 'awaiting_offerer_confirmation') {
+    return { success: false, reason: 'TRADE_NOT_AWAITING_OFFERER' };
+  }
+  if (trade.offeringPlayerId !== offeringPlayerId) {
+    return { success: false, reason: 'NOT_OFFERING_PLAYER' };
+  }
+  if (!trade.requestedCardId) {
+    return { success: false, reason: 'REQUESTED_CARD_NOT_FOUND' };
+  }
+
   return executeDirectTrade(trade);
 }
 
 /**
- * Decline a pending trade offer.
+ * Decline a trade.
+ * - Target may decline in awaiting_target_response
+ * - Offerer may decline in awaiting_offerer_confirmation
  *
  * @param {string} tradeId
- * @param {string} decliningPlayerId - Must be the trade's targetPlayerId
+ * @param {string} decliningPlayerId
  * @returns {{ success: boolean, reason?: string }}
  */
 export function declineTrade(tradeId, decliningPlayerId) {
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
-  if (trade.status !== 'pending') return { success: false, reason: 'TRADE_NOT_PENDING' };
-  if (trade.targetPlayerId !== decliningPlayerId) return { success: false, reason: 'NOT_TARGET_PLAYER' };
 
-  db.update(`trades/direct/${tradeId}`, {
-    status: 'declined',
-    respondedAt: Date.now(),
-  });
+  const now = Date.now();
+
+  if (trade.status === 'awaiting_target_response') {
+    if (trade.targetPlayerId !== decliningPlayerId) {
+      return { success: false, reason: 'NOT_TARGET_PLAYER' };
+    }
+    db.update(`trades/direct/${tradeId}`, {
+      status: 'declined',
+      respondedAt: now,
+      completedAt: now,
+    });
+  } else if (trade.status === 'awaiting_offerer_confirmation') {
+    if (trade.offeringPlayerId !== decliningPlayerId) {
+      return { success: false, reason: 'NOT_OFFERING_PLAYER' };
+    }
+    db.update(`trades/direct/${tradeId}`, {
+      status: 'declined',
+      completedAt: now,
+    });
+  } else {
+    return { success: false, reason: 'TRADE_NOT_DECLINABLE' };
+  }
 
   if (isDetailedLogging()) {
-    console.log(`[Trading][DETAIL] Trade ${tradeId} declined by ${decliningPlayerId}, offerer=${trade.offeringPlayerId}`);
+    console.log(`[Trading][DETAIL] Trade ${tradeId} declined by ${decliningPlayerId}`);
   } else {
     console.log(`[Trading] Trade ${tradeId} declined by ${decliningPlayerId}`);
   }
@@ -532,33 +664,44 @@ export function declineTrade(tradeId, decliningPlayerId) {
 }
 
 /**
- * Cancel a pending trade offer (by the sender).
+ * Cancel an offer before the target responds (offerer only).
  *
  * @param {string} tradeId
- * @param {string} cancellingPlayerId - Must be the trade's offeringPlayerId
+ * @param {string} cancellingPlayerId
  * @returns {{ success: boolean, reason?: string }}
  */
 export function cancelTrade(tradeId, cancellingPlayerId) {
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
-  if (trade.status !== 'pending') return { success: false, reason: 'TRADE_NOT_PENDING' };
-  if (trade.offeringPlayerId !== cancellingPlayerId) return { success: false, reason: 'NOT_OFFERING_PLAYER' };
+  if (trade.status !== 'awaiting_target_response') {
+    return { success: false, reason: 'TRADE_NOT_CANCELLABLE' };
+  }
+  if (trade.offeringPlayerId !== cancellingPlayerId) {
+    return { success: false, reason: 'NOT_OFFERING_PLAYER' };
+  }
 
+  const now = Date.now();
   db.update(`trades/direct/${tradeId}`, {
     status: 'cancelled',
-    respondedAt: Date.now(),
+    respondedAt: now,
+    completedAt: now,
   });
 
   if (isDetailedLogging()) {
-    console.log(`[Trading][DETAIL] Trade ${tradeId} cancelled by ${cancellingPlayerId}, target=${trade.targetPlayerId}`);
+    console.log(`[Trading][DETAIL] Trade ${tradeId} cancelled by ${cancellingPlayerId}`);
   } else {
     console.log(`[Trading] Trade ${tradeId} cancelled by ${cancellingPlayerId}`);
   }
   return { success: true };
 }
 
+const _ACTIVE_DIRECT_STATUSES = new Set([
+  'awaiting_target_response',
+  'awaiting_offerer_confirmation',
+]);
+
 /**
- * Get all pending trades for a player (as sender or target).
+ * Get active direct trades for a player (as sender or target).
  *
  * @param {string} username
  * @returns {{ incoming: object[], outgoing: object[] }}
@@ -569,12 +712,14 @@ export function getPendingTrades(username) {
   const outgoing = [];
 
   for (const trade of Object.values(allTrades)) {
-    if (!trade || trade.status !== 'pending') continue;
-    if (trade.targetPlayerId === username) incoming.push(trade);
-    else if (trade.offeringPlayerId === username) outgoing.push(trade);
+    if (!trade || !_ACTIVE_DIRECT_STATUSES.has(trade.status)) continue;
+    if (trade.targetPlayerId === username && trade.status === 'awaiting_target_response') {
+      incoming.push(trade);
+    } else if (trade.offeringPlayerId === username) {
+      outgoing.push(trade);
+    }
   }
 
-  // Sort newest first
   incoming.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   outgoing.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 

@@ -49,6 +49,16 @@ export function countProjectCommittedCopies(cardId, projects = []) {
  */
 
 /**
+ * Direct-trade statuses that reserve card copies.
+ * Terminal statuses (accepted/declined/cancelled/failed) reserve nothing.
+ */
+export const ACTIVE_DIRECT_TRADE_STATUSES = new Set([
+  'awaiting_target_response',
+  'awaiting_offerer_confirmation',
+  'processing',
+]);
+
+/**
  * @param {string} username
  * @param {object} [opts]
  * @param {object} [opts.directTrades]
@@ -78,12 +88,18 @@ export function buildTradeReservationCounts(username, {
 
   const allDirect = directTrades ?? db.get('trades/direct') ?? {};
   for (const [tradeId, trade] of Object.entries(allDirect)) {
-    if (!trade || trade.status !== 'pending') continue;
+    if (!trade || !ACTIVE_DIRECT_TRADE_STATUSES.has(trade.status)) continue;
     if (excludeDirect.has(tradeId) || excludeDirect.has(trade.id)) continue;
+
+    // awaiting_target_response: offered only
+    // awaiting_offerer_confirmation / processing: offered + requested (if set)
     if (trade.offeringPlayerId === username) {
       bump(trade.offeredCardId, 'outgoing');
     }
-    if (trade.targetPlayerId === username) {
+    if (
+      trade.targetPlayerId === username &&
+      (trade.status === 'awaiting_offerer_confirmation' || trade.status === 'processing')
+    ) {
       bump(trade.requestedCardId, 'incoming');
     }
   }

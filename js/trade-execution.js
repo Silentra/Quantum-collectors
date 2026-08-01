@@ -100,9 +100,9 @@ export function formatReadyAt(readyAtMs) {
  *
  * This is the ONLY function that mutates inventories for direct trades.
  *
- * @param {object} trade - The trade object from /trades/direct/{id}
- *   { id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId }
+ * Requires trade.status === awaiting_offerer_confirmation and a non-null requestedCardId.
  *
+ * @param {object} trade - The trade object from /trades/direct/{id}
  * @returns {{ success: boolean, reason?: string }}
  */
 export function executeDirectTrade(trade) {
@@ -114,16 +114,26 @@ export function executeDirectTrade(trade) {
     requestedCardId,
   } = trade;
 
-  // ── 0. Concurrency guard — reload trade & verify still pending ─────────
+  // ── 0. Concurrency guard — reload trade & verify awaiting offerer confirm ─
   const freshTrade = db.get(`trades/direct/${tradeId}`);
-  if (!freshTrade || freshTrade.status !== 'pending') {
-    console.log(`[Trading] Trade ${tradeId} skipped — status is '${freshTrade?.status}', not 'pending'`);
-    return { success: false, reason: 'TRADE_NOT_PENDING' };
+  if (!freshTrade || freshTrade.status !== 'awaiting_offerer_confirmation') {
+    console.log(`[Trading] Trade ${tradeId} skipped — status is '${freshTrade?.status}', not 'awaiting_offerer_confirmation'`);
+    return { success: false, reason: 'TRADE_NOT_AWAITING_OFFERER' };
   }
 
+  const resolvedRequestedId = freshTrade.requestedCardId || requestedCardId;
+  if (!resolvedRequestedId) {
+    return { success: false, reason: 'REQUESTED_CARD_NOT_FOUND' };
+  }
+
+  // Prefer fresh trade fields for the rest of execution
+  const resolvedOfferedId = freshTrade.offeredCardId || offeredCardId;
+  const resolvedOffering = freshTrade.offeringPlayerId || offeringPlayerId;
+  const resolvedTarget = freshTrade.targetPlayerId || targetPlayerId;
+
   // ── 1. Reload fresh player state ──────────────────────────────────────────
-  const freshOffering = db.get(`players/${offeringPlayerId}`);
-  const freshTarget = db.get(`players/${targetPlayerId}`);
+  const freshOffering = db.get(`players/${resolvedOffering}`);
+  const freshTarget = db.get(`players/${resolvedTarget}`);
 
   if (!freshOffering) return { success: false, reason: 'OFFERING_PLAYER_NOT_FOUND' };
   if (!freshTarget) return { success: false, reason: 'TARGET_PLAYER_NOT_FOUND' };
@@ -131,17 +141,17 @@ export function executeDirectTrade(trade) {
   // ── 2. Reload all card definitions ────────────────────────────────────────
   const allCards = db.get('cards') || {};
 
-  // ── 3. Rerun T-1 validation with fresh data (includes project-lock check) ──
+  // ── 3. Rerun T-1 validation with fresh data ───────────────────────────────
   const players = {
-    [offeringPlayerId]: _normalizePlayerForValidation(freshOffering),
-    [targetPlayerId]:   _normalizePlayerForValidation(freshTarget),
+    [resolvedOffering]: _normalizePlayerForValidation(freshOffering),
+    [resolvedTarget]:   _normalizePlayerForValidation(freshTarget),
   };
 
   const validation = validateDirectTrade({
-    offeringPlayerId,
-    targetPlayerId,
-    offeredCardId,
-    requestedCardId,
+    offeringPlayerId: resolvedOffering,
+    targetPlayerId: resolvedTarget,
+    offeredCardId: resolvedOfferedId,
+    requestedCardId: resolvedRequestedId,
     players,
     cards: allCards,
     excludeDirectTradeId: tradeId,
@@ -149,26 +159,36 @@ export function executeDirectTrade(trade) {
 
   if (!validation.valid) {
     if (isDetailedLogging()) {
-      console.log(`[Trading][DETAIL] Trade ${tradeId} failed validation: ${validation.reason} (${offeringPlayerId} → ${targetPlayerId}, offered=${offeredCardId}, requested=${requestedCardId})`);
+      console.log(`[Trading][DETAIL] Trade ${tradeId} failed validation: ${validation.reason} (${resolvedOffering} → ${resolvedTarget}, offered=${resolvedOfferedId}, requested=${resolvedRequestedId})`);
     }
-    // Mark trade as failed in DB
+    const now = Date.now();
     db.update(`trades/direct/${tradeId}`, {
       status: 'failed',
-      respondedAt: Date.now(),
+      completedAt: now,
       failureReason: validation.reason,
     });
     return { success: false, reason: validation.reason };
   }
 
   // ── 4. Check cooldowns for BOTH players ───────────────────────────────────
-  const offeringCooldown = getDirectTradeCooldown(offeringPlayerId);
+  const offeringCooldown = getDirectTradeCooldown(resolvedOffering);
   if (offeringCooldown.onCooldown) {
-    db.update(`trades/direct/${tradeId}`, { status: 'failed', respondedAt: Date.now(), failureReason: 'OFFERING_PLAYER_ON_COOLDOWN' });
+    const now = Date.now();
+    db.update(`trades/direct/${tradeId}`, {
+      status: 'failed',
+      completedAt: now,
+      failureReason: 'OFFERING_PLAYER_ON_COOLDOWN',
+    });
     return { success: false, reason: 'OFFERING_PLAYER_ON_COOLDOWN' };
   }
-  const targetCooldown = getDirectTradeCooldown(targetPlayerId);
+  const targetCooldown = getDirectTradeCooldown(resolvedTarget);
   if (targetCooldown.onCooldown) {
-    db.update(`trades/direct/${tradeId}`, { status: 'failed', respondedAt: Date.now(), failureReason: 'TARGET_PLAYER_ON_COOLDOWN' });
+    const now = Date.now();
+    db.update(`trades/direct/${tradeId}`, {
+      status: 'failed',
+      completedAt: now,
+      failureReason: 'TARGET_PLAYER_ON_COOLDOWN',
+    });
     return { success: false, reason: 'TARGET_PLAYER_ON_COOLDOWN' };
   }
 
@@ -176,19 +196,15 @@ export function executeDirectTrade(trade) {
   const offeringInv = { ...(freshOffering.inventory || {}) };
   const targetInv = { ...(freshTarget.inventory || {}) };
 
-  // Decrement offered card from offering player
-  offeringInv[offeredCardId] = (offeringInv[offeredCardId] || 0) - 1;
-  if (offeringInv[offeredCardId] <= 0) delete offeringInv[offeredCardId];
+  offeringInv[resolvedOfferedId] = (offeringInv[resolvedOfferedId] || 0) - 1;
+  if (offeringInv[resolvedOfferedId] <= 0) delete offeringInv[resolvedOfferedId];
 
-  // Increment requested card for offering player (they receive what they asked for)
-  offeringInv[requestedCardId] = (offeringInv[requestedCardId] || 0) + 1;
+  offeringInv[resolvedRequestedId] = (offeringInv[resolvedRequestedId] || 0) + 1;
 
-  // Decrement requested card from target player
-  targetInv[requestedCardId] = (targetInv[requestedCardId] || 0) - 1;
-  if (targetInv[requestedCardId] <= 0) delete targetInv[requestedCardId];
+  targetInv[resolvedRequestedId] = (targetInv[resolvedRequestedId] || 0) - 1;
+  if (targetInv[resolvedRequestedId] <= 0) delete targetInv[resolvedRequestedId];
 
-  // Increment offered card for target player (they receive what was offered)
-  targetInv[offeredCardId] = (targetInv[offeredCardId] || 0) + 1;
+  targetInv[resolvedOfferedId] = (targetInv[resolvedOfferedId] || 0) + 1;
 
   // ── 6. Prepare stats updates ──────────────────────────────────────────────
   const offeringStats = { ...(freshOffering.stats || {}) };
@@ -197,36 +213,38 @@ export function executeDirectTrade(trade) {
   const now = Date.now();
 
   // ── 7. Write ALL mutations together ───────────────────────────────────────
-  // Lock trade as 'processing' before any inventory writes
+  // Re-confirm status then lock as processing (duplicate-accept guard)
+  const statusCheck = db.get(`trades/direct/${tradeId}`);
+  if (!statusCheck || statusCheck.status !== 'awaiting_offerer_confirmation') {
+    return { success: false, reason: 'TRADE_NOT_AWAITING_OFFERER' };
+  }
   db.update(`trades/direct/${tradeId}`, { status: 'processing' });
 
-  // Offering player: inventory + stats + cooldown + progression
-  db.set(`players/${offeringPlayerId}/inventory`, offeringInv);
-  db.set(`players/${offeringPlayerId}/stats`, offeringStats);
-  db.set(`players/${offeringPlayerId}/lastDirectTradeAt`, now);
-  db.update(`players/${offeringPlayerId}/progression`, { firstTrade: true });
+  db.set(`players/${resolvedOffering}/inventory`, offeringInv);
+  db.set(`players/${resolvedOffering}/stats`, offeringStats);
+  db.set(`players/${resolvedOffering}/lastDirectTradeAt`, now);
+  db.update(`players/${resolvedOffering}/progression`, { firstTrade: true });
 
-  // Target player: inventory + stats + cooldown + progression
-  db.set(`players/${targetPlayerId}/inventory`, targetInv);
-  db.set(`players/${targetPlayerId}/stats`, targetStats);
-  db.set(`players/${targetPlayerId}/lastDirectTradeAt`, now);
-  db.update(`players/${targetPlayerId}/progression`, { firstTrade: true });
+  db.set(`players/${resolvedTarget}/inventory`, targetInv);
+  db.set(`players/${resolvedTarget}/stats`, targetStats);
+  db.set(`players/${resolvedTarget}/lastDirectTradeAt`, now);
+  db.update(`players/${resolvedTarget}/progression`, { firstTrade: true });
 
-  // ── 8. Mark trade as accepted ─────────────────────────────��───────────────
+  // ── 8. Mark trade as accepted ─────────────────────────────────────────────
   db.update(`trades/direct/${tradeId}`, {
     status: 'accepted',
-    respondedAt: now,
+    completedAt: now,
   });
 
-  bumpPlayerStat(offeringPlayerId, STAT_KEYS.TRADES_COMPLETED, 1);
-  bumpPlayerStat(targetPlayerId, STAT_KEYS.TRADES_COMPLETED, 1);
-  notifyCardInventoryChanged(offeringPlayerId);
-  notifyCardInventoryChanged(targetPlayerId);
+  bumpPlayerStat(resolvedOffering, STAT_KEYS.TRADES_COMPLETED, 1);
+  bumpPlayerStat(resolvedTarget, STAT_KEYS.TRADES_COMPLETED, 1);
+  notifyCardInventoryChanged(resolvedOffering);
+  notifyCardInventoryChanged(resolvedTarget);
 
   if (isDetailedLogging()) {
-    console.log(`[Trading][DETAIL] Trade ${tradeId} completed: ${offeringPlayerId} gave ${offeredCardId}, ${targetPlayerId} gave ${requestedCardId}, cooldowns applied at ${now}`);
+    console.log(`[Trading][DETAIL] Trade ${tradeId} completed: ${resolvedOffering} gave ${resolvedOfferedId}, ${resolvedTarget} gave ${resolvedRequestedId}, cooldowns applied at ${now}`);
   } else {
-    console.log(`[Trading] Trade ${tradeId} completed: ${offeringPlayerId} gave ${offeredCardId}, ${targetPlayerId} gave ${requestedCardId}`);
+    console.log(`[Trading] Trade ${tradeId} completed: ${resolvedOffering} gave ${resolvedOfferedId}, ${resolvedTarget} gave ${resolvedRequestedId}`);
   }
 
   return { success: true };

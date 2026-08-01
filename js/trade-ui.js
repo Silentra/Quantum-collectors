@@ -1,17 +1,14 @@
 /**
  * Trade UI Module — Phase T-2 + T-4 + T-6 (UX Safeguards)
  *
- * Lightweight trading UI: player selection, card pickers, pending trade panels,
+ * Lightweight trading UI: player selection, offer-only card picker, pending trade panels,
  * and anonymous trade listings.
  * Renders into #tab-trading content area.
  * All trade logic delegates to trading.js (lifecycle), trade-execution.js (swap),
  * trade-listings.js (listing lifecycle), and trade-listing-execution.js (listing swap).
  *
- * Phase T-6 additions:
- *   - Project-locked cards filtered from UI selectors
- *   - Last-copy warnings on card selectors and confirmation previews
- *   - Sandbox-safe confirmation modal before direct trade send/accept, listing create/accept
- *   - Error messages for OFFERED_CARD_LOCKED_BY_PROJECT / REQUESTED_CARD_LOCKED_BY_PROJECT
+ * Direct trades: A offers one card → B picks same-rarity return → A confirms.
+ * No cross-player inventory browsing in the offer form.
  */
 
 import * as auth from './auth.js';
@@ -21,7 +18,8 @@ import * as db from './database.js';
 import * as toast from './toast.js';
 import {
   createTradeOffer,
-  acceptTrade,
+  respondToTrade,
+  confirmTrade,
   declineTrade,
   cancelTrade,
   getPendingTrades,
@@ -59,7 +57,8 @@ const TRADE_PROJECT_IN_USE_HINT =
 
 let _selectedTarget = null;   // username of selected trade partner
 let _offeredCardId = null;    // card the current user is offering
-let _requestedCardId = null;  // card the current user wants from target
+let _returnCardSelections = {}; // { [tradeId]: cardId } — preserve B's return picker across refresh
+let _toastedResponseTradeIds = new Set(); // avoid repeated "response received" toasts
 let _cooldownTimer = null;    // interval for live cooldown display
 let _activeSubTab = 'direct'; // 'direct' or 'listings'
 
@@ -234,6 +233,7 @@ export function renderTrading() {
 
   // Reset reactive hashes so first reactive tick after render detects fresh state correctly
   _lastIncomingHash = '';
+  _lastOutgoingHash = '';
   _lastAvailableListingsHash = '';
   _lastMyListingsHash = '';
   _reactiveTickCounter = 0;
@@ -351,11 +351,11 @@ function _renderDirectTradesContent(username, myGroup) {
   </div>`;
 
   // Outgoing trades
-  html += `<div class="mb-6">
+  html += `<div class="mb-6" data-section="outgoing-trades">
     <h3 class="text-lg font-semibold mb-3">📤 Outgoing Trades</h3>
     ${outgoing.length === 0
-      ? '<p class="text-surface-500 text-sm">No outgoing trade requests.</p>'
-      : outgoing.map(t => _renderOutgoingTrade(t)).join('')}
+      ? '<p class="text-surface-500 text-sm">No outgoing trade offers.</p>'
+      : outgoing.map(t => _renderOutgoingTrade(t, username)).join('')}
   </div>`;
 
   // New Trade section
@@ -584,79 +584,122 @@ function _renderAvailableListing(listing, myUsername) {
 
 function _renderIncomingTrade(trade, myUsername) {
   const offeredCard = cards.getCard(trade.offeredCardId);
-  const requestedCard = cards.getCard(trade.requestedCardId);
   const offeredName = offeredCard ? offeredCard.name : trade.offeredCardId;
-  const requestedName = requestedCard ? requestedCard.name : trade.requestedCardId;
   const offeredRarity = offeredCard ? offeredCard.rarity : 'common';
-  const requestedRarity = requestedCard ? requestedCard.rarity : 'common';
   const ago = _timeAgo(trade.createdAt);
+  const myCd = getDirectTradeCooldown(myUsername);
 
-  const acceptSnapshot = buildAvailabilitySnapshot(myUsername, {
-    excludeDirectTradeIds: trade.id ? [trade.id] : [],
-  });
-  const isLast = isLastAvailableCopy(acceptSnapshot, trade.requestedCardId);
-  const lastCopyHtml = isLast ? '<span class="trade-last-copy-warn">LAST COPY</span>' : '';
+  // Incoming for B: awaiting their response (pick a return card)
+  if (trade.status === 'awaiting_target_response') {
+    const mySnapshot = buildAvailabilitySnapshot(myUsername);
+    const myInv = player.getInventory(myUsername);
+    const eligibleAll = _getTradableCards(myInv, mySnapshot)
+      .filter(({ card }) => card.rarity === offeredRarity);
+    const preserved = _returnCardSelections[trade.id] || '';
+    const onCooldown = myCd.onCooldown;
 
-  return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700">
-    <div class="flex items-center justify-between mb-2">
-      <span class="text-sm text-surface-400">From: <strong class="text-white">${trade.offeringPlayerId}</strong></span>
-      <span class="text-xs text-surface-500">${ago}</span>
-    </div>
-    <div class="flex items-center gap-3 mb-3">
-      <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
-        <div class="text-xs text-surface-500 mb-1">They offer</div>
+    return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700" data-trade-id="${trade.id}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-surface-400">From: <strong class="text-white">${trade.offeringPlayerId}</strong></span>
+        <span class="text-xs text-surface-500">${ago}</span>
+      </div>
+      <div class="mb-3 p-3 rounded bg-surface-900 border border-surface-600 text-center">
+        <div class="text-xs text-surface-500 mb-1">${trade.offeringPlayerId} is offering</div>
         <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
-        <div class="text-xs text-surface-500 capitalize">${offeredRarity}</div>
+        <div class="text-xs text-surface-500 capitalize">Rarity: ${offeredRarity}</div>
       </div>
-      <div class="text-surface-500 text-lg">⇄</div>
-      <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
-        <div class="text-xs text-surface-500 mb-1">They want</div>
-        <div class="font-semibold text-sm rarity-text-${requestedRarity}">${requestedName} ${lastCopyHtml}</div>
-        <div class="text-xs text-surface-500 capitalize">${requestedRarity}</div>
+      ${onCooldown
+        ? `<p class="text-amber-300 text-xs mb-3 text-center">Trade unavailable: you are currently on trade cooldown.</p>`
+        : ''}
+      <div class="mb-3">
+        <label class="text-sm text-surface-400 block mb-1">Choose one of your ${offeredRarity} cards to offer in return</label>
+        <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
+        <select class="trade-return-card w-full bg-surface-900 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white"
+          data-trade-id="${trade.id}" ${onCooldown ? 'disabled' : ''}>
+          <option value="">— Select a card —</option>
+          ${_buildCardOptions(eligibleAll, mySnapshot)}
+        </select>
       </div>
-    </div>
-    <div class="flex gap-2">
-      <button class="trade-accept-btn flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg transition-colors"
-        data-trade-id="${trade.id}"
-        data-give-name="${requestedName}" data-give-rarity="${requestedRarity}"
-        data-get-name="${offeredName}" data-get-rarity="${offeredRarity}"
-        data-is-last="${isLast}">✓ Accept</button>
-      <button class="trade-decline-btn flex-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 text-sm py-2 rounded-lg border border-red-700 transition-colors"
-        data-trade-id="${trade.id}">✕ Decline</button>
-    </div>
-  </div>`;
+      <div class="flex gap-2">
+        <button class="trade-respond-btn flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          data-trade-id="${trade.id}"
+          data-offered-name="${offeredName}" data-offered-rarity="${offeredRarity}"
+          ${onCooldown ? 'disabled' : ''}>Submit Trade Proposal</button>
+        <button class="trade-decline-btn flex-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 text-sm py-2 rounded-lg border border-red-700 transition-colors"
+          data-trade-id="${trade.id}">Decline</button>
+      </div>
+    </div>`;
+  }
+
+  // Should not appear as "incoming" for target once responded — handled as outgoing for offerer
+  return '';
 }
 
-function _renderOutgoingTrade(trade) {
+function _renderOutgoingTrade(trade, myUsername) {
   const offeredCard = cards.getCard(trade.offeredCardId);
-  const requestedCard = cards.getCard(trade.requestedCardId);
   const offeredName = offeredCard ? offeredCard.name : trade.offeredCardId;
-  const requestedName = requestedCard ? requestedCard.name : trade.requestedCardId;
   const offeredRarity = offeredCard ? offeredCard.rarity : 'common';
-  const requestedRarity = requestedCard ? requestedCard.rarity : 'common';
   const ago = _timeAgo(trade.createdAt);
 
-  return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700">
-    <div class="flex items-center justify-between mb-2">
-      <span class="text-sm text-surface-400">To: <strong class="text-white">${trade.targetPlayerId}</strong></span>
-      <span class="text-xs text-surface-500">${ago}</span>
-    </div>
-    <div class="flex items-center gap-3 mb-3">
-      <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
-        <div class="text-xs text-surface-500 mb-1">You offer</div>
+  if (trade.status === 'awaiting_target_response') {
+    return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700" data-trade-id="${trade.id}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-surface-400">To: <strong class="text-white">${trade.targetPlayerId}</strong></span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-300 border border-amber-700">Waiting for response</span>
+      </div>
+      <p class="text-xs text-surface-500 mb-3">Waiting for ${trade.targetPlayerId} to respond · ${ago}</p>
+      <div class="mb-3 p-3 rounded bg-surface-900 border border-surface-600 text-center">
+        <div class="text-xs text-surface-500 mb-1">You offered</div>
         <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
         <div class="text-xs text-surface-500 capitalize">${offeredRarity}</div>
       </div>
-      <div class="text-surface-500 text-lg">⇄</div>
-      <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
-        <div class="text-xs text-surface-500 mb-1">You want</div>
-        <div class="font-semibold text-sm rarity-text-${requestedRarity}">${requestedName}</div>
-        <div class="text-xs text-surface-500 capitalize">${requestedRarity}</div>
+      <button class="trade-cancel-btn w-full bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm py-2 rounded-lg transition-colors"
+        data-trade-id="${trade.id}">Cancel Offer</button>
+    </div>`;
+  }
+
+  if (trade.status === 'awaiting_offerer_confirmation') {
+    const requestedCard = cards.getCard(trade.requestedCardId);
+    const requestedName = requestedCard ? requestedCard.name : trade.requestedCardId;
+    const requestedRarity = requestedCard ? requestedCard.rarity : 'common';
+    const mySnapshot = buildAvailabilitySnapshot(myUsername, {
+      excludeDirectTradeIds: trade.id ? [trade.id] : [],
+    });
+    const isLast = isLastAvailableCopy(mySnapshot, trade.offeredCardId);
+
+    return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-primary-700/50" data-trade-id="${trade.id}">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-surface-400">With: <strong class="text-white">${trade.targetPlayerId}</strong></span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-primary-900/50 text-primary-300 border border-primary-600">Response received — your confirmation is required</span>
       </div>
-    </div>
-    <button class="trade-cancel-btn w-full bg-surface-700 hover:bg-surface-600 text-surface-300 text-sm py-2 rounded-lg transition-colors"
-      data-trade-id="${trade.id}">Cancel Trade</button>
-  </div>`;
+      <div class="text-center text-sm mb-2 text-surface-400 font-medium">Trade Proposal</div>
+      <div class="flex items-center gap-3 mb-3">
+        <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
+          <div class="text-xs text-surface-500 mb-1">You give</div>
+          <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
+          <div class="text-xs text-surface-500 capitalize">${offeredRarity}</div>
+        </div>
+        <div class="text-surface-500 text-lg">⇄</div>
+        <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
+          <div class="text-xs text-surface-500 mb-1">You receive</div>
+          <div class="font-semibold text-sm rarity-text-${requestedRarity}">${requestedName}</div>
+          <div class="text-xs text-surface-500 capitalize">${requestedRarity}</div>
+        </div>
+      </div>
+      ${isLast ? '<div class="mb-3 p-1.5 rounded bg-amber-900/40 border border-amber-700 text-amber-300 text-xs text-center">⚠️ This is your LAST COPY of the card you would give</div>' : ''}
+      <div class="flex gap-2">
+        <button class="trade-confirm-btn flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg transition-colors"
+          data-trade-id="${trade.id}"
+          data-give-name="${offeredName}" data-give-rarity="${offeredRarity}"
+          data-get-name="${requestedName}" data-get-rarity="${requestedRarity}"
+          data-is-last="${isLast}">Accept Trade</button>
+        <button class="trade-decline-btn flex-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 text-sm py-2 rounded-lg border border-red-700 transition-colors"
+          data-trade-id="${trade.id}">Decline</button>
+      </div>
+    </div>`;
+  }
+
+  return '';
 }
 
 function _renderPlayerPicker(username, myGroup) {
@@ -688,56 +731,33 @@ function _renderPlayerPicker(username, myGroup) {
 
 function _renderCardPickers(username, targetUsername) {
   const myInv = player.getInventory(username);
-  const targetInv = player.getInventory(targetUsername);
-
   const mySnapshot = buildAvailabilitySnapshot(username);
-  const targetSnapshot = buildAvailabilitySnapshot(targetUsername);
-
   const myCardsAll = _getTradableCards(myInv, mySnapshot);
-  const targetCardsAll = _getTradableCards(targetInv, targetSnapshot);
 
   if (myCardsAll.length === 0) {
     return '<p class="text-surface-500 text-sm mt-3">You have no tradable cards.</p>';
   }
-  if (targetCardsAll.length === 0) {
-    return `<p class="text-surface-500 text-sm mt-3">${targetUsername} has no tradable cards.</p>`;
-  }
 
-  // Collect available card types across both pools for the filter bar
-  const allTypes = [...new Set([...myCardsAll, ...targetCardsAll].map(({ card }) => card.type || '').filter(Boolean))].sort();
-
-  // Apply full filters (including search + dupeOnly) to my cards — personal/local
+  const allTypes = [...new Set(myCardsAll.map(({ card }) => card.type || '').filter(Boolean))].sort();
   const myCards = _applyTradeFilters(myCardsAll);
-  // Apply only shared filters (type + rarity) to target's cards — no personal search/dupeOnly
-  const targetCards = _applySharedTradeFilters(targetCardsAll);
 
   return `
     ${_renderTradeFilterBar('picker', allTypes)}
     <div id="picker-filter-result-count" class="text-xs text-surface-500 mb-2">
-      ${myCards.length} of ${myCardsAll.length} card${myCardsAll.length !== 1 ? 's' : ''} shown (you) · ${targetCards.length} of ${targetCardsAll.length} shown (${targetUsername})
+      ${myCards.length} of ${myCardsAll.length} card${myCardsAll.length !== 1 ? 's' : ''} shown
     </div>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
-      <div>
-        <label class="text-sm text-surface-400 block mb-1">Card you offer</label>
-        <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
-        <select id="trade-offered-card" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
-          <option value="">— Select a card —</option>
-          ${_buildCardOptions(myCards, mySnapshot)}
-        </select>
-      </div>
-      <div>
-        <label class="text-sm text-surface-400 block mb-1">Card you want from ${targetUsername}</label>
-        <select id="trade-requested-card" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
-          <option value="">— Select a card —</option>
-          ${_buildCardOptions(targetCards, targetSnapshot)}
-        </select>
-      </div>
+    <div class="mt-1">
+      <label class="text-sm text-surface-400 block mb-1">Card you offer to ${targetUsername}</label>
+      <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
+      <select id="trade-offered-card" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
+        <option value="">— Select a card —</option>
+        ${_buildCardOptions(myCards, mySnapshot)}
+      </select>
     </div>
-    <div id="trade-rarity-warning" class="hidden mt-2 p-2 rounded bg-red-900/30 border border-red-700 text-red-300 text-xs"></div>
     <div id="trade-confirm-section" class="hidden mt-4">
       <div id="trade-confirm-preview" class="bg-surface-900 rounded-lg p-4 border border-surface-700 mb-3"></div>
       <button id="trade-send-btn" class="w-full bg-primary-600 hover:bg-primary-700 text-white py-2.5 rounded-lg font-semibold transition-colors">
-        Send Trade Request
+        Send Offer
       </button>
     </div>`;
 }
@@ -824,8 +844,74 @@ function _wireTradeEvents(username) {
     });
   }
 
-  // Accept buttons — T-6: Confirmation step before accepting
-  document.querySelectorAll('.trade-accept-btn').forEach(btn => {
+  _wireDirectTradeActionButtons(username);
+}
+
+/**
+ * Wire respond / confirm / decline / cancel + return-card selects for direct trades.
+ * @param {string} username
+ * @param {ParentNode} [root=document] - Scope to avoid stacking listeners on full-page rewire
+ */
+function _wireDirectTradeActionButtons(username, root = document) {
+  // Preserve return-card selections on change
+  root.querySelectorAll('.trade-return-card').forEach(sel => {
+    const tradeId = sel.dataset.tradeId;
+    if (_returnCardSelections[tradeId]) {
+      const opt = sel.querySelector(`option[value="${_returnCardSelections[tradeId]}"]`);
+      if (opt) sel.value = _returnCardSelections[tradeId];
+    }
+    sel.addEventListener('change', () => {
+      _returnCardSelections[tradeId] = sel.value || '';
+    });
+  });
+
+  // B submits return card
+  root.querySelectorAll('.trade-respond-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const tradeId = btn.dataset.tradeId;
+      const select = document.querySelector(`.trade-return-card[data-trade-id="${tradeId}"]`);
+      const returnCardId = select?.value || _returnCardSelections[tradeId] || '';
+      if (!returnCardId) {
+        toast.error('Select one of your cards to offer in return.');
+        return;
+      }
+
+      const offeredName = btn.dataset.offeredName || '?';
+      const offeredRarity = btn.dataset.offeredRarity || '';
+      const returnCard = cards.getCard(returnCardId);
+      const returnName = returnCard ? returnCard.name : returnCardId;
+      const returnRarity = returnCard ? returnCard.rarity : '';
+      const mySnapshot = buildAvailabilitySnapshot(username);
+      const isLast = isLastAvailableCopy(mySnapshot, returnCardId);
+
+      let msg = `They offer:\n${offeredName}`;
+      if (offeredRarity) msg += ` [${offeredRarity}]`;
+      msg += `\n\nYou offer:\n${returnName}`;
+      if (returnRarity) msg += ` [${returnRarity}]`;
+      msg += `\n\nSubmitting this response does not complete the trade.`;
+
+      const confirmed = await showTradeConfirmModal({
+        title: 'Trade Proposal',
+        message: msg,
+        confirmText: 'Submit Proposal',
+        cancelText: 'Cancel',
+        warning: isLast ? '⚠️ This is your LAST COPY of this card' : '',
+      });
+      if (!confirmed) return;
+
+      const result = respondToTrade(tradeId, username, returnCardId);
+      if (result.success) {
+        delete _returnCardSelections[tradeId];
+        toast.success('Trade response submitted.');
+      } else {
+        toast.error(_friendlyError(result.reason));
+      }
+      renderTrading();
+    });
+  });
+
+  // A confirms final proposal
+  root.querySelectorAll('.trade-confirm-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const tradeId = btn.dataset.tradeId;
       const giveName = btn.dataset.giveName || '?';
@@ -834,22 +920,23 @@ function _wireTradeEvents(username) {
       const getRarity = btn.dataset.getRarity || '';
       const isLast = btn.dataset.isLast === 'true';
 
-      // T-6: Sandbox-safe confirmation modal
-      let msg = `You give: ${giveName} [${giveRarity}]`;
-      msg += `\nYou get: ${getName} [${getRarity}]`;
+      let msg = `You give: ${giveName}`;
+      if (giveRarity) msg += ` [${giveRarity}]`;
+      msg += `\nYou receive: ${getName}`;
+      if (getRarity) msg += ` [${getRarity}]`;
 
       const confirmed = await showTradeConfirmModal({
         title: 'Accept Trade?',
         message: msg,
-        confirmText: 'Accept',
+        confirmText: 'Accept Trade',
         cancelText: 'Cancel',
         warning: isLast ? '⚠️ This is your LAST COPY of this card' : '',
       });
       if (!confirmed) return;
 
-      const result = acceptTrade(tradeId, username);
+      const result = confirmTrade(tradeId, username);
       if (result.success) {
-        toast.success('Trade accepted! Cards swapped.');
+        toast.success('Trade complete! Cards swapped.');
       } else {
         toast.error(_friendlyError(result.reason));
       }
@@ -857,12 +944,13 @@ function _wireTradeEvents(username) {
     });
   });
 
-  // Decline buttons
-  document.querySelectorAll('.trade-decline-btn').forEach(btn => {
+  // Decline (B at await response, or A at final confirm)
+  root.querySelectorAll('.trade-decline-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const tradeId = btn.dataset.tradeId;
       const result = declineTrade(tradeId, username);
       if (result.success) {
+        delete _returnCardSelections[tradeId];
         toast.info('Trade declined.');
       } else {
         toast.error(_friendlyError(result.reason));
@@ -871,13 +959,13 @@ function _wireTradeEvents(username) {
     });
   });
 
-  // Cancel buttons
-  document.querySelectorAll('.trade-cancel-btn').forEach(btn => {
+  // Cancel (A before B responds)
+  root.querySelectorAll('.trade-cancel-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const tradeId = btn.dataset.tradeId;
       const result = cancelTrade(tradeId, username);
       if (result.success) {
-        toast.info('Trade cancelled.');
+        toast.info('Offer cancelled.');
       } else {
         toast.error(_friendlyError(result.reason));
       }
@@ -1157,7 +1245,6 @@ function _wirePickerFilterEvents(username) {
 
     if (!_selectedTarget) return;
 
-    // Rebuild offered-card select (my side — full filters)
     const myInv = player.getInventory(username);
     const mySnapshot = buildAvailabilitySnapshot(username);
     const myCardsAll = _getTradableCards(myInv, mySnapshot);
@@ -1177,29 +1264,9 @@ function _wirePickerFilterEvents(username) {
       }
     }
 
-    // Rebuild requested-card select (target side — shared filters only: type + rarity)
-    const targetInv = player.getInventory(_selectedTarget);
-    const targetSnapshot = buildAvailabilitySnapshot(_selectedTarget);
-    const targetCardsAll = _getTradableCards(targetInv, targetSnapshot);
-    const targetCards = _applySharedTradeFilters(targetCardsAll);
-
-    const requestedSelect = document.getElementById('trade-requested-card');
-    if (requestedSelect) {
-      const prevVal = requestedSelect.value;
-      requestedSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(targetCards, targetSnapshot)}`;
-      if (prevVal && requestedSelect.querySelector(`option[value="${prevVal}"]`)) {
-        requestedSelect.value = prevVal;
-      } else {
-        requestedSelect.value = '';
-        _requestedCardId = null;
-        const cs = document.getElementById('trade-confirm-section');
-        if (cs) cs.classList.add('hidden');
-      }
-    }
-
     const countEl = document.getElementById('picker-filter-result-count');
     if (countEl) {
-      countEl.textContent = `${myCards.length} of ${myCardsAll.length} card${myCardsAll.length !== 1 ? 's' : ''} shown (you) · ${targetCards.length} of ${targetCardsAll.length} shown (${_selectedTarget})`;
+      countEl.textContent = `${myCards.length} of ${myCardsAll.length} card${myCardsAll.length !== 1 ? 's' : ''} shown`;
     }
   };
 
@@ -1212,71 +1279,40 @@ function _wirePickerFilterEvents(username) {
 
 function _wireCardSelectionEvents(username) {
   const offeredSelect = document.getElementById('trade-offered-card');
-  const requestedSelect = document.getElementById('trade-requested-card');
-  if (!offeredSelect || !requestedSelect) return;
+  if (!offeredSelect) return;
 
   const updatePreview = () => {
     _offeredCardId = offeredSelect.value || null;
-    _requestedCardId = requestedSelect.value || null;
-
-    const warningEl = document.getElementById('trade-rarity-warning');
     const confirmSection = document.getElementById('trade-confirm-section');
 
-    if (!_offeredCardId || !_requestedCardId) {
+    if (!_offeredCardId) {
       if (confirmSection) confirmSection.classList.add('hidden');
-      if (warningEl) warningEl.classList.add('hidden');
       return;
     }
 
     const offeredCard = cards.getCard(_offeredCardId);
-    const requestedCard = cards.getCard(_requestedCardId);
-
-    // Rarity mismatch warning
-    if (offeredCard && requestedCard && offeredCard.rarity !== requestedCard.rarity) {
-      if (warningEl) {
-        warningEl.textContent = `Rarity mismatch: ${offeredCard.rarity} ≠ ${requestedCard.rarity}. Trades must be equal rarity.`;
-        warningEl.classList.remove('hidden');
-      }
-      if (confirmSection) confirmSection.classList.add('hidden');
-      return;
-    }
-
-    if (warningEl) warningEl.classList.add('hidden');
-
-    // T-6: Check for last copy and show warning in preview
     const pickerSnapshot = buildAvailabilitySnapshot(username);
     const isLast = isLastAvailableCopy(pickerSnapshot, _offeredCardId);
     const lastCopyHtml = isLast
       ? '<div class="mt-2 p-1.5 rounded bg-amber-900/40 border border-amber-700 text-amber-300 text-xs text-center">⚠️ This is your LAST COPY of this card</div>'
       : '';
 
-    // Show confirmation preview
     if (confirmSection) {
       const preview = document.getElementById('trade-confirm-preview');
-      if (preview && offeredCard && requestedCard) {
+      if (preview && offeredCard) {
         preview.innerHTML = `
-          <div class="text-center text-sm mb-2 text-surface-400">Confirm Trade with <strong class="text-white">${_selectedTarget}</strong></div>
-          <div class="flex items-center gap-3">
-            <div class="flex-1 text-center p-2 rounded bg-surface-800 border border-surface-600">
-              <div class="text-xs text-surface-500 mb-1">You give</div>
-              <div class="font-semibold text-sm rarity-text-${offeredCard.rarity}">${offeredCard.name}</div>
-              <div class="text-xs text-surface-500 capitalize">${offeredCard.rarity}</div>
-            </div>
-            <div class="text-surface-500 text-lg">⇄</div>
-            <div class="flex-1 text-center p-2 rounded bg-surface-800 border border-surface-600">
-              <div class="text-xs text-surface-500 mb-1">You get</div>
-              <div class="font-semibold text-sm rarity-text-${requestedCard.rarity}">${requestedCard.name}</div>
-              <div class="text-xs text-surface-500 capitalize">${requestedCard.rarity}</div>
-            </div>
+          <div class="text-center text-sm mb-2 text-surface-400">Offer to <strong class="text-white">${_selectedTarget}</strong></div>
+          <div class="text-center p-2 rounded bg-surface-800 border border-surface-600">
+            <div class="text-xs text-surface-500 mb-1">You offer</div>
+            <div class="font-semibold text-sm rarity-text-${offeredCard.rarity}">${offeredCard.name}</div>
+            <div class="text-xs text-surface-500 capitalize">${offeredCard.rarity}</div>
           </div>
           ${lastCopyHtml}`;
       }
       confirmSection.classList.remove('hidden');
 
-      // Wire send button
       const sendBtn = document.getElementById('trade-send-btn');
       if (sendBtn) {
-        // Remove old listeners by replacing the element
         const newBtn = sendBtn.cloneNode(true);
         sendBtn.parentNode.replaceChild(newBtn, sendBtn);
         newBtn.addEventListener('click', () => {
@@ -1287,38 +1323,36 @@ function _wireCardSelectionEvents(username) {
   };
 
   offeredSelect.addEventListener('change', updatePreview);
-  requestedSelect.addEventListener('change', updatePreview);
 }
 
 async function _handleSendTrade(username) {
-  if (!_selectedTarget || !_offeredCardId || !_requestedCardId) {
-    toast.error('Please select a player and both cards.');
+  if (!_selectedTarget || !_offeredCardId) {
+    toast.error('Please select a player and a card to offer.');
     return;
   }
 
-  // T-6: Sandbox-safe confirmation modal before sending direct trade
   const offeredCard = cards.getCard(_offeredCardId);
-  const requestedCard = cards.getCard(_requestedCardId);
   const sendSnapshot = buildAvailabilitySnapshot(username);
   const isLast = isLastAvailableCopy(sendSnapshot, _offeredCardId);
 
   let msg = `You offer: ${offeredCard ? offeredCard.name : _offeredCardId}`;
   if (offeredCard) msg += ` [${offeredCard.rarity}]`;
-  msg += `\nYou want: ${requestedCard ? requestedCard.name : _requestedCardId}`;
-  if (requestedCard) msg += ` [${requestedCard.rarity}]`;
+  msg += `\n\n${_selectedTarget} will choose one of their own cards of the same rarity to propose in return.`;
 
   const confirmed = await showTradeConfirmModal({
-    title: `Send Trade to ${_selectedTarget}?`,
+    title: `Send Offer to ${_selectedTarget}?`,
     message: msg,
-    confirmText: 'Send',
+    confirmText: 'Send Offer',
     cancelText: 'Cancel',
     warning: isLast ? '⚠️ This is your LAST COPY of this card' : '',
   });
   if (!confirmed) return;
 
-  const result = createTradeOffer(username, _selectedTarget, _offeredCardId, _requestedCardId);
+  const result = createTradeOffer(username, _selectedTarget, _offeredCardId);
   if (result.success) {
-    toast.success(`Trade request sent to ${_selectedTarget}!`);
+    toast.success(`Offer sent to ${_selectedTarget}.`);
+    _selectedTarget = null;
+    _offeredCardId = null;
   } else {
     toast.error(_friendlyError(result.reason));
   }
@@ -1394,8 +1428,7 @@ export function refreshListingCooldownBanners(username) {
 
 /**
  * Refresh only the Incoming Trades section.
- * Replaces the contents of the incoming trades container without touching the new trade form.
- * Preserves all form selections.
+ * Preserves return-card selections via _returnCardSelections.
  */
 export function refreshIncomingTradesSection(username) {
   if (!username) {
@@ -1404,14 +1437,17 @@ export function refreshIncomingTradesSection(username) {
     username = session.username;
   }
 
-  // Locate the incoming trades container by its heading landmark
-  // The incoming trades div is the first .mb-6 in #trade-subtab-direct
   const directTab = document.getElementById('trade-subtab-direct');
   if (!directTab) return;
 
-  const { incoming } = getPendingTrades(username);
+  // Preserve in-progress return selects before DOM replace
+  directTab.querySelectorAll('.trade-return-card').forEach(sel => {
+    if (sel.dataset.tradeId && sel.value) {
+      _returnCardSelections[sel.dataset.tradeId] = sel.value;
+    }
+  });
 
-  // Find the incoming trades section by data attribute or reconstruct it
+  const { incoming } = getPendingTrades(username);
   const incomingSection = directTab.querySelector('[data-section="incoming-trades"]');
   if (!incomingSection) return;
 
@@ -1424,58 +1460,44 @@ export function refreshIncomingTradesSection(username) {
       📥 Incoming Trades ${countBadge}
     </h3>
     ${incoming.length === 0
-      ? '<p class="text-surface-500 text-sm">No incoming trade requests.</p>'
+      ? '<p class="text-surface-500 text-sm">No incoming trade offers.</p>'
       : incoming.map(t => _renderIncomingTrade(t, username)).join('')}`;
 
-  // Re-wire accept/decline buttons in this section only
-  incomingSection.querySelectorAll('.trade-accept-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const tradeId = btn.dataset.tradeId;
-      const giveName = btn.dataset.giveName || '?';
-      const giveRarity = btn.dataset.giveRarity || '';
-      const getName = btn.dataset.getName || '?';
-      const getRarity = btn.dataset.getRarity || '';
-      const isLast = btn.dataset.isLast === 'true';
-
-      let msg = `You give: ${giveName} [${giveRarity}]`;
-      msg += `\nYou get: ${getName} [${getRarity}]`;
-
-      const confirmed = await showTradeConfirmModal({
-        title: 'Accept Trade?', message: msg, confirmText: 'Accept', cancelText: 'Cancel',
-        warning: isLast ? '⚠️ This is your LAST COPY of this card' : '',
-      });
-      if (!confirmed) return;
-
-      const result = acceptTrade(tradeId, username);
-      if (result.success) {
-        toast.success('Trade accepted! Cards swapped.');
-      } else {
-        toast.error(_friendlyError(result.reason));
-      }
-      renderTrading();
-    });
-  });
-
-  incomingSection.querySelectorAll('.trade-decline-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tradeId = btn.dataset.tradeId;
-      const result = declineTrade(tradeId, username);
-      if (result.success) {
-        toast.info('Trade declined.');
-      } else {
-        toast.error(_friendlyError(result.reason));
-      }
-      renderTrading();
-    });
-  });
+  _wireDirectTradeActionButtons(username, incomingSection);
 }
+  if (!username) {
+    const session = auth.getSession();
+    if (!session || session.username === '__admin__') return;
+    username = session.username;
+  }
 
-/**
- * Refresh only the Available Listings section (other players' listings).
- * Replaces #available-listings-section innerHTML.
- * Preserves all form state in My Listings section and the new-trade form.
- */
-export function refreshAvailableListingsSection(username) {
+  const directTab = document.getElementById('trade-subtab-direct');
+  if (!directTab) return;
+
+  const { outgoing } = getPendingTrades(username);
+  const outgoingSection = directTab.querySelector('[data-section="outgoing-trades"]');
+  if (!outgoingSection) return;
+
+  // Detect newly received responses for toast (once per trade id)
+  for (const t of outgoing) {
+    if (
+      t.status === 'awaiting_offerer_confirmation' &&
+      t.id &&
+      !_toastedResponseTradeIds.has(t.id)
+    ) {
+      _toastedResponseTradeIds.add(t.id);
+      toast.info('Trade response received.');
+    }
+  }
+
+  outgoingSection.innerHTML = `
+    <h3 class="text-lg font-semibold mb-3">📤 Outgoing Trades</h3>
+    ${outgoing.length === 0
+      ? '<p class="text-surface-500 text-sm">No outgoing trade offers.</p>'
+      : outgoing.map(t => _renderOutgoingTrade(t, username)).join('')}`;
+
+  _wireDirectTradeActionButtons(username, outgoingSection);
+}
   if (!username) {
     const session = auth.getSession();
     if (!session || session.username === '__admin__') return;
@@ -1622,13 +1644,20 @@ export function refreshTradeAvailabilityState() {
 
 // ─── Cooldown Timer ─────────────────────────────────────────────────────────
 
-// Snapshot hashes for reactive change detection (avoids unnecessary DOM writes)
 let _lastIncomingHash = '';
+let _lastOutgoingHash = '';
 let _lastAvailableListingsHash = '';
 let _lastMyListingsHash = '';
 let _reactiveTickCounter = 0;
 // T-8.6: Track listing cooldown state to detect expiry transitions
 let _lastListingCooldownState = null;
+
+function _hashDirectTrades(arr) {
+  if (!arr || arr.length === 0) return '[]';
+  return arr.map(x =>
+    `${x.id || ''}:${x.status || ''}:${x.requestedCardId || ''}:${x.respondedAt || 0}:${x.createdAt || 0}`
+  ).join('|');
+}
 
 function _hashArray(arr) {
   if (!arr || arr.length === 0) return '[]';
@@ -1639,36 +1668,38 @@ function _startCooldownTimer(username) {
   if (_cooldownTimer) clearInterval(_cooldownTimer);
 
   _cooldownTimer = setInterval(() => {
-    // ── 1. Cooldown banners (every tick, 1s) ──────────────────────────────
     refreshTradeCooldownBanners(username);
     refreshListingCooldownBanners(username);
 
-    // ── 2. Reactive checks (every 5s to avoid excess DOM churn) ──────────
     _reactiveTickCounter++;
     if (_reactiveTickCounter % 5 !== 0) return;
 
-    // Guard: skip reactive updates if user is actively filling the trade form
-    // (detected by presence of #trade-target-select with a value set, or
-    //  #listing-offered-card with a value set)
-    const targetSelect = document.getElementById('trade-target-select');
     const listingOfferedSelect = document.getElementById('listing-offered-card');
-
-    const userFillingDirectTrade = targetSelect && targetSelect.value !== '';
     const userFillingListingForm = listingOfferedSelect && listingOfferedSelect.value !== '';
+    // Preserve B's return-card form: skip incoming refresh while a return select has focus/value mid-edit
+    // (we still refresh but restore selection via _returnCardSelections)
 
-    // ── 2a. Refresh incoming trades (safe — separate section) ────────────
     const directTab = document.getElementById('trade-subtab-direct');
+    const { incoming, outgoing } = getPendingTrades(username);
+
     const incomingSection = directTab && directTab.querySelector('[data-section="incoming-trades"]');
     if (incomingSection) {
-      const { incoming } = getPendingTrades(username);
-      const newHash = _hashArray(incoming);
+      const newHash = _hashDirectTrades(incoming);
       if (newHash !== _lastIncomingHash) {
         _lastIncomingHash = newHash;
         refreshIncomingTradesSection(username);
       }
     }
 
-    // ── 2b. Refresh available listings (safe — separate section) ─────────
+    const outgoingSection = directTab && directTab.querySelector('[data-section="outgoing-trades"]');
+    if (outgoingSection) {
+      const newHash = _hashDirectTrades(outgoing);
+      if (newHash !== _lastOutgoingHash) {
+        _lastOutgoingHash = newHash;
+        refreshOutgoingTradesSection(username);
+      }
+    }
+
     const availSection = document.getElementById('available-listings-section');
     if (availSection) {
       expireStaleListings();
@@ -1680,9 +1711,6 @@ function _startCooldownTimer(username) {
       }
     }
 
-    // ── 2c. Refresh my listings section (only if user is NOT filling the form) ──
-    // When user has at max listings (create form hidden), the section can refresh safely.
-    // When user is filling the create form, skip to preserve their selections.
     if (!userFillingListingForm) {
       const mySection = document.getElementById('my-listings-section');
       if (mySection) {
@@ -1695,10 +1723,6 @@ function _startCooldownTimer(username) {
       }
     }
 
-    // ── 2d. T-8.6: Detect listing cooldown expiry transitions ────────────
-    // The hash-based check above misses cooldown expirations because the
-    // listings array itself doesn't change when a cooldown ends.
-    // This separate check triggers a rerender when onCooldown flips false.
     const cooldownNow = getListingCooldown(username).onCooldown;
     if (cooldownNow !== _lastListingCooldownState) {
       _lastListingCooldownState = cooldownNow;
@@ -1739,17 +1763,23 @@ const ERROR_MESSAGES = {
   TARGET_PLAYER_TRADE_RESTRICTED: 'This player\'s trading is restricted.',
   TARGET_PLAYER_HIDDEN: 'This player is not available for trades.',
   RARITY_MISMATCH: 'Cards must be the same rarity to trade.',
-  OFFERING_PLAYER_MISSING_OFFERED_CARD: 'You no longer own this card.',
-  TARGET_PLAYER_MISSING_REQUESTED_CARD: 'The other player no longer owns the requested card.',
-  SENDER_ON_COOLDOWN: 'You are on trade cooldown. Please wait.',
-  ACCEPTER_ON_COOLDOWN: 'You are on trade cooldown. Please wait.',
-  OFFERING_PLAYER_ON_COOLDOWN: 'The sending player is on trade cooldown.',
-  TARGET_PLAYER_ON_COOLDOWN: 'You are on trade cooldown.',
-  DUPLICATE_PENDING_TRADE: 'You already have a pending trade for these exact cards with this player.',
+  OFFERING_PLAYER_MISSING_OFFERED_CARD: 'The offered card is no longer available.',
+  TARGET_PLAYER_MISSING_REQUESTED_CARD: 'That return card is no longer available.',
+  SENDER_ON_COOLDOWN: 'Trade unavailable: you are currently on trade cooldown.',
+  RESPONDER_ON_COOLDOWN: 'Trade unavailable: you are currently on trade cooldown.',
+  ACCEPTER_ON_COOLDOWN: 'Trade unavailable: you are currently on trade cooldown.',
+  OFFERING_PLAYER_ON_COOLDOWN: 'Trade failed: one of the players is currently on trade cooldown.',
+  TARGET_PLAYER_ON_COOLDOWN: 'Trade failed: one of the players is currently on trade cooldown.',
+  DUPLICATE_PENDING_TRADE: 'You already have an active offer for this card.',
   TRADE_NOT_FOUND: 'Trade not found.',
-  TRADE_NOT_PENDING: 'This trade is no longer pending.',
+  TRADE_NOT_PENDING: 'This trade is no longer active.',
+  TRADE_NOT_AWAITING_TARGET: 'This offer is no longer waiting for a response.',
+  TRADE_NOT_AWAITING_OFFERER: 'This proposal is no longer waiting for confirmation.',
+  TRADE_NOT_DECLINABLE: 'This trade cannot be declined right now.',
+  TRADE_NOT_CANCELLABLE: 'This offer can no longer be cancelled.',
   NOT_TARGET_PLAYER: 'You cannot respond to this trade.',
-  NOT_OFFERING_PLAYER: 'You cannot cancel this trade.',
+  NOT_OFFERING_PLAYER: 'You cannot perform this action on this trade.',
+  REQUESTED_CARD_NOT_FOUND: 'The return card is missing or no longer available.',
   // Listing errors
   LISTING_NOT_FOUND: 'Listing not found.',
   LISTING_NOT_ACTIVE: 'This listing is no longer active.',
