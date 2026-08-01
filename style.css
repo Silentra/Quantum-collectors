@@ -824,9 +824,7 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .nav-identity-name,
-.nav-player-title-slot,
-.profile-identity-name,
-#game-content-scroll .profile-identity-name {
+.nav-player-title-slot {
   color: var(--identity-accent);
 }
 
@@ -1364,6 +1362,16 @@ body.app-mode-game #screen-game.screen.active {
 }
 #game-content-scroll .text-amber-400 {
   color: #fbbf24;
+}
+
+/*
+ * Identity Color — Profile summary username.
+ * Must follow header/body remaps and beat #game-content-scroll .font-bold.text-xl
+ * (username historically used those Tailwind classes; ID specificity 2,0,0 wins).
+ */
+#game-content-scroll #profile-username.profile-identity-name,
+#game-content-scroll #profile-username {
+  color: var(--identity-accent);
 }
 
 /* Profile identity accent picker */

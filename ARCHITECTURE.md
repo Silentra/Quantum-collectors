@@ -1067,14 +1067,15 @@ Equal `1fr` side columns reserve space so the center column is **visually center
 | Username **color** | Same `--identity-accent` | Profile utility preference |
 | Banner / background visuals | `data-banner`, `data-background` | Earned cosmetics (S5+) |
 
-**Identity accent system (`data-identity-accent`)**
+**Identity Color system (`data-identity-accent`)**
 
 - **Not** an earned cosmetic, banner theme, shell theme pack, or title cosmetic
 - **Not** `data-theme` (reserved for future aggregate shell accent)
 - Curated allowlist (~14 slugs): `default`, `slate`, `silver`, `ice`, `sky`, `teal`, `emerald`, `lime`, `gold`, `amber`, `coral`, `rose`, `lavender`, `violet`, `indigo`
 - Stored at `players/{username}/profile/identityAccent`
 - Applied via `applyShellTheme()` → `data-identity-accent` on `#screen-game`, `#game-shell-chrome`, `#game-header`
-- CSS maps slugs to `--identity-accent`; consumed by `.nav-identity-name` and `.nav-player-title-slot` only
+- CSS maps slugs to `--identity-accent`; consumed by `.nav-identity-name`, `.nav-player-title-slot`, and `#profile-username` / `.profile-identity-name` (Profile summary-card username) only
+- Does **not** recolor profile stats, RP, group labels, section headings, consumables, cosmetics, achievements, leaderboard names, or other players
 - Mutation: `setIdentityAccent()` in `shop-mutations.js` (profile utility, not shop purchase)
 - No arbitrary hex, no inline styles, no runtime style injection
 
@@ -1084,7 +1085,7 @@ Four independent player-controlled channels in Profile → Appearance (same cura
 
 | Channel | Profile field | Hook | Consumed by |
 |---------|---------------|------|-------------|
-| Identity accent | `identityAccent` | `data-identity-accent` | `.nav-identity-name`, `.nav-player-title-slot` |
+| Identity Color | `identityAccent` | `data-identity-accent` | Shell username, equipped shell title, Profile summary username (`.nav-identity-name`, `.nav-player-title-slot`, `#profile-username`) |
 | Header text | `headerTextColor` | `data-header-text` | Gameplay panel headings (`--profile-header-text`) |
 | Body text | `bodyTextColor` | `data-body-text` | Gameplay panel secondary/muted text (`--profile-body-text`) |
 | Tab text | `tabTextColor` | `data-tab-text` | `#game-shell-chrome .tab-btn` label color (`--chrome-tab-text`) |
