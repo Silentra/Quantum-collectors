@@ -20,12 +20,12 @@ js/
   shell-theme.js     - Application shell theme hooks (data-* attrs, title mount, identity accent); no cosmetic visuals
   toast.js           - Toast notification utility
   research.js        - Research Points (RP) infrastructure: schema, migration, helpers, leaderboard queries
-  trading.js         - Phase T-1 validation helpers (pure) + Phase T-2 direct trade lifecycle (create/accept/decline/cancel/getPending) + T-4 migration
+  trading.js         - Phase T-1 validation helpers (pure) + Phase T-2 direct trade lifecycle (create/respond/confirm/decline/cancel/getPending)
   trade-execution.js - Atomic direct-trade swap helper: executeDirectTrade(), cooldown read/format helpers
   trade-listings.js  - Phase T-4 listing lifecycle: createListing, cancelListing, acceptListing, getVisibleListings, getMyActiveListing (deprecated), getMyActiveListings, getMaxActiveListingsPerPlayer, expireStaleListings, getListingCooldown
   trade-listing-execution.js - Atomic listing-trade swap helper: executeListingTrade() — isolated, same architecture as trade-execution.js
   trade-confirm-modal.js - Sandbox-safe confirmation modal (showTradeConfirmModal), replaces native confirm() blocked by iframe sandbox
-  trade-ui.js        - Trading tab UI: sub-tabs (Direct Trades / Trade Listings), player picker, card selectors, incoming/outgoing trade panels, listing create/cancel/accept, cooldown display
+  trade-ui.js        - Trading tab UI: Direct (offer → return → confirm) / Listings; no cross-player inventory browse for offers; reactive refresh
   quest-config.js    - Research Project config: DEFAULT_QUEST_CONFIG, AURA_SCALING, Firebase mirror (config/quests), cached getter, getCardPowerContribution()
   quests.js          - Research Projects module entry: loads quest-config on init, re-exports power helper, placeholder lifecycle
   achievements.js           - Public facade: bumpPlayerStat, record* hooks, login eval, claim; gameplay must never unlock directly
@@ -212,18 +212,30 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 ### Trading System (Phase T-1 + T-2 + T-3 + T-4 + T-6)
 - **Eight modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing atomic swap), `trade-availability.js` (copy-aware reservation math), `trade-lock-helpers.js` (legacy wrappers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)
 - **DB structure**: `/trades/direct/{tradeId}` for direct trades, `/trades/listings/{listingId}` for anonymous listings. Migration from flat `/trades/{tradeId}` happens automatically on init.
-- **Phase T-1 — Pure Validation**: `validateDirectTrade()` and `validateListingTrade()` are fully pure (no DB writes, no side effects, no inventory mutation). Both take explicit data params and return `{ valid, reason }`. Safe to call repeatedly, including immediately before trade completion.
-  - `validateListingTrade()` accepts `listing` object with `requestedCardIds` (1–3 array) + `chosenCardId` (the specific card the accepter provides)
-- **Phase T-2 — Direct Trade Lifecycle**:
-  - `createTradeOffer(offering, target, offeredCard, requestedCard)` — cooldown check → fresh DB load → T-1 validation → duplicate check → write trade record to `/trades/direct/{id}`
-  - `acceptTrade(tradeId, acceptingPlayerId)` — status/target guard → cooldown check → delegates to `executeDirectTrade()`
-  - `declineTrade(tradeId, decliningPlayerId)` / `cancelTrade(tradeId, cancellingPlayerId)` — status guards → mark declined/cancelled
-  - `getPendingTrades(username)` — returns `{ incoming, outgoing }` sorted newest-first
+- **Phase T-1 — Pure Validation**:
+  - `validateDirectTradeOffer()` — offer creation only (no target inventory read)
+  - `validateDirectTrade()` — full two-card validation (respond + final execute); fully pure
+  - `validateListingTrade()` — listing accept; `requestedCardIds` (1–3) + `chosenCardId`
+- **Phase T-2 — Direct Trade Lifecycle** (classroom-arranged offer → return → confirm):
+  - Schema: `{ id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId (null until B responds), status, createdAt, respondedAt?, completedAt?, failureReason? }`
+  - Statuses: `awaiting_target_response` → `awaiting_offerer_confirmation` → `processing` → `accepted`, or terminal `declined` / `cancelled` / `failed`
+  - `createTradeOffer(offering, target, offeredCard)` — A cooldown check → offer-only validation (no B inventory) → duplicate active offer check → write with `requestedCardId: null`, status `awaiting_target_response`
+  - `respondToTrade(tradeId, targetPlayerId, requestedCardId)` — B picks same-rarity return from **own** inventory; B cooldown blocks respond; sets `requestedCardId`, status `awaiting_offerer_confirmation`, `respondedAt`
+  - `confirmTrade(tradeId, offeringPlayerId)` — A final accept → `executeDirectTrade()`
+  - `declineTrade` — B in `awaiting_target_response`, or A in `awaiting_offerer_confirmation`
+  - `cancelTrade` — A only while `awaiting_target_response`
+  - `getPendingTrades(username)` — incoming = offers awaiting B; outgoing = A's active offers/proposals
+  - **No cross-player inventory browsing** in the offer UI; execution still reloads both players for correctness
 - **Atomic Direct Execution** (`trade-execution.js`):
   - `executeDirectTrade(trade)` — the ONLY function that mutates inventories for direct trades
-  - Flow: reload fresh players → reload cards → rerun T-1 validation → check BOTH cooldowns → compute new inventories (no writes yet) → write ALL mutations together (inventories, stats, cooldowns, progression, trade status)
-  - Zero-quantity cleanup: entries with qty ≤ 0 are deleted from inventory objects
-  - On validation failure: trade marked as `failed` with `failureReason` in DB, no inventory mutation occurs
+  - Requires status `awaiting_offerer_confirmation` and non-null `requestedCardId`
+  - Flow: reload trade → verify status → reload players/cards → rerun full validation → check BOTH cooldowns → compute inventories → re-check status → `processing` → write inventories/stats/cooldowns/progression → `accepted` + `completedAt`
+  - On validation/cooldown failure: `failed` + `failureReason`, no inventory mutation
+  - Cooldown (`lastDirectTradeAt`) applied to **both** players only on successful swap
+- **Reservations** (`trade-availability.js` — `ACTIVE_DIRECT_TRADE_STATUSES`):
+  - `awaiting_target_response`: reserve A's `offeredCardId`
+  - `awaiting_offerer_confirmation` / `processing`: reserve offered + `requestedCardId` (null-safe)
+  - Terminal statuses reserve nothing; listing reservations unchanged (`active` listings only)
 - **Phase T-4 — Anonymous Trade Listings** (`trade-listings.js` + `trade-listing-execution.js`):
   - `createListing(ownerId, offeredCardId, requestedCardIds)` — max `economy.maxActiveListingsPerPlayer` active listings per player (config-driven, default 1), 1–3 requestedCardIds, all same rarity as offered, group-scoped, cooldown check
   - `cancelListing(listingId, playerId)` — cancellation does NOT remove posting cooldown
@@ -244,29 +256,31 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
   - Both owner and accepter get `lastDirectTradeAt` cooldown applied (shared trade cooldown)
 - **Cooldowns**:
   - `getDirectTradeCooldown(username)` — shared by direct trades and listing acceptance. Configurable via `config.economy.directTradeCooldownMinutes` (default 30).
+  - Direct: create/respond blocked if that player is on cooldown; decline/cancel do not apply cooldown; successful final swap applies cooldown to both
   - `getListingCooldown(username)` — separate cooldown for creating listings. Configurable via `config.economy.listingCooldownMinutes` (default 30). Uses `players/{username}/lastListingCreatedAt`.
   - Listing expiration: `config.economy.listingExpirationHours` (default 24).
 - **Trade UI** (`trade-ui.js`):
   - `renderTrading()` — entry point called by ui.js when Trading tab activates; resets reactive hashes on call
   - `cleanupTrading()` — clears cooldown interval when leaving tab
   - **Sub-tabs**: "🤝 Direct Trades" and "📋 Trade Listings" toggle between views
-  - **Direct sub-tab**: cooldown banner, incoming trades (`data-section="incoming-trades"` attr for targeted refresh), outgoing trades (cancel), new trade form (player picker → card selectors → rarity warning → confirmation preview → send)
+  - **Direct sub-tab**: cooldown banner; incoming (B: offered card + own same-rarity return picker + decline); outgoing (waiting vs response-received confirm); send offer (player picker + A's card only — no target inventory)
   - **Listings sub-tab**: listing cooldown banner, "My Listings (n/max)" section (all owned listings + create form when below max), "Available Listings" section (`id="available-listings-section"`, anonymous, group-scoped)
   - Create listing form: offered card dropdown → dynamic checkbox list (same-rarity cards, max 3) → "Post Listing" button
   - Available listings show offered card + requested cards (with ✓ for owned cards, strikethrough for unowned), "Trade: Give {card}" buttons for each fulfillable card
-  - Player picker filters to same-group, non-restricted, non-hidden players
+  - Player picker filters to same-group, non-restricted, non-hidden players (metadata only)
   - **Lightweight reactive refresh helpers** (Phase T-8.5A):
     - `refreshTradeCooldownBanners(username?)` — updates direct-trade cooldown banner/timer only
     - `refreshListingCooldownBanners(username?)` — updates listing-post + listing-accept banners/timers only
-    - `refreshIncomingTradesSection(username?)` — replaces `[data-section="incoming-trades"]` contents, rewires buttons
+    - `refreshIncomingTradesSection(username?)` — replaces `[data-section="incoming-trades"]`; preserves return-card selection
+    - `refreshOutgoingTradesSection(username?)` — replaces `[data-section="outgoing-trades"]`; one-shot toast on response received
     - `refreshAvailableListingsSection(username?)` — replaces `#available-listings-section` contents, rewires buttons
     - `refreshMyListingsSection(username?)` — replaces `#my-listings-section` contents, rewires buttons (skipped by reactive ticker if create form has a value to preserve user input)
     - `refreshTradeAvailabilityState()` — convenience wrapper for cooldown banners
-  - **Reactive ticker**: interval inside `_startCooldownTimer` runs every 1s for cooldown banners, every 5s for section change-detection. Uses `_hashArray()` snapshots to skip DOM writes when nothing changed. Guards against wiping form state when user is mid-selection.
+  - **Reactive ticker**: interval inside `_startCooldownTimer` runs every 1s for cooldown banners, every 5s for section change-detection. Hashes include direct status + `requestedCardId` + timestamps. No new Firebase listeners or polling cadence.
 - **Phase T-3 — Hidden Player System**:
   - `isTradeProfileHidden` (bool, default `false`) on every player profile — hides player from direct-trade search/lists only
   - Hidden players do NOT appear in the trade-ui player picker and cannot receive unsolicited direct trades (`TARGET_PLAYER_HIDDEN` validation error)
-  - Hidden players CAN still: open trading UI, initiate trades themselves, send trade requests, create listings, accept listings, appear on leaderboards, remain in groups/subgroups
+  - Hidden players CAN still: open trading UI, initiate trades themselves, send offers, create listings, accept listings, appear on leaderboards, remain in groups/subgroups
   - Toggle: "Hide Trading Profile: ON/OFF" rendered at top of trading tab, writes directly to `players/{username}/isTradeProfileHidden`
   - Migration: safe backfill to `false` on login + session restore (same pattern as `isTradeRestricted`), default `false` in `createPlayerRecord()`
   - Validation uses `target.isTradeProfileHidden` (NOT generic `hidden`) — scoped to trading systems only
@@ -278,10 +292,10 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 - **Phase T-6 — UX Safeguards** (validators + UI):
   - Static hint under offer selectors: cards in use on research projects are not shown in pickers
   - **Last-copy warning**: ⚠️ when `availableCopies === 1` (reservation-aware)
-  - **Trade confirmation**: Sandbox-safe in-app modal (`trade-confirm-modal.js → showTradeConfirmModal()`) before every trade action (direct send, direct accept, listing create, listing accept) — shows card names, rarities, last-copy warnings. Returns `Promise<boolean>`. Replaces native `confirm()` which is blocked in sandboxed iframes (`allow-modals` not set). Modal supports Esc/backdrop dismiss, responsive layout, dark translucent overlay. CSS classes: `.trade-confirm-overlay`, `.trade-confirm-modal`, `.trade-confirm-warning`, `.trade-confirm-actions`.
+  - **Trade confirmation**: Sandbox-safe in-app modal (`trade-confirm-modal.js → showTradeConfirmModal()`) before send offer, submit return, final accept, listing create/accept — shows card names, rarities, last-copy warnings. Returns `Promise<boolean>`. Replaces native `confirm()`. Esc/backdrop dismiss.
   - **Toast improvement**: Container moved to bottom-left (avoids platform controls), 5s visibility, slide-from-left animation
-- **Constraints**: 1-for-1 trades only, equal rarity required, same group required, `isTradeRestricted` blocks trading, `isTradeProfileHidden` blocks incoming direct trades (not listings), `tradable: false` on card def blocks that card, project-locked cards cannot be traded
-- **DB paths**: `/trades/direct/{tradeId}` (status: pending → processing → accepted|declined|cancelled|failed), `/trades/listings/{listingId}` (status: active → processing → fulfilled|cancelled|expired|failed)
+- **Constraints**: 1-for-1 trades only, equal rarity required, same group required, `isTradeRestricted` blocks trading, `isTradeProfileHidden` blocks incoming direct offers (not listings), `tradable: false` on card def blocks that card, project-locked / reserved copies cannot be traded
+- **DB paths**: `/trades/direct/{tradeId}` (status: awaiting_target_response → awaiting_offerer_confirmation → processing → accepted|declined|cancelled|failed), `/trades/listings/{listingId}` (status: active → processing → fulfilled|cancelled|expired|failed)
 - **Init**: `initTrading()` called in main.js step 6; migrates config values + migrates flat `/trades/` to `/trades/direct/` + `/trades/listings/`
 - **Config keys** (in `config/economy`): `directTradeCooldownMinutes` (default 10080), `listingCooldownMinutes` (default 10080), `listingAcceptCooldownMinutes` (default 10080), `listingExpirationHours` (default 168), `maxActiveListingsPerPlayer` (default 1)
 - **Phase T-8 — Admin Trading Controls**: `renderAdminTradingControls()` in ui.js renders a dedicated admin sub-tab ("Trading") with:
