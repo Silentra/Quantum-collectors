@@ -829,17 +829,18 @@ Firebase path: `config/cosmetics/definitions/{titleId}`.
   - `style.css` additions are scoped to `.shop-*` classes and do not redesign global rendering architecture.
 
 ### Profile Inventory + Cosmetic Runtime UI
-- **Player-facing profile scope**: The Profile tab now surfaces existing runtime state for identity, consumables, cosmetics, featured cards, RP balances, collection progress, and an achievements summary. It does not add admin tools, public/social profiles, consumable use, monetization, preview animations, new listeners, polling, or backend redesigns.
+- **Player-facing profile scope**: The Profile tab surfaces existing runtime state for identity, consumables, cosmetics, featured-card showcase, RP balances, collection progress, and an achievements summary. It does not add admin tools, public/social profiles, consumable use, monetization, preview animations, new listeners, polling, or backend redesigns.
 - **Rendering ownership** (`profile-ui.js`):
-  - Preserves the existing username/group, stats, and collection-progress behavior while adding dedicated sections for currently equipped identity, read-only consumables, owned cosmetics, featured cards, and achievements panel (`achievements-ui.js` in profile upper-right, consumables below).
-  - Equipped identity renders strictly from `players/{username}/profile/*` via the canonical profile runtime helpers, not from legacy `cosmetics.equipped`.
-  - Consumables render only owned quantities from `players/{username}/items` where quantity is greater than zero. They are read-only in Profile.
-  - Cosmetics render only owned `ITEM_TYPES.COSMETIC` entries from `cosmetics.owned`, grouped dynamically by metadata category. Unknown/future categories are shown under “Other Cosmetics.”
+  - Summary panel (`#profile-summary-card`): compact identity column (avatar, username, group, four vertically stacked stats) plus a three-slot featured-card showcase on the right.
+  - Featured showcase always renders exactly three slots. Dense `profile.featuredCards[]` maps `slot i = featuredCards[i]`; remaining positions are empty UI pads. Only the next empty index is addable (later empties are disabled placeholders). Clearing a slot compacts later cards left.
+  - Filled slots use canonical `buildCardRenderModel(..., { variant: 'modal' })` + `renderDetailFrame()` with equipped border/glow/shimmer resolvers and Mathematical Aura gating. No Collection qty badge, no on-art concept chip, no Profile-specific card template. Slot chrome is a focusable button wrapping the frame (`pointer-events: none` on the face).
+  - Achievements panel remains the upper-right aside; consumables and cosmetics remain below the upper row.
+- **Featured-card picker**: Global `#featured-card-picker-modal` (body-level, outside `#game-content-scroll`). Lightweight owned-card rows (`renderMiniCardArtHtml`) with search, rarity, and type filters. Add / Replace modes; Replace includes **Clear Featured Slot**. Cancel makes no writes.
 - **Mutation boundaries**:
   - Equip/unequip actions call `equipCosmetic()` and `unequipCosmetic()` from `shop-mutations.js`.
-  - Featured-card actions call `featureCard()` and `unfeatureCard()` from `shop-mutations.js`.
+  - Featured showcase add/replace/clear calls a single `setFeaturedCards(username, nextIds)` write (not unfeature+feature). `featureCard()` / `unfeatureCard()` remain available APIs but are not used by Profile UI.
   - Profile UI does not write Firebase paths directly, does not mutate ownership/inventory, and does not duplicate backend validation.
-  - Featured cards are capped at `MAX_FEATURED_CARDS = 3` in `player-schema.js`, so the backend runtime enforces the same cap the UI displays.
+  - Featured cards are capped at `MAX_FEATURED_CARDS = 3` in `player-schema.js`.
 - **State synchronization**:
   - Profile uses pull-after-mutation rendering: read current player snapshot, call a canonical mutation for user actions, then rerender from persisted runtime state.
   - No new realtime listeners, all-player scans, root reads, polling loops, or broad synchronization systems are introduced.

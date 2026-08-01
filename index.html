@@ -371,14 +371,19 @@
             <div class="profile-upper-row">
               <div class="profile-top-main">
                 <div class="bg-surface-900 rounded-xl p-5 border border-surface-700 mb-3" id="profile-summary-card">
-                  <div class="flex items-center gap-3 mb-3">
-                    <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center text-xl">👤</div>
-                    <div>
-                      <div id="profile-username" class="profile-identity-name text-lg font-semibold"></div>
-                      <div id="profile-group" class="text-sm text-surface-400"></div>
+                  <div class="profile-summary-layout">
+                    <div class="profile-summary-identity">
+                      <div class="profile-summary-identity-row">
+                        <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center text-xl flex-shrink-0" aria-hidden="true">👤</div>
+                        <div class="min-w-0">
+                          <div id="profile-username" class="profile-identity-name text-lg font-semibold"></div>
+                          <div id="profile-group" class="text-sm text-surface-400"></div>
+                        </div>
+                      </div>
+                      <div id="profile-stats" class="profile-stats-column"></div>
                     </div>
+                    <div id="profile-featured-showcase" class="profile-featured-showcase" aria-label="Featured cards"></div>
                   </div>
-                  <div id="profile-stats" class="grid grid-cols-2 sm:grid-cols-4 gap-2"></div>
                 </div>
                 <div id="profile-appearance" class="mb-3"></div>
               </div>
@@ -388,7 +393,6 @@
               <aside id="profile-inventory" class="profile-consumables-below" aria-label="Consumables"></aside>
             </div>
             <div id="profile-cosmetics" class="mb-4"></div>
-            <div id="profile-featured-cards" class="mb-4"></div>
             <div class="bg-surface-900 rounded-xl p-6 border border-surface-700">
               <h3 class="font-semibold mb-3">Collection Progress</h3>
               <div id="profile-progress" class="space-y-3"></div>
@@ -943,6 +947,46 @@
       <button id="btn-close-card-detail" class="w-full mt-4 bg-surface-700 hover:bg-surface-600 py-3 rounded-lg font-semibold transition">
         Close
       </button>
+    </div>
+  </div>
+
+  <!-- Featured Card Picker Modal (global — outside #screen-game / #game-content-scroll) -->
+  <div id="featured-card-picker-modal" class="global-modal-overlay hidden fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="featured-card-picker-title">
+    <div class="featured-card-picker-panel bg-surface-900 rounded-2xl border border-surface-700 w-full max-w-lg max-h-[min(90vh,40rem)] flex flex-col overflow-hidden">
+      <div class="flex items-start justify-between gap-3 px-5 pt-5 pb-3 border-b border-surface-800 flex-shrink-0">
+        <div class="min-w-0">
+          <h3 id="featured-card-picker-title" class="text-lg font-bold">Featured Card</h3>
+          <p id="featured-card-picker-subtitle" class="text-sm text-surface-400 mt-0.5"></p>
+        </div>
+        <button type="button" id="btn-close-featured-card-picker" class="global-modal-close flex-shrink-0 text-surface-300 hover:text-white text-3xl leading-none w-10 h-10 flex items-center justify-center rounded-lg hover:bg-surface-800 transition" aria-label="Close featured card picker">&times;</button>
+      </div>
+      <div class="px-5 py-3 flex flex-col gap-2 border-b border-surface-800 flex-shrink-0">
+        <label class="sr-only" for="featured-picker-search">Search owned cards</label>
+        <input id="featured-picker-search" type="search" placeholder="Search owned cards…" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500" autocomplete="off">
+        <div class="flex flex-wrap gap-2">
+          <label class="sr-only" for="featured-picker-rarity">Rarity</label>
+          <select id="featured-picker-rarity" class="bg-surface-800 border border-surface-600 rounded-lg px-2 py-2 text-sm text-white flex-1 min-w-[7rem]">
+            <option value="all">All Rarities</option>
+            <option value="common">Common</option>
+            <option value="uncommon">Uncommon</option>
+            <option value="rare">Rare</option>
+            <option value="epic">Epic</option>
+            <option value="legendary">Legendary</option>
+          </select>
+          <label class="sr-only" for="featured-picker-type">Type</label>
+          <select id="featured-picker-type" class="bg-surface-800 border border-surface-600 rounded-lg px-2 py-2 text-sm text-white flex-1 min-w-[7rem]">
+            <option value="all">All Types</option>
+            <option value="scientist">Scientist</option>
+            <option value="concept">Concept</option>
+          </select>
+        </div>
+      </div>
+      <div id="featured-card-picker-list" class="featured-card-picker-list flex-1 min-h-0 overflow-y-auto px-3 py-2"></div>
+      <div id="featured-card-picker-footer" class="px-5 py-3 border-t border-surface-800 flex-shrink-0 hidden">
+        <button type="button" id="btn-clear-featured-slot" class="w-full bg-surface-800 hover:bg-surface-700 border border-surface-600 text-surface-200 py-2.5 rounded-lg font-semibold text-sm transition">
+          Clear Featured Slot
+        </button>
+      </div>
     </div>
   </div>
 
