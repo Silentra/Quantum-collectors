@@ -21,17 +21,23 @@ import { getCosmeticDefinition, getItemDefinition, isCosmeticDefinitionActive } 
 import { ITEM_CATEGORIES, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import {
   equipCosmetic,
-  featureCard,
+  setFeaturedCards,
   setIdentityAccent,
   setProfileBodyTextColor,
   setProfileHeaderTextColor,
   setProfileTabTextColor,
   unequipCosmetic,
-  unfeatureCard,
 } from './shop-mutations.js';
 import { renderProfileAchievements } from './achievements-ui.js';
+import { buildCardRenderModel, renderDetailFrame } from './card-render.js';
+import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
+import { renderMiniCardArtHtml } from './card-art.js';
 
 const PROFILE_FEATURED_CARD_LIMIT = 3;
+
+/** @type {{ username: string, slotIndex: number, mode: 'add'|'replace', featuredIds: string[], focusEl: Element|null }|null} */
+let _featuredPickerSession = null;
+let _featuredPickerWired = false;
 
 const EQUIPPED_FIELDS = Object.freeze({
   [ITEM_CATEGORIES.AURA]: 'equippedAura',
@@ -183,7 +189,52 @@ function getOwnedCardEntries(username) {
       quantity,
       card: cards.getCard(cardId),
     }))
-    .filter(entry => entry.card);
+    .filter(entry => entry.card && entry.card.enabled !== false);
+}
+
+function getFeaturedCardIds(playerData) {
+  const raw = playerData?.profile?.featuredCards;
+  if (!Array.isArray(raw)) return [];
+  const ids = [];
+  for (const value of raw) {
+    if (typeof value !== 'string' || !value.trim()) continue;
+    if (ids.includes(value)) continue;
+    ids.push(value);
+    if (ids.length >= PROFILE_FEATURED_CARD_LIMIT) break;
+  }
+  return ids;
+}
+
+/**
+ * Build next dense featuredCards[] for a slot edit.
+ * @param {string[]} featuredIds
+ * @param {number} slotIndex
+ * @param {string|null} cardId null clears the slot
+ * @returns {string[]|null} next ids, or null if invalid
+ */
+function buildNextFeaturedIds(featuredIds, slotIndex, cardId) {
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= PROFILE_FEATURED_CARD_LIMIT) {
+    return null;
+  }
+  const ids = [...featuredIds];
+
+  if (cardId == null) {
+    if (slotIndex >= ids.length) return null;
+    return ids.filter((_, index) => index !== slotIndex);
+  }
+
+  if (typeof cardId !== 'string' || !cardId.trim()) return null;
+
+  if (slotIndex < ids.length) {
+    ids[slotIndex] = cardId;
+    return ids;
+  }
+
+  if (slotIndex === ids.length) {
+    return [...ids, cardId];
+  }
+
+  return null;
 }
 
 function renderColorSwatchGrid(current, actionName) {
@@ -350,6 +401,89 @@ function renderCompactCosmetics(p) {
   `;
 }
 
+function renderShowcaseCardHtml(card, quantity, playerData) {
+  const borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(playerData);
+  const equippedShimmerDefinition = getEquippedShimmer(playerData)?.definition ?? null;
+  const equippedGlowDefinition = getEquippedAura(playerData)?.definition ?? null;
+  const model = buildCardRenderModel(card, {
+    variant: 'modal',
+    quantity,
+    borderRenderEffectId,
+    equippedShimmerDefinition,
+    equippedGlowDefinition,
+  });
+  return renderDetailFrame(model);
+}
+
+function renderFeaturedShowcase(p, username) {
+  const container = document.getElementById('profile-featured-showcase');
+  if (!container) return;
+
+  const featuredIds = getFeaturedCardIds(p);
+  const inventory = player.getInventory(username);
+  const qtyById = new Map(inventory.map(entry => [entry.cardId, Number(entry.quantity) || 0]));
+
+  const slots = [];
+  for (let slotIndex = 0; slotIndex < PROFILE_FEATURED_CARD_LIMIT; slotIndex += 1) {
+    const cardId = featuredIds[slotIndex] || null;
+    const slotNumber = slotIndex + 1;
+
+    if (!cardId) {
+      const isNextAddSlot = slotIndex === featuredIds.length;
+      if (!isNextAddSlot) {
+        slots.push(`
+          <button type="button"
+            class="profile-showcase-slot profile-showcase-slot--empty is-pending"
+            data-showcase-slot="${slotIndex}"
+            disabled
+            aria-disabled="true"
+            aria-label="Fill earlier featured slots first">
+            <span class="profile-showcase-plus" aria-hidden="true">+</span>
+          </button>
+        `);
+        continue;
+      }
+
+      slots.push(`
+        <button type="button"
+          class="profile-showcase-slot profile-showcase-slot--empty"
+          data-showcase-slot="${slotIndex}"
+          aria-label="Add featured card to slot ${slotNumber}">
+          <span class="profile-showcase-plus" aria-hidden="true">+</span>
+        </button>
+      `);
+      continue;
+    }
+
+    const card = cards.getCard(cardId);
+    if (!card) {
+      slots.push(`
+        <button type="button"
+          class="profile-showcase-slot profile-showcase-slot--empty"
+          data-showcase-slot="${slotIndex}"
+          aria-label="Replace featured card in slot ${slotNumber}">
+          <span class="profile-showcase-plus" aria-hidden="true">+</span>
+        </button>
+      `);
+      continue;
+    }
+
+    const quantity = Math.max(1, qtyById.get(cardId) || 1);
+    const label = `Replace featured card in slot ${slotNumber}: ${card.name || cardId}`;
+    slots.push(`
+      <button type="button"
+        class="profile-showcase-slot profile-showcase-slot--filled"
+        data-showcase-slot="${slotIndex}"
+        data-card-id="${escapeHtml(cardId)}"
+        aria-label="${escapeHtml(label)}">
+        <span class="profile-showcase-card-face" aria-hidden="true">${renderShowcaseCardHtml(card, quantity, p)}</span>
+      </button>
+    `);
+  }
+
+  container.innerHTML = slots.join('');
+}
+
 function renderProfileSummary(p) {
   document.getElementById('profile-username').textContent = p.username;
   const groupEl = document.getElementById('profile-group');
@@ -371,17 +505,214 @@ function renderProfileSummary(p) {
   const projectsCompleted = p.projectsCompleted || researchStats.successfulProjects || 0;
   const tradesCompleted = stats.tradesCompleted || 0;
   document.getElementById('profile-stats').innerHTML = `
-    <div class="profile-stats-grid">
-      <div class="profile-stats-primary">
-        <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(totalRP)}</div><div class="stat-label">Lifetime RP</div></div>
-        <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(spendableRP)}</div><div class="stat-label">Spendable RP</div></div>
-      </div>
-      <div class="profile-stats-secondary">
-        <div class="stat-card stat-card-compact stat-card-secondary"><div class="stat-value">${escapeHtml(projectsCompleted)}</div><div class="stat-label">Projects Completed</div></div>
-        <div class="stat-card stat-card-compact stat-card-secondary"><div class="stat-value">${escapeHtml(tradesCompleted)}</div><div class="stat-label">Trades Completed</div></div>
-      </div>
-    </div>
+    <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(totalRP)}</div><div class="stat-label">Lifetime RP</div></div>
+    <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(spendableRP)}</div><div class="stat-label">Spendable RP</div></div>
+    <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(projectsCompleted)}</div><div class="stat-label">Projects Completed</div></div>
+    <div class="stat-card stat-card-compact"><div class="stat-value">${escapeHtml(tradesCompleted)}</div><div class="stat-label">Trades Completed</div></div>
   `;
+
+  const session = auth.getSession();
+  if (session?.username) {
+    renderFeaturedShowcase(p, session.username);
+  }
+}
+
+function closeFeaturedCardPicker({ restoreFocus = true } = {}) {
+  const modal = document.getElementById('featured-card-picker-modal');
+  const focusEl = _featuredPickerSession?.focusEl;
+  _featuredPickerSession = null;
+  modal?.classList.add('hidden');
+  if (restoreFocus && focusEl instanceof HTMLElement) {
+    focusEl.focus();
+  }
+}
+
+function getPickerFilterState() {
+  return {
+    search: (document.getElementById('featured-picker-search')?.value || '').trim().toLowerCase(),
+    rarity: document.getElementById('featured-picker-rarity')?.value || 'all',
+    type: document.getElementById('featured-picker-type')?.value || 'all',
+  };
+}
+
+function renderFeaturedPickerList() {
+  const listEl = document.getElementById('featured-card-picker-list');
+  if (!listEl || !_featuredPickerSession) return;
+
+  const { username, slotIndex, featuredIds } = _featuredPickerSession;
+  const currentSlotCardId = featuredIds[slotIndex] || null;
+  const otherFeatured = new Set(featuredIds.filter((_, index) => index !== slotIndex));
+  const { search, rarity, type } = getPickerFilterState();
+
+  let entries = getOwnedCardEntries(username);
+  if (rarity !== 'all') entries = entries.filter(entry => entry.card.rarity === rarity);
+  if (type !== 'all') entries = entries.filter(entry => entry.card.type === type);
+  if (search) {
+    entries = entries.filter(entry => {
+      const name = (entry.card.name || entry.cardId).toLowerCase();
+      return name.includes(search) || entry.cardId.toLowerCase().includes(search);
+    });
+  }
+
+  entries.sort((a, b) => {
+    const rarityDelta = (cards.RARITY_ORDER[b.card.rarity] || 0) - (cards.RARITY_ORDER[a.card.rarity] || 0);
+    if (rarityDelta !== 0) return rarityDelta;
+    return String(a.card.name || a.cardId).localeCompare(String(b.card.name || b.cardId));
+  });
+
+  if (entries.length === 0) {
+    listEl.innerHTML = '<p class="featured-card-picker-empty text-sm text-surface-400 text-center py-8">No owned cards match these filters.</p>';
+    return;
+  }
+
+  listEl.innerHTML = entries.map(({ cardId, quantity, card }) => {
+    const featuredElsewhere = otherFeatured.has(cardId);
+    const isCurrent = cardId === currentSlotCardId;
+    const disabled = featuredElsewhere;
+    const meta = `${formatLabel(card.rarity)} · ${formatLabel(card.type)} · Qty ${quantity}`;
+    const selectedClass = isCurrent ? ' is-current' : '';
+    const disabledClass = disabled ? ' is-disabled' : '';
+    const status = featuredElsewhere
+      ? '<span class="featured-picker-row-status">In another slot</span>'
+      : (isCurrent ? '<span class="featured-picker-row-status">Current</span>' : '');
+    return `
+      <button type="button"
+        class="featured-picker-row${selectedClass}${disabledClass}"
+        data-picker-card-id="${escapeHtml(cardId)}"
+        ${disabled ? 'disabled aria-disabled="true"' : ''}
+        aria-label="${escapeHtml(`${isCurrent ? 'Keep' : 'Select'} ${card.name || cardId}`)}">
+        <span class="featured-picker-row-art" aria-hidden="true">${renderMiniCardArtHtml(card)}</span>
+        <span class="featured-picker-row-text">
+          <span class="featured-picker-row-name">${escapeHtml(card.name || cardId)}</span>
+          <span class="featured-picker-row-meta">${escapeHtml(meta)}</span>
+        </span>
+        ${status}
+      </button>
+    `;
+  }).join('');
+}
+
+function openFeaturedCardPicker({ username, slotIndex, focusEl }) {
+  const playerData = player.getPlayer(username);
+  if (!playerData) return;
+
+  const featuredIds = getFeaturedCardIds(playerData);
+  if (slotIndex < 0 || slotIndex >= PROFILE_FEATURED_CARD_LIMIT) return;
+  if (slotIndex > featuredIds.length) return;
+
+  const mode = slotIndex < featuredIds.length ? 'replace' : 'add';
+  _featuredPickerSession = {
+    username,
+    slotIndex,
+    mode,
+    featuredIds,
+    focusEl: focusEl || null,
+  };
+
+  const modal = document.getElementById('featured-card-picker-modal');
+  const titleEl = document.getElementById('featured-card-picker-title');
+  const subtitleEl = document.getElementById('featured-card-picker-subtitle');
+  const footerEl = document.getElementById('featured-card-picker-footer');
+  const searchEl = document.getElementById('featured-picker-search');
+  const rarityEl = document.getElementById('featured-picker-rarity');
+  const typeEl = document.getElementById('featured-picker-type');
+
+  if (titleEl) {
+    titleEl.textContent = mode === 'replace' ? 'Replace Featured Card' : 'Add Featured Card';
+  }
+  if (subtitleEl) {
+    subtitleEl.textContent = `Slot ${slotIndex + 1} of ${PROFILE_FEATURED_CARD_LIMIT}`;
+  }
+  if (footerEl) {
+    footerEl.classList.toggle('hidden', mode !== 'replace');
+  }
+  if (searchEl) searchEl.value = '';
+  if (rarityEl) rarityEl.value = 'all';
+  if (typeEl) typeEl.value = 'all';
+
+  renderFeaturedPickerList();
+  modal?.classList.remove('hidden');
+  searchEl?.focus();
+}
+
+function commitFeaturedSlot(cardId) {
+  if (!_featuredPickerSession) return;
+  const { username, slotIndex, featuredIds, mode } = _featuredPickerSession;
+  const nextIds = buildNextFeaturedIds(featuredIds, slotIndex, cardId);
+  if (!nextIds) {
+    toast.error('Could not update that featured slot.');
+    return;
+  }
+
+  const unchanged = nextIds.length === featuredIds.length
+    && nextIds.every((id, index) => id === featuredIds[index]);
+  if (unchanged) {
+    closeFeaturedCardPicker();
+    return;
+  }
+
+  const result = setFeaturedCards(username, nextIds);
+  if (!result.success) {
+    toast.error(getReasonMessage(result.reason));
+    return;
+  }
+
+  if (cardId == null) {
+    toast.success('Featured slot cleared.');
+  } else if (mode === 'replace') {
+    toast.success('Featured card replaced.');
+  } else {
+    toast.success('Card featured.');
+  }
+
+  closeFeaturedCardPicker({ restoreFocus: false });
+  renderProfile();
+  const showcase = document.getElementById('profile-featured-showcase');
+  const slotBtn = showcase?.querySelector(`[data-showcase-slot="${slotIndex}"]`);
+  if (slotBtn instanceof HTMLElement) slotBtn.focus();
+}
+
+export function initFeaturedCardPicker() {
+  if (_featuredPickerWired) return;
+  const modal = document.getElementById('featured-card-picker-modal');
+  if (!modal) return;
+  _featuredPickerWired = true;
+
+  document.getElementById('btn-close-featured-card-picker')?.addEventListener('click', () => {
+    closeFeaturedCardPicker();
+  });
+
+  modal.addEventListener('click', event => {
+    if (event.target === modal) closeFeaturedCardPicker();
+  });
+
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    if (modal.classList.contains('hidden')) return;
+    event.preventDefault();
+    closeFeaturedCardPicker();
+  });
+
+  document.getElementById('featured-picker-search')?.addEventListener('input', () => {
+    if (_featuredPickerSession) renderFeaturedPickerList();
+  });
+  document.getElementById('featured-picker-rarity')?.addEventListener('change', () => {
+    if (_featuredPickerSession) renderFeaturedPickerList();
+  });
+  document.getElementById('featured-picker-type')?.addEventListener('change', () => {
+    if (_featuredPickerSession) renderFeaturedPickerList();
+  });
+
+  document.getElementById('featured-card-picker-list')?.addEventListener('click', event => {
+    const target = event.target instanceof Element ? event.target : null;
+    const row = target?.closest('[data-picker-card-id]');
+    if (!row || row.disabled) return;
+    commitFeaturedSlot(row.dataset.pickerCardId);
+  });
+
+  document.getElementById('btn-clear-featured-slot')?.addEventListener('click', () => {
+    commitFeaturedSlot(null);
+  });
 }
 
 function renderConsumables(p) {
@@ -416,63 +747,6 @@ function renderConsumables(p) {
   `;
 }
 
-function renderFeaturedCards(p, username) {
-  const container = document.getElementById('profile-featured-cards');
-  if (!container) return;
-
-  const featuredIds = Array.isArray(p.profile?.featuredCards)
-    ? p.profile.featuredCards.slice(0, PROFILE_FEATURED_CARD_LIMIT)
-    : [];
-  const featuredSet = new Set(featuredIds);
-  const ownedCards = getOwnedCardEntries(username);
-
-  const featured = featuredIds
-    .map(cardId => ({ cardId, card: cards.getCard(cardId) }))
-    .filter(entry => entry.card);
-
-  const featuredContent = featured.length === 0
-    ? '<div class="profile-empty-state">No featured cards selected.</div>'
-    : `<div class="profile-featured-list">${featured.map(({ cardId, card }) => `
-        <article class="profile-featured-card">
-          <div>
-            <div class="profile-card-title">${escapeHtml(card.name || cardId)}</div>
-            <div class="profile-card-meta">${escapeHtml(formatLabel(card.rarity))} · ${escapeHtml(formatLabel(card.type))}</div>
-          </div>
-          <button class="profile-btn" data-profile-action="unfeature-card" data-card-id="${escapeHtml(cardId)}">Remove</button>
-        </article>
-      `).join('')}</div>`;
-
-  const canFeatureMore = featuredIds.length < PROFILE_FEATURED_CARD_LIMIT;
-  const ownedContent = ownedCards.length === 0
-    ? '<div class="profile-empty-state">No owned cards available to feature.</div>'
-    : `<div class="profile-feature-options">${ownedCards.map(({ cardId, quantity, card }) => {
-        const alreadyFeatured = featuredSet.has(cardId);
-        return `
-          <article class="profile-feature-option">
-            <div>
-              <div class="profile-card-title">${escapeHtml(card.name || cardId)}</div>
-              <div class="profile-card-meta">${escapeHtml(formatLabel(card.rarity))} · Qty ${escapeHtml(quantity)}</div>
-            </div>
-            <button class="profile-btn profile-btn-primary" data-profile-action="feature-card" data-card-id="${escapeHtml(cardId)}" ${!alreadyFeatured && canFeatureMore ? '' : 'disabled'}>
-              ${alreadyFeatured ? 'Featured' : 'Feature'}
-            </button>
-          </article>
-        `;
-      }).join('')}</div>`;
-
-  container.innerHTML = `
-    <section class="profile-panel">
-      <div class="profile-panel-header">
-        <h3>Featured Cards</h3>
-        <span>${featuredIds.length}/${PROFILE_FEATURED_CARD_LIMIT} selected</span>
-      </div>
-      ${featuredContent}
-      <h4 class="profile-subheading">Owned Cards</h4>
-      ${ownedContent}
-    </section>
-  `;
-}
-
 function renderCollectionProgress(username) {
   const inventory = player.getInventory(username);
   const allCardsList = cards.getEnabledCards();
@@ -501,7 +775,6 @@ function wireProfileActions(username) {
   const containers = [
     document.getElementById('profile-appearance'),
     document.getElementById('profile-cosmetics'),
-    document.getElementById('profile-featured-cards'),
   ].filter(Boolean);
 
   for (const container of containers) {
@@ -510,6 +783,18 @@ function wireProfileActions(username) {
       const button = target?.closest('[data-profile-action]');
       if (!button) return;
       handleProfileAction(username, button);
+    };
+  }
+
+  const showcase = document.getElementById('profile-featured-showcase');
+  if (showcase) {
+    showcase.onclick = event => {
+      const target = event.target instanceof Element ? event.target : null;
+      const slotBtn = target?.closest('[data-showcase-slot]');
+      if (!slotBtn || slotBtn.disabled) return;
+      const slotIndex = Number(slotBtn.dataset.showcaseSlot);
+      if (!Number.isInteger(slotIndex)) return;
+      openFeaturedCardPicker({ username, slotIndex, focusEl: slotBtn });
     };
   }
 }
@@ -524,12 +809,6 @@ function handleProfileAction(username, button) {
   } else if (action === 'unequip-cosmetic') {
     result = unequipCosmetic(username, button.dataset.category);
     if (result.success) toast.success('Cosmetic unequipped.');
-  } else if (action === 'feature-card') {
-    result = featureCard(username, button.dataset.cardId);
-    if (result.success) toast.success('Card featured.');
-  } else if (action === 'unfeature-card') {
-    result = unfeatureCard(username, button.dataset.cardId);
-    if (result.success) toast.success('Card removed from featured cards.');
   } else if (action === 'set-identity-accent') {
     result = setIdentityAccent(username, button.dataset.colorId);
     if (result.success) toast.success('Identity accent updated.');
@@ -575,7 +854,6 @@ export function renderProfile() {
   renderProfileAchievements();
   renderConsumables(p);
   renderCompactCosmetics(p);
-  renderFeaturedCards(p, session.username);
   renderCollectionProgress(session.username);
   wireProfileActions(session.username);
   applyShellTheme(p);

@@ -56,7 +56,7 @@ import {
 } from './project-ui.js';
 
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
-import { getEquippedAura, getEquippedShimmer, renderProfile } from './profile-ui.js';
+import { getEquippedAura, getEquippedShimmer, initFeaturedCardPicker, renderProfile } from './profile-ui.js';
 import { renderShop, cleanupShop } from './shop-ui.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
@@ -2958,6 +2958,7 @@ export function init() {
   });
   initCardDetailModal();
   initCosmeticPreviewModal();
+  initFeaturedCardPicker();
   document.getElementById('btn-close-player-detail')?.addEventListener('click', () => {
     document.getElementById('player-detail-modal').classList.add('hidden');
   });
