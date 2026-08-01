@@ -253,7 +253,7 @@ export function renderTrading() {
   // Hide Trading Profile toggle
   html += `<div class="mb-4 p-3 rounded-lg bg-surface-800 border border-surface-700 flex items-center justify-between">
     <div>
-      <div class="text-sm font-medium text-surface-200">Hide Trading Profile</div>
+      <div class="text-sm font-medium trade-profile-toggle-title">Hide Trading Profile</div>
       <div class="text-xs text-surface-500">When ON, other players cannot search for you or send you trade requests.</div>
     </div>
     <div class="flex items-center gap-2">

@@ -230,8 +230,8 @@ function renderProfileAppearance(p) {
 
   const dropdowns = [
     renderAppearanceDropdown(
-      'Identity Accent',
-      'Colors your name and equipped title in the header.',
+      'Identity Color',
+      'Colors your name and equipped title in the header and Profile.',
       formatLabel(identityCurrent),
       `<div class="profile-accent-grid">${renderColorSwatchGrid(identityCurrent, 'set-identity-accent')}</div>`
     ),
@@ -259,7 +259,6 @@ function renderProfileAppearance(p) {
     <section class="profile-panel profile-appearance-panel">
       <div class="profile-panel-header">
         <h3>Appearance</h3>
-        <span>Readability settings — not inventory cosmetics</span>
       </div>
       <div class="profile-compact-dropdown-stack">${dropdowns}</div>
     </section>
