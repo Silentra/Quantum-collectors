@@ -16,6 +16,7 @@ import {
   normalizeCardArtSlug,
   resolveCardArt,
 } from './card-art.js';
+import { resolvePackArt, renderPackTileArtHtml } from './pack-art.js';
 import { buildCardRenderModel, renderPackCardWrapper, renderSciCard } from './card-render.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
@@ -457,10 +458,11 @@ function renderPacks() {
 
   grid.innerHTML = allPacks.map(pack => {
     const owned = playerPacksData[pack.id] || 0;
+    const packArt = resolvePackArt(pack);
     return `
       <div class="bg-surface-900 rounded-xl border border-surface-700 p-5 flex flex-col">
         <div class="text-center mb-3">
-          <div class="text-4xl mb-2">\uD83C\uDCB4</div>
+          ${renderPackTileArtHtml(packArt)}
           <h3 class="font-bold text-lg">${pack.name}</h3>
           <p class="text-sm text-surface-400">${pack.cardsPerPack} cards per pack</p>
         </div>
@@ -504,7 +506,7 @@ function openPackUI(packId) {
   const borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
 
   cardsContainer.innerHTML = result.cards
-    .map((card, i) => renderPackCardWrapper(card, i, { borderRenderEffectId }))
+    .map((card, i) => renderPackCardWrapper(card, i, { borderRenderEffectId, pack: packType }))
     .join('');
 
   // Show overlay first

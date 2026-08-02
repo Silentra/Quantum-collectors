@@ -8,10 +8,11 @@
  * Phase A: proportional CSS Grid on .card-detail-inner (geometry only)
  * Phase B: container-query typography (clamp + cqw/cqh); geometry unchanged
  *
- * Dependencies: cards.js, card-art.js, card-border.js, card-glow.js, card-shimmer.js (no ui.js / project-ui.js imports).
+ * Dependencies: cards.js, card-art.js, pack-art.js, card-border.js, card-glow.js, card-shimmer.js (no ui.js / project-ui.js imports).
  */
 
 import { renderCardDetailArtHtml, resolveCardArt } from './card-art.js';
+import { renderPackBackArtHtml, resolvePackArt } from './pack-art.js';
 import {
   AURA_THRESHOLDS,
   CONCEPT_EFFECT_LABELS,
@@ -469,16 +470,23 @@ export function renderPackRevealSciCard(card, options = {}) {
  * Full pack flip wrapper (back + front with canonical sci-card).
  * @param {object} card
  * @param {number} index
+ * @param {object} [options]
+ * @param {string|null} [options.packArtKey] - explicit art key (e.g. breakthrough → 'standard')
+ * @param {object|string|null} [options.pack] - pack record or name for art resolution
  * @returns {string}
  */
 export function renderPackCardWrapper(card, index, options = {}) {
   const rarity = RARITIES.includes(card.rarity) ? card.rarity : null;
   const glowClass = rarity ? `rarity-glow-${rarity}` : '';
+  const packArt = resolvePackArt(options.pack ?? null, { packArtKey: options.packArtKey ?? null });
+  const hasArt = Boolean(packArt.src);
+  const backClass = hasArt ? 'pack-card-back has-pack-art' : 'pack-card-back';
+  const backInner = renderPackBackArtHtml(packArt);
 
   return `
       <div class="pack-card-wrapper ${glowClass}" data-rarity="${card.rarity}" data-index="${index}">
         <div class="pack-card-flipper">
-          <div class="pack-card-back"></div>
+          <div class="${backClass}">${backInner}</div>
           <div class="pack-card-front">
             ${renderPackRevealSciCard(card, options)}
           </div>
