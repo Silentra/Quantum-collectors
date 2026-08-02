@@ -737,13 +737,11 @@ function renderConsumables(p) {
     }).join('');
 
   container.innerHTML = `
-    <section class="profile-consumables-panel">
-      <header class="profile-consumables-panel-header">
-        <h3>Consumables</h3>
-        <span class="profile-consumables-hint">Use in Shop</span>
-      </header>
-      <div class="profile-consumables-chips">${chips}</div>
-    </section>
+    <header class="profile-info-consumables-header">
+      <h3 class="profile-info-section-label">Consumables</h3>
+      <span class="profile-consumables-hint">Use in Shop</span>
+    </header>
+    <div class="profile-consumables-chips">${chips}</div>
   `;
 }
 
