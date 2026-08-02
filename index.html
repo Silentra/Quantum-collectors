@@ -369,33 +369,35 @@
           <div class="max-w-6xl mx-auto">
             <h2 class="text-xl font-bold mb-4">My Profile</h2>
             <div class="profile-layout">
-              <div class="bg-surface-900 rounded-xl p-5 border border-surface-700" id="profile-summary-card">
-                <div class="profile-summary-layout">
-                  <div class="profile-summary-identity">
-                    <div class="profile-summary-identity-row">
-                      <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center text-xl flex-shrink-0" aria-hidden="true">👤</div>
-                      <div class="min-w-0">
-                        <div id="profile-username" class="profile-identity-name text-lg font-semibold"></div>
-                        <div id="profile-group" class="text-sm text-surface-400"></div>
+              <div class="profile-layout-main">
+                <div class="bg-surface-900 rounded-xl p-5 border border-surface-700" id="profile-summary-card">
+                  <div class="profile-summary-layout">
+                    <div class="profile-summary-identity">
+                      <div class="profile-summary-identity-row">
+                        <div class="w-14 h-14 bg-primary-600 rounded-full flex items-center justify-center text-xl flex-shrink-0" aria-hidden="true">👤</div>
+                        <div class="min-w-0">
+                          <div id="profile-username" class="profile-identity-name text-lg font-semibold"></div>
+                          <div id="profile-group" class="text-sm text-surface-400"></div>
+                        </div>
                       </div>
+                      <div id="profile-stats" class="profile-stats-column"></div>
                     </div>
-                    <div id="profile-stats" class="profile-stats-column"></div>
+                    <div id="profile-featured-showcase" class="profile-featured-showcase" aria-label="Featured cards"></div>
                   </div>
-                  <div id="profile-featured-showcase" class="profile-featured-showcase" aria-label="Featured cards"></div>
                 </div>
+                <section id="profile-info-panel" class="profile-info-panel">
+                  <div class="profile-info-panel-body">
+                    <div class="profile-info-progress">
+                      <h3 class="profile-info-section-label">Collection Progress</h3>
+                      <div id="profile-progress" class="space-y-3"></div>
+                    </div>
+                    <aside id="profile-inventory" class="profile-info-consumables" aria-label="Consumables"></aside>
+                  </div>
+                </section>
+                <div id="profile-cosmetics" class="profile-layout-cosmetics"></div>
+                <div id="profile-appearance" class="profile-layout-appearance"></div>
               </div>
               <div id="profile-achievements" class="profile-achievements-aside" aria-label="Achievements"></div>
-              <section id="profile-info-panel" class="profile-info-panel">
-                <div class="profile-info-panel-body">
-                  <div class="profile-info-progress">
-                    <h3 class="profile-info-section-label">Collection Progress</h3>
-                    <div id="profile-progress" class="space-y-3"></div>
-                  </div>
-                  <aside id="profile-inventory" class="profile-info-consumables" aria-label="Consumables"></aside>
-                </div>
-              </section>
-              <div id="profile-cosmetics" class="profile-layout-cosmetics"></div>
-              <div id="profile-appearance" class="profile-layout-appearance"></div>
             </div>
           </div>
         </div>

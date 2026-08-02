@@ -2417,30 +2417,26 @@ body.app-mode-game #screen-game.screen.active {
 .profile-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
-  grid-template-areas:
-    "summary achievements"
-    "info achievements"
-    "cosmetics achievements"
-    "appearance achievements";
   gap: 1rem;
   align-items: start;
   margin-bottom: 0.75rem;
 }
 
+.profile-layout-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
 #profile-summary-card {
-  grid-area: summary;
   padding: 0.65rem 0.75rem !important;
   margin-bottom: 0 !important;
   min-width: 0;
 }
 
-.profile-layout-cosmetics {
-  grid-area: cosmetics;
-  min-width: 0;
-}
-
+.profile-layout-cosmetics,
 .profile-layout-appearance {
-  grid-area: appearance;
   min-width: 0;
 }
 
@@ -2575,13 +2571,42 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .profile-achievements-aside {
-  grid-area: achievements;
   min-width: 0;
+  align-self: start;
+}
+
+/*
+ * Show All: cap right column to left-stack height without expanding the grid.
+ * height:0 + min-height:100% zeroes the aside's max-content contribution so the
+ * left column alone sizes the row; stretch fills that height; list scrolls.
+ */
+.profile-achievements-aside.is-show-all {
   align-self: stretch;
+  height: 0;
+  min-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.profile-achievements-aside.is-show-all .profile-achievements-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.profile-achievements-aside.is-show-all .ach-show-more {
+  flex-shrink: 0;
+}
+
+.profile-achievements-aside.is-show-all .ach-profile-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .profile-info-panel {
-  grid-area: info;
   min-width: 0;
   background: #0f172a;
   border: 1px solid #334155;
@@ -2630,8 +2655,6 @@ body.app-mode-game #screen-game.screen.active {
   border: 1px solid #334155;
   border-radius: 0.85rem;
   padding: 0.65rem 0.75rem;
-  min-height: 100%;
-  height: auto;
   display: flex;
   flex-direction: column;
 }
@@ -2732,12 +2755,37 @@ body.app-mode-game #screen-game.screen.active {
 @media (max-width: 768px) {
   .profile-layout {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "summary"
-      "info"
-      "achievements"
-      "cosmetics"
-      "appearance";
+  }
+
+  .profile-layout-main {
+    display: contents;
+  }
+
+  #profile-summary-card { order: 1; }
+  #profile-info-panel { order: 2; }
+  .profile-achievements-aside { order: 3; }
+  .profile-layout-cosmetics { order: 4; }
+  .profile-layout-appearance { order: 5; }
+
+  .profile-achievements-aside.is-show-all {
+    align-self: start;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    display: block;
+  }
+
+  .profile-achievements-aside.is-show-all .profile-achievements-panel {
+    flex: none;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .profile-achievements-aside.is-show-all .ach-profile-list {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
   }
 
   .profile-summary-layout {
