@@ -2414,12 +2414,14 @@ body.app-mode-game #screen-game.screen.active {
 
 /* ===================== PROFILE INVENTORY + COSMETICS ===================== */
 
-.profile-upper-row {
+.profile-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
   grid-template-areas:
     "summary achievements"
-    "info achievements";
+    "info achievements"
+    "cosmetics achievements"
+    "appearance achievements";
   gap: 1rem;
   align-items: start;
   margin-bottom: 0.75rem;
@@ -2429,6 +2431,16 @@ body.app-mode-game #screen-game.screen.active {
   grid-area: summary;
   padding: 0.65rem 0.75rem !important;
   margin-bottom: 0 !important;
+  min-width: 0;
+}
+
+.profile-layout-cosmetics {
+  grid-area: cosmetics;
+  min-width: 0;
+}
+
+.profile-layout-appearance {
+  grid-area: appearance;
   min-width: 0;
 }
 
@@ -2718,12 +2730,14 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 @media (max-width: 768px) {
-  .profile-upper-row {
+  .profile-layout {
     grid-template-columns: 1fr;
     grid-template-areas:
       "summary"
       "info"
-      "achievements";
+      "achievements"
+      "cosmetics"
+      "appearance";
   }
 
   .profile-summary-layout {
@@ -2732,10 +2746,6 @@ body.app-mode-game #screen-game.screen.active {
 
   .profile-featured-showcase {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .profile-achievements-aside {
-    order: unset;
   }
 
   .profile-consumables-chips {
