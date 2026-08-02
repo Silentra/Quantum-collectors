@@ -254,11 +254,13 @@ export function renderProfileAchievements() {
 
   const session = auth.getSession();
   if (!session || session.username === '__admin__') {
+    container.classList.remove('is-show-all');
     container.innerHTML = '';
     return;
   }
 
   if (!isAchievementSystemEnabled()) {
+    container.classList.remove('is-show-all');
     container.innerHTML = `
       <section class="profile-achievements-panel profile-panel-muted">
         <header class="profile-achievements-header"><h3>Achievements</h3></header>
@@ -275,6 +277,7 @@ export function renderProfileAchievements() {
   const ordered = buildOrderedVisibleAchievements(definitions, playerAchievements, starredIds);
 
   if (!ordered.length) {
+    container.classList.remove('is-show-all');
     container.innerHTML = `
       <section class="profile-achievements-panel">
         <header class="profile-achievements-header"><h3>Achievements</h3></header>
@@ -284,7 +287,10 @@ export function renderProfileAchievements() {
     return;
   }
 
-  const limit = profileShowLimit === Infinity ? ordered.length : profileShowLimit;
+  const isShowAll = profileShowLimit === Infinity;
+  container.classList.toggle('is-show-all', isShowAll);
+
+  const limit = isShowAll ? ordered.length : profileShowLimit;
   const visible = ordered.slice(0, limit);
   const rowsHtml = visible.map(d => achievementRowHtml(d, playerAchievements, username, starredIds)).join('');
   const showControls = showMoreControlsHtml(ordered.length);
