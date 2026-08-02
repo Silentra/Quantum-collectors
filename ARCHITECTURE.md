@@ -17,6 +17,7 @@ js/
   player.js          - Player CRUD, inventory, packs, stats
   cards.js           - Card DB, CRUD, seed data (40 starter science cards), Phase 3 schema
   packs.js           - Pack types, weighted rarity rolling, pack opening
+  pack-art.js        - Static pack card-back resolution (local WebP → emoji fallback)
   groups.js          - Group/subgroup hierarchy
   ui.js              - All DOM rendering, event wiring, screen management
   shell-theme.js     - Application shell theme hooks (data-* attrs, title mount, identity accent); no cosmetic visuals
@@ -210,6 +211,22 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 **Export spec (content)**: WebP **400×500** (4:5) ideal, **512px** max longest edge, **75–82** quality; top-weighted composition for `object-position: center top`. Drop files into `assets/scientists/` and `assets/concepts/` — no DB migration per card.
 
 **Pitfalls**: stale `imageUrl` blocks local art until cleared; renaming a card changes expected filename; slug collisions need manual resolution.
+
+### Pack card-back artwork (`js/pack-art.js`)
+
+Static repository assets for face-down pack/breakthrough reveals and Packs-tab tiles. **No paths in Firebase** — art key derived from pack **display name** (opaque `pack_*` IDs are not used as filenames).
+
+| Art key | File | Name match |
+|---------|------|------------|
+| `standard` | `assets/card-backs/standard-pack.webp` | contains `standard` or `basic` |
+| `premium` | `assets/card-backs/premium-pack.webp` | contains `premium` |
+| `research` | `assets/card-backs/research-pack.webp` | contains `research` or `scientist` |
+
+Unknown packs and missing/failed images keep the existing emoji presentation (tile emoji / face-down CSS `::after`). Breakthrough reveals (no pack identity) use explicit `packArtKey: 'standard'` (universal printed back).
+
+**Render**: `renderPackCardWrapper(..., { pack | packArtKey })` adds `.has-pack-art` + `<img class="pack-card-back-art" alt="">` when `src` resolves. Packs tab uses `renderPackTileArtHtml()` (`alt=""`; pack name is visible in the tile heading). `initPackArtFallback()` in `main.js` silently removes failed imgs and clears `.has-pack-art`.
+
+**Export**: rectangular WebP **600×840** (exact **5:7**), q75–82. Do **not** bake rounded/transparent corners — CSS `border-radius` + `overflow: hidden` clips. Keep important art inside a safe region away from the clipped corners. Print masters are separate (e.g. 750×1050 @300 DPI for 2.5×3.5 in; bleed follows printer template).
 
 ### Trading System (Phase T-1 + T-2 + T-3 + T-4 + T-6)
 - **Eight modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing atomic swap), `trade-availability.js` (copy-aware reservation math), `trade-lock-helpers.js` (legacy wrappers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)

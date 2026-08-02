@@ -8715,6 +8715,49 @@ body.app-mode-game #screen-game.screen.active {
   font-size: 1.6rem;
   opacity: 0.3;
 }
+/* Optional local WebP (600×840, rectangular 5:7) — CSS clips corners; keep art in safe region */
+.pack-card-back-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  object-position: center;
+  display: block;
+  z-index: 0;
+  pointer-events: none;
+}
+.pack-card-back.has-pack-art::before {
+  z-index: 1;
+}
+.pack-card-back.has-pack-art::after {
+  content: none;
+}
+
+/* Packs-tab tile artwork (same assets, smaller) */
+.pack-tile-art {
+  width: 5.5rem;
+  aspect-ratio: 5 / 7;
+  margin: 0 auto 0.5rem;
+  border-radius: 0.45rem;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+  border: 2px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pack-tile-art--emoji {
+  font-size: 2rem;
+  line-height: 1;
+}
+.pack-tile-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  object-position: center;
+  display: block;
+}
 
 /*
  * Pack / breakthrough reveal rarity glows (presentation only).
