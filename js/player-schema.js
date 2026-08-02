@@ -259,7 +259,7 @@ function createProfileDefaultsFromLegacy(player = {}) {
 
 /**
  * Return a fresh copy of all Phase 2A/2B schema fields with their defaults.
- * Used by createPlayerRecord() to embed in the initial write.
+ * Used by auth buildPlayerRecord() to embed in the initial write.
  * @returns {object}
  */
 export function getPhase2ADefaults() {
@@ -312,6 +312,9 @@ export function normalizePlayerSchema(username) {
   if (!player) return false;
 
   let patched = false;
+
+  // Child-path writes only — never db.set(`players/${username}`, wholeObject).
+  // Must not invent or overwrite players/{username}/activeSession (single-session auth).
 
   ensureAchievementStats(username);
 

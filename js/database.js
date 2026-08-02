@@ -7,7 +7,7 @@
  *
  * If Firebase is not configured, falls back to localStorage silently.
  *
- * Exported API (unchanged from original):
+ * Exported API:
  *   initDB()          - now async; loads from Firebase or localStorage
  *   get(path)         - sync read from cache
  *   set(path, val)    - sync cache + async Firebase write
@@ -19,6 +19,10 @@
  *   query(p, fn)      - filter children
  *   getFullDB()       - debug
  *   resetDB()         - reset to defaults
+ *   setAcknowledged(path, value)       - await remote set, then patch cache
+ *   updateAcknowledged(updates)        - await root multi-path update, then patch cache
+ *   clearActiveSessionIfOwned(u, id)   - ownership-checked session clear
+ *   isFirebaseConnected()
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
@@ -397,4 +401,132 @@ export function resetDB() {
 /** Check if Firebase is the active backend. */
 export function isFirebaseConnected() {
   return _useFirebase;
+}
+
+/**
+ * Patch in-memory cache (+ localStorage mirror) and notify listeners without a Firebase write.
+ * Used after an acknowledged remote write succeeds, or for local-only mode.
+ */
+export function applyLocalOnly(path, value) {
+  if (!_db) return;
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length === 0) return;
+
+  if (value === null || value === undefined) {
+    let current = _db;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (current[parts[i]] === undefined || current[parts[i]] === null) return;
+      current = current[parts[i]];
+    }
+    delete current[parts[parts.length - 1]];
+  } else {
+    let current = _db;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (current[parts[i]] === undefined || current[parts[i]] === null || typeof current[parts[i]] !== 'object') {
+        current[parts[i]] = {};
+      }
+      current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = JSON.parse(JSON.stringify(value));
+  }
+
+  _persistLocal();
+  _notifyListeners(path);
+}
+
+/**
+ * Await a single-path Firebase set, then apply to local cache.
+ * In local-only mode, applies locally and returns { mode: 'local' }.
+ * @returns {Promise<{ ok: boolean, mode: 'firebase'|'local', error?: string }>}
+ */
+export async function setAcknowledged(path, value) {
+  if (!_db) return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized' };
+
+  const cloned = value !== undefined && value !== null
+    ? JSON.parse(JSON.stringify(value))
+    : null;
+
+  if (!_useFirebase || !_fbDb) {
+    applyLocalOnly(path, cloned);
+    return { ok: true, mode: 'local' };
+  }
+
+  const fbPath = path.split('/').filter(Boolean).join('/');
+  try {
+    await _fbDb.ref(fbPath).set(cloned);
+    applyLocalOnly(path, cloned);
+    return { ok: true, mode: 'firebase' };
+  } catch (e) {
+    console.warn('[DB] setAcknowledged error:', fbPath, e.message);
+    return { ok: false, mode: 'firebase', error: e.message || 'Write failed' };
+  }
+}
+
+/**
+ * Await a root multi-path Firebase update (atomic), then apply each key to local cache.
+ * `updates` keys are absolute paths from DB root (e.g. players/u, accessCodes/X/used).
+ * @returns {Promise<{ ok: boolean, mode: 'firebase'|'local', error?: string }>}
+ */
+export async function updateAcknowledged(updates) {
+  if (!_db) return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized' };
+  if (!updates || typeof updates !== 'object') {
+    return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Invalid updates' };
+  }
+
+  const cloned = JSON.parse(JSON.stringify(updates));
+
+  if (!_useFirebase || !_fbDb) {
+    for (const [path, value] of Object.entries(cloned)) {
+      applyLocalOnly(path, value);
+    }
+    return { ok: true, mode: 'local' };
+  }
+
+  try {
+    await _fbDb.ref('/').update(cloned);
+    for (const [path, value] of Object.entries(cloned)) {
+      applyLocalOnly(path, value);
+    }
+    return { ok: true, mode: 'firebase' };
+  } catch (e) {
+    console.warn('[DB] updateAcknowledged error:', e.message);
+    return { ok: false, mode: 'firebase', error: e.message || 'Write failed' };
+  }
+}
+
+/**
+ * Clear players/{username}/activeSession only if it still belongs to sessionId.
+ * Firebase: RTDB transaction (abort leaves a newer session untouched).
+ * Local-only: clear cache node only on id match.
+ * @returns {Promise<{ ok: boolean, cleared: boolean, mode: 'firebase'|'local', error?: string }>}
+ */
+export async function clearActiveSessionIfOwned(username, sessionId) {
+  if (!_db || !username || !sessionId) {
+    return { ok: false, cleared: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Invalid arguments' };
+  }
+
+  const path = `players/${username}/activeSession`;
+
+  if (!_useFirebase || !_fbDb) {
+    const current = get(path);
+    if (current && current.id === sessionId) {
+      applyLocalOnly(path, null);
+      return { ok: true, cleared: true, mode: 'local' };
+    }
+    return { ok: true, cleared: false, mode: 'local' };
+  }
+
+  try {
+    const result = await _fbDb.ref(path).transaction(current => {
+      if (!current || current.id !== sessionId) return;
+      return null;
+    });
+    const cleared = result.committed === true;
+    const nextVal = result.snapshot ? result.snapshot.val() : null;
+    applyLocalOnly(path, nextVal == null ? null : nextVal);
+    return { ok: true, cleared, mode: 'firebase' };
+  } catch (e) {
+    console.warn('[DB] clearActiveSessionIfOwned error:', e.message);
+    return { ok: false, cleared: false, mode: 'firebase', error: e.message || 'Transaction failed' };
+  }
 }

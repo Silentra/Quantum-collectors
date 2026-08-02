@@ -229,6 +229,11 @@ export function setupLoginScreen() {
   if (!config.isGameOpen()) {
     document.getElementById('game-closed-notice')?.classList.remove('hidden');
   }
+
+  const pendingAuthMessage = auth.consumePendingAuthMessage();
+  if (pendingAuthMessage) {
+    showLoginMessage(pendingAuthMessage, 'error');
+  }
 }
 
 function showLoginMessage(msg, type) {
@@ -262,6 +267,9 @@ export function enterGame() {
 
   const isStandaloneAdmin = session.username === '__admin__';
 
+  // Persistent admins use normal session enforcement; only __admin__ is exempt.
+  auth.ensureSessionGuard();
+
   document.getElementById('nav-username').textContent = isStandaloneAdmin ? '\u2699\uFE0F Admin' : session.username;
 
   if (isAdminUser) {
@@ -280,9 +288,8 @@ export function enterGame() {
     resetShellTheme();
   }
 
-  document.getElementById('btn-logout').addEventListener('click', () => {
-    auth.logout();
-    showScreen('login');
+  document.getElementById('btn-logout').addEventListener('click', async () => {
+    await auth.logout();
     location.reload();
   });
 

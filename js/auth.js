@@ -2,7 +2,8 @@
  * Auth Module - Username/Password Authentication via Firebase RTDB
  *
  * No Firebase Auth — passwords are stored (hashed) in players/{username}.
- * Sessions persist via localStorage.
+ * Sessions persist via localStorage with a server-backed opaque session id
+ * (players/{username}/activeSession). Only username === '__admin__' is exempt.
  *
  * Exported API:
  *   getSession()
@@ -14,18 +15,36 @@
  *   getCurrentUsername()
  *   generateAccessCodes(count, group)
  *   initAuth()  — async, restores session from localStorage
+ *   ensureSessionGuard()
+ *   consumePendingAuthMessage()
  */
 
 import * as db from './database.js';
 import * as config from './config.js';
 import { syncProjects } from './project-sync.js';
 import { getProjectConfig } from './project-config.js';
-import * as player from './player.js';
 import * as cards from './cards.js';
 import { getPhase2ADefaults, normalizePlayerSchema } from './player-schema.js';
 import { resetLoginAchievementEvaluation, runLoginAchievementEvaluation } from './achievements.js';
 
 const SESSION_KEY = 'scicards_session';
+const AUTH_MESSAGE_KEY = 'scicards_auth_message';
+
+const MSG_SESSION_ESTABLISH =
+  'Could not establish a secure session. Check your connection and try again.';
+const MSG_SESSION_INVALID =
+  'Your saved session is no longer valid. Please sign in again.';
+const MSG_SIGNED_IN_ELSEWHERE =
+  'This account was signed in on another device.';
+
+/** In-tab snapshot for cross-tab storage comparison (storage events update localStorage before the handler runs). */
+let _localSessionSnapshot = null;
+let _unsubSessionGuard = null;
+let _crossTabWatchInstalled = false;
+let _exitingLocally = false;
+/** After an acknowledged session claim, ignore brief stale root-listener snapshots. */
+let _sessionGuardExpectedId = null;
+let _sessionGuardGraceUntil = 0;
 
 // ---------- Password Hashing ----------
 
@@ -59,7 +78,42 @@ function simpleHash(str) {
   return 'sh_' + Math.abs(hash).toString(36);
 }
 
-// ---------- Session (localStorage) ----------
+// ---------- Session helpers ----------
+
+/** Opaque random session id (16 bytes hex). */
+function generateSessionId() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function rememberSessionSnapshot(session) {
+  if (!session) {
+    _localSessionSnapshot = null;
+    return;
+  }
+  _localSessionSnapshot = {
+    username: session.username || null,
+    sessionId: session.sessionId || null
+  };
+}
+
+function setPendingAuthMessage(message) {
+  if (!message) return;
+  try { sessionStorage.setItem(AUTH_MESSAGE_KEY, message); }
+  catch { /* ignore */ }
+}
+
+/** Read and clear a one-shot message for the login screen. */
+export function consumePendingAuthMessage() {
+  try {
+    const msg = sessionStorage.getItem(AUTH_MESSAGE_KEY);
+    if (msg) sessionStorage.removeItem(AUTH_MESSAGE_KEY);
+    return msg;
+  } catch {
+    return null;
+  }
+}
 
 /** Get current session */
 export function getSession() {
@@ -72,12 +126,133 @@ export function getSession() {
 /** Set session */
 function setSession(session) {
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  rememberSessionSnapshot(session);
 }
 
-/** Clear session */
-export function logout() {
+function clearLocalSessionOnly() {
   localStorage.removeItem(SESSION_KEY);
+  rememberSessionSnapshot(null);
   resetLoginAchievementEvaluation();
+}
+
+function stopSessionGuard() {
+  if (_unsubSessionGuard) {
+    try { _unsubSessionGuard(); } catch { /* ignore */ }
+    _unsubSessionGuard = null;
+  }
+}
+
+/**
+ * Force local exit without clearing the server session (already invalid or cleared elsewhere).
+ */
+function forceLocalExit(message) {
+  if (_exitingLocally) return;
+  _exitingLocally = true;
+  stopSessionGuard();
+  clearLocalSessionOnly();
+  if (message) setPendingAuthMessage(message);
+  location.reload();
+}
+
+function armSessionGuardGrace(sessionId, ms = 4000) {
+  _sessionGuardExpectedId = sessionId || null;
+  _sessionGuardGraceUntil = sessionId ? Date.now() + ms : 0;
+}
+
+function startSessionGuard(username) {
+  stopSessionGuard();
+  if (!username || username === '__admin__') return;
+
+  const path = `players/${username}/activeSession`;
+  _unsubSessionGuard = db.onValue(path, (activeSession) => {
+    if (_exitingLocally) return;
+    const session = getSession();
+    if (!session || session.username !== username || session.username === '__admin__') return;
+    if (!session.sessionId) {
+      forceLocalExit(MSG_SESSION_INVALID);
+      return;
+    }
+    const serverId = activeSession && activeSession.id != null ? activeSession.id : null;
+    if (serverId === session.sessionId) {
+      if (_sessionGuardExpectedId === session.sessionId) {
+        _sessionGuardExpectedId = null;
+        _sessionGuardGraceUntil = 0;
+      }
+      return;
+    }
+    // Stale in-flight root snapshot can briefly disagree after an acknowledged claim.
+    if (
+      _sessionGuardExpectedId === session.sessionId &&
+      Date.now() < _sessionGuardGraceUntil
+    ) {
+      return;
+    }
+    forceLocalExit(MSG_SIGNED_IN_ELSEWHERE);
+  });
+}
+
+/** Start or refresh the in-process session guard for the current session. */
+export function ensureSessionGuard() {
+  const session = getSession();
+  if (!session || session.username === '__admin__') {
+    stopSessionGuard();
+    return;
+  }
+  if (!session.sessionId) return;
+  startSessionGuard(session.username);
+}
+
+function setupCrossTabSessionWatch() {
+  if (_crossTabWatchInstalled) return;
+  _crossTabWatchInstalled = true;
+
+  window.addEventListener('storage', (e) => {
+    if (e.key !== SESSION_KEY) return;
+    if (_exitingLocally) return;
+
+    if (e.newValue == null) {
+      if (_localSessionSnapshot) {
+        stopSessionGuard();
+        rememberSessionSnapshot(null);
+        resetLoginAchievementEvaluation();
+        location.reload();
+      }
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(e.newValue);
+    } catch {
+      location.reload();
+      return;
+    }
+
+    const prev = _localSessionSnapshot;
+    if (!prev) {
+      location.reload();
+      return;
+    }
+
+    const nextUser = parsed.username || null;
+    const nextId = parsed.sessionId || null;
+    if (nextUser !== prev.username || nextId !== prev.sessionId) {
+      // Do not adopt the new token in-tab — reload and let initAuth verify.
+      location.reload();
+    }
+  });
+}
+
+/**
+ * Explicit logout: ownership-checked clear of activeSession, then local clear.
+ */
+export async function logout() {
+  stopSessionGuard();
+  const session = getSession();
+  if (session && session.username && session.username !== '__admin__' && session.sessionId) {
+    await db.clearActiveSessionIfOwned(session.username, session.sessionId);
+  }
+  clearLocalSessionOnly();
 }
 
 /** Check if current session is admin */
@@ -100,73 +275,103 @@ export function getCurrentUsername() {
   return session ? session.username : null;
 }
 
+function applyPostLoginPlayerMaintenance(username) {
+  const player = db.get(`players/${username}`);
+  if (!player) return;
+
+  const defaults = {};
+  if (player.projects === undefined || player.projects === null) defaults.projects = [];
+  if (player.lastProjectRefreshAt === undefined) defaults.lastProjectRefreshAt = 0;
+  if (player.totalResearchPoints === undefined) {
+    defaults.totalResearchPoints = (typeof player.researchPoints === 'number' ? player.researchPoints : 0);
+  }
+  if (player.projectsCompleted === undefined) defaults.projectsCompleted = 0;
+  if (player.seasonalResearchPoints === undefined) defaults.seasonalResearchPoints = 0;
+  if (player.isAdmin === undefined) defaults.isAdmin = false;
+  if (player.isTradeRestricted === undefined) defaults.isTradeRestricted = false;
+  if (player.isTradeProfileHidden === undefined) defaults.isTradeProfileHidden = false;
+
+  // Child/shallow updates only — never whole-player overwrite (preserves activeSession).
+  db.update(`players/${username}`, {
+    lastLogin: Date.now(),
+    ...defaults
+  });
+
+  // Path-specific child writes only — must not clobber activeSession.
+  normalizePlayerSchema(username);
+  runLoginAchievementEvaluation(username);
+
+  const freshPlayer = db.get(`players/${username}`);
+  const syncResult = syncProjects({
+    projects:      freshPlayer.projects      ?? [],
+    totalRP:       freshPlayer.totalResearchPoints ?? 0,
+    lastRefreshAt: freshPlayer.lastProjectRefreshAt ?? 0,
+    now:           Date.now(),
+  });
+  db.update(`players/${username}`, {
+    projects:             syncResult.projects,
+    lastProjectRefreshAt: syncResult.refreshAt,
+  });
+  console.log(`[ResearchProjects] Sync complete — generated:${syncResult.generatedCount} resolved:${syncResult.resolvedCount} pruned:${syncResult.prunedCount}`);
+}
+
 // ---------- Auth init (session restore) ----------
 
 /**
  * Initialize auth. Restores session from localStorage.
- * Validates that the stored session's player still exists.
+ * Validates opaque session id against players/{u}/activeSession (except __admin__).
  */
 export async function initAuth() {
+  setupCrossTabSessionWatch();
+
   const session = getSession();
+  rememberSessionSnapshot(session);
+
   if (!session) {
     console.log('[Auth] No existing session');
     return;
   }
 
-  // Admin session — just trust it
+  // Only username === '__admin__' is exempt from activeSession enforcement.
   if (session.isAdmin && session.username === '__admin__') {
     console.log('[Auth] Admin session restored');
     return;
   }
 
-  // Player session — verify player still exists in DB
-  if (session.username) {
-    const player = db.get(`players/${session.username}`);
-    if (player) {
-      // Update last login + safely backfill missing fields (Phase 4A + 5A + schema migration)
-      const researchDefaults = {};
-      if (player.projects === undefined || player.projects === null)         researchDefaults.projects = [];
-      if (player.lastProjectRefreshAt === undefined)  researchDefaults.lastProjectRefreshAt = 0;
-      // Canonical RP migration: backfill totalResearchPoints from legacy researchPoints if missing
-      if (player.totalResearchPoints === undefined)   researchDefaults.totalResearchPoints = (typeof player.researchPoints === 'number' ? player.researchPoints : 0);
-      if (player.projectsCompleted === undefined)     researchDefaults.projectsCompleted = 0;
-      if (player.seasonalResearchPoints === undefined) researchDefaults.seasonalResearchPoints = 0;
-      // Phase 5A — persistent capability flags migration
-      if (player.isAdmin === undefined)               researchDefaults.isAdmin = false;
-      if (player.isTradeRestricted === undefined)     researchDefaults.isTradeRestricted = false;
-      // Phase T-3 — trade profile hidden flag migration
-      if (player.isTradeProfileHidden === undefined)  researchDefaults.isTradeProfileHidden = false;
-
-      db.update(`players/${session.username}`, {
-        lastLogin: Date.now(),
-        ...researchDefaults
-      });
-
-      // Phase 2A — safe backfill of expanded schema fields
-      normalizePlayerSchema(session.username);
-      runLoginAchievementEvaluation(session.username);
-
-      // Phase 4B — passive backend sync on session restore
-      const freshPlayer = db.get(`players/${session.username}`);
-      const syncResult = syncProjects({
-        projects:      freshPlayer.projects      ?? [],
-        totalRP:       freshPlayer.totalResearchPoints ?? 0,
-        lastRefreshAt: freshPlayer.lastProjectRefreshAt ?? 0,
-        now:           Date.now(),
-      });
-      db.update(`players/${session.username}`, {
-        projects:             syncResult.projects,
-        lastProjectRefreshAt: syncResult.refreshAt,
-      });
-      console.log(`[ResearchProjects] Sync complete — generated:${syncResult.generatedCount} resolved:${syncResult.resolvedCount} pruned:${syncResult.prunedCount}`);
-
-      console.log(`[Auth] Session restored for: ${session.username}`);
-    } else {
-      // Player was deleted — clear stale session
-      console.warn('[Auth] Stale session cleared (player not found)');
-      logout();
-    }
+  if (!session.username) {
+    clearLocalSessionOnly();
+    return;
   }
+
+  // No legacy compatibility — sessionId required.
+  if (!session.sessionId) {
+    console.warn('[Auth] Stale session cleared (missing sessionId)');
+    clearLocalSessionOnly();
+    setPendingAuthMessage(MSG_SESSION_INVALID);
+    return;
+  }
+
+  const player = db.get(`players/${session.username}`);
+  if (!player) {
+    console.warn('[Auth] Stale session cleared (player not found)');
+    clearLocalSessionOnly();
+    setPendingAuthMessage(MSG_SESSION_INVALID);
+    return;
+  }
+
+  const activeSession = db.get(`players/${session.username}/activeSession`);
+  const serverId = activeSession && activeSession.id != null ? activeSession.id : null;
+  if (serverId !== session.sessionId) {
+    console.warn('[Auth] Stale session cleared (session id mismatch)');
+    clearLocalSessionOnly();
+    setPendingAuthMessage(MSG_SESSION_INVALID);
+    return;
+  }
+
+  // Cache already matches — start guard before fire-and-forget maintenance.
+  startSessionGuard(session.username);
+  applyPostLoginPlayerMaintenance(session.username);
+  console.log(`[Auth] Session restored for: ${session.username}`);
 }
 
 // ---------- Login ----------
@@ -194,47 +399,33 @@ export async function login(username, password) {
     return { success: false, error: 'Account not found. Please register first.' };
   }
 
-  // Validate password
   const hashedInput = await hashPassword(password);
   if (player.password !== hashedInput) {
     return { success: false, error: 'Incorrect password.' };
   }
 
+  const sessionId = generateSessionId();
+  const issuedAt = Date.now();
+  const ack = await db.setAcknowledged(`players/${username}/activeSession`, {
+    id: sessionId,
+    issuedAt
+  });
+  if (!ack.ok) {
+    return { success: false, error: MSG_SESSION_ESTABLISH };
+  }
+
+  // Cache patched by setAcknowledged — set local session, then start guard.
   const session = {
     username,
     isAdmin: player.isAdmin === true,
-    loginTime: Date.now()
+    loginTime: issuedAt,
+    sessionId
   };
   setSession(session);
+  armSessionGuardGrace(sessionId);
+  startSessionGuard(username);
 
-  // Update last login + migration backfill (Phase 5A + canonical RP schema)
-  const loginDefaults = {};
-  if (player.isTradeRestricted === undefined) loginDefaults.isTradeRestricted = false;
-  if (player.isAdmin === undefined)           loginDefaults.isAdmin = false;
-  // Canonical RP migration: backfill totalResearchPoints from legacy researchPoints if missing
-  if (player.totalResearchPoints === undefined) loginDefaults.totalResearchPoints = (typeof player.researchPoints === 'number' ? player.researchPoints : 0);
-  if (player.seasonalResearchPoints === undefined) loginDefaults.seasonalResearchPoints = 0;
-  // Phase T-3 — trade profile hidden flag migration
-  if (player.isTradeProfileHidden === undefined) loginDefaults.isTradeProfileHidden = false;
-  db.update(`players/${username}`, { lastLogin: Date.now(), ...loginDefaults });
-
-  // Phase 2A — safe backfill of expanded schema fields
-  normalizePlayerSchema(username);
-  runLoginAchievementEvaluation(username);
-
-  // Phase 4B — passive backend sync on login
-  const loginPlayer = db.get(`players/${username}`);
-  const syncResult = syncProjects({
-    projects:      loginPlayer.projects      ?? [],
-    totalRP:       loginPlayer.totalResearchPoints ?? 0,
-    lastRefreshAt: loginPlayer.lastProjectRefreshAt ?? 0,
-    now:           Date.now(),
-  });
-  db.update(`players/${username}`, {
-    projects:             syncResult.projects,
-    lastProjectRefreshAt: syncResult.refreshAt,
-  });
-  console.log(`[ResearchProjects] Sync complete — generated:${syncResult.generatedCount} resolved:${syncResult.resolvedCount} pruned:${syncResult.prunedCount}`);
+  applyPostLoginPlayerMaintenance(username);
 
   return { success: true, session };
 }
@@ -242,8 +433,8 @@ export async function login(username, password) {
 // ---------- Register ----------
 
 /**
- * Register with username, password, and access code
- * Returns { success, error?, session? }
+ * Register with username, password, and access code.
+ * Commits player (with activeSession) + access-code consumption in one acknowledged multi-path update.
  */
 export async function register(username, password, accessCode) {
   if (!username || !username.trim()) {
@@ -270,17 +461,14 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'Registration is currently closed.' };
   }
 
-  // Validate username format
   if (!/^[a-z0-9_]{3,20}$/.test(username)) {
     return { success: false, error: 'Username must be 3-20 characters, letters/numbers/underscore only.' };
   }
 
-  // Check if username already exists
   if (db.get(`players/${username}`)) {
     return { success: false, error: 'Username already taken.' };
   }
 
-  // Validate access code
   const codeData = db.get(`accessCodes/${accessCode}`);
   if (!codeData) {
     return { success: false, error: 'Invalid access code.' };
@@ -289,37 +477,47 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'This access code has already been used.' };
   }
 
-  // Mark code as used
-  db.update(`accessCodes/${accessCode}`, {
-    used: true,
-    usedBy: username,
-    usedAt: Date.now()
-  });
-
-  // Hash the password
   const hashedPassword = await hashPassword(password);
+  const sessionId = generateSessionId();
+  const issuedAt = Date.now();
 
-  // Create player with password and isAdmin fields
-  createPlayerRecord(username, hashedPassword, codeData.group || null);
+  const playerRecord = buildPlayerRecord(username, hashedPassword, codeData.group || null);
+  playerRecord.activeSession = { id: sessionId, issuedAt };
 
-  // Phase 4B — initial project sync on registration (same as login path).
-  // createPlayerRecord writes projects:[] and lastProjectRefreshAt:0, so
-  // syncProjects will immediately generate the configured starter projects.
-  const newPlayer = db.get(`players/${username}`);
+  // Embed starter projects in the same atomic player write.
   const regSyncResult = syncProjects({
-    projects:      newPlayer.projects      ?? [],
-    totalRP:       newPlayer.totalResearchPoints ?? 0,
-    lastRefreshAt: newPlayer.lastProjectRefreshAt ?? 0,
-    now:           Date.now(),
+    projects:      playerRecord.projects      ?? [],
+    totalRP:       playerRecord.totalResearchPoints ?? 0,
+    lastRefreshAt: playerRecord.lastProjectRefreshAt ?? 0,
+    now:           issuedAt,
   });
-  db.update(`players/${username}`, {
-    projects:             regSyncResult.projects,
-    lastProjectRefreshAt: regSyncResult.refreshAt,
-  });
-  console.log(`[ResearchProjects] New account sync — generated:${regSyncResult.generatedCount}`);
+  playerRecord.projects = regSyncResult.projects;
+  playerRecord.lastProjectRefreshAt = regSyncResult.refreshAt;
 
-  const session = { username, isAdmin: false, isTradeRestricted: false, loginTime: Date.now() };
+  const ack = await db.updateAcknowledged({
+    [`players/${username}`]: playerRecord,
+    [`accessCodes/${accessCode}/used`]: true,
+    [`accessCodes/${accessCode}/usedBy`]: username,
+    [`accessCodes/${accessCode}/usedAt`]: issuedAt,
+  });
+
+  if (!ack.ok) {
+    return { success: false, error: MSG_SESSION_ESTABLISH };
+  }
+
+  console.log(`[ResearchProjects] New account sync — generated:${regSyncResult.generatedCount}`);
+  console.log(`[Auth] New player created: ${username}`);
+
+  const session = {
+    username,
+    isAdmin: false,
+    isTradeRestricted: false,
+    loginTime: issuedAt,
+    sessionId
+  };
   setSession(session);
+  armSessionGuardGrace(sessionId);
+  startSessionGuard(username);
 
   return { success: true, session };
 }
@@ -342,14 +540,12 @@ function sampleWithoutReplacement(pool, count) {
 
 /**
  * Build the starter inventory object for a new player.
- * Returns { inventory, cardsGrantedCount, scientistsGranted, conceptsGranted }
- * so createPlayerRecord can embed it into the initial write.
+ * Returns { inventory, cardsGrantedCount }
  */
 function buildStarterInventory(pCfg) {
   const inventory = {};
   let cardsGrantedCount = 0;
 
-  // ── Starter Scientists ──────────────────────────────────────────────────────
   const scientistCount = typeof pCfg.starterScientistCount === 'number' ? pCfg.starterScientistCount : 5;
   if (scientistCount > 0) {
     const pool = cards.getAllCards().filter(
@@ -363,9 +559,7 @@ function buildStarterInventory(pCfg) {
     console.log(`[Auth] Starter scientists granted: ${chosen.length} (requested: ${scientistCount}, pool: ${pool.length})`);
   }
 
-  // ── Starter Concepts ────────────────────────────────────────────────────────
   const conceptCount = typeof pCfg.starterConceptCount === 'number' ? pCfg.starterConceptCount : 2;
-  // Normalize pool — Firebase may store arrays as objects
   let conceptPool = pCfg.starterConceptPool;
   if (conceptPool && typeof conceptPool === 'object' && !Array.isArray(conceptPool)) {
     conceptPool = Object.values(conceptPool);
@@ -373,7 +567,6 @@ function buildStarterInventory(pCfg) {
   if (!Array.isArray(conceptPool)) conceptPool = ['synergyBoost', 'breakthrough'];
 
   if (conceptCount > 0 && conceptPool.length > 0) {
-    // For each conceptType in the pool, collect enabled concept cards of that type
     const eligibleByType = {};
     for (const ct of conceptPool) {
       const typeCards = cards.getAllCards().filter(
@@ -382,8 +575,6 @@ function buildStarterInventory(pCfg) {
       if (typeCards.length > 0) eligibleByType[ct] = typeCards;
     }
 
-    // Build a flat pool of [conceptType, cardObj] pairs from eligible types
-    // so we can sample up to conceptCount distinct conceptTypes when possible
     const eligibleTypes = Object.keys(eligibleByType);
     const selectedTypes = sampleWithoutReplacement(eligibleTypes, conceptCount);
 
@@ -400,21 +591,11 @@ function buildStarterInventory(pCfg) {
 }
 
 /**
- * Create a player record in the DB with auth fields.
- * This is the auth-aware version that includes password + isAdmin.
- *
- * Starter packs: if config.starterPackId is set and starterPackQuantity > 0,
- * we add packs to the player record directly (no separate reward pipeline).
- *
- * Starter cards: random common scientist + concept cards from the live card pool.
- * All grants are written atomically in the initial record and protected by
- * idempotency flags (starterPacksGranted, starterScientistsGranted,
- * starterConceptsGranted) so they can never fire a second time.
+ * Build a new player record (does not write). Caller commits via updateAcknowledged.
  */
-function createPlayerRecord(username, hashedPassword, group) {
+function buildPlayerRecord(username, hashedPassword, group) {
   const pCfg = getProjectConfig();
 
-  // ── Starter Packs ───────────────────────────────────────────────────────────
   let starterPacks = {};
   const starterPackId  = (pCfg.starterPackId  || '').trim();
   const starterPackQty = typeof pCfg.starterPackQuantity === 'number' ? pCfg.starterPackQuantity : 1;
@@ -422,10 +603,9 @@ function createPlayerRecord(username, hashedPassword, group) {
     starterPacks[starterPackId] = starterPackQty;
   }
 
-  // ── Starter Cards ───────────────────────────────────────────────────────────
   const { inventory: starterInventory, cardsGrantedCount } = buildStarterInventory(pCfg);
 
-  const playerRecord = {
+  return {
     username,
     password: hashedPassword,
     createdAt: Date.now(),
@@ -447,15 +627,13 @@ function createPlayerRecord(username, hashedPassword, group) {
       tutorialComplete: false,
       firstPackOpened: false,
       firstTrade: false,
-      // Idempotency flags — prevent any future double-grant
       starterPacksGranted:     true,
       starterScientistsGranted: true,
       starterConceptsGranted:   true,
     },
-    // ResearchProjects persistence fields (Phase 4A)
     projects: [],
     lastProjectRefreshAt: 0,
-    totalResearchPoints: 0,  // canonical permanent RP field
+    totalResearchPoints: 0,
     projectsCompleted: 0,
     researchStats: {
       totalProjects: 0,
@@ -465,18 +643,11 @@ function createPlayerRecord(username, hashedPassword, group) {
       highestTierCompleted: null
     },
     seasonalResearchPoints: 0,
-    // Phase 5A — persistent capability flags
     isTradeRestricted: false,
-    // Phase T-3/T-8 — trade profile hidden flag (default from config)
     isTradeProfileHidden: (config.getValue('trading.defaultHiddenProfile') === true),
-    // Legacy top-level grant flag kept for backward compat
     starterPacksGranted: true,
-    // Phase 2A — expanded player schema
     ...getPhase2ADefaults(),
   };
-  db.set(`players/${username}`, playerRecord);
-  console.log(`[Auth] New player created: ${username}${starterPackId && starterPackQty > 0 ? ` — granted ${starterPackQty}x starter pack` : ''}${cardsGrantedCount > 0 ? ` — granted ${cardsGrantedCount} starter card(s)` : ''}`);
-  return playerRecord;
 }
 
 // ---------- Admin Login ----------
@@ -487,7 +658,7 @@ function createPlayerRecord(username, hashedPassword, group) {
  *
  * Phase 5A: If a player is currently logged in, permanently sets isAdmin=true
  * on their player profile (persists across sessions). Otherwise falls back
- * to the standalone __admin__ session.
+ * to the standalone __admin__ session (only account exempt from activeSession).
  */
 export function adminLogin(password) {
   const adminPw = config.getValue('adminPassword');
@@ -495,7 +666,6 @@ export function adminLogin(password) {
     return { success: false, error: 'Incorrect admin password.' };
   }
 
-  // Phase 5A — if a player is already logged in, promote them permanently
   const existing = getSession();
   if (existing && existing.username && existing.username !== '__admin__') {
     const playerData = db.get(`players/${existing.username}`);
@@ -508,7 +678,7 @@ export function adminLogin(password) {
     }
   }
 
-  // Fallback: standalone admin session (no player logged in)
+  stopSessionGuard();
   const session = { username: '__admin__', isAdmin: true, loginTime: Date.now() };
   setSession(session);
   return { success: true, session };
