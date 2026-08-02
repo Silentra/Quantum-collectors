@@ -834,7 +834,8 @@ Firebase path: `config/cosmetics/definitions/{titleId}`.
   - Summary panel (`#profile-summary-card`): compact identity column (avatar, username, group, four vertically stacked stats) plus a three-slot featured-card showcase on the right.
   - Featured showcase always renders exactly three slots. Dense `profile.featuredCards[]` maps `slot i = featuredCards[i]`; remaining positions are empty UI pads. Only the next empty index is addable (later empties are disabled placeholders). Clearing a slot compacts later cards left.
   - Filled slots use canonical `buildCardRenderModel(..., { variant: 'modal' })` + `renderDetailFrame()` with equipped border/glow/shimmer resolvers and Mathematical Aura gating. No Collection qty badge, no on-art concept chip, no Profile-specific card template. Slot chrome is a focusable button wrapping the frame (`pointer-events: none` on the face).
-  - Achievements panel remains the upper-right aside; consumables and cosmetics remain below the upper row.
+  - Upper layout (`.profile-upper-row`): CSS grid with summary (featured showcase) top-left, shared Progress/Consumables info panel below it, and Achievements spanning the right column beside both. Cosmetics then Appearance render full-width below the upper row.
+  - Shared info panel (`#profile-info-panel`) uses one outer chrome with internal headings only (Collection Progress, Consumables)—no parent “Progress & Resources” title. Renderers for progress and consumables remain separate.
 - **Featured-card picker**: Global `#featured-card-picker-modal` (body-level, outside `#game-content-scroll`). Lightweight owned-card rows (`renderMiniCardArtHtml`) with search, rarity, and type filters. Add / Replace modes; Replace includes **Clear Featured Slot**. Cancel makes no writes.
 - **Mutation boundaries**:
   - Equip/unequip actions call `equipCosmetic()` and `unequipCosmetic()` from `shop-mutations.js`.

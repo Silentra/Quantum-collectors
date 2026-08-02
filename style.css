@@ -2417,14 +2417,19 @@ body.app-mode-game #screen-game.screen.active {
 .profile-upper-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(240px, 320px);
+  grid-template-areas:
+    "summary achievements"
+    "info achievements";
   gap: 1rem;
   align-items: start;
   margin-bottom: 0.75rem;
 }
 
 #profile-summary-card {
+  grid-area: summary;
   padding: 0.65rem 0.75rem !important;
-  margin-bottom: 0.5rem !important;
+  margin-bottom: 0 !important;
+  min-width: 0;
 }
 
 .profile-summary-layout {
@@ -2557,23 +2562,55 @@ body.app-mode-game #screen-game.screen.active {
   margin: 0;
 }
 
-.profile-top-main {
-  min-width: 0;
-}
-
 .profile-achievements-aside {
+  grid-area: achievements;
   min-width: 0;
-  max-height: min(70vh, 520px);
-  overflow-y: auto;
+  align-self: stretch;
 }
 
-.profile-inventory-row {
-  margin-bottom: 1rem;
+.profile-info-panel {
+  grid-area: info;
+  min-width: 0;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 0.85rem;
+  padding: 0.75rem 0.85rem;
 }
 
-.profile-consumables-below {
+.profile-info-panel-body {
+  display: grid;
+  grid-template-columns: minmax(0, 2.1fr) minmax(12rem, 1fr);
+  gap: 0.85rem 1rem;
+  align-items: start;
+}
+
+.profile-info-progress {
   min-width: 0;
-  max-width: 100%;
+}
+
+.profile-info-consumables {
+  min-width: 0;
+  padding-left: 1rem;
+  border-left: 1px solid #1e293b;
+}
+
+.profile-info-section-label {
+  margin: 0 0 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.profile-info-consumables-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.55rem;
+}
+
+.profile-info-consumables-header .profile-info-section-label {
+  margin-bottom: 0;
 }
 
 .profile-achievements-panel {
@@ -2581,10 +2618,10 @@ body.app-mode-game #screen-game.screen.active {
   border: 1px solid #334155;
   border-radius: 0.85rem;
   padding: 0.65rem 0.75rem;
-  height: 100%;
+  min-height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
-  min-height: 12rem;
 }
 
 .profile-achievements-header {
@@ -2619,36 +2656,6 @@ body.app-mode-game #screen-game.screen.active {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-}
-
-.profile-consumables-aside {
-  min-width: 0;
-}
-
-.profile-consumables-panel {
-  background: #0f172a;
-  border: 1px solid #334155;
-  border-radius: 0.85rem;
-  padding: 0.65rem 0.75rem;
-}
-
-.profile-consumables-panel-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid #1e293b;
-}
-
-.profile-consumables-panel-header h3 {
-  margin: 0;
-  font-size: 0.85rem;
-  font-weight: 700;
 }
 
 .profile-consumables-hint,
@@ -2697,9 +2704,26 @@ body.app-mode-game #screen-game.screen.active {
   font-size: 0.68rem;
 }
 
+@media (max-width: 900px) {
+  .profile-info-panel-body {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-info-consumables {
+    padding-left: 0;
+    padding-top: 0.75rem;
+    border-left: none;
+    border-top: 1px solid #1e293b;
+  }
+}
+
 @media (max-width: 768px) {
   .profile-upper-row {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "summary"
+      "info"
+      "achievements";
   }
 
   .profile-summary-layout {
@@ -2711,22 +2735,11 @@ body.app-mode-game #screen-game.screen.active {
   }
 
   .profile-achievements-aside {
-    max-height: none;
-    order: 2;
-  }
-
-  .profile-inventory-row {
-    order: 3;
+    order: unset;
   }
 
   .profile-consumables-chips {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .profile-consumable-chip {
-    flex: 1 1 calc(50% - 0.35rem);
-    min-width: 7.5rem;
+    flex-direction: column;
   }
 }
 
