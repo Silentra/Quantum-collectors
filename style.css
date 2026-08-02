@@ -2431,7 +2431,7 @@ body.app-mode-game #screen-game.screen.active {
   display: grid;
   grid-template-columns: minmax(9.75rem, 11.25rem) minmax(0, 1fr);
   gap: 0.75rem 0.65rem;
-  align-items: start;
+  align-items: center;
 }
 
 .profile-summary-identity {
@@ -2473,7 +2473,8 @@ body.app-mode-game #screen-game.screen.active {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: calc(2 * var(--showcase-glow-bleed) + 3px);
-  align-items: start;
+  align-items: center;
+  align-content: center;
   min-width: 0;
 }
 
@@ -2537,6 +2538,9 @@ body.app-mode-game #screen-game.screen.active {
 
 .profile-showcase-slot--filled {
   overflow: visible;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .profile-showcase-card-face {
