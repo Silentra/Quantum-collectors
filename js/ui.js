@@ -201,7 +201,7 @@ export function setupLoginScreen() {
     const code = document.getElementById('register-access-code').value;
     const result = await auth.register(username, password, code);
     if (result.success) {
-      toast.success('Account created! Welcome to SciCards!');
+      toast.success('Account created! Welcome to Quantum Collectors!');
       enterGame();
     } else {
       showLoginMessage(result.error, 'error');
