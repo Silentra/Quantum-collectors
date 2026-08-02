@@ -1,4 +1,4 @@
-# Firebase Setup for SciCards
+# Firebase Setup for Quantum Collectors
 
 ## 1. Create a Firebase Project
 

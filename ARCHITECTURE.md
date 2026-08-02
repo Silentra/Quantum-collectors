@@ -1,4 +1,6 @@
-## SciCards Architecture
+## Quantum Collectors Architecture
+
+Formerly developed under the working name SciCards.
 
 ### File Map
 ```
@@ -8,7 +10,7 @@ main.js              - Entry point, async init sequence (DB → Auth → Config 
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
 js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
-  database.js        - Firebase RTDB + in-memory cache (sync API, async Firebase writes)
+  database.js        - Firebase RTDB + in-memory cache (sync API, async Firebase writes; ack helpers for auth sessions)
   config.js          - Centralized live config (reads from /config DB node)
   auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
   admin.js           - Admin foundation: isAdmin(username), getPlayer, setPlayerData, listPlayers
@@ -282,7 +284,7 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
   - Hidden players do NOT appear in the trade-ui player picker and cannot receive unsolicited direct trades (`TARGET_PLAYER_HIDDEN` validation error)
   - Hidden players CAN still: open trading UI, initiate trades themselves, send offers, create listings, accept listings, appear on leaderboards, remain in groups/subgroups
   - Toggle: "Hide Trading Profile: ON/OFF" rendered at top of trading tab, writes directly to `players/{username}/isTradeProfileHidden`
-  - Migration: safe backfill to `false` on login + session restore (same pattern as `isTradeRestricted`), default `false` in `createPlayerRecord()`
+  - Migration: safe backfill to `false` on login + session restore (same pattern as `isTradeRestricted`), default `false` in `buildPlayerRecord()`
   - Validation uses `target.isTradeProfileHidden` (NOT generic `hidden`) — scoped to trading systems only
 - **Copy-aware availability** (`trade-availability.js`):
   - **Projects (binary)**: `isCardLockedByActiveProject()` — one cardId → at most one active project; duplicates cannot be assigned across projects
@@ -308,9 +310,15 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 ### Auth System
 - **No Firebase Auth** — passwords stored as SHA-256 hashes in `players/{username}.password`
 - Hashing uses Web Crypto API (SHA-256 + salt) with simple fallback
-- Sessions stored in localStorage (`scicards_session`)
-- Auto-login on refresh: `initAuth()` validates stored session against DB
-- `login(username, password)` and `register(username, password, accessCode)` are async (due to hashing)
+- Sessions stored in localStorage (`scicards_session`) as `{ username, isAdmin, loginTime, sessionId, … }`
+- **Single active session**: server token at `players/{username}/activeSession = { id, issuedAt }` (opaque random id). Local `sessionId` must match. New login replaces the token; other devices are invalidated via in-process `db.onValue` on that path (root listener fan-in — no extra Firebase subscription, no polling).
+- **Exemption**: only `username === '__admin__'`. Persistent admin player accounts use normal session enforcement.
+- **Acknowledged writes**: login uses `setAcknowledged` for `activeSession`; registration uses `updateAcknowledged` multi-path commit of full player (including `activeSession`) + `accessCodes/{code}/used|usedBy|usedAt` (never fire-and-forget code consume before player create). Cache is patched before the session guard starts.
+- **Logout**: `clearActiveSessionIfOwned` RTDB transaction — clears only if `current.id === local sessionId` so an invalidated device cannot wipe a newer session.
+- **Cross-tab**: `storage` on `scicards_session` — key removed → local exit/reload; different username or `sessionId` → reload (no in-tab token adoption); same token → no-op. `initAuth()` verifies after reload.
+- **No legacy session compatibility**: missing `sessionId` forces re-login.
+- Auto-login on refresh: `initAuth()` validates stored session against DB `activeSession`
+- `login(username, password)` and `register(username, password, accessCode)` are async (due to hashing + acknowledged session writes)
 - Admin access: either `isAdmin` flag on player record OR admin password login (creates `__admin__` session)
 - **Phase 5A — Persistent Admin**: entering admin code while logged in permanently sets `isAdmin: true` on the player profile (persisted to DB). On subsequent login/session restore, admin UI auto-unlocks without re-entering the code. Standalone `__admin__` session preserved as fallback when no player is logged in.
 - **Phase 5A — Capability flags**: `isAdmin` (bool) and `isTradeRestricted` (bool) on every player profile. Default `false`. Safe migration backfill on login and session restore.
@@ -370,7 +378,7 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 
 ### Key Patterns
 - All balance values from config.js (never hardcoded)
-- database.js maintains an in-memory cache for synchronous reads; writes fire-and-forget to Firebase
+- database.js maintains an in-memory cache for synchronous reads; gameplay writes are fire-and-forget to Firebase. Auth also uses `setAcknowledged` / `updateAcknowledged` (await remote, then patch cache) and `clearActiveSessionIfOwned` (RTDB transaction) for single-session safety.
 - If Firebase is not configured (placeholder keys), falls back to localStorage transparently
 - main.js init is async: `await db.initDB()` → `await auth.initAuth()` → sync seed/config/UI
 - ui.js renders reactively from DB reads (no separate state)
@@ -388,11 +396,11 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
   - `profileCustomization` — `{ featuredCards: [], featuredAchievements: [] }`.
   - `profileVisibility` — `{ isProfileHidden: false, isCollectionHidden: false }`.
 - **Frozen defaults**: `DEFAULT_CURRENCIES`, `DEFAULT_COSMETICS`, `DEFAULT_ITEMS`, `DEFAULT_SHOP_USAGE`, `DEFAULT_SHOP`, `DEFAULT_PROFILE_CUSTOMIZATION`, `DEFAULT_PROFILE_VISIBILITY`, `PURCHASE_HISTORY_MAX` — all exported, frozen.
-- **getPhase2ADefaults()**: returns a fresh copy of all Phase 2A/2B defaults; used by `createPlayerRecord()` in auth.js for new accounts. Name preserved for import stability.
+- **getPhase2ADefaults()**: returns a fresh copy of all Phase 2A/2B defaults; used by `buildPlayerRecord()` in auth.js for new accounts. Name preserved for import stability.
 - **normalizePlayerSchema(username)**: safe backfill for a single player — never overwrites existing valid data. Handles Firebase array→object conversion for `shop.currentRotation.slots`, `purchaseHistory`, `featuredCards`, `featuredAchievements`. Called on login, session restore, and bulk migration.
 - **migrateAllPlayersPhase2A()**: startup bulk migration called from main.js step 4f. Iterates all players, calls `normalizePlayerSchema()` for each. Idempotent. Name preserved for startup/import stability while now covering Phase 2B shop persistence fields.
 - **normalizePurchaseHistory(raw)**: utility to normalize and cap a raw purchaseHistory value (array or Firebase object → capped array).
-- **Integration points**: `auth.js` imports `getPhase2ADefaults` (createPlayerRecord) + `normalizePlayerSchema` (login + initAuth). `main.js` imports `migrateAllPlayersPhase2A` (startup step 4f).
+- **Integration points**: `auth.js` imports `getPhase2ADefaults` (buildPlayerRecord) + `normalizePlayerSchema` (login + initAuth). `main.js` imports `migrateAllPlayersPhase2A` (startup step 4f). `normalizePlayerSchema` uses child-path writes only and must never overwrite `activeSession`.
 - **No Phase 2B files modified**: ui.js, index.html, style.css, profile-ui.js, shop-ui.js, project-*.js, quest-config.js, cards.js — none touched.
 
 ### Phase 2B — Shop Rotation Persistence Schema
