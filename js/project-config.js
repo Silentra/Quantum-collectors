@@ -139,7 +139,7 @@ const PROJECT_CONFIG_DEFAULTS = {
    * starterPackId:       DB id of the pack type to grant on registration (empty = none)
    * starterPackQuantity: how many packs to grant (0 = disabled)
    *
-   * The grant happens once inside createPlayerRecord() immediately after profile
+   * The grant happens once inside auth buildPlayerRecord() immediately after profile
    * creation. The flag starterPacksGranted:true is written to the player record
    * so the grant never fires again (even on future logins).
    */

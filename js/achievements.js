@@ -155,6 +155,17 @@ export function initAchievements() {
   console.log(`[Achievements] Loaded ${Object.keys(config.definitions).length} definition(s); enabled=${config.meta.enabled !== false}`);
 }
 
+/**
+ * Toast unlock notifications after a batched pack-open commit (no persistence).
+ * @param {string[]} achievementIds
+ */
+export function toastAchievementUnlocks(achievementIds = []) {
+  for (const achievementId of achievementIds) {
+    const def = getAchievementConfig().definitions[achievementId];
+    if (def?.name) toast.success(`Achievement unlocked: ${def.name}`);
+  }
+}
+
 export { STAT_KEYS };
 export { getAchievementConfig, listAchievementDefinitions } from './achievement-config.js';
-export { evaluateAchievementsForStats } from './achievement-mutations.js';
+export { evaluateAchievementsForStats, planAchievementUpdatesForStats } from './achievement-mutations.js';

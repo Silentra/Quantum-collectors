@@ -194,7 +194,10 @@ function showBreakthroughCardReveal(card) {
     ? resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username))
     : null;
 
-  cardsContainer.innerHTML = renderPackCardWrapper(card, 0, { borderRenderEffectId });
+  cardsContainer.innerHTML = renderPackCardWrapper(card, 0, {
+    borderRenderEffectId,
+    packArtKey: 'standard',
+  });
 
   overlay.classList.remove('hidden');
 

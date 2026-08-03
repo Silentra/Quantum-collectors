@@ -221,7 +221,16 @@ export function getTopSeasonalResearchPlayers(limit = 10) {
 export function computeUniqueCardsOwned(username) {
   if (!username) return 0;
   const inventory = db.get(`players/${username}/inventory`) || {};
-  return Object.values(inventory).filter(qty => typeof qty === 'number' && qty > 0).length;
+  return computeUniqueCardsOwnedFromInventory(inventory);
+}
+
+/**
+ * Pure: unique card count from an inventory map (no DB writes).
+ * @param {Object} inventory
+ * @returns {number}
+ */
+export function computeUniqueCardsOwnedFromInventory(inventory = {}) {
+  return Object.values(inventory || {}).filter(qty => typeof qty === 'number' && qty > 0).length;
 }
 
 /**
