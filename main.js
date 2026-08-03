@@ -19,15 +19,6 @@ import * as ui from './js/ui.js';
 import { initCardArtFallback } from './js/card-art.js';
 import { initPackArtFallback } from './js/pack-art.js';
 
-// Research Points infrastructure
-import { migrateAllPlayersRP, migrateAllPlayersLeaderboardStats } from './js/research.js';
-
-// Weekly Research Pack
-import { migrateAllPlayersWeeklyPack } from './js/weekly-research-pack.js';
-
-// Phase 2A — expanded player schema migration
-import { migrateAllPlayersPhase2A } from './js/player-schema.js';
-
 // LB-1: Leaderboard season schema bootstrap
 import { ensureLeaderboardSeasonsSchema } from './js/leaderboard-seasons.js';
 
@@ -65,17 +56,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4b. Normalize existing concept card types (safe, never crashes)
     cards.normalizeConceptTypes();
 
-    // 4c. Migrate existing players to include RP fields (safe, never crashes)
-    migrateAllPlayersRP();
-
-    // 4d. LB-1: Migrate players to include leaderboard stat fields (safe, never crashes)
-    migrateAllPlayersLeaderboardStats();
-
-    // 4e-2. Weekly Research Pack — migrate existing players to include weekly fields
-    migrateAllPlayersWeeklyPack();
-
-    // 4f. Phase 2A — migrate existing players to include expanded schema fields
-    migrateAllPlayersPhase2A();
+    // Phase B: bulk all-player migrators removed from ordinary startup.
+    // Per-player schema/RP/weekly backfill runs on login via applyPostLoginPlayerMaintenance
+    // (normalizePlayerSchema + related). Exported migrateAll* helpers remain for admin/manual use.
 
     // 4e. LB-1: Ensure leaderboardSeasons DB schema exists
     ensureLeaderboardSeasonsSchema();

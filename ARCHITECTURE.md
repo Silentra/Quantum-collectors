@@ -87,7 +87,7 @@ js/
 
 ### Research Points System (js/research.js)
 - **Schema fields** on every player: `researchPoints` (lifetime), `seasonalResearchPoints` (resettable), `researchStats` object (totalProjects, successfulProjects, failedProjects, breakthroughs, highestTierCompleted)
-- **Migration**: `migrateAllPlayersRP()` called at startup (step 4c in main.js) — auto-adds missing fields to existing players, never overwrites valid data, never resets inventories
+- **Migration**: `ensurePlayerRPFields(username)` on login/session restore; bulk `migrateAllPlayersRP()` retained for admin/manual use (not ordinary student startup — Phase B). Never overwrites valid data, never resets inventories
 - **Helpers**: `getResearchPoints(username)`, `addResearchPoints(username, amount)`, `addSeasonalResearchPoints(username, amount)`
 - **Leaderboard queries** (data only, no UI): `getTopResearchPlayers(limit)`, `getTopSeasonalResearchPlayers(limit)` — descending sort, stable tiebreaker by username
 - **Admin reset**: `resetSeasonalResearchPoints()` — zeroes only `seasonalResearchPoints` across all players, preserves everything else
@@ -411,6 +411,22 @@ Temporary **measurement-only** instrumentation. **Disabled by default.**
 
 Collects: root `once` + `on('value')` snapshot counts and **estimated JSON bytes** (`Blob`/`TextEncoder` — **not** Firebase billed transfer), write counts by op/path (redacted; no values/passwords/session ids), local write↔snapshot **correlation only**, `scicards_db` persist counts/sizes, in-memory `onValue` fan-in counts, startup milestones. Does **not** change listeners, migrations, gameplay, or write batching. No metrics written to Firebase.
 
+### Phase A — Normalizer idempotency (write-storm fix)
+Per-player normalizers are **idempotent under RTDB null/empty semantics** (absent ≡ null for unequipped defaults; empty lists skip rewrite; object-shaped arrays compared semantically).
+
+### Phase A2 — Remaining startup write fixes
+| Hazard | Fix |
+|--------|-----|
+| `cosmetics/owned` → `{}` every reload | Treat **missing / null / `{}` as empty**; never write empty owned/equipped maps ([`player-schema.js`](js/player-schema.js)) |
+| `shop/.../slots` every reload | Order-insensitive compare via sorted-key canonicalize; compare `normalize(raw)` vs desired normalized — no rewrite for Firebase key order or array-vs-object alone |
+| Pending achievement `set` every login | [`writeProgress`](js/achievement-mutations.js) persists only when progress/target/unlock/claim fields change — not `lastEvaluatedAt` alone |
+| Unconditional project `update` | Post-login project sync writes only when generated/resolved/pruned or `refreshAt` advances |
+
+### Phase B — Bulk migrators off student startup
+[`main.js`](main.js) no longer calls `migrateAllPlayersRP`, `migrateAllPlayersLeaderboardStats`, `migrateAllPlayersWeeklyPack`, or `migrateAllPlayersPhase2A` on ordinary load. Those helpers remain exported for admin/manual use. Current-player backfill runs in `applyPostLoginPlayerMaintenance`: `ensurePlayerRPFields`, `ensurePlayerUniqueCardsOwned`, `checkAndResetWeeklyCycle`, `normalizePlayerSchema`. Root `on('value')` listener is unchanged.
+
+Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sync ± rare one-shot seeds). No `players/{other-user}/...` on normal startup.
+
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
 - **Schema subsystems** added to every player record:
@@ -424,10 +440,10 @@ Collects: root `once` + `on('value')` snapshot counts and **estimated JSON bytes
   - `profileVisibility` — `{ isProfileHidden: false, isCollectionHidden: false }`.
 - **Frozen defaults**: `DEFAULT_CURRENCIES`, `DEFAULT_COSMETICS`, `DEFAULT_ITEMS`, `DEFAULT_SHOP_USAGE`, `DEFAULT_SHOP`, `DEFAULT_PROFILE_CUSTOMIZATION`, `DEFAULT_PROFILE_VISIBILITY`, `PURCHASE_HISTORY_MAX` — all exported, frozen.
 - **getPhase2ADefaults()**: returns a fresh copy of all Phase 2A/2B defaults; used by `buildPlayerRecord()` in auth.js for new accounts. Name preserved for import stability.
-- **normalizePlayerSchema(username)**: safe backfill for a single player — never overwrites existing valid data. Handles Firebase array→object conversion for `shop.currentRotation.slots`, `purchaseHistory`, `featuredCards`, `featuredAchievements`. Called on login, session restore, and bulk migration.
-- **migrateAllPlayersPhase2A()**: startup bulk migration called from main.js step 4f. Iterates all players, calls `normalizePlayerSchema()` for each. Idempotent. Name preserved for startup/import stability while now covering Phase 2B shop persistence fields.
+- **normalizePlayerSchema(username)**: safe backfill for a single player — never overwrites existing valid data. Handles Firebase array→object conversion for `shop.currentRotation.slots`, `purchaseHistory`, `featuredCards`, `featuredAchievements`. Called on login and session restore. Idempotent under RTDB null/empty-array/empty-object semantics (Phase A / A2).
+- **migrateAllPlayersPhase2A()**: bulk helper — iterates all players, calls `normalizePlayerSchema()` for each. Idempotent (Phase A/A2). **Not** called from ordinary student startup (Phase B); retained for admin/manual use.
 - **normalizePurchaseHistory(raw)**: utility to normalize and cap a raw purchaseHistory value (array or Firebase object → capped array).
-- **Integration points**: `auth.js` imports `getPhase2ADefaults` (buildPlayerRecord) + `normalizePlayerSchema` (login + initAuth). `main.js` imports `migrateAllPlayersPhase2A` (startup step 4f). `normalizePlayerSchema` uses child-path writes only and must never overwrite `activeSession`.
+- **Integration points**: `auth.js` imports `getPhase2ADefaults` (buildPlayerRecord) + `normalizePlayerSchema` (login + initAuth). `migrateAllPlayersPhase2A` is exported but not wired in `main.js` after Phase B. `normalizePlayerSchema` uses child-path writes only and must never overwrite `activeSession`.
 - **No Phase 2B files modified**: ui.js, index.html, style.css, profile-ui.js, shop-ui.js, project-*.js, quest-config.js, cards.js — none touched.
 
 ### Phase 2B — Shop Rotation Persistence Schema
