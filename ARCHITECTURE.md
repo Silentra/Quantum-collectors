@@ -18,6 +18,7 @@ js/
   cards.js           - Card DB, CRUD, seed data (40 starter science cards), Phase 3 schema
   packs.js           - Pack types, weighted rarity rolling, pack opening
   pack-art.js        - Static pack card-back resolution (local WebP → emoji fallback)
+  db-metrics.js      - Phase 1A temporary RTDB diagnostics (opt-in; measurement only)
   groups.js          - Group/subgroup hierarchy
   ui.js              - All DOM rendering, event wiring, screen management
   shell-theme.js     - Application shell theme hooks (data-* attrs, title mount, identity accent); no cosmetic visuals
@@ -400,6 +401,15 @@ Unknown packs and missing/failed images keep the existing emoji presentation (ti
 - main.js init is async: `await db.initDB()` → `await auth.initAuth()` → sync seed/config/UI
 - ui.js renders reactively from DB reads (no separate state)
 - Placeholder modules export no-op inits + throw on actual calls
+
+### Phase 1A — RTDB diagnostics (`js/db-metrics.js`)
+Temporary **measurement-only** instrumentation. **Disabled by default.**
+
+| Enable | `localStorage.setItem('qc-db-metrics-enabled', 'true')` then reload |
+| Verbose | `localStorage.setItem('qc-db-metrics-verbose', 'true')` |
+| API | `window.qcDbMetrics.summary()` / `reset()` / `resetAll()` / `enable()` / `disable()` / `help()` |
+
+Collects: root `once` + `on('value')` snapshot counts and **estimated JSON bytes** (`Blob`/`TextEncoder` — **not** Firebase billed transfer), write counts by op/path (redacted; no values/passwords/session ids), local write↔snapshot **correlation only**, `scicards_db` persist counts/sizes, in-memory `onValue` fan-in counts, startup milestones. Does **not** change listeners, migrations, gameplay, or write batching. No metrics written to Firebase.
 
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation

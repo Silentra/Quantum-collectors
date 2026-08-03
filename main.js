@@ -10,6 +10,7 @@
  */
 
 import * as db from './js/database.js';
+import * as metrics from './js/db-metrics.js';
 import * as config from './js/config.js';
 import * as cards from './js/cards.js';
 import * as packs from './js/packs.js';
@@ -37,6 +38,7 @@ import { initAchievements } from './js/achievements.js';
 import { initSeasonal } from './js/seasonal.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
+  metrics.mark('dom-content-loaded');
   console.log('[SciCards] Initializing...');
 
   try {
@@ -45,14 +47,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.log('[SciCards] Database initialized');
 
     // 2. Initialize Auth (async — restores session from localStorage)
+    metrics.mark('initAuth-start');
     await auth.initAuth();
+    metrics.mark('initAuth-complete');
     console.log('[SciCards] Auth initialized');
 
     // 3. Load config
+    metrics.mark('config-load');
     config.loadConfig();
     console.log('[SciCards] Config loaded');
 
     // 4. Seed default data if empty
+    metrics.mark('migrations-start');
     cards.seedDefaultCards();
     packs.seedDefaultPacks();
 
@@ -81,6 +87,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.log('[SciCards] Generated 10 starter access codes');
     }
 
+    metrics.mark('migrations-complete');
     console.log('[SciCards] Seed data ready');
 
     // 6. Init placeholder modules
@@ -95,10 +102,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     initPackArtFallback();
 
     // 7. Initialize UI
+    metrics.mark('ui-init-start');
     ui.init();
+    metrics.mark('ui-init-complete');
+    if (auth.getSession()) {
+      metrics.mark('enterGame');
+    }
     console.log('[SciCards] UI initialized');
 
+    metrics.mark('app-ready');
     console.log('[SciCards] Ready!');
+    if (metrics.isEnabled()) {
+      console.info('[DB Metrics] Active. Run qcDbMetrics.summary() or qcDbMetrics.help()');
+    }
 
   } catch (e) {
     console.error('[SciCards] Initialization error:', e);
