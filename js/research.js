@@ -53,15 +53,20 @@ function ensurePlayerRPFields(username) {
   // researchStats object
   const existing = player.researchStats;
   if (!existing || typeof existing !== 'object') {
-    // Missing entirely — write full default
-    db.set(`players/${username}/researchStats`, { ...DEFAULT_RESEARCH_STATS });
+    // Missing entirely — write full default.
+    // Note: highestTierCompleted defaults to null; RTDB omits nulls, so we omit it
+    // from the written object to avoid a delete/recreate loop on every startup.
+    const { highestTierCompleted, ...requiredStats } = DEFAULT_RESEARCH_STATS;
+    db.set(`players/${username}/researchStats`, { ...requiredStats });
     migrated = true;
   } else {
-    // Patch individual missing keys
+    // Patch individual missing keys (skip null defaults — absent already means null)
     for (const [key, defaultVal] of Object.entries(DEFAULT_RESEARCH_STATS)) {
+      if (defaultVal === null || defaultVal === undefined) {
+        // Absent or explicit null are equivalent; never db.set(path, null).
+        continue;
+      }
       if (existing[key] === undefined || existing[key] === null) {
-        // highestTierCompleted default is null, which is valid — but if the key
-        // is entirely absent we should add it
         db.set(`players/${username}/researchStats/${key}`, defaultVal);
         migrated = true;
       }

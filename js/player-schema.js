@@ -154,8 +154,80 @@ function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * Drop null/undefined keys so compares match RTDB round-trips (Firebase omits nulls).
+ * Prevents rewrite loops when normalizers fill null defaults that never persist.
+ */
+function stripNullishForCompare(value) {
+  if (value === null || value === undefined) return null;
+  if (Array.isArray(value)) {
+    return value.map((item) => stripNullishForCompare(item));
+  }
+  if (isObject(value)) {
+    const out = {};
+    for (const [key, child] of Object.entries(value)) {
+      if (child === null || child === undefined) continue;
+      const stripped = stripNullishForCompare(child);
+      if (stripped === null || stripped === undefined) continue;
+      if (isObject(stripped) && Object.keys(stripped).length === 0) continue;
+      out[key] = stripped;
+    }
+    return out;
+  }
+  return value;
+}
+
 function valuesDiffer(a, b) {
-  return JSON.stringify(a) !== JSON.stringify(b);
+  return JSON.stringify(stripNullishForCompare(a)) !== JSON.stringify(stripNullishForCompare(b));
+}
+
+/**
+ * Empty array storage forms that RTDB may use interchangeably with "no list".
+ * Writing [] often round-trips as null/absent and causes rewrite loops.
+ */
+function isEmptyArrayStorage(raw) {
+  if (raw === undefined || raw === null) return true;
+  if (Array.isArray(raw)) return raw.length === 0;
+  if (isObject(raw)) return Object.keys(raw).length === 0;
+  return false;
+}
+
+/**
+ * Whether an array-like field needs a write after normalization.
+ * Skips empty≡absent and Firebase object-shaped arrays that already match semantically.
+ * @param {any} raw
+ * @param {any[]} normalized
+ * @param {(item: any) => any} [itemNormalize] - when set, also detect incomplete items
+ */
+function shouldWriteNormalizedArray(raw, normalized, itemNormalize = null) {
+  if (normalized.length === 0 && isEmptyArrayStorage(raw)) return false;
+
+  if (Array.isArray(raw)) {
+    if (itemNormalize) {
+      return valuesDiffer(raw.map(itemNormalize), raw);
+    }
+    return valuesDiffer(raw, normalized);
+  }
+
+  if (isObject(raw)) {
+    const vals = Object.values(raw);
+    if (itemNormalize) {
+      return valuesDiffer(vals.map(itemNormalize), vals);
+    }
+    // Object-shaped RTDB array with same semantic content — do not rewrite to [].
+    return valuesDiffer(vals, normalized);
+  }
+
+  // Unexpected type with non-empty normalized content
+  return normalized.length > 0;
+}
+
+/**
+ * Write null only to clear an invalid non-null value.
+ * Never write null when the key is already absent (RTDB deletes nulls → startup loops).
+ */
+function shouldClearToNull(current) {
+  return current !== undefined && current !== null;
 }
 
 function normalizeDiscountApplied(raw) {
@@ -335,9 +407,11 @@ export function normalizePlayerSchema(username) {
 
   // ── cosmetics ───────────────────────────────────────────────────────────
   if (!player.cosmetics || typeof player.cosmetics !== 'object') {
+    // Equipped defaults are all null — persist empty owned/equipped objects only
+    // (writing null equip keys is deleted by RTDB and re-triggers every startup).
     db.set(`players/${username}/cosmetics`, {
       owned: { ...DEFAULT_COSMETICS.owned },
-      equipped: { ...DEFAULT_COSMETICS.equipped },
+      equipped: {},
     });
     patched = true;
   } else {
@@ -356,13 +430,23 @@ export function normalizePlayerSchema(username) {
     }
     // cosmetics.equipped
     if (!player.cosmetics.equipped || typeof player.cosmetics.equipped !== 'object') {
-      db.set(`players/${username}/cosmetics/equipped`, { ...DEFAULT_COSMETICS.equipped });
-      patched = true;
+      // Only persist non-null default entries (all current defaults are null → skip empty write)
+      const equippedDefaults = {};
+      for (const [key, val] of Object.entries(DEFAULT_COSMETICS.equipped)) {
+        if (val !== null && val !== undefined) equippedDefaults[key] = val;
+      }
+      if (Object.keys(equippedDefaults).length > 0) {
+        db.set(`players/${username}/cosmetics/equipped`, equippedDefaults);
+        patched = true;
+      }
     } else {
       for (const [key, val] of Object.entries(DEFAULT_COSMETICS.equipped)) {
         if (player.cosmetics.equipped[key] === undefined) {
-          db.set(`players/${username}/cosmetics/equipped/${key}`, val);
-          patched = true;
+          // Absent already means unequipped when default is null — do not db.set(null).
+          if (val !== null && val !== undefined) {
+            db.set(`players/${username}/cosmetics/equipped/${key}`, val);
+            patched = true;
+          }
         }
       }
     }
@@ -413,7 +497,7 @@ export function normalizePlayerSchema(username) {
       const rotation = shop.currentRotation;
 
       const normalizedSlots = normalizeShopSlots(rotation.slots);
-      if (!Array.isArray(rotation.slots) || valuesDiffer(rotation.slots, normalizedSlots)) {
+      if (shouldWriteNormalizedArray(rotation.slots, normalizedSlots, normalizeShopSlot)) {
         db.set(`players/${username}/shop/currentRotation/slots`, normalizedSlots);
         patched = true;
       }
@@ -438,50 +522,54 @@ export function normalizePlayerSchema(username) {
   }
 
   // ── purchaseHistory ─────────────────────────────────────────────────────
-  if (!Array.isArray(player.purchaseHistory)) {
-    // Firebase may store arrays as objects — normalize safely
+  if (isEmptyArrayStorage(player.purchaseHistory)) {
+    // Empty [] / {} / null / absent are equivalent — do not rewrite.
+  } else if (!Array.isArray(player.purchaseHistory)) {
+    // Firebase may store arrays as objects — normalize only when non-empty object
     if (player.purchaseHistory && typeof player.purchaseHistory === 'object') {
       const arr = Object.values(player.purchaseHistory);
-      // Cap at max
-      db.set(`players/${username}/purchaseHistory`, arr.slice(-PURCHASE_HISTORY_MAX));
-      patched = true;
-    } else {
-      db.set(`players/${username}/purchaseHistory`, []);
-      patched = true;
+      const capped = arr.slice(-PURCHASE_HISTORY_MAX);
+      if (shouldWriteNormalizedArray(player.purchaseHistory, capped)) {
+        db.set(`players/${username}/purchaseHistory`, capped);
+        patched = true;
+      }
     }
   } else if (player.purchaseHistory.length > PURCHASE_HISTORY_MAX) {
-    // Enforce cap on existing data
     db.set(`players/${username}/purchaseHistory`, player.purchaseHistory.slice(-PURCHASE_HISTORY_MAX));
     patched = true;
   }
 
   // ── profileCustomization ────────────────────────────────────────────────
   if (!player.profileCustomization || typeof player.profileCustomization !== 'object') {
-    db.set(`players/${username}/profileCustomization`, {
-      featuredCards: [],
-      featuredAchievements: [],
-    });
-    patched = true;
+    // Defaults are empty lists — absent parent is fine; avoid writing [] that RTDB drops.
   } else {
-    if (!Array.isArray(player.profileCustomization.featuredCards)) {
-      // Firebase array → object normalization
-      const raw = player.profileCustomization.featuredCards;
-      const arr = (raw && typeof raw === 'object') ? Object.values(raw) : [];
-      db.set(`players/${username}/profileCustomization/featuredCards`, arr);
-      patched = true;
+    if (!isEmptyArrayStorage(player.profileCustomization.featuredCards)) {
+      const arr = normalizeIdArray(player.profileCustomization.featuredCards, MAX_FEATURED_CARDS);
+      if (shouldWriteNormalizedArray(player.profileCustomization.featuredCards, arr)) {
+        db.set(`players/${username}/profileCustomization/featuredCards`, arr);
+        patched = true;
+      }
     }
-    if (!Array.isArray(player.profileCustomization.featuredAchievements)) {
-      const raw = player.profileCustomization.featuredAchievements;
-      const arr = (raw && typeof raw === 'object') ? Object.values(raw) : [];
-      db.set(`players/${username}/profileCustomization/featuredAchievements`, arr);
-      patched = true;
+    if (!isEmptyArrayStorage(player.profileCustomization.featuredAchievements)) {
+      const arr = normalizeIdArray(player.profileCustomization.featuredAchievements, MAX_FEATURED_ACHIEVEMENTS);
+      if (shouldWriteNormalizedArray(player.profileCustomization.featuredAchievements, arr)) {
+        db.set(`players/${username}/profileCustomization/featuredAchievements`, arr);
+        patched = true;
+      }
     }
   }
 
   // ── profile (canonical identity runtime) ────────────────────────────────
   const profileDefaults = createProfileDefaultsFromLegacy(player);
   if (!player.profile || typeof player.profile !== 'object' || Array.isArray(player.profile)) {
-    db.set(`players/${username}/profile`, profileDefaults);
+    // Omit null equip slots and empty featured arrays — RTDB drops them anyway.
+    const initialProfile = {};
+    for (const [key, val] of Object.entries(profileDefaults)) {
+      if (val === null || val === undefined) continue;
+      if (Array.isArray(val) && val.length === 0) continue;
+      initialProfile[key] = val;
+    }
+    db.set(`players/${username}/profile`, initialProfile);
     patched = true;
   } else {
     const owned = isObject(player.cosmetics?.owned) ? player.cosmetics.owned : {};
@@ -497,11 +585,12 @@ export function normalizePlayerSchema(username) {
     for (const [key, category] of Object.entries(equippedFields)) {
       const value = player.profile[key];
       if (value === undefined) {
-        db.set(`players/${username}/profile/${key}`, profileDefaults[key] ?? null);
-        patched = true;
+        // Absent means unequipped — do not write null defaults (RTDB null-delete loop).
       } else if (value !== null && !isOwnedValidCosmetic(value, owned, category)) {
-        db.set(`players/${username}/profile/${key}`, null);
-        patched = true;
+        if (shouldClearToNull(value)) {
+          db.set(`players/${username}/profile/${key}`, null);
+          patched = true;
+        }
       }
     }
 
@@ -523,7 +612,7 @@ export function normalizePlayerSchema(username) {
       delete owned.border_quantum;
       patched = true;
     }
-    if (player.profile?.equippedBorder === 'border_quantum') {
+    if (player.profile?.equippedBorder === 'border_quantum' && shouldClearToNull(player.profile.equippedBorder)) {
       db.set(`players/${username}/profile/equippedBorder`, null);
       patched = true;
     }
@@ -533,7 +622,8 @@ export function normalizePlayerSchema(username) {
       delete owned[INTERNAL_DEFAULT_BORDER_ITEM_ID];
       patched = true;
     }
-    if (player.profile?.equippedBorder === INTERNAL_DEFAULT_BORDER_ITEM_ID) {
+    if (player.profile?.equippedBorder === INTERNAL_DEFAULT_BORDER_ITEM_ID &&
+        shouldClearToNull(player.profile.equippedBorder)) {
       db.set(`players/${username}/profile/equippedBorder`, null);
       patched = true;
     }
@@ -542,12 +632,12 @@ export function normalizePlayerSchema(username) {
     const legacyBanner = player.cosmetics?.equipped?.profileBanner;
 
     /* Default chrome = no equip; pseudo-cosmetic profile_banner_default retired */
-    if (equippedBanner === 'profile_banner_default') {
+    if (equippedBanner === 'profile_banner_default' && shouldClearToNull(equippedBanner)) {
       equippedBanner = null;
       db.set(`players/${username}/profile/equippedBanner`, null);
       patched = true;
     }
-    if (legacyBanner === 'profile_banner_default') {
+    if (legacyBanner === 'profile_banner_default' && shouldClearToNull(legacyBanner)) {
       db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
       patched = true;
     }
@@ -556,11 +646,14 @@ export function normalizePlayerSchema(username) {
       legacyBanner === 'profile_banner_research';
     if (researchEquipped ||
         (equippedBanner && !isOwnedValidCosmetic(equippedBanner, owned, ITEM_CATEGORIES.PROFILE_BANNER))) {
-      db.set(`players/${username}/profile/equippedBanner`, null);
-      if (player.cosmetics?.equipped && typeof player.cosmetics.equipped === 'object') {
-        db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
+      if (shouldClearToNull(player.profile.equippedBanner)) {
+        db.set(`players/${username}/profile/equippedBanner`, null);
+        patched = true;
       }
-      patched = true;
+      if (shouldClearToNull(player.cosmetics?.equipped?.profileBanner)) {
+        db.set(`players/${username}/cosmetics/equipped/profileBanner`, null);
+        patched = true;
+      }
     } else if (
       (equippedBanner === null || equippedBanner === undefined) &&
       legacyBanner &&
@@ -578,7 +671,10 @@ export function normalizePlayerSchema(username) {
         : player.profile.featuredCards,
       MAX_FEATURED_CARDS
     );
-    if (!Array.isArray(player.profile.featuredCards) || valuesDiffer(player.profile.featuredCards, featuredCards)) {
+    if (shouldWriteNormalizedArray(
+      player.profile.featuredCards === undefined ? null : player.profile.featuredCards,
+      featuredCards
+    )) {
       db.set(`players/${username}/profile/featuredCards`, featuredCards);
       patched = true;
     }
@@ -589,8 +685,10 @@ export function normalizePlayerSchema(username) {
         : player.profile.featuredAchievements,
       MAX_FEATURED_ACHIEVEMENTS
     );
-    if (!Array.isArray(player.profile.featuredAchievements) ||
-        valuesDiffer(player.profile.featuredAchievements, featuredAchievements)) {
+    if (shouldWriteNormalizedArray(
+      player.profile.featuredAchievements === undefined ? null : player.profile.featuredAchievements,
+      featuredAchievements
+    )) {
       db.set(`players/${username}/profile/featuredAchievements`, featuredAchievements);
       patched = true;
     }
