@@ -129,8 +129,17 @@ export function ensureAchievementStats(username) {
 export function computeCardsAtMaxAura(username) {
   if (!username) return 0;
   const inventory = db.get(`players/${username}/inventory`) || {};
+  return computeCardsAtMaxAuraFromInventory(inventory);
+}
+
+/**
+ * Pure: count max-aura cards from an inventory map (no DB writes).
+ * @param {Object} inventory
+ * @returns {number}
+ */
+export function computeCardsAtMaxAuraFromInventory(inventory = {}) {
   let count = 0;
-  for (const [cardId, qty] of Object.entries(inventory)) {
+  for (const [cardId, qty] of Object.entries(inventory || {})) {
     if (typeof qty !== 'number' || qty <= 0) continue;
     const card = cards.getCard(cardId);
     if (!card?.rarity) continue;
