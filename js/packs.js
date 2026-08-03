@@ -6,13 +6,27 @@
  * it only triggers if a pack somehow has no odds object. All packs created
  * via the admin UI always have explicit odds. Do NOT change live generation
  * behavior without a migration plan.
+ *
+ * Pack-open persistence (batched):
+ *   1. Acquire cross-tab lock when navigator.locks is available
+ *   2. Revalidate pack ownership from the current in-memory cache (not a
+ *      guaranteed server-fresh read — Option B residual race with same-session
+ *      tabs that bypass locks is documented in ARCHITECTURE.md)
+ *   3. Roll all cards once (immutable reveal list)
+ *   4. Build absolute multi-path updates (pack, inventory aggregates, stats,
+ *      progression, achievement progress/unlock entries via pure planner)
+ *   5. Commit with updateAcknowledged — reveal only after success
  */
 
 import * as db from './database.js';
 import * as config from './config.js';
 import * as cards from './cards.js';
-import * as player from './player.js';
-import { bumpPlayerStat, STAT_KEYS } from './achievements.js';
+import {
+  STAT_KEYS,
+  planAchievementUpdatesForStats,
+} from './achievements.js';
+import { getPlayerStat, computeCardsAtMaxAuraFromInventory } from './achievement-stats.js';
+import { computeUniqueCardsOwnedFromInventory } from './research.js';
 
 /**
  * Create a new pack type
@@ -83,49 +97,166 @@ export function togglePack(id) {
 }
 
 /**
- * Open a pack for a player
- * Returns array of card objects received
+ * Serialize pack opens for the same username+packId across tabs when
+ * navigator.locks is available; otherwise run immediately (per-tab UI mutex
+ * still applies in openPackUI).
+ * @template T
+ * @param {string} username
+ * @param {string} packId
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
  */
-export function openPack(username, packId) {
-  const packType = getPackType(packId);
-  if (!packType) return { success: false, error: 'Pack type not found.' };
+async function withPackOpenLock(username, packId, fn) {
+  const lockName = `qc-pack-open:${username}:${packId}`;
+  if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+    return navigator.locks.request(lockName, { mode: 'exclusive' }, () => fn());
+  }
+  return fn();
+}
 
-  // Check player has this pack
-  const playerPacks = player.getPlayerPacks(username);
-  if (!playerPacks[packId] || playerPacks[packId] <= 0) {
-    return { success: false, error: 'You don\'t have this pack.' };
+/**
+ * Build absolute multi-path updates for one pack open from cache snapshot + rolls.
+ * @returns {{ updates: Object, rolledCards: Object[], statKeys: string[], unlocked: string[], notified: string[] } | { error: string }}
+ */
+function buildPackOpenPlan(username, packId, packType) {
+  const ownedQty = Number(db.get(`players/${username}/packs/${packId}`)) || 0;
+  if (ownedQty <= 0) {
+    return { error: "You don't have this pack." };
   }
 
   const allCards = cards.getAllCards();
   if (allCards.length === 0) {
-    return { success: false, error: 'No cards in the database.' };
+    return { error: 'No cards in the database.' };
   }
 
-  // Roll cards
+  const odds = packType.odds || config.getPackOdds();
   const rolledCards = [];
-  const odds = packType.odds || config.getPackOdds(); // @deprecated fallback — each pack should have its own odds
-
   for (let i = 0; i < packType.cardsPerPack; i++) {
     const rarity = rollRarity(odds);
     const card = pickCardOfRarity(allCards, rarity);
-    if (card) {
-      rolledCards.push(card);
-      player.addCard(username, card.id);
-    }
+    if (card) rolledCards.push(card);
   }
 
-  // Remove pack from player
-  player.removePack(username, packId);
+  if (rolledCards.length === 0) {
+    return { error: 'No cards in the database.' };
+  }
 
-  bumpPlayerStat(username, STAT_KEYS.PACKS_OPENED, 1);
+  // Aggregate duplicate rolls: A,A,B → { A:2, B:1 }
+  const gainsByCardId = {};
+  for (const card of rolledCards) {
+    gainsByCardId[card.id] = (gainsByCardId[card.id] || 0) + 1;
+  }
 
-  // Mark progression
+  const prevInventory = { ...(db.get(`players/${username}/inventory`) || {}) };
+  const nextInventory = { ...prevInventory };
+  let discoveryDelta = 0;
+
+  const updates = {};
+  for (const [cardId, gain] of Object.entries(gainsByCardId)) {
+    const prevQty = typeof prevInventory[cardId] === 'number' ? prevInventory[cardId] : 0;
+    const nextQty = prevQty + gain;
+    nextInventory[cardId] = nextQty;
+    updates[`players/${username}/inventory/${cardId}`] = nextQty;
+    if (prevQty === 0 && nextQty > 0) discoveryDelta += 1;
+  }
+
+  const nextPackQty = ownedQty - 1;
+  updates[`players/${username}/packs/${packId}`] = nextPackQty <= 0 ? null : nextPackQty;
+
+  const prevCardsCollected = Number(db.get(`players/${username}/stats/cardsCollected`)) || 0;
+  updates[`players/${username}/stats/cardsCollected`] = prevCardsCollected + rolledCards.length;
+
+  const prevPacksOpened = getPlayerStat(username, STAT_KEYS.PACKS_OPENED);
+  const nextPacksOpened = prevPacksOpened + 1;
+  updates[`players/${username}/stats/packsOpened`] = nextPacksOpened;
+
+  const prevDiscovered = getPlayerStat(username, STAT_KEYS.UNIQUE_CARDS_DISCOVERED);
+  const nextDiscovered = prevDiscovered + discoveryDelta;
+  if (discoveryDelta > 0) {
+    updates[`players/${username}/stats/uniqueCardsDiscovered`] = nextDiscovered;
+  }
+
+  const prevUniqueOwned = getPlayerStat(username, STAT_KEYS.UNIQUE_CARDS_OWNED);
+  const nextUniqueOwned = computeUniqueCardsOwnedFromInventory(nextInventory);
+  if (nextUniqueOwned !== prevUniqueOwned) {
+    updates[`players/${username}/stats/uniqueCardsOwned`] = nextUniqueOwned;
+  }
+
+  const prevAura = getPlayerStat(username, STAT_KEYS.MAX_CARD_AURA_TIER);
+  const nextAura = computeCardsAtMaxAuraFromInventory(nextInventory);
+  if (nextAura !== prevAura) {
+    updates[`players/${username}/stats/maxCardAuraTier`] = nextAura;
+  }
+
   const prog = db.get(`players/${username}/progression`) || {};
   if (!prog.firstPackOpened) {
-    db.update(`players/${username}/progression`, { firstPackOpened: true });
+    updates[`players/${username}/progression/firstPackOpened`] = true;
   }
 
-  return { success: true, cards: rolledCards };
+  const plannedStatValues = {
+    [STAT_KEYS.PACKS_OPENED]: nextPacksOpened,
+    [STAT_KEYS.UNIQUE_CARDS_DISCOVERED]: nextDiscovered,
+    [STAT_KEYS.UNIQUE_CARDS_OWNED]: nextUniqueOwned,
+    [STAT_KEYS.MAX_CARD_AURA_TIER]: nextAura,
+  };
+
+  const statKeys = [STAT_KEYS.PACKS_OPENED, STAT_KEYS.UNIQUE_CARDS_OWNED];
+  if (discoveryDelta > 0) statKeys.push(STAT_KEYS.UNIQUE_CARDS_DISCOVERED);
+  if (nextAura !== prevAura) statKeys.push(STAT_KEYS.MAX_CARD_AURA_TIER);
+
+  const getStat = (statKey) => {
+    if (Object.prototype.hasOwnProperty.call(plannedStatValues, statKey)) {
+      return plannedStatValues[statKey];
+    }
+    return getPlayerStat(username, statKey);
+  };
+
+  const achPlan = planAchievementUpdatesForStats(username, statKeys, { getStat });
+  Object.assign(updates, achPlan.updates);
+
+  return {
+    updates,
+    rolledCards,
+    statKeys,
+    unlocked: achPlan.unlocked,
+    notified: achPlan.notified,
+  };
+}
+
+/**
+ * Open a pack for a player (acknowledged multi-path commit).
+ * Reveal only after this resolves successfully.
+ * @returns {Promise<{ success: boolean, cards?: Object[], unlocked?: string[], notified?: string[], error?: string, writeCount?: number }>}
+ */
+export async function openPack(username, packId) {
+  if (!username || !packId) {
+    return { success: false, error: 'Invalid pack open request.' };
+  }
+
+  return withPackOpenLock(username, packId, async () => {
+    const packType = getPackType(packId);
+    if (!packType) return { success: false, error: 'Pack type not found.' };
+
+    // Revalidate ownership after lock — still cache state, not server-fresh.
+    const plan = buildPackOpenPlan(username, packId, packType);
+    if (plan.error) return { success: false, error: plan.error };
+
+    const ack = await db.updateAcknowledged(plan.updates);
+    if (!ack.ok) {
+      return {
+        success: false,
+        error: ack.error || 'Could not save pack opening. Check your connection and try again.',
+      };
+    }
+
+    return {
+      success: true,
+      cards: plan.rolledCards,
+      unlocked: plan.unlocked,
+      notified: plan.notified,
+      writeCount: 1,
+    };
+  });
 }
 
 /**

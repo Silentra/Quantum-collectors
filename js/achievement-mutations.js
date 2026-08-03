@@ -32,7 +32,13 @@ function getPlayerSnapshot(username) {
 }
 
 function writeUnlock(username, achievementId, evalResult, now) {
-  const entry = {
+  const entry = buildUnlockEntry(evalResult, now);
+  db.set(`players/${username}/achievements/${achievementId}`, entry);
+  return entry;
+}
+
+function buildUnlockEntry(evalResult, now) {
+  return {
     unlocked: true,
     unlockedAt: now,
     progress: evalResult.progress ?? 1,
@@ -42,13 +48,10 @@ function writeUnlock(username, achievementId, evalResult, now) {
     claimedAt: 0,
     lastEvaluatedAt: now,
   };
-  db.set(`players/${username}/achievements/${achievementId}`, entry);
-  return entry;
 }
 
-function writeProgress(username, achievementId, evalResult, now) {
-  const existing = db.get(`players/${username}/achievements/${achievementId}`);
-  if (isPlayerUnlocked({ [achievementId]: existing }, achievementId)) return;
+function buildProgressEntryIfChanged(existing, evalResult, now) {
+  if (existing?.unlocked === true) return null;
 
   const progress = evalResult.progress ?? 0;
   const progressValue = evalResult.progressValue ?? 0;
@@ -64,10 +67,10 @@ function writeProgress(username, achievementId, evalResult, now) {
     Number(existing.targetValue ?? 1) === Number(targetValue) &&
     existing.claimed !== true
   ) {
-    return;
+    return null;
   }
 
-  const entry = {
+  return {
     unlocked: false,
     unlockedAt: 0,
     progress,
@@ -77,7 +80,72 @@ function writeProgress(username, achievementId, evalResult, now) {
     claimedAt: 0,
     lastEvaluatedAt: now,
   };
+}
+
+function writeProgress(username, achievementId, evalResult, now) {
+  const existing = db.get(`players/${username}/achievements/${achievementId}`);
+  if (isPlayerUnlocked({ [achievementId]: existing }, achievementId)) return;
+
+  const entry = buildProgressEntryIfChanged(existing, evalResult, now);
+  if (!entry) return;
   db.set(`players/${username}/achievements/${achievementId}`, entry);
+}
+
+/**
+ * Pure achievement write plan for given stat keys — reuses evaluateDefinition /
+ * buildStatIndex / dirty progress rules. Does not write to the DB.
+ *
+ * @param {string} username
+ * @param {string[]} statKeys
+ * @param {Object} [options]
+ * @param {(statKey: string) => number} [options.getStat] - override live DB stats (planned overlay)
+ * @param {Object} [options.playerAchievements] - override live achievement map
+ * @param {number} [options.now]
+ * @returns {{ updates: Object<string, Object>, unlocked: string[], notified: string[] }}
+ */
+export function planAchievementUpdatesForStats(username, statKeys = [], options = {}) {
+  const empty = { updates: {}, unlocked: [], notified: [] };
+  if (!username || !statKeys.length) return empty;
+
+  const config = getAchievementConfig();
+  if (config.meta.enabled === false) return empty;
+
+  const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+  const playerAchievements = isObject(options.playerAchievements)
+    ? options.playerAchievements
+    : getPlayerAchievements(username);
+  const getStat = typeof options.getStat === 'function'
+    ? options.getStat
+    : (statKey => getPlayerStat(username, statKey));
+
+  const index = buildStatIndex(config.definitions);
+  const achievementIds = getAchievementIdsForStats(index, statKeys);
+  if (!achievementIds.length) return empty;
+
+  const updates = {};
+  const unlocked = [];
+  const notified = [];
+
+  for (const achievementId of achievementIds) {
+    const definition = config.definitions[achievementId];
+    if (!definition?.enabled) continue;
+    if (isPlayerUnlocked(playerAchievements, achievementId)) continue;
+
+    const evalResult = evaluateDefinition(definition, getStat);
+    const path = `players/${username}/achievements/${achievementId}`;
+
+    if (evalResult.met) {
+      updates[path] = buildUnlockEntry(evalResult, now);
+      unlocked.push(achievementId);
+      if (definition.notifyOnUnlock) notified.push(achievementId);
+    } else {
+      const existing = playerAchievements[achievementId];
+      const entry = buildProgressEntryIfChanged(existing, evalResult, now);
+      if (entry) updates[path] = entry;
+    }
+  }
+
+  return { updates, unlocked, notified };
 }
 
 /**
@@ -101,6 +169,8 @@ export function evaluateAchievementIds(username, achievementIds = [], options = 
   const playerAchievements = getPlayerAchievements(username);
   const getStat = statKey => getPlayerStat(username, statKey);
 
+  // Reuse planner via a synthetic stat-key path: evaluate the explicit id list directly
+  // while keeping unlock/progress entry builders shared with pack-open planning.
   const unlocked = [];
   const notified = [];
 
@@ -126,14 +196,11 @@ export function evaluateAchievementIds(username, achievementIds = [], options = 
  * Evaluate only achievements indexed for the given stat keys.
  */
 export function evaluateAchievementsForStats(username, statKeys = [], options = {}) {
-  const config = getAchievementConfig();
-  if (config.meta.enabled === false || !statKeys.length) {
-    return { unlocked: [], notified: [] };
+  const plan = planAchievementUpdatesForStats(username, statKeys, options);
+  for (const [path, value] of Object.entries(plan.updates)) {
+    db.set(path, value);
   }
-
-  const index = buildStatIndex(config.definitions);
-  const achievementIds = getAchievementIdsForStats(index, statKeys);
-  return evaluateAchievementIds(username, achievementIds, options);
+  return { unlocked: plan.unlocked, notified: plan.notified };
 }
 
 /**

@@ -26,7 +26,7 @@ import * as config from './config.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
 import * as metrics from './db-metrics.js';
-import { refreshUniqueCardsOwned } from './research.js';
+import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
 import { renderAdminSeasons } from './leaderboard-admin.js';
@@ -487,72 +487,83 @@ function renderPacks() {
   });
 }
 
-function openPackUI(packId) {
+/** Per-tab mutex — blocks overlapping opens in this tab (navigator.locks covers cross-tab). */
+let packOpenInFlight = false;
+
+async function openPackUI(packId) {
   const session = auth.getSession();
   if (!session) return;
+  if (packOpenInFlight) return;
 
-  const result = packs.openPack(session.username, packId);
-  if (!result.success) {
-    toast.error(result.error);
-    return;
-  }
-
-  // LB-1: refresh uniqueCardsOwned stat after any pack opening
-  refreshUniqueCardsOwned(session.username);
-
-  const packType = packs.getPackType(packId);
-  document.getElementById('pack-opening-title').textContent = `${packType?.name || 'Pack'} Opened!`;
-
-  const cardsContainer = document.getElementById('pack-opening-cards');
-
-  const borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
-
-  cardsContainer.innerHTML = result.cards
-    .map((card, i) => renderPackCardWrapper(card, i, { borderRenderEffectId, pack: packType }))
-    .join('');
-
-  // Show overlay first
-  document.getElementById('pack-opening-overlay').classList.remove('hidden');
-
-  // Stagger fade-in, then auto-flip common/uncommon
-  const wrappers = cardsContainer.querySelectorAll('.pack-card-wrapper');
-  wrappers.forEach((wrapper, i) => {
-    const rarity = wrapper.dataset.rarity;
-    const needsClick = ['rare', 'epic', 'legendary'].includes(rarity);
-    const flipper = wrapper.querySelector('.pack-card-flipper');
-
-    // Phase in with stagger
-    setTimeout(() => {
-      wrapper.classList.add('phase-in');
-
-      // Auto-flip common + uncommon after they appear
-      if (!needsClick) {
-        setTimeout(() => {
-          flipper.classList.add('flipped');
-          wrapper.classList.add('flipped');
-        }, 250);
-      }
-    }, i * 125);
-
-    // Click-to-reveal for rare, epic, legendary
-    if (needsClick) {
-      const revealHandler = () => {
-        if (flipper.classList.contains('flipped')) return;
-        flipper.classList.add('flipped');
-        wrapper.classList.add('flipped');
-
-        // Spawn particles for epic/legendary
-        if (rarity === 'epic' || rarity === 'legendary') {
-          spawnRevealParticles(wrapper, rarity);
-        }
-
-        wrapper.removeEventListener('click', revealHandler);
-      };
-      wrapper.addEventListener('click', revealHandler);
-    }
+  packOpenInFlight = true;
+  document.querySelectorAll('.btn-open-pack').forEach(btn => {
+    btn.disabled = true;
   });
 
-  renderPacks();
+  try {
+    const result = await packs.openPack(session.username, packId);
+    if (!result.success) {
+      toast.error(result.error || 'Could not open pack.');
+      return;
+    }
+
+    toastAchievementUnlocks(result.notified || []);
+
+    const packType = packs.getPackType(packId);
+    document.getElementById('pack-opening-title').textContent = `${packType?.name || 'Pack'} Opened!`;
+
+    const cardsContainer = document.getElementById('pack-opening-cards');
+
+    const borderRenderEffectId = resolveBorderRenderEffectIdFromPlayer(player.getPlayer(session.username));
+
+    cardsContainer.innerHTML = result.cards
+      .map((card, i) => renderPackCardWrapper(card, i, { borderRenderEffectId, pack: packType }))
+      .join('');
+
+    // Show overlay only after acknowledged commit
+    document.getElementById('pack-opening-overlay').classList.remove('hidden');
+
+    // Stagger fade-in, then auto-flip common/uncommon
+    const wrappers = cardsContainer.querySelectorAll('.pack-card-wrapper');
+    wrappers.forEach((wrapper, i) => {
+      const rarity = wrapper.dataset.rarity;
+      const needsClick = ['rare', 'epic', 'legendary'].includes(rarity);
+      const flipper = wrapper.querySelector('.pack-card-flipper');
+
+      // Phase in with stagger
+      setTimeout(() => {
+        wrapper.classList.add('phase-in');
+
+        // Auto-flip common + uncommon after they appear
+        if (!needsClick) {
+          setTimeout(() => {
+            flipper.classList.add('flipped');
+            wrapper.classList.add('flipped');
+          }, 250);
+        }
+      }, i * 125);
+
+      // Click-to-reveal for rare, epic, legendary
+      if (needsClick) {
+        const revealHandler = () => {
+          if (flipper.classList.contains('flipped')) return;
+          flipper.classList.add('flipped');
+          wrapper.classList.add('flipped');
+
+          // Spawn particles for epic/legendary
+          if (rarity === 'epic' || rarity === 'legendary') {
+            spawnRevealParticles(wrapper, rarity);
+          }
+
+          wrapper.removeEventListener('click', revealHandler);
+        };
+        wrapper.addEventListener('click', revealHandler);
+      }
+    });
+  } finally {
+    packOpenInFlight = false;
+    renderPacks();
+  }
 }
 
 // ===================== RESEARCH PROJECTS (delegated to project-ui.js) =====================
