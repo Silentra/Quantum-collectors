@@ -4,7 +4,8 @@
  * Schema + persistence only. No quests, UI, timers, or rewards.
  *
  * Provides:
- *   - migrateAllPlayersRP()           - safe migration for existing players
+ *   - ensurePlayerRPFields(username)  - per-player RP backfill (login)
+ *   - migrateAllPlayersRP()           - bulk helper (admin/manual; not student startup)
  *   - getResearchPoints(username)
  *   - addResearchPoints(username, amount)
  *   - addSeasonalResearchPoints(username, amount)
@@ -32,7 +33,7 @@ const DEFAULT_RESEARCH_STATS = {
  * @param {string} username
  * @returns {boolean} true if any field was added
  */
-function ensurePlayerRPFields(username) {
+export function ensurePlayerRPFields(username) {
   const player = db.get(`players/${username}`);
   if (!player) return false;
 
@@ -84,7 +85,8 @@ function ensurePlayerRPFields(username) {
 /**
  * Migrate all existing players to include RP fields.
  * Safe to call multiple times — skips players that already have valid data.
- * Called once at startup from main.js.
+ * Phase B: not called from ordinary student startup; use ensurePlayerRPFields on login
+ * or invoke this helper manually/admin.
  */
 export function migrateAllPlayersRP() {
   const players = db.getChildren('players');
@@ -228,7 +230,7 @@ export function computeUniqueCardsOwned(username) {
  * @param {string} username
  * @returns {boolean} true if field was added
  */
-function ensurePlayerUniqueCardsOwned(username) {
+export function ensurePlayerUniqueCardsOwned(username) {
   const player = db.get(`players/${username}`);
   if (!player) return false;
 
@@ -244,6 +246,8 @@ function ensurePlayerUniqueCardsOwned(username) {
  * Migrate all existing players to include stats.uniqueCardsOwned.
  * Safe to call multiple times — skips players that already have the field.
  * Called once at startup from main.js alongside migrateAllPlayersRP.
+ * Phase B: no longer invoked from ordinary student startup — use ensurePlayerUniqueCardsOwned on login
+ * or call this helper manually/admin.
  */
 export function migrateAllPlayersLeaderboardStats() {
   const players = db.getChildren('players');

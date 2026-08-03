@@ -50,12 +50,29 @@ function writeProgress(username, achievementId, evalResult, now) {
   const existing = db.get(`players/${username}/achievements/${achievementId}`);
   if (isPlayerUnlocked({ [achievementId]: existing }, achievementId)) return;
 
+  const progress = evalResult.progress ?? 0;
+  const progressValue = evalResult.progressValue ?? 0;
+  const targetValue = evalResult.targetValue ?? 1;
+
+  // Persist only when meaningful state changes (or first seed). Do not rewrite for
+  // lastEvaluatedAt alone — that caused one set() per pending achievement every login.
+  if (
+    isObject(existing) &&
+    existing.unlocked !== true &&
+    Number(existing.progress ?? 0) === Number(progress) &&
+    Number(existing.progressValue ?? 0) === Number(progressValue) &&
+    Number(existing.targetValue ?? 1) === Number(targetValue) &&
+    existing.claimed !== true
+  ) {
+    return;
+  }
+
   const entry = {
     unlocked: false,
     unlockedAt: 0,
-    progress: evalResult.progress ?? 0,
-    progressValue: evalResult.progressValue ?? 0,
-    targetValue: evalResult.targetValue ?? 1,
+    progress,
+    progressValue,
+    targetValue,
     claimed: false,
     claimedAt: 0,
     lastEvaluatedAt: now,

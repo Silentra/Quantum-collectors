@@ -26,6 +26,8 @@ import { getProjectConfig } from './project-config.js';
 import * as cards from './cards.js';
 import { getPhase2ADefaults, normalizePlayerSchema } from './player-schema.js';
 import { resetLoginAchievementEvaluation, runLoginAchievementEvaluation } from './achievements.js';
+import { ensurePlayerRPFields, ensurePlayerUniqueCardsOwned } from './research.js';
+import { checkAndResetWeeklyCycle } from './weekly-research-pack.js';
 
 const SESSION_KEY = 'scicards_session';
 const AUTH_MESSAGE_KEY = 'scicards_auth_message';
@@ -297,21 +299,37 @@ function applyPostLoginPlayerMaintenance(username) {
     ...defaults
   });
 
+  // Phase B: per-player backfill that used to run via startup migrateAll* bulk passes.
+  // Order: RP + uniqueCardsOwned before normalize (normalize seeds uniqueCardsOwned to 0).
+  ensurePlayerRPFields(username);
+  ensurePlayerUniqueCardsOwned(username);
+  checkAndResetWeeklyCycle(username);
+
   // Path-specific child writes only — must not clobber activeSession.
   normalizePlayerSchema(username);
   runLoginAchievementEvaluation(username);
 
   const freshPlayer = db.get(`players/${username}`);
+  const prevRefreshAt = freshPlayer.lastProjectRefreshAt ?? 0;
   const syncResult = syncProjects({
     projects:      freshPlayer.projects      ?? [],
     totalRP:       freshPlayer.totalResearchPoints ?? 0,
-    lastRefreshAt: freshPlayer.lastProjectRefreshAt ?? 0,
+    lastRefreshAt: prevRefreshAt,
     now:           Date.now(),
   });
-  db.update(`players/${username}`, {
-    projects:             syncResult.projects,
-    lastProjectRefreshAt: syncResult.refreshAt,
-  });
+  // Match project-ui heartbeat: persist only when sync changed something
+  // (including refreshAt advances when the pool is full).
+  if (
+    syncResult.generatedCount > 0 ||
+    syncResult.resolvedCount > 0 ||
+    syncResult.prunedCount > 0 ||
+    syncResult.refreshAt !== prevRefreshAt
+  ) {
+    db.update(`players/${username}`, {
+      projects:             syncResult.projects,
+      lastProjectRefreshAt: syncResult.refreshAt,
+    });
+  }
   console.log(`[ResearchProjects] Sync complete — generated:${syncResult.generatedCount} resolved:${syncResult.resolvedCount} pruned:${syncResult.prunedCount}`);
 }
 

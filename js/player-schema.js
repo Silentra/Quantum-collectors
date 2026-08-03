@@ -177,8 +177,25 @@ function stripNullishForCompare(value) {
   return value;
 }
 
+/** Sort object keys recursively so JSON.stringify is order-insensitive (Firebase lex-sorts). */
+function canonicalizeForCompare(value) {
+  const stripped = stripNullishForCompare(value);
+  if (stripped === null || stripped === undefined) return null;
+  if (Array.isArray(stripped)) {
+    return stripped.map((item) => canonicalizeForCompare(item));
+  }
+  if (isObject(stripped)) {
+    const out = {};
+    for (const key of Object.keys(stripped).sort()) {
+      out[key] = canonicalizeForCompare(stripped[key]);
+    }
+    return out;
+  }
+  return stripped;
+}
+
 function valuesDiffer(a, b) {
-  return JSON.stringify(stripNullishForCompare(a)) !== JSON.stringify(stripNullishForCompare(b));
+  return JSON.stringify(canonicalizeForCompare(a)) !== JSON.stringify(canonicalizeForCompare(b));
 }
 
 /**
@@ -192,19 +209,28 @@ function isEmptyArrayStorage(raw) {
   return false;
 }
 
+/** Empty object maps RTDB may drop — treat missing / null / {} as equivalent. */
+function isEmptyObjectStorage(raw) {
+  if (raw === undefined || raw === null) return true;
+  if (isObject(raw)) return Object.keys(raw).length === 0;
+  return false;
+}
+
 /**
  * Whether an array-like field needs a write after normalization.
  * Skips empty≡absent and Firebase object-shaped arrays that already match semantically.
+ * Compares normalized(raw) vs desired normalized — order-insensitive; no rewrite for
+ * array-vs-object shape alone when content matches.
  * @param {any} raw
  * @param {any[]} normalized
- * @param {(item: any) => any} [itemNormalize] - when set, also detect incomplete items
+ * @param {(item: any) => any} [itemNormalize] - when set, normalize each raw item before compare
  */
 function shouldWriteNormalizedArray(raw, normalized, itemNormalize = null) {
   if (normalized.length === 0 && isEmptyArrayStorage(raw)) return false;
 
   if (Array.isArray(raw)) {
     if (itemNormalize) {
-      return valuesDiffer(raw.map(itemNormalize), raw);
+      return valuesDiffer(raw.map(itemNormalize), normalized);
     }
     return valuesDiffer(raw, normalized);
   }
@@ -212,7 +238,7 @@ function shouldWriteNormalizedArray(raw, normalized, itemNormalize = null) {
   if (isObject(raw)) {
     const vals = Object.values(raw);
     if (itemNormalize) {
-      return valuesDiffer(vals.map(itemNormalize), vals);
+      return valuesDiffer(vals.map(itemNormalize), normalized);
     }
     // Object-shaped RTDB array with same semantic content — do not rewrite to [].
     return valuesDiffer(vals, normalized);
@@ -406,31 +432,46 @@ export function normalizePlayerSchema(username) {
   }
 
   // ── cosmetics ───────────────────────────────────────────────────────────
+  // RTDB drops empty objects — missing / null / {} owned|equipped are equivalent.
+  // Never write empty maps (Phase A2). Only persist real ownership or non-null equip defaults.
   if (!player.cosmetics || typeof player.cosmetics !== 'object') {
-    // Equipped defaults are all null — persist empty owned/equipped objects only
-    // (writing null equip keys is deleted by RTDB and re-triggers every startup).
-    db.set(`players/${username}/cosmetics`, {
-      owned: { ...DEFAULT_COSMETICS.owned },
-      equipped: {},
-    });
-    patched = true;
-  } else {
-    // cosmetics.owned
-    if (!player.cosmetics.owned || typeof player.cosmetics.owned !== 'object') {
-      db.set(`players/${username}/cosmetics/owned`, { ...DEFAULT_COSMETICS.owned });
+    const ownedDefaults = {};
+    for (const [key, val] of Object.entries(DEFAULT_COSMETICS.owned)) {
+      if (val !== null && val !== undefined) ownedDefaults[key] = val;
+    }
+    const equippedDefaults = {};
+    for (const [key, val] of Object.entries(DEFAULT_COSMETICS.equipped)) {
+      if (val !== null && val !== undefined) equippedDefaults[key] = val;
+    }
+    if (Object.keys(ownedDefaults).length > 0 || Object.keys(equippedDefaults).length > 0) {
+      const cosmeticsInit = {};
+      if (Object.keys(ownedDefaults).length > 0) cosmeticsInit.owned = ownedDefaults;
+      if (Object.keys(equippedDefaults).length > 0) cosmeticsInit.equipped = equippedDefaults;
+      db.set(`players/${username}/cosmetics`, cosmeticsInit);
       patched = true;
-    } else {
-      // Ensure default owned item exists
+    }
+  } else {
+    // cosmetics.owned — skip empty≡absent; backfill only real default ownership keys
+    if (!isEmptyObjectStorage(player.cosmetics.owned) && typeof player.cosmetics.owned === 'object') {
       for (const [key, val] of Object.entries(DEFAULT_COSMETICS.owned)) {
-        if (player.cosmetics.owned[key] === undefined) {
+        if (player.cosmetics.owned[key] === undefined && val !== null && val !== undefined) {
           db.set(`players/${username}/cosmetics/owned/${key}`, val);
           patched = true;
         }
       }
+    } else if (player.cosmetics.owned != null && typeof player.cosmetics.owned !== 'object') {
+      // Corrupt non-object — replace only with non-empty defaults if any
+      const ownedDefaults = {};
+      for (const [key, val] of Object.entries(DEFAULT_COSMETICS.owned)) {
+        if (val !== null && val !== undefined) ownedDefaults[key] = val;
+      }
+      if (Object.keys(ownedDefaults).length > 0) {
+        db.set(`players/${username}/cosmetics/owned`, ownedDefaults);
+        patched = true;
+      }
     }
     // cosmetics.equipped
     if (!player.cosmetics.equipped || typeof player.cosmetics.equipped !== 'object') {
-      // Only persist non-null default entries (all current defaults are null → skip empty write)
       const equippedDefaults = {};
       for (const [key, val] of Object.entries(DEFAULT_COSMETICS.equipped)) {
         if (val !== null && val !== undefined) equippedDefaults[key] = val;
