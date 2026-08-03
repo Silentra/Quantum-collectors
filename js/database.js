@@ -28,6 +28,7 @@
  */
 
 import { initFirebase, isConfigured } from './firebase-config.js';
+import * as metrics from './db-metrics.js';
 
 const DB_KEY = 'scicards_db';
 
@@ -35,6 +36,9 @@ let _db = null;              // in-memory cache (synchronous reads)
 let _fbDb = null;            // Firebase RTDB instance
 let _useFirebase = false;    // true when Firebase is live
 const _listeners = new Map();
+
+/** Optional reason for metrics-only; does not change persistence behavior. */
+let _persistReason = 'unknown';
 
 // ---------- Default data ----------
 
@@ -112,6 +116,7 @@ function _mergeDefaults(data) {
 function _fbSet(path, value) {
   if (!_useFirebase || !_fbDb) return;
   const fbPath = path.split('/').filter(Boolean).join('/');
+  metrics.recordFirebaseWrite({ op: 'set', path: fbPath || '/', mode: 'fire-and-forget' });
   _fbDb.ref(fbPath).set(value != null ? value : null)
     .catch(e => console.warn('[DB] Firebase set error:', fbPath, e.message));
 }
@@ -119,6 +124,7 @@ function _fbSet(path, value) {
 function _fbUpdate(path, updates) {
   if (!_useFirebase || !_fbDb) return;
   const fbPath = path.split('/').filter(Boolean).join('/');
+  metrics.recordFirebaseWrite({ op: 'update', path: fbPath || '/', mode: 'fire-and-forget' });
   _fbDb.ref(fbPath).update(updates)
     .catch(e => console.warn('[DB] Firebase update error:', fbPath, e.message));
 }
@@ -126,6 +132,7 @@ function _fbUpdate(path, updates) {
 function _fbRemove(path) {
   if (!_useFirebase || !_fbDb) return;
   const fbPath = path.split('/').filter(Boolean).join('/');
+  metrics.recordFirebaseWrite({ op: 'remove', path: fbPath || '/', mode: 'fire-and-forget' });
   _fbDb.ref(fbPath).remove()
     .catch(e => console.warn('[DB] Firebase remove error:', fbPath, e.message));
 }
@@ -133,7 +140,13 @@ function _fbRemove(path) {
 // ---------- localStorage fallback ----------
 
 function _persistLocal() {
-  try { localStorage.setItem(DB_KEY, JSON.stringify(_db)); }
+  try {
+    localStorage.setItem(DB_KEY, JSON.stringify(_db));
+    if (metrics.isEnabled()) {
+      metrics.captureCacheRoot(_db);
+      metrics.recordCachePersist(_db, _persistReason);
+    }
+  }
   catch (e) { console.error('[DB] localStorage persist error:', e); }
 }
 
@@ -172,6 +185,7 @@ function _notifyListeners(path) {
  * Tries Firebase RTDB first; falls back to localStorage.
  */
 export async function initDB() {
+  metrics.mark('initDB-start');
   // --- Try Firebase ---
   if (isConfigured()) {
     try {
@@ -193,6 +207,8 @@ export async function initDB() {
       ]);
       const data = snapshot.val();
       console.log('[DB] Initial snapshot received, keys:', data ? Object.keys(data).join(', ') : 'null');
+      metrics.mark('initial-root-snapshot');
+      metrics.recordRootSnapshot({ source: 'initial-once', value: data });
 
       if (data && typeof data === 'object') {
         _db = data;
@@ -200,17 +216,42 @@ export async function initDB() {
       } else {
         // Empty Firebase DB — seed with defaults
         _db = getDefaultDB();
-        await _fbDb.ref('/').set(_db);
+        try {
+          await _fbDb.ref('/').set(_db);
+          metrics.recordFirebaseWrite({ op: 'set-seed', path: '/', mode: 'acknowledged', ok: true });
+        } catch (seedErr) {
+          metrics.recordFirebaseWrite({ op: 'set-seed', path: '/', mode: 'acknowledged', ok: false });
+          throw seedErr;
+        }
       }
 
       _useFirebase = true;
+      _persistReason = 'startup';
       _persistLocal(); // keep localStorage as offline fallback
+      if (metrics.isEnabled()) {
+        metrics.captureCacheRoot(_db);
+        metrics.recordMajorNodeSizes(_db);
+      }
 
       // Live sync: Firebase → cache
       _fbDb.ref('/').on('value', (snap) => {
         const fresh = snap.val();
         if (fresh && typeof fresh === 'object') {
           _db = fresh;
+          const listenerPaths = Array.from(_listeners.keys());
+          let callbackCount = 0;
+          for (const cbs of _listeners.values()) {
+            callbackCount += cbs.size;
+          }
+          metrics.recordRegisteredListeners(listenerPaths);
+          metrics.recordRootSnapshot({
+            source: 'root-listener',
+            value: fresh,
+            listenerPathCount: listenerPaths.length,
+            listenerCallbackCount: callbackCount,
+            listenerPaths,
+          });
+          _persistReason = 'root-snapshot';
           _persistLocal();
           for (const [p, cbs] of _listeners) {
             const val = get(p);
@@ -222,6 +263,7 @@ export async function initDB() {
       });
 
       console.log('[DB] Firebase Realtime Database connected (WebSocket)');
+      metrics.mark('initDB-complete');
       return;
     } catch (e) {
       console.warn('[DB] Firebase failed, falling back to localStorage:', e.message);
@@ -238,8 +280,14 @@ export async function initDB() {
   } else {
     _db = getDefaultDB();
   }
+  _persistReason = 'startup';
   _persistLocal();
+  if (metrics.isEnabled()) {
+    metrics.captureCacheRoot(_db);
+    metrics.recordMajorNodeSizes(_db);
+  }
   console.log('[DB] Using localStorage fallback');
+  metrics.mark('initDB-complete');
 }
 
 /**
@@ -276,6 +324,7 @@ export function set(path, value) {
   const cloned = value !== undefined ? JSON.parse(JSON.stringify(value)) : null;
   current[parts[parts.length - 1]] = cloned;
 
+  _persistReason = 'optimistic-local-write';
   _persistLocal();
   _fbSet(path, cloned);
   _notifyListeners(path);
@@ -301,6 +350,7 @@ export function update(path, updates) {
   }
   node[parts[parts.length - 1]] = JSON.parse(JSON.stringify(merged));
 
+  _persistReason = 'optimistic-local-write';
   _persistLocal();
   _fbUpdate(path, JSON.parse(JSON.stringify(updates)));
   _notifyListeners(path);
@@ -321,6 +371,7 @@ export function remove(path) {
   }
   delete current[parts[parts.length - 1]];
 
+  _persistReason = 'optimistic-local-write';
   _persistLocal();
   _fbRemove(path);
   _notifyListeners(path);
@@ -350,6 +401,9 @@ export function onValue(path, callback) {
     _listeners.set(path, new Set());
   }
   _listeners.get(path).add(callback);
+  if (metrics.isEnabled()) {
+    metrics.recordRegisteredListeners(Array.from(_listeners.keys()));
+  }
 
   // Immediately call with current value
   try { callback(get(path)); } catch (e) { console.error('[DB] Listener error:', e); }
@@ -359,6 +413,9 @@ export function onValue(path, callback) {
     if (s) {
       s.delete(callback);
       if (s.size === 0) _listeners.delete(path);
+    }
+    if (metrics.isEnabled()) {
+      metrics.recordRegisteredListeners(Array.from(_listeners.keys()));
     }
   };
 }
@@ -391,8 +448,10 @@ export function getFullDB() {
  */
 export function resetDB() {
   _db = getDefaultDB();
+  _persistReason = 'optimistic-local-write';
   _persistLocal();
   if (_useFirebase && _fbDb) {
+    metrics.recordFirebaseWrite({ op: 'set', path: '/', mode: 'fire-and-forget' });
     _fbDb.ref('/').set(_db)
       .catch(e => console.warn('[DB] Firebase reset error:', e.message));
   }
@@ -430,6 +489,7 @@ export function applyLocalOnly(path, value) {
     current[parts[parts.length - 1]] = JSON.parse(JSON.stringify(value));
   }
 
+  _persistReason = 'acknowledged-cache-patch';
   _persistLocal();
   _notifyListeners(path);
 }
@@ -454,9 +514,11 @@ export async function setAcknowledged(path, value) {
   const fbPath = path.split('/').filter(Boolean).join('/');
   try {
     await _fbDb.ref(fbPath).set(cloned);
+    metrics.recordFirebaseWrite({ op: 'set-ack', path: fbPath || '/', mode: 'acknowledged', ok: true });
     applyLocalOnly(path, cloned);
     return { ok: true, mode: 'firebase' };
   } catch (e) {
+    metrics.recordFirebaseWrite({ op: 'set-ack', path: fbPath || '/', mode: 'acknowledged', ok: false });
     console.warn('[DB] setAcknowledged error:', fbPath, e.message);
     return { ok: false, mode: 'firebase', error: e.message || 'Write failed' };
   }
@@ -484,11 +546,25 @@ export async function updateAcknowledged(updates) {
 
   try {
     await _fbDb.ref('/').update(cloned);
+    metrics.recordFirebaseWrite({
+      op: 'update-ack',
+      path: '/',
+      mode: 'acknowledged',
+      ok: true,
+      extraPaths: Object.keys(cloned),
+    });
     for (const [path, value] of Object.entries(cloned)) {
       applyLocalOnly(path, value);
     }
     return { ok: true, mode: 'firebase' };
   } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'update-ack',
+      path: '/',
+      mode: 'acknowledged',
+      ok: false,
+      extraPaths: Object.keys(cloned),
+    });
     console.warn('[DB] updateAcknowledged error:', e.message);
     return { ok: false, mode: 'firebase', error: e.message || 'Write failed' };
   }
@@ -522,10 +598,22 @@ export async function clearActiveSessionIfOwned(username, sessionId) {
       return null;
     });
     const cleared = result.committed === true;
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: true,
+    });
     const nextVal = result.snapshot ? result.snapshot.val() : null;
     applyLocalOnly(path, nextVal == null ? null : nextVal);
     return { ok: true, cleared, mode: 'firebase' };
   } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: false,
+    });
     console.warn('[DB] clearActiveSessionIfOwned error:', e.message);
     return { ok: false, cleared: false, mode: 'firebase', error: e.message || 'Transaction failed' };
   }

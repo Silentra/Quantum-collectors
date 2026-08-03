@@ -25,6 +25,7 @@ import * as groups from './groups.js';
 import * as config from './config.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
+import * as metrics from './db-metrics.js';
 import { refreshUniqueCardsOwned } from './research.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
@@ -251,6 +252,7 @@ function clearLoginMessage() {
 // ===================== GAME SCREEN =====================
 
 export function enterGame() {
+  metrics.mark('enterGame');
   showScreen('game');
   const session = auth.getSession();
   if (!session) return;
