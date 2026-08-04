@@ -17,6 +17,7 @@ import * as cards from './cards.js';
 import * as db from './database.js';
 import * as player from './player.js';
 import * as toast from './toast.js';
+import { toastAchievementUnlocks } from './achievements.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { getEquippedAura, getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
@@ -185,9 +186,11 @@ function getReasonMessage(reason) {
     no_eligible_replacement: 'No valid replacement is available right now.',
     no_eligible_slots: 'No valid slots are available for that action.',
     purchased_slot: 'Purchased slots cannot be changed.',
+    slot_purchased: 'That slot has already been purchased.',
     slot_already_purchased: 'That slot has already been purchased.',
     slot_frozen: 'Frozen slots cannot be rerolled.',
     unsupported_behavior: 'That item cannot be used here.',
+    WRITE_FAILED: 'Could not save the purchase. Check your connection and try again.',
   };
   return messages[reason] || formatLabel(reason, 'Action failed.');
 }
@@ -555,9 +558,14 @@ async function handleShopAction(username, action, { slotIndex, itemId }) {
     if (action === 'buy') {
       const confirmed = await confirmShopAction('Purchase this shop item?', 'Confirm Purchase');
       if (!confirmed) return;
-      const result = purchaseShopItem(username, slotIndex);
-      showResult(result, 'Purchase complete.');
-      if (result.success) targetMode = null;
+      const result = await purchaseShopItem(username, slotIndex);
+      if (result.success) {
+        toastAchievementUnlocks(result.notified || []);
+        showResult(result, 'Purchase complete.');
+        targetMode = null;
+      } else {
+        showResult(result, 'Purchase complete.');
+      }
       renderShop();
       return;
     }

@@ -48,6 +48,10 @@ import {
 } from './player-schema.js';
 import { generateAvailableProjects } from './project-pool.js';
 import { getLastWeeklyRefreshTimestamp } from './weekly-research-pack.js';
+import {
+  buildShopPurchasePlan,
+  commitShopPurchaseWithRevalidation,
+} from './shop-purchase-plan.js';
 import { bumpPlayerStat, notifyEquippedCosmeticsChanged, STAT_KEYS } from './achievements.js';
 import { getCosmeticDefinition, isCosmeticGrantable } from './cosmetic-definitions.js';
 import {
@@ -147,12 +151,6 @@ function getGrantQuantity(itemDefinition, options = {}) {
 function appendPurchaseHistoryEntry(rawHistory, entry) {
   const history = normalizePurchaseHistory(rawHistory);
   return [...history, entry].slice(-PURCHASE_HISTORY_MAX);
-}
-
-function persistPurchasePlan(username, writePlan) {
-  for (const [path, value] of writePlan) {
-    db.set(`players/${username}/${path}`, value);
-  }
 }
 
 function buildPurchaseHistoryEntry({ itemDefinition, price, currency, slot, rotation, now }) {
@@ -404,94 +402,98 @@ export function refreshShopRotation(username, options = {}) {
 // purchaseShopItem
 // ---------------------------------------------------------------------------
 /**
- * Purchases an item from a specific shop slot.
+ * Purchases an item from a specific shop slot (one acknowledged multi-path write).
  *
  * Layer 2 flow:
- * 1. canPurchaseItem() validation.
- * 2. Deduct RP from player balance.
- * 3. Add item to player inventory/cosmetics.
- * 4. Mark slot as purchased (locked for rotation).
- * 5. Append capped purchase history.
- * 6. Persist scoped economy paths.
+ * 1. canPurchaseItem() validation (cache).
+ * 2. Per-user lock + revalidate slot / ownership / price / RP.
+ * 3. Build RP + grant + slots + history + shopPurchases + achievements plan.
+ * 4. await updateAcknowledged — no success until ack.
  *
  * @param {string} username
  * @param {number} slotIndex
  * @param {Object} [options]
- * @returns {Object}
+ * @returns {Promise<Object>}
  */
-export function purchaseShopItem(username, slotIndex, options = {}) {
+export async function purchaseShopItem(username, slotIndex, options = {}) {
   if (!username || typeof username !== 'string') {
     return { success: false, reason: 'invalid_username' };
   }
 
-  const snapshot = getEconomySnapshot(username);
-  if (!snapshot) {
-    return { success: false, reason: 'player_not_found' };
-  }
+  const buildOnce = () => {
+    const snapshot = getEconomySnapshot(username);
+    if (!snapshot) {
+      return { ok: false, reason: 'player_not_found' };
+    }
 
-  const config = resolveShopRuntimeConfig(options.config);
-  const catalog = getShopCatalogForConfig(config);
-  const validation = canPurchaseItem(snapshot, slotIndex, { getItem: catalog.getItem });
-  if (!validation.allowed) {
-    return { success: false, reason: validation.reason, validation };
-  }
+    const config = resolveShopRuntimeConfig(options.config);
+    const catalog = getShopCatalogForConfig(config);
+    const validation = canPurchaseItem(snapshot, slotIndex, { getItem: catalog.getItem });
+    if (!validation.allowed) {
+      return { ok: false, reason: validation.reason, validation };
+    }
 
-  const currentRotation = getCurrentRotation(snapshot);
-  const slots = getShopRotationSlots(currentRotation);
-  const nextSlots = [...slots];
-  const purchasedSlot = {
-    ...nextSlots[validation.slotIndex],
-    purchased: true,
-  };
-  nextSlots[validation.slotIndex] = purchasedSlot;
-
-  const grantWrite = buildGrantWrite(snapshot, validation.itemDefinition, options);
-  if (!grantWrite) {
-    return {
-      success: false,
-      reason: 'unsupported_item_type',
-      itemType: validation.itemDefinition.type,
+    const currentRotation = getCurrentRotation(snapshot);
+    const slots = getShopRotationSlots(currentRotation);
+    const nextSlots = [...slots];
+    const purchasedSlot = {
+      ...nextSlots[validation.slotIndex],
+      purchased: true,
     };
+    nextSlots[validation.slotIndex] = purchasedSlot;
+
+    const grantWrite = buildGrantWrite(snapshot, validation.itemDefinition, options);
+    if (!grantWrite) {
+      return {
+        ok: false,
+        reason: 'unsupported_item_type',
+        validation: { ...validation, itemType: validation.itemDefinition.type },
+      };
+    }
+
+    const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+    const nextRp = Number(snapshot.currencies?.currentResearchPoints || 0) - validation.price;
+    if (!Number.isFinite(nextRp) || nextRp < 0) {
+      return { ok: false, reason: 'insufficient_rp', validation };
+    }
+
+    const historyEntry = buildPurchaseHistoryEntry({
+      itemDefinition: validation.itemDefinition,
+      price: validation.price,
+      currency: validation.currency,
+      slot: purchasedSlot,
+      rotation: currentRotation,
+      now,
+    });
+    const purchaseHistory = appendPurchaseHistoryEntry(snapshot.purchaseHistory, historyEntry);
+
+    const plan = buildShopPurchasePlan({
+      username,
+      validation,
+      grantWrite,
+      nextSlots,
+      purchaseHistory,
+      purchasedSlot,
+      currentRotation,
+      nextRp,
+      now,
+    });
+
+    if (!plan.ok) {
+      return { ok: false, reason: plan.reason || 'invalid_purchase_plan' };
+    }
+
+    return { ok: true, plan };
+  };
+
+  // Fast-fail before lock when clearly invalid (avoids lock contention on bad clicks)
+  const pre = buildOnce();
+  if (!pre.ok) {
+    return { success: false, reason: pre.reason, validation: pre.validation };
   }
 
-  const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
-  const nextRp = Number(snapshot.currencies?.currentResearchPoints || 0) - validation.price;
-  const historyEntry = buildPurchaseHistoryEntry({
-    itemDefinition: validation.itemDefinition,
-    price: validation.price,
-    currency: validation.currency,
-    slot: purchasedSlot,
-    rotation: currentRotation,
-    now,
-  });
-  const purchaseHistory = appendPurchaseHistoryEntry(snapshot.purchaseHistory, historyEntry);
-
-  const writePlan = [
-    ['currencies/currentResearchPoints', nextRp],
-    [grantWrite.path, grantWrite.value],
-    ['shop/currentRotation/slots', nextSlots],
-    ['purchaseHistory', purchaseHistory],
-  ];
-
-  persistPurchasePlan(username, writePlan);
-  bumpPlayerStat(username, STAT_KEYS.SHOP_PURCHASES, 1);
-
-  return {
-    success: true,
-    itemId: validation.itemDefinition.id,
-    itemType: validation.itemDefinition.type,
-    pricePaid: validation.price,
-    currency: validation.currency,
-    grantQuantity: grantWrite.quantity,
-    slotIndex: validation.slotIndex,
-    slot: purchasedSlot,
-    purchaseHistory,
-    currentResearchPoints: nextRp,
-    rotation: {
-      ...currentRotation,
-      slots: nextSlots,
-    },
-  };
+  // Lock + revalidate + commit (re-runs buildOnce under lock)
+  return commitShopPurchaseWithRevalidation(username, buildOnce);
 }
 
 // ---------------------------------------------------------------------------
