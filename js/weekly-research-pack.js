@@ -211,18 +211,61 @@ export function getPlayerWeeklyResetAt(username) {
 export function checkAndResetWeeklyCycle(username, now = Date.now()) {
   if (!username) return false;
 
-  const lastRefresh   = getLastWeeklyRefreshTimestamp(now);
-  const playerResetAt = getPlayerWeeklyResetAt(username);
+  const planned = buildWeeklyCycleResetUpdates(username, now);
+  if (!planned.reset) return false;
 
-  // Player's reset timestamp is before the most recent cycle boundary → reset needed
-  if (playerResetAt < lastRefresh) {
-    db.set(`players/${username}/weeklyRPProgress`,  0);
-    db.set(`players/${username}/weeklyPackClaimed`, false);
-    db.set(`players/${username}/weeklyResetAt`,     lastRefresh);
-    console.log(`[WeeklyPack] Reset weekly state for ${username} (cycle started ${new Date(lastRefresh).toISOString()})`);
-    return true;
+  for (const [path, value] of Object.entries(planned.updates)) {
+    db.set(path, value);
   }
-  return false;
+  console.log(`[WeeklyPack] Reset weekly state for ${username} (cycle started ${new Date(planned.lastRefresh).toISOString()})`);
+  return true;
+}
+
+/**
+ * Pure: weekly cycle reset fields when playerResetAt < last cycle boundary.
+ * Parity with checkAndResetWeeklyCycle write targets.
+ * @param {string} username
+ * @param {number} [now]
+ * @returns {{ reset: boolean, lastRefresh: number, updates: Object }}
+ */
+export function buildWeeklyCycleResetUpdates(username, now = Date.now()) {
+  const lastRefresh = getLastWeeklyRefreshTimestamp(now);
+  const playerResetAt = getPlayerWeeklyResetAt(username);
+  if (!username || !(playerResetAt < lastRefresh)) {
+    return { reset: false, lastRefresh, updates: {} };
+  }
+  return {
+    reset: true,
+    lastRefresh,
+    updates: {
+      [`players/${username}/weeklyRPProgress`]: 0,
+      [`players/${username}/weeklyPackClaimed`]: false,
+      [`players/${username}/weeklyResetAt`]: lastRefresh,
+    },
+  };
+}
+
+/**
+ * Pure: reset (if due) then add amount to weeklyRPProgress.
+ * Parity with checkAndResetWeeklyCycle + addWeeklyPackRP call order on project claim.
+ * Does not auto-grant weekly packs when crossing getWeeklyRPRequired — claimWeeklyPack remains separate.
+ * @param {string} username
+ * @param {number} amount
+ * @param {number} [now]
+ * @returns {{ updates: Object, newProgress: number }}
+ */
+export function buildWeeklyPackRpGrantUpdates(username, amount, now = Date.now()) {
+  if (!username || typeof amount !== 'number' || amount <= 0) {
+    return { updates: {}, newProgress: getWeeklyRPProgress(username) };
+  }
+
+  const resetPlan = buildWeeklyCycleResetUpdates(username, now);
+  const progressBeforeAdd = resetPlan.reset ? 0 : getWeeklyRPProgress(username);
+  const newProgress = progressBeforeAdd + amount;
+
+  const updates = { ...resetPlan.updates };
+  updates[`players/${username}/weeklyRPProgress`] = newProgress;
+  return { updates, newProgress };
 }
 
 /**

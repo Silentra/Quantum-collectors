@@ -22,11 +22,8 @@ import {
   getProjectAssignmentLockTooltip,
 } from './trade-availability.js';
 import { evaluateProject } from './project-engine.js';
-import { claimProjectRewards } from './project-claiming.js';
-import { addResearchPoints, addSeasonalResearchPoints, refreshUniqueCardsOwned } from './research.js';
 import { getProjectConfig } from './project-config.js';
 import {
-  addWeeklyPackRP,
   claimWeeklyPack,
   checkAndResetWeeklyCycle,
   getWeeklyRPProgress,
@@ -39,7 +36,8 @@ import { getProjectRefreshHours, getProjectRefreshIntervalMs, getMaxStoredProjec
 import { syncProjects } from './project-sync.js';
 import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
-import { recordBreakthroughEarned, recordProjectOutcome } from './achievements.js';
+import { toastAchievementUnlocks } from './achievements.js';
+import { commitProjectClaim } from './project-claim-plan.js';
 
 import { renderMiniCardArtHtml } from './card-art.js';
 import { renderPackCardWrapper } from './card-render.js';
@@ -117,57 +115,6 @@ export function stopProjectHeartbeat() {
 }
 
 // ===================== BREAKTHROUGH CARD HELPERS =====================
-
-/**
- * Generate one breakthrough card using the same pack pipeline (rollRarity + pickCardOfRarity).
- * Adds the card to the player's inventory immediately.
- * Returns the card object, or null if no cards are in the DB.
- *
- * Uses the Standard Pack odds as the default breakthrough rarity distribution.
- * This is intentionally the same pipeline as packs — no separate inventory path.
- *
- * @param {string} username
- * @returns {object|null}
- */
-function _generateBreakthroughCard(username) {
-  const allCards = cards.getAllCards().filter(c => c.enabled !== false);
-  if (allCards.length === 0) {
-    console.warn('[ResearchProjects] Breakthrough card: no enabled cards in DB');
-    return null;
-  }
-
-  // Load breakthrough card rarity weights from config (admin-configurable, independent of pack odds)
-  const cfg = getProjectConfig();
-  const odds = Object.assign(
-    { common: 50, uncommon: 25, rare: 15, epic: 8, legendary: 2 },
-    cfg.breakthroughCardRarityWeights ?? {}
-  );
-
-  // Roll rarity
-  const total = Object.values(odds).reduce((s, v) => s + v, 0);
-  let roll = Math.random() * total;
-  const rarityOrder = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
-  let rarity = 'common';
-  for (const r of rarityOrder) {
-    const weight = odds[r] || 0;
-    if (roll < weight) { rarity = r; break; }
-    roll -= weight;
-  }
-
-  // Pick a card of that rarity (fallback to any card)
-  const matching = allCards.filter(c => c.rarity === rarity);
-  const pool = matching.length > 0 ? matching : allCards;
-  const card = pool[Math.floor(Math.random() * pool.length)];
-
-  if (!card?.id) return null;
-
-  // Add to inventory via the same path as pack openings
-  player.addCard(username, card.id, 1);
-  refreshUniqueCardsOwned(username);
-
-  console.log(`[ResearchProjects] Breakthrough card granted: ${card.name} (${card.rarity})`);
-  return card;
-}
 
 /**
  * Show a single-card breakthrough reveal overlay.
@@ -504,13 +451,22 @@ export function renderResearchProjects() {
         'Complete active project?'
       );
       if (!confirmed) return;
-      const result = adminCompleteActiveProject(session.username, btn.dataset.projectId);
+      const result = await adminCompleteActiveProject(session.username, btn.dataset.projectId);
       if (!result.success) {
-        toast.error(`Could not complete project: ${result.reason || 'unknown error'}`);
+        toast.error(`Could not complete project: ${result.reason || result.error || 'unknown error'}`);
         return;
       }
+      toastAchievementUnlocks(result.notified || []);
       toast.success(`Project completed. ${result.rpEarned || 0} RP granted.`);
       renderResearchProjects();
+      if (result.revealCard) {
+        const _capturedCard = result.revealCard;
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            showBreakthroughCardReveal(_capturedCard);
+          });
+        });
+      }
     });
   });
 
@@ -840,100 +796,42 @@ function renderProjectReportPanel(container, project, username) {
   // Claim button (only present for COMPLETE)
   const claimBtnEl = panel.querySelector('#rp-btn-claim');
   if (claimBtnEl) {
-    claimBtnEl.addEventListener('click', () => {
-      // Re-read fresh player state
-      const freshPlayer  = player.getPlayer(username);
-      const allProjects  = freshPlayer?.projects ?? [];
-      const freshProject = allProjects.find(pr => pr.id === project.id);
+    claimBtnEl.addEventListener('click', async () => {
+      if (claimBtnEl.dataset.claimInFlight === '1') return;
+      claimBtnEl.dataset.claimInFlight = '1';
+      claimBtnEl.disabled = true;
 
-      if (!freshProject) {
-        toast.error('Project not found.');
-        return;
-      }
-
-      const result = claimProjectRewards({ project: freshProject });
-
-      if (!result.claimed) {
-        toast.error(`Could not claim rewards: ${result.reason ?? 'unknown error'}`);
-        return;
-      }
-
-      // Replace only the updated project in player.projects
-      const updatedProjects = allProjects.map(pr =>
-        pr.id === result.project.id ? result.project : pr
-      );
-
-      // Build player stat updates
-      const playerUpdates = { projects: updatedProjects };
-
-      // Add RP only on success
-      if (result.rewards?.success === true) {
-        console.log('[DEBUG CLAIM] result.rewards =', result.rewards);
-        const rpEarned = result.rewards.rpEarned ?? 0;
-        console.log('[DEBUG CLAIM] rpEarned =', rpEarned);
-        if (rpEarned > 0) {
-          addResearchPoints(username, rpEarned);
-          // LB-1: also write to seasonalResearchPoints (additive, separate from lifetime)
-          addSeasonalResearchPoints(username, rpEarned);
-          // Weekly pack tracking — additive only, never touches lifetime/seasonal RP
-          checkAndResetWeeklyCycle(username);
-          addWeeklyPackRP(username, rpEarned);
+      try {
+        const result = await commitProjectClaim(username, project.id);
+        if (!result.success) {
+          const msg = result.error
+            || (result.reason === 'already_claimed' ? 'Rewards already claimed.' : null)
+            || (result.reason === 'invalid_project_state' ? 'Project is not ready to claim.' : null)
+            || `Could not claim rewards: ${result.reason ?? 'unknown error'}`;
+          toast.error(msg);
+          return;
         }
-        recordProjectOutcome(username, true);
-        if (result.rewards?.breakthrough === true) {
-          recordBreakthroughEarned(username);
-        }
-      } else {
-        recordProjectOutcome(username, false);
-      }
 
-      console.log('[DEBUG CLAIM] playerUpdates =', playerUpdates);
-      player.updatePlayer(username, playerUpdates);
-      console.log('[DEBUG CLAIM] fresh DB player =', player.getPlayer(username));
+        toastAchievementUnlocks(result.notified || []);
+        console.log('[ResearchProjects] Rewards claimed');
+        toast.success(`Rewards claimed for "${result.project.title}"!`);
 
-      // Handle card rewards using existing inventory system
-      // Breakthrough card: card is null at resolution time — generate it now at claim.
-      const rewardItems = result.rewards?.rewards ?? [];
-      let breakthroughCardGranted = null;
-      for (const r of rewardItems) {
-        if (r.type === 'card') {
-          if (r.card != null) {
-            // Already a real card object (future-proof path)
-            const cardId = r.card.id ?? r.card.cardId ?? null;
-            if (cardId) {
-              player.addCard(username, cardId, 1);
-              refreshUniqueCardsOwned(username);
-              breakthroughCardGranted = r.card;
-            }
-          } else {
-            // Null card = breakthrough card — generate one now using pack pipeline
-            const granted = _generateBreakthroughCard(username);
-            if (granted) {
-              breakthroughCardGranted = granted;
-            }
-          }
-        }
-      }
+        _viewingReportProjectId = result.project.id;
+        panel.remove();
+        renderResearchProjects();
 
-      console.log('[ResearchProjects] Rewards claimed');
-      toast.success(`Rewards claimed for "${result.project.title}"!`);
-
-      // Transition to CLAIMED view (read-only)
-      _viewingReportProjectId = result.project.id;
-      panel.remove();
-      renderResearchProjects();
-
-      // Show single-card reveal if a breakthrough card was granted.
-      // Deferred one frame so renderResearchProjects() fully paints before
-      // the overlay appears — avoids a race where the overlay title/cards
-      // get wiped by a synchronous DOM rebuild.
-      if (breakthroughCardGranted) {
-        const _capturedCard = breakthroughCardGranted;
-        requestAnimationFrame(() => {
+        if (result.revealCard) {
+          const _capturedCard = result.revealCard;
           requestAnimationFrame(() => {
-            showBreakthroughCardReveal(_capturedCard);
+            requestAnimationFrame(() => {
+              showBreakthroughCardReveal(_capturedCard);
+            });
           });
-        });
+        }
+      } finally {
+        claimBtnEl.dataset.claimInFlight = '0';
+        // Button may be gone after re-render; safe no-op if detached
+        try { claimBtnEl.disabled = false; } catch (_) { /* ignore */ }
       }
     });
   }

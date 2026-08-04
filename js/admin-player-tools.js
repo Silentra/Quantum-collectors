@@ -4,60 +4,26 @@
  *
  * UI should call these helpers instead of writing player/shop/project paths
  * directly for the admin tools added after the shop runtime layers.
+ *
+ * adminCompleteActiveProject: force-timer resolve in memory, then claim through
+ * the canonical batched claim planner (same streaks/achievements/RP/cards as
+ * student Claim Rewards). This intentionally corrects the former admin path that
+ * skipped recordProjectOutcome / recordBreakthroughEarned.
  */
 
 import * as db from './database.js';
 import * as player from './player.js';
-import * as cards from './cards.js';
 import { getItemDefinition } from './cosmetic-definitions.js';
 import { ITEM_TYPES } from './shop-definitions.js';
 import { grantConsumable, unlockCosmetic } from './shop-mutations.js';
 import { resolveCompletedProject } from './project-resolution.js';
-import { claimProjectRewards } from './project-claiming.js';
 import { PROJECT_STATES } from './project-state.js';
-import { getProjectConfig } from './project-config.js';
-import { addResearchPoints, addSeasonalResearchPoints, refreshUniqueCardsOwned } from './research.js';
-import { addWeeklyPackRP, checkAndResetWeeklyCycle } from './weekly-research-pack.js';
+import { addResearchPoints } from './research.js';
+import { commitProjectClaim } from './project-claim-plan.js';
 
 function toPositiveInteger(value, fallback = 1) {
   const parsed = Math.floor(Number(value));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function getBreakthroughCard(username) {
-  const allCards = cards.getAllCards().filter(card => card.enabled !== false);
-  if (allCards.length === 0) return null;
-
-  const cfg = getProjectConfig();
-  const odds = {
-    common: 50,
-    uncommon: 25,
-    rare: 15,
-    epic: 8,
-    legendary: 2,
-    ...(cfg.breakthroughCardRarityWeights || {}),
-  };
-  const total = Object.values(odds).reduce((sum, value) => sum + Number(value || 0), 0);
-  let roll = Math.random() * (total > 0 ? total : 1);
-  const rarityOrder = ['legendary', 'epic', 'rare', 'uncommon', 'common'];
-  let rarity = 'common';
-  for (const candidate of rarityOrder) {
-    const weight = Number(odds[candidate] || 0);
-    if (roll < weight) {
-      rarity = candidate;
-      break;
-    }
-    roll -= weight;
-  }
-
-  const matching = allCards.filter(card => card.rarity === rarity);
-  const pool = matching.length > 0 ? matching : allCards;
-  const card = pool[Math.floor(Math.random() * pool.length)];
-  if (!card?.id) return null;
-
-  player.addCard(username, card.id, 1);
-  refreshUniqueCardsOwned(username);
-  return card;
 }
 
 export function adminGrantResearchPoints(username, amount) {
@@ -89,7 +55,11 @@ export function adminGrantShopItem(username, itemId, quantity = 1) {
   return { success: false, reason: 'unsupported_item_type', itemType: definition.type };
 }
 
-export function adminCompleteActiveProject(username, projectId, options = {}) {
+/**
+ * Force-complete an ACTIVE project and claim rewards via the canonical claim batcher.
+ * @returns {Promise<object>}
+ */
+export async function adminCompleteActiveProject(username, projectId, options = {}) {
   if (!username || typeof username !== 'string') {
     return { success: false, reason: 'invalid_username' };
   }
@@ -115,58 +85,31 @@ export function adminCompleteActiveProject(username, projectId, options = {}) {
     return { success: false, reason: resolved.reason || 'project_resolution_failed' };
   }
 
-  const claimed = claimProjectRewards({ project: resolved.project, claimedAt: now });
-  if (!claimed.claimed) {
-    return { success: false, reason: claimed.reason || 'project_claim_failed' };
-  }
-
-  let rpEarned = 0;
-  let breakthroughCardGranted = null;
-  const updates = {};
-  if (claimed.rewards?.success === true) {
-    rpEarned = Number(claimed.rewards.rpEarned || 0);
-    if (rpEarned > 0) {
-      addResearchPoints(username, rpEarned);
-      addSeasonalResearchPoints(username, rpEarned);
-      checkAndResetWeeklyCycle(username);
-      addWeeklyPackRP(username, rpEarned);
-    }
-    updates.projectsCompleted = (freshPlayer.projectsCompleted || 0) + 1;
-
-    if (claimed.rewards?.breakthrough === true) {
-      updates.researchStats = {
-        ...(freshPlayer.researchStats || {}),
-        breakthroughs: Number(freshPlayer.researchStats?.breakthroughs || 0) + 1,
-      };
-    }
-  }
-
-  for (const reward of claimed.rewards?.rewards || []) {
-    if (reward?.type !== 'card') continue;
-    if (reward.card != null) {
-      const cardId = reward.card.id || reward.card.cardId || null;
-      if (cardId) {
-        player.addCard(username, cardId, 1);
-        refreshUniqueCardsOwned(username);
-        breakthroughCardGranted = reward.card;
-      }
-    } else {
-      breakthroughCardGranted = getBreakthroughCard(username);
-    }
-  }
-
-  const updatedProjects = projects.map(project =>
-    project.id === claimed.project.id ? claimed.project : project
+  // In-memory COMPLETE snapshot for claim planner (student path reads COMPLETE from DB).
+  const projectsWithComplete = projects.map(project =>
+    project.id === resolved.project.id ? resolved.project : project
   );
-  player.updatePlayer(username, {
-    ...updates,
-    projects: updatedProjects,
+
+  const claim = await commitProjectClaim(username, projectId, {
+    now,
+    projects: projectsWithComplete,
   });
+
+  if (!claim.success) {
+    return {
+      success: false,
+      reason: claim.reason || 'project_claim_failed',
+      error: claim.error,
+    };
+  }
 
   return {
     success: true,
-    project: claimed.project,
-    rpEarned,
-    breakthroughCardGranted,
+    project: claim.project,
+    rpEarned: claim.rpEarned,
+    revealCard: claim.revealCard || null,
+    breakthroughCardGranted: claim.revealCard || null,
+    notified: claim.notified || [],
+    writeCount: claim.writeCount,
   };
 }

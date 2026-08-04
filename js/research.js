@@ -131,18 +131,41 @@ export function getResearchPoints(username) {
  */
 export function addResearchPoints(username, amount) {
   if (!username || typeof amount !== 'number' || amount <= 0) return getResearchPoints(username);
-  const current = getResearchPoints(username);
-  const newTotal = current + amount;
-  const currentSpendable = db.get(`players/${username}/currencies/currentResearchPoints`);
-  const spendableSafe = typeof currentSpendable === 'number' ? currentSpendable : 0;
-  db.set(`players/${username}/totalResearchPoints`, newTotal);
-  db.set(`players/${username}/currencies/currentResearchPoints`, spendableSafe + amount);
+  const planned = buildResearchPointGrantUpdates(username, amount);
+  for (const [path, value] of Object.entries(planned.updates)) {
+    db.set(path, value);
+  }
 
   import('./achievements.js')
     .then(mod => mod.notifyStatsChanged(username, ['totalResearchPoints']))
     .catch(() => {});
 
-  return newTotal;
+  return planned.newTotal;
+}
+
+/**
+ * Pure: absolute multi-path updates for a lifetime + spendable RP grant.
+ * Matches addResearchPoints write targets (no achievement notify, no DB writes).
+ * @param {string} username
+ * @param {number} amount
+ * @returns {{ updates: Object, newTotal: number }}
+ */
+export function buildResearchPointGrantUpdates(username, amount) {
+  const empty = { updates: {}, newTotal: getResearchPoints(username) };
+  if (!username || typeof amount !== 'number' || amount <= 0) return empty;
+
+  const current = getResearchPoints(username);
+  const newTotal = current + amount;
+  const currentSpendable = db.get(`players/${username}/currencies/currentResearchPoints`);
+  const spendableSafe = typeof currentSpendable === 'number' ? currentSpendable : 0;
+
+  return {
+    updates: {
+      [`players/${username}/totalResearchPoints`]: newTotal,
+      [`players/${username}/currencies/currentResearchPoints`]: spendableSafe + amount,
+    },
+    newTotal,
+  };
 }
 
 /**
@@ -156,11 +179,32 @@ export function addSeasonalResearchPoints(username, amount) {
     const val = db.get(`players/${username}/seasonalResearchPoints`);
     return typeof val === 'number' ? val : 0;
   }
+  const planned = buildSeasonalResearchPointGrantUpdates(username, amount);
+  for (const [path, value] of Object.entries(planned.updates)) {
+    db.set(path, value);
+  }
+  return planned.newTotal;
+}
+
+/**
+ * Pure: absolute update for seasonal RP grant (parity with addSeasonalResearchPoints).
+ * @param {string} username
+ * @param {number} amount
+ * @returns {{ updates: Object, newTotal: number }}
+ */
+export function buildSeasonalResearchPointGrantUpdates(username, amount) {
   const current = db.get(`players/${username}/seasonalResearchPoints`);
   const currentSafe = typeof current === 'number' ? current : 0;
+  if (!username || typeof amount !== 'number' || amount <= 0) {
+    return { updates: {}, newTotal: currentSafe };
+  }
   const newTotal = currentSafe + amount;
-  db.set(`players/${username}/seasonalResearchPoints`, newTotal);
-  return newTotal;
+  return {
+    updates: {
+      [`players/${username}/seasonalResearchPoints`]: newTotal,
+    },
+    newTotal,
+  };
 }
 
 // ---------- Leaderboard helpers (data only, no UI) ----------
