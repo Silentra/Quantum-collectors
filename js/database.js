@@ -15,14 +15,24 @@
  *   remove(path)      - sync cache + async Firebase remove
  *   getChildren(path) - sync read from cache
  *   push(path, val)   - sync cache + async Firebase push
- *   onValue(p, cb)    - subscribe to cache changes
+ *   onValue(p, cb)    - subscribe to cache changes (in-process)
  *   query(p, fn)      - filter children
  *   getFullDB()       - debug
  *   resetDB()         - reset to defaults
  *   setAcknowledged(path, value)       - await remote set, then patch cache
  *   updateAcknowledged(updates)        - await root multi-path update, then patch cache
  *   clearActiveSessionIfOwned(u, id)   - ownership-checked session clear
+ *   generatePushKey(path)              - push key without write
+ *   getAcknowledged(path)              - one-shot remote read + cache patch
+ *   loadPathOnce(path, opts)           - S1 scoped once → merge subtree
+ *   subscribePath(path)                - S1 scoped Firebase .on → merge subtree
+ *   isPathReady(path) / waitForPath    - S1 hierarchical readiness
+ *   clearCachedPath(path)              - explicit subtree eviction (not on unsub)
+ *   getSubscriptionRegistry()          - active scoped Firebase subscriptions
  *   isFirebaseConnected()
+ *
+ * Phase S1: root once + root on('value') remain authoritative for startup/features.
+ * Scoped APIs are additive and must not change default app behavior.
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
@@ -39,6 +49,20 @@ const _listeners = new Map();
 
 /** Optional reason for metrics-only; does not change persistence behavior. */
 let _persistReason = 'unknown';
+
+/** Paths explicitly marked ready by scoped load/subscribe (not by root listener). */
+const _readyPaths = new Set();
+
+/** @type {Map<string, Array<{ resolve: Function, reject: Function, timer: any }>>} */
+const _readyWaiters = new Map();
+
+/**
+ * Firebase path subscriptions owned by subscribePath (separate from db.onValue).
+ * @type {Map<string, { id: string, refCount: number, fbPath: string, handler: Function }>}
+ */
+const _fbPathSubscriptions = new Map();
+
+let _scopedSubSeq = 0;
 
 // ---------- Default data ----------
 
@@ -176,6 +200,202 @@ function _notifyListeners(path) {
       }
     }
   }
+}
+
+/**
+ * Normalize a DB path: trim slashes, drop empty segments.
+ * Empty string means root (rejected by scoped APIs).
+ * @param {string} path
+ * @returns {string}
+ */
+function _normalizePath(path) {
+  if (path == null || path === '' || path === '/') return '';
+  return String(path).split('/').filter(Boolean).join('/');
+}
+
+/**
+ * Notify in-process onValue listeners for exact path, ancestors, and descendants.
+ * Used after scoped subtree merges so child listeners (e.g. activeSession) fire
+ * when a parent player node is replaced.
+ * @param {string} path - normalized non-empty path
+ */
+function _notifyScoped(path) {
+  if (!path) return;
+
+  const notified = new Set();
+  const fire = (listenerPath) => {
+    if (!listenerPath || notified.has(listenerPath)) return;
+    if (!_listeners.has(listenerPath)) return;
+    notified.add(listenerPath);
+    const val = get(listenerPath);
+    for (const cb of _listeners.get(listenerPath)) {
+      try { cb(val); } catch (e) { console.error('[DB] Scoped listener error:', e); }
+    }
+  };
+
+  fire(path);
+
+  const parts = path.split('/');
+  for (let i = parts.length - 1; i > 0; i--) {
+    fire(parts.slice(0, i).join('/'));
+  }
+
+  const prefix = `${path}/`;
+  for (const listenerPath of _listeners.keys()) {
+    if (listenerPath.startsWith(prefix)) fire(listenerPath);
+  }
+}
+
+/**
+ * Mark a path ready and resolve waitForPath waiters (path + descendants waiting
+ * that become satisfied via hierarchical readiness).
+ * @param {string} path - normalized
+ */
+function _markPathReady(path) {
+  if (!path) return;
+  _readyPaths.add(path);
+
+  // Resolve waiters whose target is this path or a descendant (ancestor-ready satisfies child)
+  for (const [waitPath, waiters] of [..._readyWaiters.entries()]) {
+    if (waitPath === path || waitPath.startsWith(`${path}/`) || _isPathReadyNormalized(waitPath)) {
+      for (const w of waiters) {
+        if (w.timer) clearTimeout(w.timer);
+        w.resolve({ ok: true, path: waitPath });
+      }
+      _readyWaiters.delete(waitPath);
+    }
+  }
+}
+
+/**
+ * Clear ready marks for path and any descendant marks.
+ * @param {string} path - normalized
+ */
+function _clearReadyMarksUnder(path) {
+  if (!path) return;
+  _readyPaths.delete(path);
+  for (const ready of [..._readyPaths]) {
+    if (ready.startsWith(`${path}/`)) _readyPaths.delete(ready);
+  }
+}
+
+function _isPathReadyNormalized(path) {
+  if (!path) return false;
+  if (_readyPaths.has(path)) return true;
+  const parts = path.split('/');
+  for (let i = parts.length - 1; i > 0; i--) {
+    if (_readyPaths.has(parts.slice(0, i).join('/'))) return true;
+  }
+  return false;
+}
+
+/**
+ * Replace only the target subtree in `_db`. Never touches siblings/unrelated roots.
+ * @param {string} path - normalized non-empty
+ * @param {any} value - null/undefined deletes the node
+ * @param {{ source: 'scoped-once'|'scoped-subscription'|'scoped-clear', persist?: boolean, markReady?: boolean }} opts
+ */
+function _applyScopedSnapshot(path, value, opts = {}) {
+  if (!_db || !path) return;
+
+  const parts = path.split('/').filter(Boolean);
+  if (parts.length === 0) return;
+
+  const source = opts.source || 'scoped-once';
+  const shouldPersist = opts.persist !== false;
+  const shouldMarkReady = opts.markReady !== false;
+
+  if (value === null || value === undefined) {
+    let current = _db;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (current[parts[i]] === undefined || current[parts[i]] === null || typeof current[parts[i]] !== 'object') {
+        // Nothing to delete
+        if (shouldMarkReady) _markPathReady(path);
+        _notifyScoped(path);
+        return;
+      }
+      current = current[parts[i]];
+    }
+    delete current[parts[parts.length - 1]];
+  } else {
+    let current = _db;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (current[parts[i]] === undefined || current[parts[i]] === null || typeof current[parts[i]] !== 'object') {
+        current[parts[i]] = {};
+      }
+      current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = JSON.parse(JSON.stringify(value));
+  }
+
+  if (shouldMarkReady) _markPathReady(path);
+
+  if (shouldPersist) {
+    _persistReason = source === 'scoped-subscription' ? 'scoped-subscription'
+      : source === 'scoped-clear' ? 'scoped-clear'
+        : 'scoped-once';
+    _persistLocal();
+  }
+
+  if (metrics.isEnabled() && source !== 'scoped-clear') {
+    metrics.recordPathSnapshot({
+      source,
+      path,
+      value,
+    });
+  }
+
+  _notifyScoped(path);
+}
+
+function _syncScopedSubscriptionMetrics() {
+  if (!metrics.isEnabled()) return;
+  metrics.recordActiveScopedSubscriptions(
+    Array.from(_fbPathSubscriptions.entries()).map(([path, entry]) => ({
+      path,
+      id: entry.id,
+      refCount: entry.refCount,
+    })),
+  );
+}
+
+function _releasePathSubscription(path) {
+  const entry = _fbPathSubscriptions.get(path);
+  if (!entry) return { released: false, remaining: 0 };
+
+  entry.refCount -= 1;
+  if (entry.refCount > 0) {
+    if (metrics.isEnabled()) {
+      metrics.recordScopedSubscription({
+        action: 'release',
+        path,
+        refCount: entry.refCount,
+        id: entry.id,
+      });
+    }
+    _syncScopedSubscriptionMetrics();
+    return { released: false, remaining: entry.refCount };
+  }
+
+  if (_useFirebase && _fbDb && entry.handler) {
+    try {
+      _fbDb.ref(entry.fbPath).off('value', entry.handler);
+    } catch (e) {
+      console.warn('[DB] subscribePath off error:', path, e.message);
+    }
+  }
+  _fbPathSubscriptions.delete(path);
+  if (metrics.isEnabled()) {
+    metrics.recordScopedSubscription({
+      action: 'remove',
+      path,
+      refCount: 0,
+      id: entry.id,
+    });
+  }
+  _syncScopedSubscriptionMetrics();
+  // Cache and readiness intentionally retained
+  return { released: true, remaining: 0 };
 }
 
 // ---------- Public API ----------
@@ -470,6 +690,218 @@ export function resetDB() {
 /** Check if Firebase is the active backend. */
 export function isFirebaseConnected() {
   return _useFirebase;
+}
+
+/**
+ * Whether a path has been marked ready by scoped load/subscribe.
+ * Hierarchical downward: a ready ancestor satisfies child-path readiness.
+ * A ready child does NOT imply its parent is ready.
+ * Root wholesale hydration does not mark scoped readiness (S1).
+ * @param {string} path
+ * @returns {boolean}
+ */
+export function isPathReady(path) {
+  return _isPathReadyNormalized(_normalizePath(path));
+}
+
+/**
+ * Wait until isPathReady(path) or timeout.
+ * @param {string} path
+ * @param {{ timeoutMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, path: string, error?: string }>}
+ */
+export function waitForPath(path, options = {}) {
+  const normalized = _normalizePath(path);
+  if (!normalized) {
+    return Promise.resolve({ ok: false, path: '', error: 'Invalid path' });
+  }
+  if (_isPathReadyNormalized(normalized)) {
+    return Promise.resolve({ ok: true, path: normalized });
+  }
+
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  return new Promise((resolve) => {
+    const entry = {
+      resolve,
+      reject: resolve,
+      timer: null,
+    };
+    if (!_readyWaiters.has(normalized)) _readyWaiters.set(normalized, []);
+    _readyWaiters.get(normalized).push(entry);
+
+    entry.timer = setTimeout(() => {
+      const list = _readyWaiters.get(normalized);
+      if (list) {
+        const idx = list.indexOf(entry);
+        if (idx >= 0) list.splice(idx, 1);
+        if (list.length === 0) _readyWaiters.delete(normalized);
+      }
+      resolve({ ok: false, path: normalized, error: 'timeout' });
+    }, timeoutMs);
+  });
+}
+
+/**
+ * Active scoped Firebase path subscriptions (not db.onValue observers).
+ * @returns {{ path: string, id: string, refCount: number }[]}
+ */
+export function getSubscriptionRegistry() {
+  return Array.from(_fbPathSubscriptions.entries()).map(([path, entry]) => ({
+    path,
+    id: entry.id,
+    refCount: entry.refCount,
+  }));
+}
+
+/**
+ * Explicitly delete a cached subtree and clear readiness under it.
+ * Does not detach Firebase subscriptions — call unsubscribe separately.
+ * @param {string} path
+ * @returns {{ ok: boolean, path: string, error?: string }}
+ */
+export function clearCachedPath(path) {
+  const normalized = _normalizePath(path);
+  if (!normalized) return { ok: false, path: '', error: 'Invalid path' };
+  if (!_db) return { ok: false, path: normalized, error: 'Database not initialized' };
+
+  _clearReadyMarksUnder(normalized);
+  _applyScopedSnapshot(normalized, null, {
+    source: 'scoped-clear',
+    persist: true,
+    markReady: false,
+  });
+  return { ok: true, path: normalized };
+}
+
+/**
+ * One-shot load of a path into the cache (subtree merge only).
+ * Does not attach a live Firebase listener.
+ * @param {string} path
+ * @param {{ timeoutMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, path: string, value: any, mode: 'firebase'|'local', reused?: boolean, error?: string }>}
+ */
+export async function loadPathOnce(path, options = {}) {
+  const normalized = _normalizePath(path);
+  if (!normalized) {
+    return { ok: false, path: '', value: null, mode: _useFirebase ? 'firebase' : 'local', error: 'Invalid path' };
+  }
+  if (!_db) {
+    return { ok: false, path: normalized, value: null, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized' };
+  }
+
+  if (!_useFirebase || !_fbDb) {
+    _markPathReady(normalized);
+    _notifyScoped(normalized);
+    return { ok: true, path: normalized, value: get(normalized), mode: 'local' };
+  }
+
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const fbPath = normalized;
+
+  try {
+    const snap = await Promise.race([
+      _fbDb.ref(fbPath).once('value'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+    ]);
+    const value = snap.val();
+    _applyScopedSnapshot(normalized, value, { source: 'scoped-once', persist: true, markReady: true });
+    return { ok: true, path: normalized, value: get(normalized), mode: 'firebase' };
+  } catch (e) {
+    console.warn('[DB] loadPathOnce error:', fbPath, e.message);
+    return {
+      ok: false,
+      path: normalized,
+      value: null,
+      mode: 'firebase',
+      error: e.message || 'Load failed',
+    };
+  }
+}
+
+/**
+ * Own a Firebase `.on('value')` subscription for a path; merge into cache on each event.
+ * Observation of cache changes should use db.onValue (separate from network ownership).
+ * Duplicate subscribePath for the same path reuses the Firebase listener (refCount++).
+ * Unsubscribe does not evict cache or clear readiness.
+ *
+ * @param {string} path
+ * @returns {{ unsubscribe: Function, id: string, path: string, reused: boolean }}
+ */
+export function subscribePath(path) {
+  const normalized = _normalizePath(path);
+  if (!normalized) {
+    return {
+      unsubscribe: () => {},
+      id: '',
+      path: '',
+      reused: false,
+    };
+  }
+
+  const existing = _fbPathSubscriptions.get(normalized);
+  if (existing) {
+    existing.refCount += 1;
+    if (metrics.isEnabled()) {
+      metrics.recordScopedSubscription({
+        action: 'reuse',
+        path: normalized,
+        refCount: existing.refCount,
+        id: existing.id,
+      });
+    }
+    _syncScopedSubscriptionMetrics();
+    return {
+      unsubscribe: () => { _releasePathSubscription(normalized); },
+      id: existing.id,
+      path: normalized,
+      reused: true,
+    };
+  }
+
+  _scopedSubSeq += 1;
+  const id = `scoped-sub-${_scopedSubSeq}`;
+  const fbPath = normalized;
+
+  const handler = (snap) => {
+    _applyScopedSnapshot(normalized, snap.val(), {
+      source: 'scoped-subscription',
+      persist: true,
+      markReady: true,
+    });
+  };
+
+  if (_useFirebase && _fbDb) {
+    _fbDb.ref(fbPath).on('value', handler);
+  } else {
+    // Local-only: mark ready from current cache; no network listener
+    _markPathReady(normalized);
+    _notifyScoped(normalized);
+  }
+
+  _fbPathSubscriptions.set(normalized, {
+    id,
+    refCount: 1,
+    fbPath,
+    handler,
+  });
+
+  if (metrics.isEnabled()) {
+    metrics.recordScopedSubscription({
+      action: 'add',
+      path: normalized,
+      refCount: 1,
+      id,
+    });
+  }
+  _syncScopedSubscriptionMetrics();
+
+  return {
+    unsubscribe: () => { _releasePathSubscription(normalized); },
+    id,
+    path: normalized,
+    reused: false,
+  };
 }
 
 /**

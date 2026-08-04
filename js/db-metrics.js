@@ -136,6 +136,8 @@ export function pathCategory(path) {
 function _emptyState() {
   return {
     rootSnapshots: [],
+    pathSnapshots: [],
+    scopedSubscriptionEvents: [],
     writes: [],
     writesSinceLastSnapshot: [],
     persistEvents: [],
@@ -143,17 +145,23 @@ function _emptyState() {
     milestones: {},
     majorNodes: null,
     registeredListenerPaths: [],
+    activeScopedSubscriptions: [],
     totals: {
       rootSnapshotCount: 0,
+      pathSnapshotCount: 0,
       initialOnceBytes: null,
       subsequentBytes: 0,
       cumulativeEstimatedBytes: 0,
+      pathSnapshotCumulativeBytes: 0,
       largestSnapshotBytes: 0,
       writeCount: 0,
       persistCount: 0,
       persistCumulativeBytes: 0,
       listenerCallbacksTotal: 0,
       rootFanInEvents: 0,
+      scopedSubscriptionAdd: 0,
+      scopedSubscriptionReuse: 0,
+      scopedSubscriptionRemove: 0,
     },
   };
 }
@@ -233,6 +241,7 @@ export function recordRootSnapshot(opts) {
     seq: _state.totals.rootSnapshotCount + 1,
     ts: now,
     source: opts.source,
+    cacheUpdateSource: opts.source === 'initial-once' ? 'initial-root' : 'root-listener',
     estimatedJsonBytes: bytes,
     elapsedSincePrevMs,
     localWritesSincePrev: localWrites.length,
@@ -279,12 +288,102 @@ export function recordRootSnapshot(opts) {
     console.info('[DB Metrics] detail', {
       seq: entry.seq,
       source: opts.source,
+      cacheUpdateSource: entry.cacheUpdateSource,
       estimatedJsonBytes: bytes,
       elapsedSincePrevMs,
       localWritePaths: entry.localWritePaths,
       listenerCallbackCount: entry.listenerCallbackCount,
     });
   }
+}
+
+/**
+ * Scoped path snapshot (subtree merge — not a full root replace).
+ * @param {object} opts
+ * @param {'scoped-once'|'scoped-subscription'} opts.source
+ * @param {string} opts.path
+ * @param {any} opts.value
+ */
+export function recordPathSnapshot(opts) {
+  if (!_enabled) return;
+
+  const now = Date.now();
+  const bytes = estimateJsonBytes(opts.value);
+  const pathRedacted = redactPath(opts.path);
+  const entry = {
+    seq: _state.totals.pathSnapshotCount + 1,
+    ts: now,
+    source: opts.source,
+    cacheUpdateSource: opts.source,
+    pathRedacted,
+    category: pathCategory(opts.path),
+    estimatedJsonBytes: bytes,
+    note: 'Estimated JSON bytes for scoped subtree only — not Firebase billed transfer.',
+  };
+
+  _state.pathSnapshots.push(entry);
+  _state.totals.pathSnapshotCount += 1;
+  if (bytes != null) {
+    _state.totals.pathSnapshotCumulativeBytes += bytes;
+  }
+
+  if (_verbose) {
+    console.info(
+      `[DB Metrics] Path snapshot #${entry.seq} (${opts.source}) ${pathRedacted} — ${_formatBytes(bytes)}`,
+    );
+  }
+}
+
+/**
+ * Track scoped Firebase subscription registry lifecycle.
+ * @param {object} opts
+ * @param {'add'|'reuse'|'release'|'remove'} opts.action
+ * @param {string} opts.path
+ * @param {number} opts.refCount
+ * @param {string} [opts.id]
+ */
+export function recordScopedSubscription(opts) {
+  if (!_enabled) return;
+
+  const pathRedacted = redactPath(opts.path);
+  const entry = {
+    ts: Date.now(),
+    action: opts.action,
+    pathRedacted,
+    refCount: opts.refCount,
+    id: opts.id || null,
+  };
+  _state.scopedSubscriptionEvents.push(entry);
+
+  if (opts.action === 'add') _state.totals.scopedSubscriptionAdd += 1;
+  if (opts.action === 'reuse') _state.totals.scopedSubscriptionReuse += 1;
+  if (opts.action === 'remove') _state.totals.scopedSubscriptionRemove += 1;
+
+  // Refresh active list snapshot for summary (paths only)
+  try {
+    // Caller may also push via recordActiveScopedSubscriptions
+  } catch { /* ignore */ }
+
+  if (_verbose) {
+    console.info(
+      `[DB Metrics] Scoped sub ${opts.action} ${pathRedacted} refCount=${opts.refCount}`,
+    );
+  }
+}
+
+/**
+ * Replace the metrics copy of the active scoped subscription registry.
+ * @param {{ path: string, id: string, refCount: number }[]} entries
+ */
+export function recordActiveScopedSubscriptions(entries) {
+  if (!_enabled) return;
+  _state.activeScopedSubscriptions = Array.isArray(entries)
+    ? entries.map(e => ({
+      pathRedacted: redactPath(e.path),
+      id: e.id,
+      refCount: e.refCount,
+    }))
+    : [];
 }
 
 /**
@@ -471,6 +570,9 @@ export function summary() {
   const report = {
     disclaimer: 'Estimated JSON bytes — not Firebase billed transfer. Local write↔snapshot links are correlation only (other clients omitted).',
     enabled: _enabled,
+    cacheUpdateSources: {
+      note: 'initial-root / root-listener / scoped-once / scoped-subscription',
+    },
     rootSnapshots: {
       total: snapCount,
       initialOnceBytes: _state.totals.initialOnceBytes,
@@ -479,6 +581,21 @@ export function summary() {
       largestSnapshotBytes: _state.totals.largestSnapshotBytes,
       averageSnapshotBytes: avgSnap,
       events: _state.rootSnapshots,
+    },
+    pathSnapshots: {
+      total: _state.totals.pathSnapshotCount,
+      cumulativeEstimatedBytes: _state.totals.pathSnapshotCumulativeBytes,
+      recent: _state.pathSnapshots.slice(-30),
+    },
+    scopedSubscriptions: {
+      active: _state.activeScopedSubscriptions,
+      events: _state.scopedSubscriptionEvents.slice(-30),
+      totals: {
+        add: _state.totals.scopedSubscriptionAdd,
+        reuse: _state.totals.scopedSubscriptionReuse,
+        remove: _state.totals.scopedSubscriptionRemove,
+      },
+      note: 'Firebase path .on ownership — separate from db.onValue cache observers.',
     },
     writes: {
       total: _state.totals.writeCount,
@@ -513,7 +630,9 @@ export function summary() {
 
   console.info('[DB Metrics] Summary', report);
   console.info(
-    `[DB Metrics] Quick: snapshots=${snapCount} cum=${_formatBytes(_state.totals.cumulativeEstimatedBytes)} writes=${_state.totals.writeCount} persists=${_state.totals.persistCount}`
+    `[DB Metrics] Quick: rootSnaps=${snapCount} pathSnaps=${_state.totals.pathSnapshotCount} ` +
+      `cum=${_formatBytes(_state.totals.cumulativeEstimatedBytes)} writes=${_state.totals.writeCount} ` +
+      `scopedSubs=${_state.activeScopedSubscriptions.length}`,
   );
   return report;
 }
@@ -534,6 +653,7 @@ Enable:  localStorage.setItem('qc-db-metrics-enabled','true'); location.reload()
 Verbose: localStorage.setItem('qc-db-metrics-verbose','true')
 Disable: qcDbMetrics.disable() or set flag false + reload
 API: summary() | reset() | resetAll() | measureMajorNodes()
+Cache update sources: initial-root | root-listener | scoped-once | scoped-subscription
 Bytes are Estimated JSON — not Firebase billed transfer.`);
     },
   };
