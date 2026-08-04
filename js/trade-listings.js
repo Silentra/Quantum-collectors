@@ -107,54 +107,43 @@ export function expireStaleListings() {
   }
 }
 
-// ─── Listing Lifecycle ───────��──────────────────────────────────────────────
+// ─── Listing Lifecycle ──────────────────────────────────────────────────────
 
 /**
- * Create an anonymous trade listing.
- *
- * @param {string}   ownerId         - Username of the listing creator
- * @param {string}   offeredCardId   - Card the owner is offering
- * @param {string[]} requestedCardIds - 1–3 card IDs the owner would accept (any ONE fulfills)
- * @returns {{ success: boolean, listingId?: string, reason?: string }}
+ * Validate listing creation inputs against current cache state.
+ * @returns {{ ok: true, ownerGroup: string } | { ok: false, reason: string }}
  */
-export function createListing(ownerId, offeredCardId, requestedCardIds) {
-  // Phase T-8: Global / listing toggle enforcement
-  if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
-  if (!isListingsEnabled()) return { success: false, reason: 'LISTINGS_DISABLED' };
+function _validateCreateListing(ownerId, offeredCardId, requestedCardIds) {
+  if (!isTradingEnabled()) return { ok: false, reason: 'TRADING_DISABLED' };
+  if (!isListingsEnabled()) return { ok: false, reason: 'LISTINGS_DISABLED' };
 
-  // ── 1. Basic input validation ──────────────────────────────────────────────
   if (!Array.isArray(requestedCardIds) || requestedCardIds.length < 1 || requestedCardIds.length > 3) {
-    return { success: false, reason: 'INVALID_REQUESTED_CARDS_COUNT' };
+    return { ok: false, reason: 'INVALID_REQUESTED_CARDS_COUNT' };
   }
 
-  // Check uniqueness
   const uniqueIds = new Set(requestedCardIds);
   if (uniqueIds.size !== requestedCardIds.length) {
-    return { success: false, reason: 'DUPLICATE_REQUESTED_CARDS' };
+    return { ok: false, reason: 'DUPLICATE_REQUESTED_CARDS' };
   }
 
-  // Offered card cannot be in requested list
   if (requestedCardIds.includes(offeredCardId)) {
-    return { success: false, reason: 'OFFERED_CARD_IN_REQUESTED' };
+    return { ok: false, reason: 'OFFERED_CARD_IN_REQUESTED' };
   }
 
-  // ── 2. Player checks ──────────────────────────────────────────────────────
   const freshOwner = db.get(`players/${ownerId}`);
-  if (!freshOwner) return { success: false, reason: 'OWNER_NOT_FOUND' };
+  if (!freshOwner) return { ok: false, reason: 'OWNER_NOT_FOUND' };
 
   const owner = _normalizePlayer(freshOwner);
-  if (owner.isTradeRestricted) return { success: false, reason: 'OWNER_TRADE_RESTRICTED' };
+  if (owner.isTradeRestricted) return { ok: false, reason: 'OWNER_TRADE_RESTRICTED' };
 
   const ownerGroup = owner.groupId;
-  if (!ownerGroup) return { success: false, reason: 'OWNER_NO_GROUP' };
+  if (!ownerGroup) return { ok: false, reason: 'OWNER_NO_GROUP' };
 
-  // ── 3. Cooldown check ─────────────────────────────────────────────────────
   const cooldown = getListingCooldown(ownerId);
   if (cooldown.onCooldown) {
-    return { success: false, reason: 'LISTING_ON_COOLDOWN' };
+    return { ok: false, reason: 'LISTING_ON_COOLDOWN' };
   }
 
-  // ── 4. Max active listings per player (config-driven) ────────────────────
   const maxListings = _getMaxActiveListings();
   const allListings = db.get('trades/listings') || {};
   let activeCount = 0;
@@ -164,68 +153,106 @@ export function createListing(ownerId, offeredCardId, requestedCardIds) {
     }
   }
   if (activeCount >= maxListings) {
-    return { success: false, reason: 'MAX_ACTIVE_LISTINGS_REACHED' };
+    return { ok: false, reason: 'MAX_ACTIVE_LISTINGS_REACHED' };
   }
 
-  // ── 5. Card validation ─────────────────────────────────────────────────────
   const allCards = db.get('cards') || {};
 
-  // Offered card must exist, be enabled, and be tradable
   const offeredCard = allCards[offeredCardId];
-  if (!offeredCard) return { success: false, reason: 'OFFERED_CARD_NOT_FOUND' };
-  if (offeredCard.enabled === false) return { success: false, reason: 'OFFERED_CARD_DISABLED' };
-  if (!isCardTradable(offeredCard)) return { success: false, reason: 'OFFERED_CARD_NOT_TRADABLE' };
+  if (!offeredCard) return { ok: false, reason: 'OFFERED_CARD_NOT_FOUND' };
+  if (offeredCard.enabled === false) return { ok: false, reason: 'OFFERED_CARD_DISABLED' };
+  if (!isCardTradable(offeredCard)) return { ok: false, reason: 'OFFERED_CARD_NOT_TRADABLE' };
 
-  // Owner must own the offered card
   const ownerInv = owner.inventory || {};
   if ((ownerInv[offeredCardId] || 0) < 1) {
-    return { success: false, reason: 'OWNER_MISSING_OFFERED_CARD' };
+    return { ok: false, reason: 'OWNER_MISSING_OFFERED_CARD' };
   }
 
-  // Copy-aware availability (project + trade reservations)
   const ownerSnapshot = buildAvailabilitySnapshot(ownerId, { playerData: owner });
   if (!canOfferCardInTrade(ownerSnapshot, offeredCardId)) {
     const reason = getAvailabilityFailureReason(ownerSnapshot, offeredCardId, 'offer');
-    return { success: false, reason: reason ?? 'INSUFFICIENT_AVAILABLE_COPIES' };
+    return { ok: false, reason: reason ?? 'INSUFFICIENT_AVAILABLE_COPIES' };
   }
 
-  // All requested cards must exist, be tradable, and match offered rarity
   for (const reqId of requestedCardIds) {
     const reqCard = allCards[reqId];
-    if (!reqCard) return { success: false, reason: `REQUESTED_CARD_NOT_FOUND:${reqId}` };
-    if (reqCard.enabled === false) return { success: false, reason: `REQUESTED_CARD_DISABLED:${reqId}` };
-    if (!isCardTradable(reqCard)) return { success: false, reason: `REQUESTED_CARD_NOT_TRADABLE:${reqId}` };
+    if (!reqCard) return { ok: false, reason: `REQUESTED_CARD_NOT_FOUND:${reqId}` };
+    if (reqCard.enabled === false) return { ok: false, reason: `REQUESTED_CARD_DISABLED:${reqId}` };
+    if (!isCardTradable(reqCard)) return { ok: false, reason: `REQUESTED_CARD_NOT_TRADABLE:${reqId}` };
     if (reqCard.rarity !== offeredCard.rarity) {
-      return { success: false, reason: `RARITY_MISMATCH:${reqId}` };
+      return { ok: false, reason: `RARITY_MISMATCH:${reqId}` };
     }
   }
 
-  // ── 6. Create listing record ───────────────────────────────────────────────
-  const now = Date.now();
-  const expiresAt = now + _getListingExpirationMs();
+  return { ok: true, ownerGroup };
+}
 
-  const listingId = db.push('trades/listings', {
-    ownerId,
-    offeredCardId,
-    requestedCardIds,
-    createdAt: now,
-    expiresAt,
-    groupId: ownerGroup,
-    status: 'active',
-  });
-
-  // Store id inside the record
-  db.set(`trades/listings/${listingId}/id`, listingId);
-
-  // Set listing cooldown (even though listing is active, cooldown starts now)
-  db.set(`players/${ownerId}/lastListingCreatedAt`, now);
-
-  if (isDetailedLogging()) {
-    console.log(`[Listings][DETAIL] Listing ${listingId} created by ${ownerId}: offers ${offeredCardId}, wants [${requestedCardIds.join(', ')}], group=${ownerGroup}, expires=${new Date(expiresAt).toISOString()}`);
-  } else {
-    console.log(`[Listings] Listing ${listingId} created by ${ownerId}: offers ${offeredCardId}, wants [${requestedCardIds.join(', ')}]`);
+async function withListingCreateLock(ownerId, fn) {
+  const lockName = `qc-listing-create:${ownerId}`;
+  if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+    return navigator.locks.request(lockName, { mode: 'exclusive' }, () => fn());
   }
-  return { success: true, listingId };
+  return fn();
+}
+
+/**
+ * Create an anonymous trade listing (one acknowledged multi-path update).
+ *
+ * @param {string}   ownerId         - Username of the listing creator
+ * @param {string}   offeredCardId   - Card the owner is offering
+ * @param {string[]} requestedCardIds - 1–3 card IDs the owner would accept (any ONE fulfills)
+ * @returns {Promise<{ success: boolean, listingId?: string, reason?: string, error?: string, writeCount?: number }>}
+ */
+export async function createListing(ownerId, offeredCardId, requestedCardIds) {
+  const pre = _validateCreateListing(ownerId, offeredCardId, requestedCardIds);
+  if (!pre.ok) return { success: false, reason: pre.reason };
+
+  return withListingCreateLock(ownerId, async () => {
+    // Revalidate after lock (cache Option B) so double-submit fails cleanly
+    const check = _validateCreateListing(ownerId, offeredCardId, requestedCardIds);
+    if (!check.ok) return { success: false, reason: check.reason };
+
+    const now = Date.now();
+    const expiresAt = now + _getListingExpirationMs();
+    const listingId = db.generatePushKey('trades/listings');
+
+    const updates = {
+      [`trades/listings/${listingId}`]: {
+        id: listingId,
+        ownerId,
+        offeredCardId,
+        requestedCardIds,
+        createdAt: now,
+        expiresAt,
+        groupId: check.ownerGroup,
+        status: 'active',
+      },
+      [`players/${ownerId}/lastListingCreatedAt`]: now,
+    };
+
+    const ack = await db.updateAcknowledged(updates);
+    if (!ack.ok) {
+      return {
+        success: false,
+        reason: 'WRITE_FAILED',
+        error: ack.error || 'Could not save listing. Check your connection and try again.',
+      };
+    }
+
+    if (isDetailedLogging()) {
+      console.log(
+        `[Listings][DETAIL] Listing ${listingId} created by ${ownerId}: offers ${offeredCardId}, ` +
+          `wants [${requestedCardIds.join(', ')}], group=${check.ownerGroup}, ` +
+          `expires=${new Date(expiresAt).toISOString()}`,
+      );
+    } else {
+      console.log(
+        `[Listings] Listing ${listingId} created by ${ownerId}: offers ${offeredCardId}, wants [${requestedCardIds.join(', ')}]`,
+      );
+    }
+
+    return { success: true, listingId, writeCount: 1 };
+  });
 }
 
 /**

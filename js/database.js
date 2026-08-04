@@ -378,16 +378,26 @@ export function remove(path) {
 }
 
 /**
+ * Generate a Firebase-style push key without writing.
+ * Firebase: allocates via ref.push().key (local, no network).
+ * Local-only: same synthetic key pattern as push().
+ * @param {string} path - Parent path (e.g. 'trades/listings')
+ * @returns {string}
+ */
+export function generatePushKey(path) {
+  if (_useFirebase && _fbDb) {
+    const fbPath = (path || '').split('/').filter(Boolean).join('/');
+    return _fbDb.ref(fbPath || '/').push().key;
+  }
+  return '_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
+/**
  * Push a new child with auto-generated key.
  * Returns the generated key.
  */
 export function push(path, value) {
-  let key;
-  if (_useFirebase && _fbDb) {
-    key = _fbDb.ref(path.split('/').filter(Boolean).join('/')).push().key;
-  } else {
-    key = '_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
-  }
+  const key = generatePushKey(path);
   set(`${path}/${key}`, value);
   return key;
 }

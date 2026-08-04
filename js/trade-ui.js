@@ -1206,8 +1206,10 @@ async function _handleCreateListing(username) {
   const offeredSelect = document.getElementById('listing-offered-card');
   const checkboxArea = document.getElementById('listing-requested-checkboxes');
   const errorEl = document.getElementById('listing-error');
+  const createBtn = document.getElementById('listing-create-btn');
 
   if (!offeredSelect || !checkboxArea) return;
+  if (createBtn?.dataset.createInFlight === '1') return;
 
   const offeredCardId = offeredSelect.value;
   if (!offeredCardId) {
@@ -1244,14 +1246,25 @@ async function _handleCreateListing(username) {
   });
   if (!confirmed) return;
 
-  const result = createListing(username, offeredCardId, requestedCardIds);
-  if (result.success) {
-    toast.success('Listing posted!');
-  } else {
-    const reason = result.reason || 'Unknown error';
-    toast.error(_friendlyError(reason));
+  if (createBtn) {
+    createBtn.dataset.createInFlight = '1';
+    createBtn.disabled = true;
   }
-  renderTrading();
+  try {
+    const result = await createListing(username, offeredCardId, requestedCardIds);
+    if (result.success) {
+      toast.success('Listing posted!');
+    } else {
+      const reason = result.reason || 'Unknown error';
+      toast.error(_friendlyError(reason));
+    }
+  } finally {
+    if (createBtn) {
+      createBtn.dataset.createInFlight = '0';
+      try { createBtn.disabled = false; } catch (_) { /* ignore */ }
+    }
+    renderTrading();
+  }
 }
 
 function _wirePickerFilterEvents(username) {
