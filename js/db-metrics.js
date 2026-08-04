@@ -571,7 +571,7 @@ export function summary() {
     disclaimer: 'Estimated JSON bytes — not Firebase billed transfer. Local write↔snapshot links are correlation only (other clients omitted).',
     enabled: _enabled,
     cacheUpdateSources: {
-      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S2: root and scoped coexist; do not claim bandwidth reduction yet',
+      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S3: root is legacy safety net; scoped player is eventual owner — do not claim bandwidth reduction or root-wins semantics',
     },
     startupTimingMs: {
       milestones: { ..._state.milestones },
@@ -579,6 +579,7 @@ export function summary() {
       initDbStartToInitialSnapshot: _milestoneDelta('initDB-start', 'initial-root-snapshot'),
       initDbStartToComplete: _milestoneDelta('initDB-start', 'initDB-complete'),
       sharedHydrate: _milestoneDelta('shared-hydrate-start', 'shared-hydrate-complete'),
+      currentPlayerHydrate: _milestoneDelta('current-player-hydrate-start', 'current-player-hydrate-complete'),
       initAuth: _milestoneDelta('initAuth-start', 'initAuth-complete'),
       migrations: _milestoneDelta('migrations-start', 'migrations-complete'),
       uiInit: _milestoneDelta('ui-init-start', 'ui-init-complete'),
@@ -655,9 +656,9 @@ Verbose: localStorage.setItem('qc-db-metrics-verbose','true')
 Disable: qcDbMetrics.disable() or set flag false + reload
 API: summary() | reset() | resetAll() | measureMajorNodes()
 Cache update sources: initial-root | root-listener | scoped-once | scoped-subscription
-(S2 coexistence: root + scoped — do not treat path snaps as bandwidth wins yet)
+(S3: root = legacy safety net; scoped player = eventual owner — no bandwidth claim)
 Bytes are Estimated JSON — not Firebase billed transfer.
-Hydration: qcDbHydration.getSharedHydrationReport() | help()`);
+Hydration: qcDbHydration.getSharedHydrationReport() | getCurrentPlayerHydrationReport() | help()`);
     },
   };
 }

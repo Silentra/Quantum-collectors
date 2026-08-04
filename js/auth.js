@@ -21,6 +21,12 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
+import {
+  ensureCurrentPlayerScope,
+  hydrateCurrentPlayer,
+  releaseCurrentPlayerScope,
+  subscribeCurrentPlayer,
+} from './db-hydration.js';
 import { syncProjects } from './project-sync.js';
 import { getProjectConfig } from './project-config.js';
 import * as cards from './cards.js';
@@ -146,11 +152,13 @@ function stopSessionGuard() {
 
 /**
  * Force local exit without clearing the server session (already invalid or cleared elsewhere).
+ * Releases the current-player scoped subscription; never calls clearActiveSessionIfOwned.
  */
 function forceLocalExit(message) {
   if (_exitingLocally) return;
   _exitingLocally = true;
   stopSessionGuard();
+  releaseCurrentPlayerScope();
   clearLocalSessionOnly();
   if (message) setPendingAuthMessage(message);
   location.reload();
@@ -182,7 +190,7 @@ function startSessionGuard(username) {
       }
       return;
     }
-    // Stale in-flight root snapshot can briefly disagree after an acknowledged claim.
+    // Stale in-flight root/scoped snapshot can briefly disagree after an acknowledged claim.
     if (
       _sessionGuardExpectedId === session.sessionId &&
       Date.now() < _sessionGuardGraceUntil
@@ -198,6 +206,7 @@ export function ensureSessionGuard() {
   const session = getSession();
   if (!session || session.username === '__admin__') {
     stopSessionGuard();
+    releaseCurrentPlayerScope();
     return;
   }
   if (!session.sessionId) return;
@@ -215,6 +224,7 @@ function setupCrossTabSessionWatch() {
     if (e.newValue == null) {
       if (_localSessionSnapshot) {
         stopSessionGuard();
+        releaseCurrentPlayerScope();
         rememberSessionSnapshot(null);
         resetLoginAchievementEvaluation();
         location.reload();
@@ -246,7 +256,10 @@ function setupCrossTabSessionWatch() {
 }
 
 /**
- * Explicit logout: ownership-checked clear of activeSession, then local clear.
+ * Explicit logout: stop in-process guard, ownership-checked clear of activeSession
+ * (Firebase transaction — does not depend on the scoped player subscription), then
+ * release current-player scope and clear local session.
+ * Forced remote logout must never call this clear path (see forceLocalExit).
  */
 export async function logout() {
   stopSessionGuard();
@@ -254,6 +267,7 @@ export async function logout() {
   if (session && session.username && session.username !== '__admin__' && session.sessionId) {
     await db.clearActiveSessionIfOwned(session.username, session.sessionId);
   }
+  releaseCurrentPlayerScope();
   clearLocalSessionOnly();
 }
 
@@ -337,7 +351,8 @@ function applyPostLoginPlayerMaintenance(username) {
 
 /**
  * Initialize auth. Restores session from localStorage.
- * Validates opaque session id against players/{u}/activeSession (except __admin__).
+ * S3 restore order: hydrate players/{u} → verify exact activeSession token match
+ * → subscribe → guard → maintenance. Grace must not mask an invalid saved session.
  */
 export async function initAuth() {
   setupCrossTabSessionWatch();
@@ -352,6 +367,7 @@ export async function initAuth() {
 
   // Only username === '__admin__' is exempt from activeSession enforcement.
   if (session.isAdmin && session.username === '__admin__') {
+    releaseCurrentPlayerScope();
     console.log('[Auth] Admin session restored');
     return;
   }
@@ -369,9 +385,19 @@ export async function initAuth() {
     return;
   }
 
+  const hydrated = await hydrateCurrentPlayer(session.username);
+  if (!hydrated.ok) {
+    console.warn('[Auth] Stale session cleared (current-player hydrate failed)', hydrated.error);
+    releaseCurrentPlayerScope();
+    clearLocalSessionOnly();
+    setPendingAuthMessage(MSG_SESSION_INVALID);
+    return;
+  }
+
   const player = db.get(`players/${session.username}`);
   if (!player) {
     console.warn('[Auth] Stale session cleared (player not found)');
+    releaseCurrentPlayerScope();
     clearLocalSessionOnly();
     setPendingAuthMessage(MSG_SESSION_INVALID);
     return;
@@ -379,14 +405,24 @@ export async function initAuth() {
 
   const activeSession = db.get(`players/${session.username}/activeSession`);
   const serverId = activeSession && activeSession.id != null ? activeSession.id : null;
+  // Exact match only — no grace window on restore.
   if (serverId !== session.sessionId) {
     console.warn('[Auth] Stale session cleared (session id mismatch)');
+    releaseCurrentPlayerScope();
     clearLocalSessionOnly();
     setPendingAuthMessage(MSG_SESSION_INVALID);
     return;
   }
 
-  // Cache already matches — start guard before fire-and-forget maintenance.
+  const sub = subscribeCurrentPlayer(session.username);
+  if (!sub.ok) {
+    console.warn('[Auth] Stale session cleared (current-player subscribe failed)', sub.error);
+    releaseCurrentPlayerScope();
+    clearLocalSessionOnly();
+    setPendingAuthMessage(MSG_SESSION_INVALID);
+    return;
+  }
+
   startSessionGuard(session.username);
   applyPostLoginPlayerMaintenance(session.username);
   console.log(`[Auth] Session restored for: ${session.username}`);
@@ -432,7 +468,8 @@ export async function login(username, password) {
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
 
-  // Cache patched by setAcknowledged — set local session, then start guard.
+  // Cache patched by setAcknowledged — set local session, arm grace, then
+  // scoped hydrate+subscribe before starting the in-process guard.
   const session = {
     username,
     isAdmin: player.isAdmin === true,
@@ -441,8 +478,17 @@ export async function login(username, password) {
   };
   setSession(session);
   armSessionGuardGrace(sessionId);
-  startSessionGuard(username);
 
+  const scoped = await ensureCurrentPlayerScope(username);
+  if (!scoped.ok) {
+    console.warn('[Auth] Current-player scope failed after login claim', scoped.error);
+    releaseCurrentPlayerScope();
+    // Do not clear server activeSession we just claimed — next login replaces it.
+    clearLocalSessionOnly();
+    return { success: false, error: MSG_SESSION_ESTABLISH };
+  }
+
+  startSessionGuard(username);
   applyPostLoginPlayerMaintenance(username);
 
   return { success: true, session };
@@ -535,6 +581,28 @@ export async function register(username, password, accessCode) {
   };
   setSession(session);
   armSessionGuardGrace(sessionId);
+
+  // Account + access code already committed. If the redundant scoped once-load fails,
+  // ackCacheFallback continues with ack-patched cache + subscribe — never re-register.
+  const scoped = await ensureCurrentPlayerScope(username, { ackCacheFallback: true });
+  if (!scoped.ok) {
+    console.warn('[Auth] Current-player scope failed after registration', scoped.error);
+    // Account exists; keep local session if cache has the player so the user can enter.
+    if (db.get(`players/${username}`)) {
+      const sub = subscribeCurrentPlayer(username);
+      if (sub.ok) {
+        startSessionGuard(username);
+        return { success: true, session, scopedWarning: scoped.error };
+      }
+    }
+    releaseCurrentPlayerScope();
+    clearLocalSessionOnly();
+    return {
+      success: false,
+      error: 'Account was created but profile hydration failed. Please sign in.',
+    };
+  }
+
   startSessionGuard(username);
 
   return { success: true, session };
@@ -697,6 +765,7 @@ export function adminLogin(password) {
   }
 
   stopSessionGuard();
+  releaseCurrentPlayerScope();
   const session = { username: '__admin__', isAdmin: true, loginTime: Date.now() };
   setSession(session);
   return { success: true, session };

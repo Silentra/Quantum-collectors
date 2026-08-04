@@ -31,8 +31,8 @@
  *   getSubscriptionRegistry()          - active scoped Firebase subscriptions
  *   isFirebaseConnected()
  *
- * Phase S1–S2: root once + root on('value') remain authoritative for startup/features.
- * Scoped APIs are additive; S2 shared hydration uses loadPathOnce beside the root listener.
+ * Phase S1–S3: root once + root on('value') remain the legacy safety net.
+ * Scoped APIs are additive; S3 current-player scope is auth-owned beside root.
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
