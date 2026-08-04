@@ -1005,6 +1005,7 @@ function _wireListingEvents(username) {
   // Accept listing buttons — T-6: Confirmation step before accepting listing
   document.querySelectorAll('.listing-accept-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (btn.dataset.acceptInFlight === '1') return;
       const listingId = btn.dataset.listingId;
       const chosenCard = btn.dataset.chosenCard;
       const offeredName = btn.dataset.offeredName || '?';
@@ -1026,13 +1027,26 @@ function _wireListingEvents(username) {
       });
       if (!confirmed) return;
 
-      const result = acceptListing(listingId, username, chosenCard);
-      if (result.success) {
-        toast.success('Listing fulfilled! Cards swapped.');
-      } else {
-        toast.error(_friendlyError(result.reason));
+      btn.dataset.acceptInFlight = '1';
+      btn.disabled = true;
+      try {
+        const result = await acceptListing(listingId, username, chosenCard);
+        if (result.success) {
+          // Only toast unlocks for the accepting player — not the listing owner.
+          toastAchievementUnlocks(result.notifiedAccepter || []);
+          toast.success('Listing fulfilled! Cards swapped.');
+        } else if (result.uncertain || result.reason === 'WRITE_UNCERTAIN') {
+          toast.error(_friendlyError(result.reason));
+        } else if (result.stale || result.reason === 'LISTING_NOT_ACTIVE') {
+          toast.info('This listing is no longer available.');
+        } else {
+          toast.error(_friendlyError(result.reason));
+        }
+      } finally {
+        btn.dataset.acceptInFlight = '0';
+        try { btn.disabled = false; } catch (_) { /* ignore */ }
+        renderTrading();
       }
-      renderTrading();
     });
   });
 
@@ -1551,6 +1565,7 @@ export function refreshAvailableListingsSection(username) {
   // Re-wire accept listing buttons
   section.querySelectorAll('.listing-accept-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (btn.dataset.acceptInFlight === '1') return;
       const listingId = btn.dataset.listingId;
       const chosenCard = btn.dataset.chosenCard;
       const offeredName = btn.dataset.offeredName || '?';
@@ -1568,13 +1583,25 @@ export function refreshAvailableListingsSection(username) {
       });
       if (!confirmed) return;
 
-      const result = acceptListing(listingId, username, chosenCard);
-      if (result.success) {
-        toast.success('Listing fulfilled! Cards swapped.');
-      } else {
-        toast.error(_friendlyError(result.reason));
+      btn.dataset.acceptInFlight = '1';
+      btn.disabled = true;
+      try {
+        const result = await acceptListing(listingId, username, chosenCard);
+        if (result.success) {
+          toastAchievementUnlocks(result.notifiedAccepter || []);
+          toast.success('Listing fulfilled! Cards swapped.');
+        } else if (result.uncertain || result.reason === 'WRITE_UNCERTAIN') {
+          toast.error(_friendlyError(result.reason));
+        } else if (result.stale || result.reason === 'LISTING_NOT_ACTIVE') {
+          toast.info('This listing is no longer available.');
+        } else {
+          toast.error(_friendlyError(result.reason));
+        }
+      } finally {
+        btn.dataset.acceptInFlight = '0';
+        try { btn.disabled = false; } catch (_) { /* ignore */ }
+        renderTrading();
       }
-      renderTrading();
     });
   });
 }
@@ -1804,6 +1831,7 @@ const ERROR_MESSAGES = {
   STALE_TRADE_STATE: 'This trade is no longer available to accept.',
   SAME_CARD_BOTH_SIDES: 'A trade cannot exchange the same card for itself.',
   WRITE_FAILED: 'Could not save the trade. Check your connection and try again.',
+  WRITE_UNCERTAIN: 'Listing may still be processing. Refresh before trying again.',
   TRADE_NOT_DECLINABLE: 'This trade cannot be declined right now.',
   TRADE_NOT_CANCELLABLE: 'This offer can no longer be cancelled.',
   NOT_TARGET_PLAYER: 'You cannot respond to this trade.',

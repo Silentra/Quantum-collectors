@@ -262,9 +262,9 @@ export function cancelListing(listingId, cancellingPlayerId) {
  * @param {string} listingId
  * @param {string} accepterId
  * @param {string} chosenCardId - Must be one of listing.requestedCardIds that the accepter owns
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, notifiedAccepter?: string[] }>}
  */
-export function acceptListing(listingId, accepterId, chosenCardId) {
+export async function acceptListing(listingId, accepterId, chosenCardId) {
   // Phase T-8: Global / listing toggle enforcement
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isListingsEnabled()) return { success: false, reason: 'LISTINGS_DISABLED' };
@@ -273,9 +273,12 @@ export function acceptListing(listingId, accepterId, chosenCardId) {
   if (!listing) return { success: false, reason: 'LISTING_NOT_FOUND' };
   if (listing.status !== 'active') return { success: false, reason: 'LISTING_NOT_ACTIVE' };
 
-  // Check expiry
+  // Check expiry — only mark expired while still active (never overwrite terminals)
   if (listing.expiresAt && Date.now() > listing.expiresAt) {
-    db.update(`trades/listings/${listingId}`, { status: 'expired', respondedAt: Date.now() });
+    const still = db.get(`trades/listings/${listingId}`);
+    if (still && still.status === 'active') {
+      db.update(`trades/listings/${listingId}`, { status: 'expired', respondedAt: Date.now() });
+    }
     return { success: false, reason: 'LISTING_EXPIRED' };
   }
 
@@ -289,7 +292,7 @@ export function acceptListing(listingId, accepterId, chosenCardId) {
   if (!freshAccepter) return { success: false, reason: 'ACCEPTER_NOT_FOUND' };
   if (freshAccepter.isTradeRestricted) return { success: false, reason: 'ACCEPTER_TRADE_RESTRICTED' };
 
-  // Delegate to isolated listing execution
+  // Delegate to isolated listing execution (claim + fulfill)
   return executeListingTrade(listing, accepterId, chosenCardId);
 }
 

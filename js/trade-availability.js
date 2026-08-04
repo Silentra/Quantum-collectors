@@ -104,9 +104,12 @@ export function buildTradeReservationCounts(username, {
     }
   }
 
+  // active + processing both reserve the creator's offered card (fulfill in flight).
+  // Terminal statuses reserve nothing. excludeListingIds skips the listing under validation.
   const allListings = listings ?? db.get('trades/listings') ?? {};
   for (const [listingId, listing] of Object.entries(allListings)) {
-    if (!listing || listing.status !== 'active') continue;
+    if (!listing) continue;
+    if (listing.status !== 'active' && listing.status !== 'processing') continue;
     if (excludeListing.has(listingId) || excludeListing.has(listing.id)) continue;
     if (listing.expiresAt && now > listing.expiresAt) continue;
     if (listing.ownerId === username) {

@@ -6,7 +6,7 @@
  * directly modify inventories for trades.
  *
  * Final acceptance commits via one updateAcknowledged multi-path write
- * (see trade-direct-plan.js). Listings use executeListingTrade separately.
+ * (see trade-direct-plan.js). Listings use claim+fulfill via trade-listing-plan.js.
  */
 
 import * as db from './database.js';

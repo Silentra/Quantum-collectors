@@ -12,7 +12,7 @@
  * recomputed, written only when changed; NO uniqueCardsDiscovered / cardsCollected
  * (notifyCardInventoryChanged semantics).
  *
- * Listings / executeListingTrade are intentionally untouched.
+ * Listings use a separate two-write claim+fulfill path (trade-listing-plan.js).
  */
 
 import * as db from './database.js';

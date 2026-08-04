@@ -266,8 +266,17 @@ export function validateListingTrade({
   // ── 1. Listing must exist ───────────────────────────────────────────────────
   if (!listing) return fail('LISTING_NOT_FOUND');
 
-  // ── 2. Listing must be active ──────────────────────────────────────────────
-  if (listing.status !== 'active') return fail('LISTING_NOT_ACTIVE');
+  // ── 2. Listing must be active (or processing for the listing under fulfill) ─
+  // After claim, status is processing; allow validation when excludeListingId
+  // matches so reservation math can exclude this listing without failing status.
+  const listingKey = listing.id || excludeListingId;
+  const isOwnProcessingClaim =
+    listing.status === 'processing' &&
+    excludeListingId &&
+    listingKey === excludeListingId;
+  if (listing.status !== 'active' && !isOwnProcessingClaim) {
+    return fail('LISTING_NOT_ACTIVE');
+  }
 
   // ── 3. Listing must not be expired ─────────────────────────────────────────
   if (listing.expiresAt && Date.now() > listing.expiresAt) return fail('LISTING_EXPIRED');

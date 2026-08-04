@@ -618,3 +618,193 @@ export async function clearActiveSessionIfOwned(username, sessionId) {
     return { ok: false, cleared: false, mode: 'firebase', error: e.message || 'Transaction failed' };
   }
 }
+
+/**
+ * One-shot read of a path from Firebase (server-current when connected).
+ * Local-only mode returns the cache value.
+ * @param {string} path
+ * @returns {Promise<{ ok: boolean, value: any, mode: 'firebase'|'local', error?: string }>}
+ */
+export async function getAcknowledged(path) {
+  if (!_db) return { ok: false, value: null, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized' };
+
+  if (!_useFirebase || !_fbDb) {
+    return { ok: true, value: get(path), mode: 'local' };
+  }
+
+  const fbPath = path.split('/').filter(Boolean).join('/');
+  try {
+    const snap = await _fbDb.ref(fbPath).once('value');
+    const value = snap.val();
+    applyLocalOnly(path, value == null ? null : value);
+    return { ok: true, value, mode: 'firebase' };
+  } catch (e) {
+    console.warn('[DB] getAcknowledged error:', fbPath, e.message);
+    return { ok: false, value: null, mode: 'firebase', error: e.message || 'Read failed' };
+  }
+}
+
+/**
+ * Claim an active, unexpired listing via RTDB transaction (multi-accepter guard).
+ * @param {string} listingId
+ * @param {{ accepterId: string, chosenCardId: string, claimId: string, now?: number }} claim
+ * @returns {Promise<{ ok: boolean, claimed: boolean, listing?: object|null, reason?: string, mode: string, error?: string }>}
+ */
+export async function claimListingIfActive(listingId, claim) {
+  if (!_db || !listingId || !claim?.accepterId || !claim?.chosenCardId || !claim?.claimId) {
+    return {
+      ok: false,
+      claimed: false,
+      listing: null,
+      reason: 'INVALID_CLAIM',
+      mode: _useFirebase ? 'firebase' : 'local',
+    };
+  }
+
+  const path = `trades/listings/${listingId}`;
+  const now = Number.isFinite(Number(claim.now)) ? Number(claim.now) : Date.now();
+
+  const tryClaim = (current) => {
+    if (!current || typeof current !== 'object') return;
+    if (current.status !== 'active') return;
+    if (current.expiresAt && now > current.expiresAt) return;
+    return {
+      ...current,
+      id: current.id || listingId,
+      status: 'processing',
+      processingBy: claim.accepterId,
+      processingAt: now,
+      claimId: claim.claimId,
+      fulfilledCardId: claim.chosenCardId,
+    };
+  };
+
+  if (!_useFirebase || !_fbDb) {
+    const current = get(path);
+    const next = tryClaim(current);
+    if (!next) {
+      const reason = current?.expiresAt && now > current.expiresAt
+        ? 'LISTING_EXPIRED'
+        : 'LISTING_NOT_ACTIVE';
+      return { ok: true, claimed: false, listing: current, reason, mode: 'local' };
+    }
+    applyLocalOnly(path, next);
+    return { ok: true, claimed: true, listing: next, mode: 'local' };
+  }
+
+  try {
+    const result = await _fbDb.ref(path).transaction(current => tryClaim(current));
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: true,
+      extraPaths: ['listing-claim'],
+    });
+    const nextVal = result.snapshot ? result.snapshot.val() : null;
+    applyLocalOnly(path, nextVal == null ? null : nextVal);
+    const claimed = result.committed === true;
+    if (!claimed) {
+      const reason = nextVal?.expiresAt && now > nextVal.expiresAt
+        ? 'LISTING_EXPIRED'
+        : 'LISTING_NOT_ACTIVE';
+      return { ok: true, claimed: false, listing: nextVal, reason, mode: 'firebase' };
+    }
+    return { ok: true, claimed: true, listing: nextVal, mode: 'firebase' };
+  } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: false,
+      extraPaths: ['listing-claim'],
+    });
+    console.warn('[DB] claimListingIfActive error:', e.message);
+    return {
+      ok: false,
+      claimed: false,
+      listing: null,
+      mode: 'firebase',
+      error: e.message || 'Claim transaction failed',
+    };
+  }
+}
+
+/**
+ * Revert processing → active only if this claimId still owns the listing.
+ * Never touches fulfilled / cancelled / expired / failed.
+ * @param {string} listingId
+ * @param {string} claimId
+ * @returns {Promise<{ ok: boolean, released: boolean, listing?: object|null, mode: string, error?: string }>}
+ */
+export async function releaseListingClaimIfOwned(listingId, claimId) {
+  if (!_db || !listingId || !claimId) {
+    return {
+      ok: false,
+      released: false,
+      listing: null,
+      mode: _useFirebase ? 'firebase' : 'local',
+      error: 'Invalid arguments',
+    };
+  }
+
+  const path = `trades/listings/${listingId}`;
+
+  const tryRelease = (current) => {
+    if (!current || typeof current !== 'object') return;
+    if (current.status !== 'processing') return;
+    if (current.claimId !== claimId) return;
+    const next = { ...current, status: 'active' };
+    delete next.processingBy;
+    delete next.processingAt;
+    delete next.claimId;
+    // Keep fulfilledCardId cleared on release — it was set as chosen during claim
+    delete next.fulfilledCardId;
+    return next;
+  };
+
+  if (!_useFirebase || !_fbDb) {
+    const current = get(path);
+    const next = tryRelease(current);
+    if (!next) {
+      return { ok: true, released: false, listing: current, mode: 'local' };
+    }
+    applyLocalOnly(path, next);
+    return { ok: true, released: true, listing: next, mode: 'local' };
+  }
+
+  try {
+    const result = await _fbDb.ref(path).transaction(current => tryRelease(current));
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: true,
+      extraPaths: ['listing-release'],
+    });
+    const nextVal = result.snapshot ? result.snapshot.val() : null;
+    applyLocalOnly(path, nextVal == null ? null : nextVal);
+    return {
+      ok: true,
+      released: result.committed === true,
+      listing: nextVal,
+      mode: 'firebase',
+    };
+  } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: false,
+      extraPaths: ['listing-release'],
+    });
+    console.warn('[DB] releaseListingClaimIfOwned error:', e.message);
+    return {
+      ok: false,
+      released: false,
+      listing: null,
+      mode: 'firebase',
+      error: e.message || 'Release transaction failed',
+    };
+  }
+}
