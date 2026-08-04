@@ -3,6 +3,7 @@
  *
  * Initializes all systems in correct order:
  * 1. Database (Firebase RTDB or localStorage fallback)
+ * 1b. Shared defs hydration (S2 — beside root listener)
  * 2. Auth (session restore from localStorage)
  * 3. Config
  * 4. Seed data
@@ -11,6 +12,10 @@
 
 import * as db from './js/database.js';
 import * as metrics from './js/db-metrics.js';
+import {
+  hydrateSharedDefs,
+  isSharedDefsReady,
+} from './js/db-hydration.js';
 import * as config from './js/config.js';
 import * as cards from './js/cards.js';
 import * as packs from './js/packs.js';
@@ -34,8 +39,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     // 1. Initialize database (async — connects to Firebase or falls back)
+    // Root once('/') + on('value') remain authoritative (S2 does not disable them).
     await db.initDB();
     console.log('[SciCards] Database initialized');
+
+    // 1b. Phase S2 — explicit sharedDefs once-loads beside root (config/cards/packs/groups).
+    // accessCodes intentionally excluded. No current-player or social subscriptions.
+    metrics.mark('shared-hydrate-start');
+    const sharedHydration = await hydrateSharedDefs();
+    metrics.mark('shared-hydrate-complete');
+    console.log(
+      '[SciCards] Shared hydration:',
+      sharedHydration.status,
+      'paths=',
+      (sharedHydration.pathsHydrated || []).join(','),
+      'ready=',
+      isSharedDefsReady(),
+    );
 
     // 2. Initialize Auth (async — restores session from localStorage)
     metrics.mark('initAuth-start');
@@ -48,13 +68,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     config.loadConfig();
     console.log('[SciCards] Config loaded');
 
-    // 4. Seed default data if empty
+    // 4. Seed default data if empty — only after that shared path's scoped load completed
     metrics.mark('migrations-start');
-    cards.seedDefaultCards();
-    packs.seedDefaultPacks();
-
-    // 4b. Normalize existing concept card types (safe, never crashes)
-    cards.normalizeConceptTypes();
+    if (db.isPathReady('cards')) {
+      cards.seedDefaultCards();
+      cards.normalizeConceptTypes();
+    } else {
+      console.warn('[SciCards] Skipping card seed/normalize — cards path not scoped-ready');
+    }
+    if (db.isPathReady('packs')) {
+      packs.seedDefaultPacks();
+    } else {
+      console.warn('[SciCards] Skipping pack seed — packs path not scoped-ready');
+    }
 
     // Phase B: bulk all-player migrators removed from ordinary startup.
     // Per-player schema/RP/weekly backfill runs on login via applyPostLoginPlayerMaintenance
@@ -63,7 +89,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4e. LB-1: Ensure leaderboardSeasons DB schema exists
     ensureLeaderboardSeasonsSchema();
 
-    // 5. Generate starter access codes if none exist
+    // 5. Generate starter access codes if none exist (root cache; not part of sharedDefs)
     const existingCodes = db.getChildren('accessCodes');
     if (existingCodes.length === 0) {
       auth.generateAccessCodes(10);

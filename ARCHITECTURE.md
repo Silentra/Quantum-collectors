@@ -6,28 +6,31 @@ Formerly developed under the working name SciCards.
 ```
 index.html           - Single-page app shell, all screens/modals, Firebase SDK CDN scripts
 style.css            - Custom styles (cards, tabs, toasts, animations)
-main.js              - Entry point, async init sequence (DB → Auth → Config → Seed → UI)
+main.js              - Entry point, async init (DB → sharedDefs hydrate → Auth → Config → Seed → UI)
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
 js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
-  database.js        - Firebase RTDB + in-memory cache (sync API, async Firebase writes; ack helpers for auth sessions)
+  database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; S2 sharedDefs hydration caller; root listener still authoritative)
+  db-hydration.js    - Named hydration scopes (S2: sharedDefs = config/cards/packs/groups; accessCodes excluded)
   config.js          - Centralized live config (reads from /config DB node)
   auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
   admin.js           - Admin foundation: isAdmin(username), getPlayer, setPlayerData, listPlayers
   player.js          - Player CRUD, inventory, packs, stats
   cards.js           - Card DB, CRUD, seed data (40 starter science cards), Phase 3 schema
-  packs.js           - Pack types, weighted rarity rolling, pack opening
+  packs.js           - Pack types, weighted rarity rolling, acknowledged batched pack opening
   pack-art.js        - Static pack card-back resolution (local WebP → emoji fallback)
-  db-metrics.js      - Phase 1A temporary RTDB diagnostics (opt-in; measurement only)
+  db-metrics.js      - Opt-in RTDB diagnostics (root + scoped path snapshots, subscription registry)
   groups.js          - Group/subgroup hierarchy
   ui.js              - All DOM rendering, event wiring, screen management
   shell-theme.js     - Application shell theme hooks (data-* attrs, title mount, identity accent); no cosmetic visuals
   toast.js           - Toast notification utility
   research.js        - Research Points (RP) infrastructure: schema, migration, helpers, leaderboard queries
   trading.js         - Phase T-1 validation helpers (pure) + Phase T-2 direct trade lifecycle (create/respond/confirm/decline/cancel/getPending)
-  trade-execution.js - Atomic direct-trade swap helper: executeDirectTrade(), cooldown read/format helpers
+  trade-execution.js - Direct-trade swap + cooldown helpers; batches accept via trade-direct-plan.js
+  trade-direct-plan.js - One-write acknowledged direct-trade accept plan/commit
   trade-listings.js  - Phase T-4 listing lifecycle: createListing, cancelListing, acceptListing, getVisibleListings, getMyActiveListing (deprecated), getMyActiveListings, getMaxActiveListingsPerPlayer, expireStaleListings, getListingCooldown
-  trade-listing-execution.js - Atomic listing-trade swap helper: executeListingTrade() — isolated, same architecture as trade-execution.js
+  trade-listing-execution.js - Listing claim+fulfill: executeListingTrade() — RTDB claim then one updateAcknowledged
+  trade-listing-plan.js - Multi-path listing fulfill plan + ack recovery (re-read before release)
   trade-confirm-modal.js - Sandbox-safe confirmation modal (showTradeConfirmModal), replaces native confirm() blocked by iframe sandbox
   trade-ui.js        - Trading tab UI: Direct (offer → return → confirm) / Listings; no cross-player inventory browse for offers; reactive refresh
   quest-config.js    - Research Project config: DEFAULT_QUEST_CONFIG, AURA_SCALING, Firebase mirror (config/quests), cached getter, getCardPowerContribution()
@@ -49,6 +52,7 @@ js/
   shop-generation.js - Phase 3 pure weighted shop generation engine: ownership filtering, slot planning, scoped reroll helpers
   shop-validation.js - Shop validation guards: purchases, rerolls, freezing, consumables, discounts, project proposal eligibility, profile identity
   shop-mutations.js  - Canonical shop economy mutation layer: purchases, RP, item stacks, cosmetics, history, refresh/rerolls/freezing, profile identity
+  shop-purchase-plan.js - One-write acknowledged shop purchase plan/commit (RP, grant, slots, history, shopPurchases, achievements)
   shop-consumables.js - BehaviorType-routed consumable execution layer; no item-specific gameplay logic
   shop-ui.js         - Thin player-facing shop tab renderer; delegates actions to canonical shop mutations
   shop-admin.js      - Additive admin Shop tools: config and item override UI wrappers
@@ -58,9 +62,9 @@ js/
 
 ### DB Schema (database.js nodes → Firebase RTDB paths)
 - `/config` - gameOpen, registrationOpen, adminPassword, packOdds, economy{packsPerDay, tradeCooldownMinutes, maxInventorySize, **directTradeCooldownMinutes**}, progression, seasonal, **quests{...}**, **projectBalance{...}**, **shop{shopRefreshDays,shopSlotCount,rerollCosts,itemOverrides{...}}**, **achievements{meta{enabled,version},definitions{id→{enabled,hidden,name,description,category,sortOrder,rarity,icon,conditions[],conditionMode,rewards[],notifyOnUnlock}}}**
-- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards[],featuredAchievements[]}**, **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
+- `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **lastListingAcceptAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards[],featuredAchievements[]}**, **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
-- `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?
+- `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?, processingBy?, processingAt?, claimId?
 - `/cards/{cardId}` - id, name, rarity, type, field, effect, image, flavor, created, **imageUrl, keyFact, auraType, enabled**, conceptType (concept cards only)
 - `/packs/{packId}` - id, name, cardsPerPack, odds{rarity:pct}, enabled
 - `/groups/{groupId}` - id, name, parent
@@ -230,7 +234,7 @@ Unknown packs and missing/failed images keep the existing emoji presentation (ti
 **Export**: rectangular WebP **600×840** (exact **5:7**), q75–82. Do **not** bake rounded/transparent corners — CSS `border-radius` + `overflow: hidden` clips. Keep important art inside a safe region away from the clipped corners. Print masters are separate (e.g. 750×1050 @300 DPI for 2.5×3.5 in; bleed follows printer template).
 
 ### Trading System (Phase T-1 + T-2 + T-3 + T-4 + T-6)
-- **Eight modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing atomic swap), `trade-availability.js` (copy-aware reservation math), `trade-lock-helpers.js` (legacy wrappers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)
+- **Eight modules**: `trading.js` (validation + direct lifecycle), `trade-execution.js` (direct atomic swap), `trade-listings.js` (listing lifecycle), `trade-listing-execution.js` (listing claim+fulfill), `trade-listing-plan.js` (fulfill multi-path plan), `trade-availability.js` (copy-aware reservation math), `trade-lock-helpers.js` (legacy wrappers), `trade-confirm-modal.js` (sandbox-safe confirmation modal), `trade-ui.js` (UI rendering)
 - **DB structure**: `/trades/direct/{tradeId}` for direct trades, `/trades/listings/{listingId}` for anonymous listings. Migration from flat `/trades/{tradeId}` happens automatically on init.
 - **Phase T-1 — Pure Validation**:
   - `validateDirectTradeOffer()` — offer creation only (no target inventory read)
@@ -246,46 +250,50 @@ Unknown packs and missing/failed images keep the existing emoji presentation (ti
   - `cancelTrade` — A only while `awaiting_target_response`
   - `getPendingTrades(username)` — incoming = offers awaiting B; outgoing = A's active offers/proposals
   - **No cross-player inventory browsing** in the offer UI; execution still reloads both players for correctness
-- **Atomic Direct Execution** (`trade-execution.js`):
-  - `executeDirectTrade(trade)` — the ONLY function that mutates inventories for direct trades
-  - Requires status `awaiting_offerer_confirmation` and non-null `requestedCardId`
-  - Flow: reload trade → verify status → reload players/cards → rerun full validation → check BOTH cooldowns → compute inventories → re-check status → `processing` → write inventories/stats/cooldowns/progression → `accepted` + `completedAt`
-  - On validation/cooldown failure: `failed` + `failureReason`, no inventory mutation
-  - Cooldown (`lastDirectTradeAt`) applied to **both** players only on successful swap
+- **Atomic Direct Execution** (`trade-execution.js` + `trade-direct-plan.js`):
+  - `executeDirectTrade(trade)` — the ONLY function that mutates inventories for direct trades (async; one `updateAcknowledged`)
+  - Requires status `awaiting_offerer_confirmation` and non-null `requestedCardId`; rejects `offeredCardId === requestedCardId`
+  - Flow: reload trade → verify awaiting confirmation → reload players/cards → validation → BOTH cooldowns → build plan → lock → single multi-path `accepted` + inventories/stats/achievements
+  - On validation/cooldown failure: `markDirectTradeFailedIfAwaiting` only (never clobber terminal/non-actionable status → `STALE_TRADE_STATE`)
+  - Cooldown (`lastDirectTradeAt`) applied to **both** players only on successful swap; same timestamp as `completedAt`
+  - Unique/aura written only when changed; offerer client toasts only offerer achievement unlocks
 - **Reservations** (`trade-availability.js` — `ACTIVE_DIRECT_TRADE_STATUSES`):
   - `awaiting_target_response`: reserve A's `offeredCardId`
   - `awaiting_offerer_confirmation` / `processing`: reserve offered + `requestedCardId` (null-safe)
-  - Terminal statuses reserve nothing; listing reservations unchanged (`active` listings only)
-- **Phase T-4 — Anonymous Trade Listings** (`trade-listings.js` + `trade-listing-execution.js`):
-  - `createListing(ownerId, offeredCardId, requestedCardIds)` — max `economy.maxActiveListingsPerPlayer` active listings per player (config-driven, default 1), 1–3 requestedCardIds, all same rarity as offered, group-scoped, cooldown check
+  - Terminal statuses reserve nothing; **listing reservations** include `active` and `processing` (creator’s offered card stays reserved during claim→fulfill). Validation of the executing listing passes `excludeListingId` so it does not reserve against itself.
+- **Phase T-4 — Anonymous Trade Listings** (`trade-listings.js` + `trade-listing-execution.js` + `trade-listing-plan.js`):
+  - `createListing(ownerId, offeredCardId, requestedCardIds)` — async; one `updateAcknowledged` (full listing including `id` + `lastListingCreatedAt`); max `economy.maxActiveListingsPerPlayer` active listings per player (config-driven, default 1), 1–3 requestedCardIds, all same rarity as offered, group-scoped, cooldown check; push key via `generatePushKey` (no write)
   - `cancelListing(listingId, playerId)` — cancellation does NOT remove posting cooldown
-  - `acceptListing(listingId, accepterId, chosenCardId)` — delegates to `executeListingTrade()`
+  - `acceptListing(listingId, accepterId, chosenCardId)` — async; delegates to `executeListingTrade()`
   - `getVisibleListings(username)` — returns active listings in player's group, sorted newest-first
   - `getMyActiveListing(username)` — @deprecated, returns first active listing or null (wraps getMyActiveListings)
   - `getMyActiveListings(username)` — returns ALL active listings owned by player, sorted newest-first
   - `getMaxActiveListingsPerPlayer()` — exported config accessor for UI
   - `expireStaleListings()` — scans all active listings, expires any past their `expiresAt`, called on tab render
-  - `getListingCooldown(username)` — separate cooldown (`lastListingCreatedAt`, configurable `economy.listingCooldownMinutes` default 30)
-  - Listing status lifecycle: `active → fulfilled|cancelled|expired|failed`
-  - Listing schema: `{ id, ownerId, offeredCardId, requestedCardIds[], createdAt, expiresAt, groupId, status, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason? }`
+  - `getListingCooldown(username)` — separate **create** cooldown (`lastListingCreatedAt`, configurable `economy.listingCooldownMinutes`)
+  - Listing status lifecycle: `active → processing → fulfilled`, or terminal `cancelled` / `expired` / `failed` (failed claim release returns `processing → active`)
+  - Listing schema: `{ id, ownerId, offeredCardId, requestedCardIds[], createdAt, expiresAt, groupId, status, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?, processingBy?, processingAt?, claimId? }`
   - Anonymous: UI never displays ownerId to other players
   - Hidden players MAY create and accept listings
-- **Atomic Listing Execution** (`trade-listing-execution.js`):
+- **Listing fulfillment** (`trade-listing-execution.js` + `trade-listing-plan.js`):
   - `executeListingTrade(listing, accepterId, chosenCardId)` — the ONLY function that mutates inventories for listing trades
-  - Same architecture as `executeDirectTrade()`: concurrency guard → reload fresh state → rerun validation → check cooldowns → compute inventories → write all mutations → mark fulfilled
-  - Both owner and accepter get `lastDirectTradeAt` cooldown applied (shared trade cooldown)
+  - **Two writes:** (1) `claimListingIfActive` RTDB transaction (`active`+unexpired → `processing` + claim metadata); (2) one `updateAcknowledged` fulfill (inventories/stats/achievements + `fulfilled`, clear claim fields)
+  - On fulfill ack failure: re-read server listing — fulfilled by this accepter/card → success; still `processing` + owned claim → ownership-safe release; otherwise leave `processing` and report `WRITE_UNCERTAIN`. Never overwrite terminal states.
+  - Cooldowns on fulfill: **accepter only** gets `lastListingAcceptAt`; owner gets **no** fulfill cooldown; **no** `lastDirectTradeAt` on listing fulfill (`lastListingCreatedAt` is create-only)
+  - Achievements persist for both players; UI toasts unlocks for the **accepter** only
 - **Cooldowns**:
-  - `getDirectTradeCooldown(username)` — shared by direct trades and listing acceptance. Configurable via `config.economy.directTradeCooldownMinutes` (default 30).
+  - `getDirectTradeCooldown(username)` — direct trades only (`lastDirectTradeAt`). Configurable via `config.economy.directTradeCooldownMinutes`.
   - Direct: create/respond blocked if that player is on cooldown; decline/cancel do not apply cooldown; successful final swap applies cooldown to both
-  - `getListingCooldown(username)` — separate cooldown for creating listings. Configurable via `config.economy.listingCooldownMinutes` (default 30). Uses `players/{username}/lastListingCreatedAt`.
-  - Listing expiration: `config.economy.listingExpirationHours` (default 24).
+  - `getListingCooldown(username)` — separate cooldown for **creating** listings. Configurable via `config.economy.listingCooldownMinutes`. Uses `players/{username}/lastListingCreatedAt`.
+  - `getListingAcceptCooldown(username)` — separate cooldown for **accepting** listings. Configurable via `config.economy.listingAcceptCooldownMinutes`. Uses `players/{username}/lastListingAcceptAt` (accepter only on fulfill).
+  - Listing expiration: `config.economy.listingExpirationHours`.
 - **Trade UI** (`trade-ui.js`):
   - `renderTrading()` — entry point called by ui.js when Trading tab activates; resets reactive hashes on call
   - `cleanupTrading()` — clears cooldown interval when leaving tab
   - **Sub-tabs**: "🤝 Direct Trades" and "📋 Trade Listings" toggle between views
   - **Direct sub-tab**: cooldown banner; incoming (B: offered card + own same-rarity return picker + decline); outgoing (waiting vs response-received confirm); send offer (player picker + A's card only — no target inventory)
-  - **Listings sub-tab**: listing cooldown banner, "My Listings (n/max)" section (all owned listings + create form when below max), "Available Listings" section (`id="available-listings-section"`, anonymous, group-scoped)
-  - Create listing form: offered card dropdown → dynamic checkbox list (same-rarity cards, max 3) → "Post Listing" button
+  - **Listings sub-tab**: listing-create + listing-accept cooldown banners, "My Listings (n/max)" section (all owned listings + create form when below max), "Available Listings" section (`id="available-listings-section"`, anonymous, group-scoped); create and accept are async with in-flight guards; accept toasts accepter-only unlocks
+  - Create listing form: offered card dropdown → dynamic checkbox list (same-rarity cards, max 3) → "Post Listing" button (success toast only after acknowledged write)
   - Available listings show offered card + requested cards (with ✓ for owned cards, strikethrough for unowned), "Trade: Give {card}" buttons for each fulfillable card
   - Player picker filters to same-group, non-restricted, non-hidden players (metadata only)
   - **Lightweight reactive refresh helpers** (Phase T-8.5A):
@@ -409,7 +417,7 @@ Temporary **measurement-only** instrumentation. **Disabled by default.**
 | Verbose | `localStorage.setItem('qc-db-metrics-verbose', 'true')` |
 | API | `window.qcDbMetrics.summary()` / `reset()` / `resetAll()` / `enable()` / `disable()` / `help()` |
 
-Collects: root `once` + `on('value')` snapshot counts and **estimated JSON bytes** (`Blob`/`TextEncoder` — **not** Firebase billed transfer), write counts by op/path (redacted; no values/passwords/session ids), local write↔snapshot **correlation only**, `scicards_db` persist counts/sizes, in-memory `onValue` fan-in counts, startup milestones. Does **not** change listeners, migrations, gameplay, or write batching. No metrics written to Firebase.
+Collects: root `once` + `on('value')` snapshot counts and **estimated JSON bytes** (`Blob`/`TextEncoder` — **not** Firebase billed transfer), **scoped path snapshots** (`scoped-once` / `scoped-subscription`), scoped subscription registry lifecycle, write counts by op/path (redacted; no values/passwords/session ids), local write↔snapshot **correlation only**, `scicards_db` persist counts/sizes, in-memory `onValue` fan-in counts, startup milestones. Does **not** change listeners, migrations, gameplay, or write batching. No metrics written to Firebase.
 
 ### Phase A — Normalizer idempotency (write-storm fix)
 Per-player normalizers are **idempotent under RTDB null/empty semantics** (absent ≡ null for unequipped defaults; empty lists skip rewrite; object-shaped arrays compared semantically).
@@ -426,6 +434,82 @@ Per-player normalizers are **idempotent under RTDB null/empty semantics** (absen
 [`main.js`](main.js) no longer calls `migrateAllPlayersRP`, `migrateAllPlayersLeaderboardStats`, `migrateAllPlayersWeeklyPack`, or `migrateAllPlayersPhase2A` on ordinary load. Those helpers remain exported for admin/manual use. Current-player backfill runs in `applyPostLoginPlayerMaintenance`: `ensurePlayerRPFields`, `ensurePlayerUniqueCardsOwned`, `checkAndResetWeeklyCycle`, `normalizePlayerSchema`. Root `on('value')` listener is unchanged.
 
 Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sync ± rare one-shot seeds). No `players/{other-user}/...` on normal startup.
+
+### Pack-opening write batching
+[`packs.openPack`](js/packs.js) pre-rolls cards once, builds absolute multi-path updates (pack consume, aggregated inventory qty, `cardsCollected` / `packsOpened` / unique / aura / `firstPackOpened`, plus achievement progress/unlock entries from [`planAchievementUpdatesForStats`](js/achievement-mutations.js)), and commits with **one** `updateAcknowledged`. Reveal runs only after ack. Cross-tab: `navigator.locks` when available + per-tab UI mutex.
+
+**Option B residual race:** Pre-commit reads use the **current in-memory cache**, not a guaranteed server-fresh snapshot. Same-session tabs that lack `navigator.locks` (or exotic multi-client cases) can still TOCTOU the last pack. Single-session auth + locks cover the classroom default; a pack-qty RTDB transaction is deferred unless abuse appears.
+
+### Research project claim write batching
+- **Product boundary preserved:** ACTIVE→COMPLETE remains automatic via `syncProjects` (~1 write). Student **Claim Rewards** is a separate COMPLETE→CLAIMED action.
+- **Claim persistence:** [`commitProjectClaim`](js/project-claim-plan.js) builds one absolute multi-path update (projects array, RP lifetime/spendable/seasonal, weekly reset+progress, streaks/`projectsCompleted`/`researchStats/breakthroughs`, aggregated card inventory + derived card stats, achievement entries via `planAchievementUpdatesForStats`) and commits with **one** `updateAcknowledged`.
+- **Weekly threshold:** claim only advances `weeklyRPProgress` (after in-plan cycle reset if due). Crossing `getWeeklyRPRequired` does **not** auto-grant the weekly pack — `claimWeeklyPack` stays separate (unchanged).
+- **Admin alignment:** `adminCompleteActiveProject` force-resolves in memory then uses the same claim planner. This **intentionally corrects** the old admin path that incremented `projectsCompleted`/breakthroughs inline and skipped `recordProjectOutcome` / streak / full achievement evaluation.
+- **Option B race:** claim revalidates COMPLETE from cache inside `navigator.locks`; not server-fresh.
+
+### Direct-trade acceptance write batching
+- **Target:** final Accept only (`confirmTrade` → `executeDirectTrade`). Offer/counteroffer unchanged.
+- **One** `updateAcknowledged` via [`trade-direct-plan.js`](js/trade-direct-plan.js): `awaiting_offerer_confirmation` → `accepted` plus both players’ inventory leaf paths, shared `completedAt`/`lastDirectTradeAt` timestamp, `progression/firstTrade`, `tradesCompleted`, unique/aura **only when changed**, achievement entries for both players.
+- **`processing`:** no longer a separate network write; atomic multi-path replaces the old fragmented-write guard. Status remains in reservation sets for legacy/in-flight.
+- **Toasts:** confirming offerer’s client only toasts **offerer** unlocks (`notifiedOfferer`), not the target’s.
+- **Failed marking:** validation/cooldown failures call `markDirectTradeFailedIfAwaiting` — never overwrite `accepted`/`declined`/`cancelled`/`failed`/`processing`; UI treats that as `STALE_TRADE_STATE` and rerenders.
+- **Option B:** cache revalidation + `navigator.locks` `qc-direct-trade:{tradeId}`; not server-fresh.
+
+### Listing creation write batching
+- **Target:** Post Listing only (`_handleCreateListing` → `createListing`). Cancellation and fulfillment unchanged by this pass.
+- **One** `updateAcknowledged`: `trades/listings/{listingId}` (complete record including `id`, `status: active`, shared `createdAt`/`expiresAt`) + `players/{owner}/lastListingCreatedAt` (same `now`).
+- **Key gen:** `generatePushKey('trades/listings')` — Firebase `ref.push().key` locally (no network write); `push()` reuses the same helper.
+- **No partial listing:** id is present on first persistence; cooldown only written on successful ack; failure leaves no listing and no cooldown.
+- **Reservations:** derived from `status: active` after commit (no separate reservation write).
+- **UI:** success toast only after ack; `createInFlight` + disable Post; `navigator.locks` `qc-listing-create:{username}` with cache revalidation after lock (Option B). Residual cross-device max-active race unchanged.
+- **Metrics target:** 1 write / ~1 root snapshot (was 3 / 3).
+
+### Listing fulfillment write batching
+- **Target:** Accept/fulfill only (`acceptListing` → `executeListingTrade`). Cancellation unchanged.
+- **Two writes / ~2 root snapshots:** (1) `claimListingIfActive` RTDB transaction — `active`+unexpired → `processing` + `processingBy`/`processingAt`/`claimId`/`fulfilledCardId`; (2) one `updateAcknowledged` via [`trade-listing-plan.js`](js/trade-listing-plan.js) — inventories, accepter `lastListingAcceptAt`, both `progression/firstTrade`, `tradesCompleted`, unique/aura when changed, achievements both players, listing → `fulfilled` + clear claim fields.
+- **Why not one write:** multiple different students can race the same listing; cache-only claim is unsafe.
+- **Reservations:** `active` and `processing` listings reserve the owner’s offered card; fulfill validation uses `excludeListingId`.
+- **Ack failure recovery:** `getAcknowledged` re-read first — fulfilled by this accepter/card → success; still processing + owned claim → `releaseListingClaimIfOwned`; uncertain → leave processing + `WRITE_UNCERTAIN`. Never overwrite terminal listing states.
+- **Cooldowns (code truth):** accepter `lastListingAcceptAt` only; no owner fulfill cooldown; no `lastDirectTradeAt` on listing fulfill.
+- **Toasts:** accepter client only toasts `notifiedAccepter`.
+- **Option B:** `navigator.locks` `qc-listing-fulfill:{listingId}` around fulfill commit; claim is server-transactional.
+
+### Shop purchase write batching
+- **Target:** Buy only (`purchaseShopItem`). Reroll/freeze/generation/equip/consumable-use unchanged.
+- **One** `updateAcknowledged` via [`shop-purchase-plan.js`](js/shop-purchase-plan.js): `currencies/currentResearchPoints`, grant leaf (`cosmetics/owned/{id}` | `items/{id}` | `inventory/{id}` | `packs/{id}`), full `shop/currentRotation/slots` with `purchased: true`, capped `purchaseHistory`, `stats/shopPurchases`, achievement entries for `shopPurchases` only.
+- **Price:** persisted slot `currentPrice ?? basePrice` (`canPurchaseItem`); does not recompute discounts from live config.
+- **No double apply:** does **not** call `bumpPlayerStat(SHOP_PURCHASES)` after commit.
+- **Parity:** does not bump `cosmeticsUnlocked` or collection-derived card stats on shop card grants.
+- **UI:** success + achievement unlock toasts only after ack; `actionInFlight` + `navigator.locks` `qc-shop-purchase:{username}` with cache revalidation under lock.
+- **Metrics target:** 1 write / ~1 root snapshot (was ~7 / ~7).
+
+### Phase S1 — Scoped Firebase path primitives (additive)
+Infrastructure only — **root `once('/')` + `on('value')` unchanged** and remain authoritative for startup/features.
+
+New APIs on [`database.js`](js/database.js):
+- `loadPathOnce(path)` — Firebase `once` (or local mark-ready); merges **only** that subtree via `applyScopedSnapshot`
+- `subscribePath(path)` — owns Firebase `.on('value')` for the path; refCounted reuse for duplicates; `unsubscribe` does **not** evict cache
+- `isPathReady` / `waitForPath` — readiness is hierarchical **downward** (ready ancestor ⇒ child ready; not reverse). Root hydration does not mark scoped readiness
+- `clearCachedPath(path)` — explicit subtree eviction + clear readiness under path
+- `getSubscriptionRegistry()` — active scoped Firebase subscriptions (separate from `db.onValue` observers)
+
+Scoped merges notify exact-path, ancestor, and **descendant** in-process listeners. Metrics: `recordPathSnapshot` (`scoped-once` | `scoped-subscription`), `recordScopedSubscription`, persist reasons `scoped-once` / `scoped-subscription` / `scoped-clear`. Root events labeled `initial-root` / `root-listener`.
+
+### Phase S2 — Explicit shared-data hydration (beside root)
+Additive — **root `once('/')` + `on('value')` unchanged** and remain authoritative. No bandwidth claim while root and scoped snapshots coexist.
+
+[`js/db-hydration.js`](js/db-hydration.js) owns named scope **`sharedDefs`** only:
+- Paths: `config`, `cards`, `packs`, `groups` via `loadPathOnce` (parallel; pending/ready reuse)
+- **`accessCodes` excluded** — not part of sharedDefs; not broadened
+- No `subscribePath` for shared defs in S2 (no permanent shared Firebase `.on`)
+- No current-player / trading / leaderboard / admin / directory scopes yet (S3+)
+- Flag prep: `localStorage.qc_scoped_loading` + `config/firebase/scopedLoadingEnabled` read helpers — **does not** disable root
+
+[`main.js`](main.js) awaits `hydrateSharedDefs()` after `initDB()` and **before** card/pack seed/normalize. Seeds run only when that path’s scoped load completed (`isPathReady`).
+
+Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrationStatus()` / `help()`.
+
+Duplicate `hydrateSharedDefs` / `loadPathOnce` calls reuse in-flight work or already-ready paths (no repeated Firebase reads). Metrics continue to label `initial-root` / `root-listener` vs `scoped-once`.
 
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
@@ -561,28 +645,28 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 ### Layer 2 — Unified Atomic Economy Mutation Layer
 - **Trusted economy path**: shop purchases and reusable economy writes now route through `shop-mutations.js`. Future UI should not directly mutate `currencies`, `cosmetics`, `items`, purchased slot state, or `purchaseHistory`.
 - **Purchase validation** (`shop-validation.js → canPurchaseItem()`):
-  - Checks player snapshot, rotation/slot validity, valid enabled item definition, unpurchased slot state, supported `rp` currency, finite affordable `currentPrice`, duplicate cosmetic ownership, and supported item types.
-  - Supported purchase grants in this layer: `ITEM_TYPES.COSMETIC` and `ITEM_TYPES.CONSUMABLE`. Pack/card shop purchases remain future work and fail closed unless definitions and validation are added later.
-- **Canonical helpers** (`shop-mutations.js`):
-  - `purchaseShopItem(username, slotIndex, options)` is the single purchase execution entry point.
-  - `grantConsumable(username, itemId, quantity)`, `consumeItem(username, itemId, quantity)`, and `unlockCosmetic(username, itemId)` are reusable scoped economy helpers.
-  - Purchase execution computes the full write plan before persistence: RP deduction, grant path, purchased slot flag, and capped purchase history.
+  - Checks player snapshot, rotation/slot validity, valid enabled item definition, unpurchased slot state, supported `rp` currency, finite affordable `currentPrice ?? basePrice`, duplicate cosmetic ownership, and supported item types.
+  - Supported purchase grants: `ITEM_TYPES.COSMETIC`, `CONSUMABLE`, `CARD`, and `PACK`.
+- **Canonical helpers** (`shop-mutations.js` + `shop-purchase-plan.js`):
+  - `purchaseShopItem(username, slotIndex, options)` is the async purchase execution entry point (one `updateAcknowledged`).
+  - `grantConsumable(username, itemId, quantity)`, `consumeItem(username, itemId, quantity)`, and `unlockCosmetic(username, itemId)` are reusable scoped economy helpers (unchanged; not used by the batched purchase path for cosmeticsUnlocked).
+  - Purchase builds the full multi-path plan before persistence: RP deduction, grant path, purchased slot flag, capped purchase history, `shopPurchases`, and planned achievements.
   - `shop-consumables.js` delegates successful consumable decrement to `consumeItem()` instead of writing item quantities itself.
 - **Purchase grants**:
   - Cosmetic purchases persist `players/{username}/cosmetics/owned/{itemId} = true` and do not auto-equip.
   - Consumable purchases increment `players/{username}/items/{itemId}` by the grant quantity, default `1`.
+  - Card/pack purchases increment `inventory/{id}` / `packs/{id}` without collection-stat side effects on this path.
   - Purchased slots are marked `purchased: true`, making them ineligible for reroll, freeze, and discount mutation paths.
 - **Purchase history**:
   - Uses `createPurchaseHistoryEntry()` and `normalizePurchaseHistory()`.
   - Stores compact entries with `itemId`, `pricePaid`, `currency`, `purchasedAt`, `source: 'shop'`, `slotId`, and `rotationGeneratedAt`.
   - Persists only the capped `players/{username}/purchaseHistory` array, preserving `PURCHASE_HISTORY_MAX`.
 - **Scoped persistence**:
-  - Purchase writes are limited to `currencies/currentResearchPoints`, one grant path (`cosmetics/owned/{itemId}` or `items/{itemId}`), `shop/currentRotation/slots`, and `purchaseHistory`.
+  - Purchase writes are limited to `currencies/currentResearchPoints`, one grant path, `shop/currentRotation/slots`, `purchaseHistory`, `stats/shopPurchases`, and achievement leaf paths — all in one acknowledged multi-path update.
   - No full player rewrites, root scans, new listeners, admin writes, premium currencies, purchase analytics fanout, or Firebase architecture redesign.
 - **Atomicity model**:
-  - All validation and write-plan computation happen before local writes.
-  - `database.js` remains cache-first and Firebase writes remain fire-and-forget; true cross-path remote transactions are not introduced in this layer.
-  - Duplicate execution protection is local: each purchase re-reads the slot and rejects `purchased === true`. Simultaneous-session race handling remains a future scalability/server-authoritative concern.
+  - Validation and write-plan computation happen before the acknowledged commit; failure applies no charge/grant/history/stat/achievement change.
+  - Duplicate execution protection: re-read slot under `qc-shop-purchase:{username}` lock and reject `purchased === true`. Simultaneous-session race handling remains a future scalability concern.
 
 ### Layer 3 — Cosmetic Runtime Layer
 - **Runtime identity scope**: Layer 3 turns owned cosmetics into active profile state and featured selections. It does not add final shop/profile UI, cosmetic previews, animations, admin tooling, monetization, achievements gameplay, new listeners, root scans, or database architecture changes.
