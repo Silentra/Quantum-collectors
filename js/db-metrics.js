@@ -571,7 +571,18 @@ export function summary() {
     disclaimer: 'Estimated JSON bytes — not Firebase billed transfer. Local write↔snapshot links are correlation only (other clients omitted).',
     enabled: _enabled,
     cacheUpdateSources: {
-      note: 'initial-root / root-listener / scoped-once / scoped-subscription',
+      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S2: root and scoped coexist; do not claim bandwidth reduction yet',
+    },
+    startupTimingMs: {
+      milestones: { ..._state.milestones },
+      domToInitDbStart: _milestoneDelta('dom-content-loaded', 'initDB-start'),
+      initDbStartToInitialSnapshot: _milestoneDelta('initDB-start', 'initial-root-snapshot'),
+      initDbStartToComplete: _milestoneDelta('initDB-start', 'initDB-complete'),
+      sharedHydrate: _milestoneDelta('shared-hydrate-start', 'shared-hydrate-complete'),
+      initAuth: _milestoneDelta('initAuth-start', 'initAuth-complete'),
+      migrations: _milestoneDelta('migrations-start', 'migrations-complete'),
+      uiInit: _milestoneDelta('ui-init-start', 'ui-init-complete'),
+      domToReady: _milestoneDelta('dom-content-loaded', 'app-ready'),
     },
     rootSnapshots: {
       total: snapCount,
@@ -615,16 +626,6 @@ export function summary() {
       note: 'Root snapshots notify every registered db.onValue path with no equality check.',
       recentFanIns: _state.listenerFanIns.slice(-20),
     },
-    startupTimingMs: {
-      milestones: { ..._state.milestones },
-      domToInitDbStart: _milestoneDelta('dom-content-loaded', 'initDB-start'),
-      initDbStartToInitialSnapshot: _milestoneDelta('initDB-start', 'initial-root-snapshot'),
-      initDbStartToComplete: _milestoneDelta('initDB-start', 'initDB-complete'),
-      initAuth: _milestoneDelta('initAuth-start', 'initAuth-complete'),
-      migrations: _milestoneDelta('migrations-start', 'migrations-complete'),
-      uiInit: _milestoneDelta('ui-init-start', 'ui-init-complete'),
-      domToReady: _milestoneDelta('dom-content-loaded', 'app-ready'),
-    },
     majorNodes: _state.majorNodes,
   };
 
@@ -654,7 +655,9 @@ Verbose: localStorage.setItem('qc-db-metrics-verbose','true')
 Disable: qcDbMetrics.disable() or set flag false + reload
 API: summary() | reset() | resetAll() | measureMajorNodes()
 Cache update sources: initial-root | root-listener | scoped-once | scoped-subscription
-Bytes are Estimated JSON — not Firebase billed transfer.`);
+(S2 coexistence: root + scoped — do not treat path snaps as bandwidth wins yet)
+Bytes are Estimated JSON — not Firebase billed transfer.
+Hydration: qcDbHydration.getSharedHydrationReport() | help()`);
     },
   };
 }

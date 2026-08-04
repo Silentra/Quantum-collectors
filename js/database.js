@@ -24,15 +24,15 @@
  *   clearActiveSessionIfOwned(u, id)   - ownership-checked session clear
  *   generatePushKey(path)              - push key without write
  *   getAcknowledged(path)              - one-shot remote read + cache patch
- *   loadPathOnce(path, opts)           - S1 scoped once → merge subtree
+ *   loadPathOnce(path, opts)           - S1/S2 scoped once → merge subtree (pending/ready reuse)
  *   subscribePath(path)                - S1 scoped Firebase .on → merge subtree
  *   isPathReady(path) / waitForPath    - S1 hierarchical readiness
  *   clearCachedPath(path)              - explicit subtree eviction (not on unsub)
  *   getSubscriptionRegistry()          - active scoped Firebase subscriptions
  *   isFirebaseConnected()
  *
- * Phase S1: root once + root on('value') remain authoritative for startup/features.
- * Scoped APIs are additive and must not change default app behavior.
+ * Phase S1–S2: root once + root on('value') remain authoritative for startup/features.
+ * Scoped APIs are additive; S2 shared hydration uses loadPathOnce beside the root listener.
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
@@ -61,6 +61,12 @@ const _readyWaiters = new Map();
  * @type {Map<string, { id: string, refCount: number, fbPath: string, handler: Function }>}
  */
 const _fbPathSubscriptions = new Map();
+
+/**
+ * In-flight loadPathOnce work keyed by normalized path (duplicate calls share one network read).
+ * @type {Map<string, Promise<{ ok: boolean, path: string, value: any, mode: string, reused?: boolean, error?: string }>>}
+ */
+const _pendingPathLoads = new Map();
 
 let _scopedSubSeq = 0;
 
@@ -777,23 +783,59 @@ export function clearCachedPath(path) {
 /**
  * One-shot load of a path into the cache (subtree merge only).
  * Does not attach a live Firebase listener.
+ * Duplicate in-flight calls for the same path share one pending Promise.
+ * Paths already marked ready skip the network unless `{ force: true }`.
  * @param {string} path
- * @param {{ timeoutMs?: number }} [options]
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
  * @returns {Promise<{ ok: boolean, path: string, value: any, mode: 'firebase'|'local', reused?: boolean, error?: string }>}
  */
 export async function loadPathOnce(path, options = {}) {
   const normalized = _normalizePath(path);
+  const modeHint = _useFirebase ? 'firebase' : 'local';
   if (!normalized) {
-    return { ok: false, path: '', value: null, mode: _useFirebase ? 'firebase' : 'local', error: 'Invalid path' };
+    return { ok: false, path: '', value: null, mode: modeHint, error: 'Invalid path' };
   }
   if (!_db) {
-    return { ok: false, path: normalized, value: null, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized' };
+    return { ok: false, path: normalized, value: null, mode: modeHint, error: 'Database not initialized' };
   }
 
+  const force = options.force === true;
+
+  if (!force && _isPathReadyNormalized(normalized)) {
+    return {
+      ok: true,
+      path: normalized,
+      value: get(normalized),
+      mode: modeHint,
+      reused: true,
+    };
+  }
+
+  if (!force && _pendingPathLoads.has(normalized)) {
+    const pending = await _pendingPathLoads.get(normalized);
+    return { ...pending, reused: true };
+  }
+
+  const work = _loadPathOnceWork(normalized, options);
+  _pendingPathLoads.set(normalized, work);
+  try {
+    return await work;
+  } finally {
+    if (_pendingPathLoads.get(normalized) === work) {
+      _pendingPathLoads.delete(normalized);
+    }
+  }
+}
+
+/**
+ * @param {string} normalized
+ * @param {{ timeoutMs?: number }} options
+ */
+async function _loadPathOnceWork(normalized, options = {}) {
   if (!_useFirebase || !_fbDb) {
     _markPathReady(normalized);
     _notifyScoped(normalized);
-    return { ok: true, path: normalized, value: get(normalized), mode: 'local' };
+    return { ok: true, path: normalized, value: get(normalized), mode: 'local', reused: false };
   }
 
   const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
@@ -806,7 +848,7 @@ export async function loadPathOnce(path, options = {}) {
     ]);
     const value = snap.val();
     _applyScopedSnapshot(normalized, value, { source: 'scoped-once', persist: true, markReady: true });
-    return { ok: true, path: normalized, value: get(normalized), mode: 'firebase' };
+    return { ok: true, path: normalized, value: get(normalized), mode: 'firebase', reused: false };
   } catch (e) {
     console.warn('[DB] loadPathOnce error:', fbPath, e.message);
     return {
@@ -814,6 +856,7 @@ export async function loadPathOnce(path, options = {}) {
       path: normalized,
       value: null,
       mode: 'firebase',
+      reused: false,
       error: e.message || 'Load failed',
     };
   }
