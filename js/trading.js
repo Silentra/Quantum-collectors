@@ -598,16 +598,21 @@ export function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
  *
  * @param {string} tradeId
  * @param {string} offeringPlayerId
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, notifiedOfferer?: string[], stale?: boolean }>}
  */
-export function confirmTrade(tradeId, offeringPlayerId) {
+export async function confirmTrade(tradeId, offeringPlayerId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
   if (trade.status !== 'awaiting_offerer_confirmation') {
-    return { success: false, reason: 'TRADE_NOT_AWAITING_OFFERER' };
+    return {
+      success: false,
+      reason: 'STALE_TRADE_STATE',
+      stale: true,
+      currentStatus: trade.status,
+    };
   }
   if (trade.offeringPlayerId !== offeringPlayerId) {
     return { success: false, reason: 'NOT_OFFERING_PLAYER' };

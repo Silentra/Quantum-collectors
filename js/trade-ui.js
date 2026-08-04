@@ -28,6 +28,7 @@ import {
   getDirectTradeCooldown,
   formatCooldown,
 } from './trade-execution.js';
+import { toastAchievementUnlocks } from './achievements.js';
 import {
   createListing,
   cancelListing,
@@ -913,6 +914,7 @@ function _wireDirectTradeActionButtons(username, root = document) {
   // A confirms final proposal
   root.querySelectorAll('.trade-confirm-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
+      if (btn.dataset.confirmInFlight === '1') return;
       const tradeId = btn.dataset.tradeId;
       const giveName = btn.dataset.giveName || '?';
       const giveRarity = btn.dataset.giveRarity || '';
@@ -934,13 +936,24 @@ function _wireDirectTradeActionButtons(username, root = document) {
       });
       if (!confirmed) return;
 
-      const result = confirmTrade(tradeId, username);
-      if (result.success) {
-        toast.success('Trade complete! Cards swapped.');
-      } else {
-        toast.error(_friendlyError(result.reason));
+      btn.dataset.confirmInFlight = '1';
+      btn.disabled = true;
+      try {
+        const result = await confirmTrade(tradeId, username);
+        if (result.success) {
+          // Only toast unlocks for the confirming offerer — not the counterparty.
+          toastAchievementUnlocks(result.notifiedOfferer || []);
+          toast.success('Trade complete! Cards swapped.');
+        } else if (result.stale || result.reason === 'STALE_TRADE_STATE') {
+          toast.info('This trade is no longer available to accept.');
+        } else {
+          toast.error(_friendlyError(result.reason));
+        }
+      } finally {
+        btn.dataset.confirmInFlight = '0';
+        try { btn.disabled = false; } catch (_) { /* ignore */ }
+        renderTrading();
       }
-      renderTrading();
     });
   });
 
@@ -1788,6 +1801,9 @@ const ERROR_MESSAGES = {
   TRADE_NOT_PENDING: 'This trade is no longer active.',
   TRADE_NOT_AWAITING_TARGET: 'This offer is no longer waiting for a response.',
   TRADE_NOT_AWAITING_OFFERER: 'This proposal is no longer waiting for confirmation.',
+  STALE_TRADE_STATE: 'This trade is no longer available to accept.',
+  SAME_CARD_BOTH_SIDES: 'A trade cannot exchange the same card for itself.',
+  WRITE_FAILED: 'Could not save the trade. Check your connection and try again.',
   TRADE_NOT_DECLINABLE: 'This trade cannot be declined right now.',
   TRADE_NOT_CANCELLABLE: 'This offer can no longer be cancelled.',
   NOT_TARGET_PLAYER: 'You cannot respond to this trade.',

@@ -5,19 +5,18 @@
  * All inventory mutation is contained here. UI handlers must NEVER
  * directly modify inventories for trades.
  *
- * Responsibilities:
- *   - Reload fresh player state from DB
- *   - Rerun T-1 validation helpers (pure, safe)
- *   - Decrement/increment inventories atomically
- *   - Clean up zero-quantity entries
- *   - Apply cooldown timestamps
- *   - Increment stats.tradesCompleted for both players
+ * Final acceptance commits via one updateAcknowledged multi-path write
+ * (see trade-direct-plan.js). Listings use executeListingTrade separately.
  */
 
 import * as db from './database.js';
-import { bumpPlayerStat, notifyCardInventoryChanged, STAT_KEYS } from './achievements.js';
 import * as config from './config.js';
 import { validateDirectTrade, isDetailedLogging } from './trading.js';
+import {
+  buildDirectTradeAcceptPlan,
+  commitDirectTradeAcceptPlan,
+  markDirectTradeFailedIfAwaiting,
+} from './trade-direct-plan.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -93,19 +92,36 @@ export function formatReadyAt(readyAtMs) {
   return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * Attempt to mark trade failed only if still awaiting offerer confirmation.
+ * @returns {{ success: false, reason: string, stale?: boolean, currentStatus?: string }}
+ */
+function failTradeIfActionable(tradeId, reason) {
+  const result = markDirectTradeFailedIfAwaiting(tradeId, reason);
+  if (!result.marked) {
+    return {
+      success: false,
+      reason: result.reason === 'STALE_TRADE_STATE' ? 'STALE_TRADE_STATE' : reason,
+      stale: result.reason === 'STALE_TRADE_STATE',
+      currentStatus: result.currentStatus,
+    };
+  }
+  return { success: false, reason };
+}
+
 // ─── Atomic Trade Execution ─────────────────────────────────────────────────
 
 /**
- * Execute a direct trade atomically.
+ * Execute a direct trade atomically (one acknowledged multi-path update).
  *
  * This is the ONLY function that mutates inventories for direct trades.
  *
  * Requires trade.status === awaiting_offerer_confirmation and a non-null requestedCardId.
  *
  * @param {object} trade - The trade object from /trades/direct/{id}
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, notifiedOfferer?: string[], stale?: boolean }>}
  */
-export function executeDirectTrade(trade) {
+export async function executeDirectTrade(trade) {
   const {
     id: tradeId,
     offeringPlayerId,
@@ -118,20 +134,28 @@ export function executeDirectTrade(trade) {
   const freshTrade = db.get(`trades/direct/${tradeId}`);
   if (!freshTrade || freshTrade.status !== 'awaiting_offerer_confirmation') {
     console.log(`[Trading] Trade ${tradeId} skipped — status is '${freshTrade?.status}', not 'awaiting_offerer_confirmation'`);
-    return { success: false, reason: 'TRADE_NOT_AWAITING_OFFERER' };
+    return {
+      success: false,
+      reason: 'STALE_TRADE_STATE',
+      stale: true,
+      currentStatus: freshTrade?.status ?? null,
+    };
   }
 
   const resolvedRequestedId = freshTrade.requestedCardId || requestedCardId;
   if (!resolvedRequestedId) {
-    return { success: false, reason: 'REQUESTED_CARD_NOT_FOUND' };
+    return failTradeIfActionable(tradeId, 'REQUESTED_CARD_NOT_FOUND');
   }
 
-  // Prefer fresh trade fields for the rest of execution
   const resolvedOfferedId = freshTrade.offeredCardId || offeredCardId;
   const resolvedOffering = freshTrade.offeringPlayerId || offeringPlayerId;
   const resolvedTarget = freshTrade.targetPlayerId || targetPlayerId;
 
-  // ── 1. Reload fresh player state ──────────────────────────────────────────
+  if (resolvedOfferedId === resolvedRequestedId) {
+    return failTradeIfActionable(tradeId, 'SAME_CARD_BOTH_SIDES');
+  }
+
+  // ── 1. Reload fresh player state (cache) ──────────────────────────────────
   const freshOffering = db.get(`players/${resolvedOffering}`);
   const freshTarget = db.get(`players/${resolvedTarget}`);
 
@@ -161,85 +185,54 @@ export function executeDirectTrade(trade) {
     if (isDetailedLogging()) {
       console.log(`[Trading][DETAIL] Trade ${tradeId} failed validation: ${validation.reason} (${resolvedOffering} → ${resolvedTarget}, offered=${resolvedOfferedId}, requested=${resolvedRequestedId})`);
     }
-    const now = Date.now();
-    db.update(`trades/direct/${tradeId}`, {
-      status: 'failed',
-      completedAt: now,
-      failureReason: validation.reason,
-    });
-    return { success: false, reason: validation.reason };
+    return failTradeIfActionable(tradeId, validation.reason);
   }
 
   // ── 4. Check cooldowns for BOTH players ───────────────────────────────────
   const offeringCooldown = getDirectTradeCooldown(resolvedOffering);
   if (offeringCooldown.onCooldown) {
-    const now = Date.now();
-    db.update(`trades/direct/${tradeId}`, {
-      status: 'failed',
-      completedAt: now,
-      failureReason: 'OFFERING_PLAYER_ON_COOLDOWN',
-    });
-    return { success: false, reason: 'OFFERING_PLAYER_ON_COOLDOWN' };
+    return failTradeIfActionable(tradeId, 'OFFERING_PLAYER_ON_COOLDOWN');
   }
   const targetCooldown = getDirectTradeCooldown(resolvedTarget);
   if (targetCooldown.onCooldown) {
-    const now = Date.now();
-    db.update(`trades/direct/${tradeId}`, {
-      status: 'failed',
-      completedAt: now,
-      failureReason: 'TARGET_PLAYER_ON_COOLDOWN',
-    });
-    return { success: false, reason: 'TARGET_PLAYER_ON_COOLDOWN' };
+    return failTradeIfActionable(tradeId, 'TARGET_PLAYER_ON_COOLDOWN');
   }
 
-  // ── 5. Compute new inventories (no DB writes yet) ─────────────────────────
-  const offeringInv = { ...(freshOffering.inventory || {}) };
-  const targetInv = { ...(freshTarget.inventory || {}) };
-
-  offeringInv[resolvedOfferedId] = (offeringInv[resolvedOfferedId] || 0) - 1;
-  if (offeringInv[resolvedOfferedId] <= 0) delete offeringInv[resolvedOfferedId];
-
-  offeringInv[resolvedRequestedId] = (offeringInv[resolvedRequestedId] || 0) + 1;
-
-  targetInv[resolvedRequestedId] = (targetInv[resolvedRequestedId] || 0) - 1;
-  if (targetInv[resolvedRequestedId] <= 0) delete targetInv[resolvedRequestedId];
-
-  targetInv[resolvedOfferedId] = (targetInv[resolvedOfferedId] || 0) + 1;
-
-  // ── 6. Prepare stats updates ──────────────────────────────────────────────
-  const offeringStats = { ...(freshOffering.stats || {}) };
-  const targetStats = { ...(freshTarget.stats || {}) };
-
+  // ── 5. One shared timestamp for completedAt + both lastDirectTradeAt ─────
   const now = Date.now();
 
-  // ── 7. Write ALL mutations together ───────────────────────────────────────
-  // Re-confirm status then lock as processing (duplicate-accept guard)
-  const statusCheck = db.get(`trades/direct/${tradeId}`);
-  if (!statusCheck || statusCheck.status !== 'awaiting_offerer_confirmation') {
-    return { success: false, reason: 'TRADE_NOT_AWAITING_OFFERER' };
-  }
-  db.update(`trades/direct/${tradeId}`, { status: 'processing' });
-
-  db.set(`players/${resolvedOffering}/inventory`, offeringInv);
-  db.set(`players/${resolvedOffering}/stats`, offeringStats);
-  db.set(`players/${resolvedOffering}/lastDirectTradeAt`, now);
-  db.update(`players/${resolvedOffering}/progression`, { firstTrade: true });
-
-  db.set(`players/${resolvedTarget}/inventory`, targetInv);
-  db.set(`players/${resolvedTarget}/stats`, targetStats);
-  db.set(`players/${resolvedTarget}/lastDirectTradeAt`, now);
-  db.update(`players/${resolvedTarget}/progression`, { firstTrade: true });
-
-  // ── 8. Mark trade as accepted ─────────────────────────────────────────────
-  db.update(`trades/direct/${tradeId}`, {
-    status: 'accepted',
-    completedAt: now,
+  const plan = buildDirectTradeAcceptPlan({
+    tradeId,
+    offeringPlayerId: resolvedOffering,
+    targetPlayerId: resolvedTarget,
+    offeredCardId: resolvedOfferedId,
+    requestedCardId: resolvedRequestedId,
+    offeringPlayer: freshOffering,
+    targetPlayer: freshTarget,
+    now,
   });
 
-  bumpPlayerStat(resolvedOffering, STAT_KEYS.TRADES_COMPLETED, 1);
-  bumpPlayerStat(resolvedTarget, STAT_KEYS.TRADES_COMPLETED, 1);
-  notifyCardInventoryChanged(resolvedOffering);
-  notifyCardInventoryChanged(resolvedTarget);
+  if (!plan.ok) {
+    return failTradeIfActionable(tradeId, plan.reason || 'INVALID_TRADE_PLAN');
+  }
+
+  // ── 6. Lock + revalidate + acknowledged multi-path commit ─────────────────
+  const commit = await commitDirectTradeAcceptPlan(tradeId, plan);
+  if (!commit.success) {
+    if (commit.reason === 'STALE_TRADE_STATE') {
+      return {
+        success: false,
+        reason: 'STALE_TRADE_STATE',
+        stale: true,
+        currentStatus: commit.currentStatus,
+      };
+    }
+    return {
+      success: false,
+      reason: commit.reason || 'WRITE_FAILED',
+      error: commit.error,
+    };
+  }
 
   if (isDetailedLogging()) {
     console.log(`[Trading][DETAIL] Trade ${tradeId} completed: ${resolvedOffering} gave ${resolvedOfferedId}, ${resolvedTarget} gave ${resolvedRequestedId}, cooldowns applied at ${now}`);
@@ -247,5 +240,10 @@ export function executeDirectTrade(trade) {
     console.log(`[Trading] Trade ${tradeId} completed: ${resolvedOffering} gave ${resolvedOfferedId}, ${resolvedTarget} gave ${resolvedRequestedId}`);
   }
 
-  return { success: true };
+  return {
+    success: true,
+    // Only offerer's unlocks for the confirming client's toasts
+    notifiedOfferer: commit.notifiedOfferer || [],
+    writeCount: 1,
+  };
 }
