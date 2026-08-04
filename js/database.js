@@ -39,6 +39,7 @@
 
 import { initFirebase, isConfigured } from './firebase-config.js';
 import * as metrics from './db-metrics.js';
+import * as readAudit from './db-read-audit.js';
 
 const DB_KEY = 'scicards_db';
 
@@ -521,8 +522,23 @@ export async function initDB() {
  * Returns deep clone to prevent accidental mutation.
  */
 export function get(path) {
+  const gate = readAudit.beforeRead('get', path);
+  if (gate.block) throw gate.error;
+  readAudit.record('get', path);
+  return _readPath(path);
+}
+
+/**
+ * Internal cache read without audit hooks (used by getChildren/query to avoid double-count).
+ * @param {string} path
+ */
+function _readPath(path) {
   if (!_db) return null;
-  const parts = path.split('/').filter(Boolean);
+  const parts = String(path || '').split('/').filter(Boolean);
+  if (parts.length === 0) {
+    // Root read — deep clone entire cache
+    return JSON.parse(JSON.stringify(_db));
+  }
   let current = _db;
   for (const part of parts) {
     if (current === null || current === undefined || typeof current !== 'object') return null;
@@ -660,7 +676,10 @@ export function onValue(path, callback) {
  * Get all children of a path as an array of {key, value} pairs.
  */
 export function getChildren(path) {
-  const data = get(path);
+  const gate = readAudit.beforeRead('getChildren', path);
+  if (gate.block) throw gate.error;
+  readAudit.record('getChildren', path);
+  const data = _readPath(path);
   if (!data || typeof data !== 'object') return [];
   return Object.entries(data).map(([key, value]) => ({ key, value }));
 }
@@ -669,7 +688,14 @@ export function getChildren(path) {
  * Query children matching a condition.
  */
 export function query(path, filterFn) {
-  return getChildren(path).filter(({ key, value }) => filterFn(key, value));
+  const gate = readAudit.beforeRead('query', path);
+  if (gate.block) throw gate.error;
+  readAudit.record('query', path);
+  const data = _readPath(path);
+  if (!data || typeof data !== 'object') return [];
+  return Object.entries(data)
+    .map(([key, value]) => ({ key, value }))
+    .filter(({ key, value }) => filterFn(key, value));
 }
 
 /**

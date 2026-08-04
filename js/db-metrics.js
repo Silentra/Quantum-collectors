@@ -658,7 +658,8 @@ API: summary() | reset() | resetAll() | measureMajorNodes()
 Cache update sources: initial-root | root-listener | scoped-once | scoped-subscription
 (S3: root = legacy safety net; scoped player = eventual owner — no bandwidth claim)
 Bytes are Estimated JSON — not Firebase billed transfer.
-Hydration: qcDbHydration.getSharedHydrationReport() | getCurrentPlayerHydrationReport() | help()`);
+Hydration: qcDbHydration.getSharedHydrationReport() | getCurrentPlayerHydrationReport() | help()
+Personal audit (S4): qcPersonalAudit.help() | workflow()`);
     },
   };
 }
