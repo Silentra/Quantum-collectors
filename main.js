@@ -12,6 +12,7 @@
 
 import * as db from './js/database.js';
 import * as metrics from './js/db-metrics.js';
+import './js/db-read-audit.js'; // S4 personal read-audit / isolation (off by default)
 import {
   hydrateSharedDefs,
   isSharedDefsReady,

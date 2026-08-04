@@ -10,8 +10,9 @@ main.js              - Entry point, async init (DB → sharedDefs hydrate → Au
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
 js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
-  database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; S2 sharedDefs hydration caller; root listener still authoritative)
-  db-hydration.js    - Named hydration scopes (S2: sharedDefs = config/cards/packs/groups; accessCodes excluded)
+  db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 auth-owned currentPlayer subscribe)
+  db-read-audit.js   - S4 dev-only personal cache-read audit + optional isolation read-gate (off by default)
+  database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; root listener legacy safety net)
   config.js          - Centralized live config (reads from /config DB node)
   auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
   admin.js           - Admin foundation: isAdmin(username), getPlayer, setPlayerData, listPlayers
@@ -496,20 +497,52 @@ New APIs on [`database.js`](js/database.js):
 Scoped merges notify exact-path, ancestor, and **descendant** in-process listeners. Metrics: `recordPathSnapshot` (`scoped-once` | `scoped-subscription`), `recordScopedSubscription`, persist reasons `scoped-once` / `scoped-subscription` / `scoped-clear`. Root events labeled `initial-root` / `root-listener`.
 
 ### Phase S2 — Explicit shared-data hydration (beside root)
-Additive — **root `once('/')` + `on('value')` unchanged** and remain authoritative. No bandwidth claim while root and scoped snapshots coexist.
+Additive — **root `once('/')` + `on('value')` unchanged** as the **legacy safety net**. No bandwidth claim while root and scoped snapshots coexist. Root and scoped events may arrive in either order — do not depend on root “winning.”
 
-[`js/db-hydration.js`](js/db-hydration.js) owns named scope **`sharedDefs`** only:
+[`js/db-hydration.js`](js/db-hydration.js) owns named scope **`sharedDefs`**:
 - Paths: `config`, `cards`, `packs`, `groups` via `loadPathOnce` (parallel; pending/ready reuse)
 - **`accessCodes` excluded** — not part of sharedDefs; not broadened
-- No `subscribePath` for shared defs in S2 (no permanent shared Firebase `.on`)
-- No current-player / trading / leaderboard / admin / directory scopes yet (S3+)
-- Flag prep: `localStorage.qc_scoped_loading` + `config/firebase/scopedLoadingEnabled` read helpers — **does not** disable root
+- No permanent `subscribePath` for shared defs
+- Flag prep: `localStorage.qc_scoped_loading` + `config/firebase/scopedLoadingEnabled` — **does not** disable root
 
 [`main.js`](main.js) awaits `hydrateSharedDefs()` after `initDB()` and **before** card/pack seed/normalize. Seeds run only when that path’s scoped load completed (`isPathReady`).
 
 Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrationStatus()` / `help()`.
 
-Duplicate `hydrateSharedDefs` / `loadPathOnce` calls reuse in-flight work or already-ready paths (no repeated Firebase reads). Metrics continue to label `initial-root` / `root-listener` vs `scoped-once`.
+### Phase S3 — Current-player scoped hydration + session guard
+Additive — root listener **unchanged** (legacy safety net). Exactly **one** auth-owned Firebase `.on` at `players/{username}` (`refCount: 1`). UI / Profile / session-guard must **not** call `subscribePath` for the player.
+
+[`js/db-hydration.js`](js/db-hydration.js) current-player API:
+- `hydrateCurrentPlayer(u)` — `loadPathOnce` only (restore pre-verify)
+- `subscribeCurrentPlayer(u)` — sole `subscribePath` acquire for auth
+- `ensureCurrentPlayerScope(u)` — once then subscribe (login/register); `ackCacheFallback` for register if redundant once fails after ack
+- `releaseCurrentPlayerScope()` — auth-owned only (**not** on DevTools mirror)
+- `isCurrentPlayerReady` / `waitForCurrentPlayer` / `getCurrentPlayerHydrationReport`
+
+[`js/auth.js`](js/auth.js) ordering:
+- **Restore:** hydrate → exact `activeSession.id` match (no grace) → subscribe → guard → maintenance
+- **Login:** ack claim → local session → grace → ensure → guard → maintenance
+- **Register:** ack full player + code → local session → grace → ensure(`ackCacheFallback`) → guard (never re-register on once-load failure)
+- **Logout:** stop guard → `clearActiveSessionIfOwned` (independent of scoped sub) → release scope → clear local
+- **Forced exit:** stop guard → release scope → clear local → reload (**never** clear server session)
+- **`__admin__`:** no player scope / no activeSession guard
+
+Session guard remains in-process `db.onValue('players/{u}/activeSession')`, fed by parent scoped snaps (descendant notify) and root coexistence. Prior-player cache retained on account switch (privacy cleanup later).
+
+Dev: `qcDbHydration.getCurrentPlayerHydrationReport()` — no password / sessionId / inventory.
+
+### Phase S4 — Personal-tab read audit (infrastructure only)
+Development-only proof that personal surfaces read only `config|cards|packs|groups|players/{me}`. **Root listener unchanged.** Flags off by default.
+
+[`js/db-read-audit.js`](js/db-read-audit.js) + thin hooks in [`database.js`](js/database.js) `get` / `getChildren` / `query`:
+- `localStorage.qc-personal-scope-audit=true` — record op + redacted path only (no values/payloads)
+- `localStorage.qc-personal-cache-isolation=true` — during `begin()`/`start()` only, forbidden reads **throw** (not silent empty)
+- Isolation does **not** gate cold startup (accessCodes seed / init safe)
+- `qcPersonalAudit.begin/end/summary/workflow` — labeled sessions; overall **PASS** / **PARTIAL** / **FAIL**
+
+**Known blocker (not remediating here):** Research Projects → `trades/direct` + `trades/listings` via [`trade-availability.js`](js/trade-availability.js) (`buildAvailabilitySnapshot`). Trade-reservation checks remain active. Projects label reports **PARTIAL** with known blocker id `projects-trade-reservations`.
+
+No Trading / Leaderboard / Admin / mutation-planner / gameplay changes in this phase.
 
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
