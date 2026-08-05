@@ -17,6 +17,7 @@
  */
 
 import * as db from './database.js';
+import { emptyGroupListingsIndexPaths, LISTINGS_BY_GROUP_ROOT } from './trade-index.js';
 
 // ---------- ID Generation ----------
 
@@ -27,11 +28,11 @@ function _genId(prefix) {
 // ---------- Group CRUD ----------
 
 /**
- * Create a new top-level group.
+ * Create a new top-level group and seed an empty ready listingsByGroup index.
  * @param {string} name
- * @returns {string} groupId
+ * @returns {Promise<string|null>} groupId, or null if write failed
  */
-export function createGroup(name) {
+export async function createGroup(name) {
   const id = _genId('grp');
   const group = {
     id,
@@ -39,7 +40,14 @@ export function createGroup(name) {
     subgroups: {},
     created: Date.now()
   };
-  db.set(`groups/${id}`, group);
+  const ack = await db.updateAcknowledged({
+    [`groups/${id}`]: group,
+    ...emptyGroupListingsIndexPaths(id),
+  });
+  if (!ack.ok) {
+    console.warn('[Groups] createGroup write failed:', ack.error);
+    return null;
+  }
   return id;
 }
 
@@ -72,13 +80,22 @@ export function renameGroup(id, newName) {
 }
 
 /**
- * Delete a group and all its subgroups.
+ * Delete a group and all its subgroups, and remove listingsByGroup/{id} index node.
  * Does NOT automatically unassign players — caller should handle that if needed.
+ * Canonical listings are left unchanged (create-time groupId snapshot parity).
  * @param {string} id
+ * @returns {Promise<{ ok: boolean, error?: string }>}
  */
-export function deleteGroup(id) {
-  if (!id) return;
-  db.remove(`groups/${id}`);
+export async function deleteGroup(id) {
+  if (!id) return { ok: false, error: 'Missing group id' };
+  const ack = await db.updateAcknowledged({
+    [`groups/${id}`]: null,
+    [`${LISTINGS_BY_GROUP_ROOT}/${id}`]: null,
+  });
+  if (!ack.ok) {
+    return { ok: false, error: ack.error || 'Group delete failed' };
+  }
+  return { ok: true };
 }
 
 // ---------- Subgroup CRUD ----------

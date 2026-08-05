@@ -33,6 +33,7 @@ import {
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
 } from './player-directory.js';
+import { emptyPlayerTradeIndexPaths } from './trade-index.js';
 import { syncProjects } from './project-sync.js';
 import { getProjectConfig } from './project-config.js';
 import * as cards from './cards.js';
@@ -595,6 +596,7 @@ export async function register(username, password, accessCode) {
     [`accessCodes/${accessCode}/usedBy`]: username,
     [`accessCodes/${accessCode}/usedAt`]: issuedAt,
     ...directoryPathsForPlayer(username, buildDirectoryEntry(username, playerRecord)),
+    ...emptyPlayerTradeIndexPaths(username),
   });
 
   if (!ack.ok) {

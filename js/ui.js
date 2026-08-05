@@ -32,6 +32,7 @@ import {
   syncDirectoryUpdateFromPlayer,
   DIRECTORY_ROOT,
 } from './player-directory.js';
+import { rebuildTradeIndexes } from './trade-index.js';
 import {
   ensureAdminDirectoryScope,
   releaseAdminDirectoryScope,
@@ -744,6 +745,35 @@ function _setupPlayerFilters() {
         renderAdminPlayers();
       } finally {
         rebuildBtn.disabled = false;
+      }
+    });
+  }
+
+  const rebuildTradeIdxBtn = document.getElementById('btn-rebuild-trade-indexes');
+  if (rebuildTradeIdxBtn && !rebuildTradeIdxBtn.dataset.wired) {
+    rebuildTradeIdxBtn.dataset.wired = '1';
+    rebuildTradeIdxBtn.addEventListener('click', async () => {
+      const confirmed = await confirmAction(
+        'Rebuild derived trade indexes from canonical trades/direct and trades/listings? This does not change inventories or canonical trade records. Seeds ready metadata for all players and groups.',
+        'Rebuild Trade Indexes?'
+      );
+      if (!confirmed) return;
+      rebuildTradeIdxBtn.disabled = true;
+      try {
+        const result = await rebuildTradeIndexes();
+        if (!result.ok) {
+          toast.error(result.error || 'Trade index rebuild failed');
+          return;
+        }
+        if (result.skipped) {
+          toast.info(`Trade indexes already in sync (unchanged: ${result.unchanged})`);
+        } else {
+          toast.success(
+            `Trade indexes rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}, written: ${result.written}`,
+          );
+        }
+      } finally {
+        rebuildTradeIdxBtn.disabled = false;
       }
     });
   }
@@ -1962,10 +1992,14 @@ function renderAdminGroups() {
   }
 
   // Create group
-  document.getElementById('btn-create-group').onclick = () => {
+  document.getElementById('btn-create-group').onclick = async () => {
     const name = document.getElementById('new-group-name').value.trim();
     if (!name) { toast.error('Group name required'); return; }
-    groups.createGroup(name);
+    const id = await groups.createGroup(name);
+    if (!id) {
+      toast.error('Failed to create group');
+      return;
+    }
     toast.success(`Group "${name}" created`);
     document.getElementById('new-group-name').value = '';
     renderAdminGroups();
@@ -2012,7 +2046,11 @@ function openGroupEditModal(groupId) {
       `Delete "${group.name}"?`
     );
     if (!confirmed) return;
-    groups.deleteGroup(groupId);
+    const result = await groups.deleteGroup(groupId);
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to delete group');
+      return;
+    }
     toast.info('Group deleted');
     modal.classList.add('hidden');
     renderAdminGroups();
