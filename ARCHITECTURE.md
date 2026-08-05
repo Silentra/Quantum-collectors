@@ -12,6 +12,7 @@ js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
   db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 auth-owned currentPlayer subscribe)
   db-read-audit.js   - S4 dev-only personal cache-read audit + optional isolation read-gate (off by default)
+  player-directory.js - S5a derived playerDirectory projection, drift report, admin rebuild
   database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; root listener legacy safety net)
   config.js          - Centralized live config (reads from /config DB node)
   auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
@@ -543,6 +544,20 @@ Development-only proof that personal surfaces read only `config|cards|packs|grou
 **Known blocker (not remediating here):** Research Projects → `trades/direct` + `trades/listings` via [`trade-availability.js`](js/trade-availability.js) (`buildAvailabilitySnapshot`). Trade-reservation checks remain active. Projects label reports **PARTIAL** with known blocker id `projects-trade-reservations`.
 
 No Trading / Leaderboard / Admin / mutation-planner / gameplay changes in this phase.
+
+### Phase S5a — Player directory (schema + sync)
+Derived node `playerDirectory/{username}` projected from canonical `players/{username}`.
+
+Fields only: `username`, `groupId`, `subgroupId`, `isAdmin`, `isTradeRestricted`, `isTradeProfileHidden`.  
+**Not included:** lastLogin, inventory/packs, password, session, RP, cosmetics, shop.
+
+[`js/player-directory.js`](js/player-directory.js): `buildDirectoryEntry`, `rebuildPlayerDirectory`, `getDirectoryDriftReport`, key resolution that **preserves exact Firebase player keys** (no lowercased duplicate paths for legacy keys).
+
+Live writers dual-path via one `updateAcknowledged`: registration, group assign, admin promote/demote (incl. `adminLogin` promote), trade lock, hidden trading profile, player delete. Login maintenance dual-writes directory **only** when directory-relevant flags are first seeded (not for lastLogin alone).
+
+Admin **Rebuild Directory** (Players tab): confirm → create/update/remove orphans → omit unchanged → skip Firebase when in sync → report counts only. Never writes `players/*`.
+
+Consumers still read `/players` (Trading/Admin unchanged). No directory hydration/subscriptions yet. Root listener unchanged.
 
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
