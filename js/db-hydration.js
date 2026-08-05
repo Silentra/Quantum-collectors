@@ -1,19 +1,22 @@
 /**
- * db-hydration.js — Named cache hydration scopes (Phase S2–S3)
+ * db-hydration.js — Named cache hydration scopes (Phase S2–S5b)
  *
  * S2: sharedDefs — once-loads for config / cards / packs / groups.
  * S3: currentPlayer — auth-owned once-load + one subscribePath for players/{username}.
+ * S5b: adminDirectory — Admin-owned playerDirectory subscribe;
+ *      adminSelectedPlayer — Admin-owned players/{selected} or borrow auth current-player.
  *
  * accessCodes is intentionally NOT part of sharedDefs (register-only; do not broaden).
- * Trading / leaderboard / admin / directory scopes belong to later phases.
+ * Trading / leaderboard remain deferred.
  *
  * Root once('/') + on('value') remain the legacy safety net (unchanged). Root and scoped
- * player events may arrive in either order during S3 coexistence — do not depend on root
+ * player events may arrive in either order during coexistence — do not depend on root
  * events “winning.” No bandwidth claim while they coexist.
  */
 
 import * as db from './database.js';
 import * as metrics from './db-metrics.js';
+import { DIRECTORY_ROOT, resolvePlayerDirectoryKey } from './player-directory.js';
 
 /** Dev flag prep (S7 cutover later). Does not disable the root listener. */
 export const SCOPED_LOADING_LS_KEY = 'qc_scoped_loading';
@@ -417,29 +420,16 @@ export function subscribeCurrentPlayer(username) {
     releaseCurrentPlayerScope();
   }
 
-  // Ensure we never leave a dangling second player sub from a prior partial ensure
-  const existingOther = db.getSubscriptionRegistry().find((e) => e.path.startsWith('players/'));
-  if (existingOther && existingOther.path !== path) {
-    // Should not happen if auth is sole owner — release our handle if any, then refuse
-    releaseCurrentPlayerScope();
+  // Other players/* paths may be owned by Admin selected-player scope — ignore them.
+  // Only refuse if THIS path is already subscribed without our auth handle (orphan / share).
+  const existingSame = db.getSubscriptionRegistry().find((e) => e.path === path);
+  if (existingSame && !_currentPlayerUnsub) {
     return {
       ok: false,
       path,
       username: u,
       reused: false,
-      id: '',
-      error: `Unexpected player subscription already active at ${existingOther.path}`,
-    };
-  }
-
-  if (existingOther && existingOther.path === path && !_currentPlayerUnsub) {
-    // Orphaned registry entry without our unsub handle — do not acquire a second refCount
-    return {
-      ok: false,
-      path,
-      username: u,
-      reused: false,
-      id: existingOther.id,
+      id: existingSame.id,
       error: 'Player path already subscribed without auth owner handle',
     };
   }
@@ -697,8 +687,480 @@ export function getCurrentPlayerHydrationReport() {
   };
 }
 
+// ---------- Phase S5b: Admin directory + selected player ----------
+
+export const SCOPE_ADMIN_DIRECTORY = 'adminDirectory';
+export const SCOPE_ADMIN_SELECTED_PLAYER = 'adminSelectedPlayer';
+
+const ADMIN_DIRECTORY_PATH = DIRECTORY_ROOT; // 'playerDirectory'
+
+/** @type {(() => void)|null} */
+let _adminDirUnsub = null;
+/** @type {string|null} */
+let _adminDirSubId = null;
+/** @type {number|null} */
+let _adminDirStartedAt = null;
+/** @type {Promise<object>|null} */
+let _adminDirPromise = null;
+
+/** @type {string|null} */
+let _adminSelectedUsername = null;
+/** @type {(() => void)|null} */
+let _adminSelectedUnsub = null;
+/** @type {string|null} */
+let _adminSelectedSubId = null;
+/** @type {boolean} */
+let _adminSelectedBorrowed = false;
+/** @type {Promise<object>|null} */
+let _adminSelectedPromise = null;
+/** @type {string|null} — in-flight target for dedupe / supersession */
+let _adminSelectedInFlightKey = null;
+
+function _isAuthOwnedCurrentPlayer(playerKey) {
+  if (!_currentPlayerUsername || !playerKey) return false;
+  return (
+    _currentPlayerUsername === playerKey
+    || _currentPlayerUsername === String(playerKey).toLowerCase()
+  );
+}
+
+function _registryEntry(path) {
+  return db.getSubscriptionRegistry().find((e) => e.path === path) || null;
+}
+
 /**
- * Named-scope status snapshot (S2 sharedDefs + S3 currentPlayer).
+ * @returns {boolean}
+ */
+export function isAdminDirectoryReady() {
+  return db.isPathReady(ADMIN_DIRECTORY_PATH);
+}
+
+/**
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export function waitForAdminDirectory(options = {}) {
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  return db.waitForPath(ADMIN_DIRECTORY_PATH, { timeoutMs }).then((result) => ({
+    ok: result.ok === true,
+    scope: SCOPE_ADMIN_DIRECTORY,
+    path: ADMIN_DIRECTORY_PATH,
+    error: result.error,
+  }));
+}
+
+/**
+ * Release Admin-owned playerDirectory subscription. Does not clear cache.
+ */
+export function releaseAdminDirectoryScope() {
+  if (_adminDirUnsub) {
+    try { _adminDirUnsub(); } catch { /* ignore */ }
+  }
+  _adminDirUnsub = null;
+  _adminDirSubId = null;
+  _adminDirStartedAt = null;
+  _adminDirPromise = null;
+  return { released: true, path: ADMIN_DIRECTORY_PATH };
+}
+
+/**
+ * Ensure exactly one Admin-owned subscription to playerDirectory.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ */
+export function ensureAdminDirectoryScope(options = {}) {
+  const force = options.force === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  if (!force && _adminDirUnsub && isAdminDirectoryReady()) {
+    const entry = _registryEntry(ADMIN_DIRECTORY_PATH);
+    return Promise.resolve({
+      ok: true,
+      scope: SCOPE_ADMIN_DIRECTORY,
+      path: ADMIN_DIRECTORY_PATH,
+      reused: true,
+      subscriptionActive: true,
+      subscriptionRefCount: entry?.refCount ?? 1,
+      ready: true,
+    });
+  }
+
+  if (_adminDirPromise && !force) {
+    return _adminDirPromise.then((r) => ({ ...r, reused: true }));
+  }
+
+  _adminDirPromise = (async () => {
+    if (force) {
+      releaseAdminDirectoryScope();
+    }
+
+    const load = await db.loadPathOnce(ADMIN_DIRECTORY_PATH, { timeoutMs, force });
+    if (!load.ok) {
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_DIRECTORY,
+        path: ADMIN_DIRECTORY_PATH,
+        error: load.error || 'Directory load failed',
+        ready: false,
+      };
+    }
+
+    if (_adminDirUnsub) {
+      const entry = _registryEntry(ADMIN_DIRECTORY_PATH);
+      return {
+        ok: true,
+        scope: SCOPE_ADMIN_DIRECTORY,
+        path: ADMIN_DIRECTORY_PATH,
+        reused: true,
+        subscriptionActive: true,
+        subscriptionRefCount: entry?.refCount ?? 1,
+        ready: isAdminDirectoryReady(),
+      };
+    }
+
+    const handle = db.subscribePath(ADMIN_DIRECTORY_PATH);
+    const entryAfter = _registryEntry(ADMIN_DIRECTORY_PATH);
+    if (entryAfter && entryAfter.refCount > 1) {
+      try { handle.unsubscribe(); } catch { /* ignore */ }
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_DIRECTORY,
+        path: ADMIN_DIRECTORY_PATH,
+        error: 'Refusing to share playerDirectory subscription (Admin must be sole owner)',
+        ready: false,
+      };
+    }
+
+    _adminDirUnsub = handle.unsubscribe;
+    _adminDirSubId = handle.id;
+    _adminDirStartedAt = Date.now();
+
+    const wait = await db.waitForPath(ADMIN_DIRECTORY_PATH, { timeoutMs });
+    return {
+      ok: wait.ok === true,
+      scope: SCOPE_ADMIN_DIRECTORY,
+      path: ADMIN_DIRECTORY_PATH,
+      reused: false,
+      subscriptionActive: _adminDirUnsub != null,
+      subscriptionId: _adminDirSubId,
+      subscriptionRefCount: entryAfter?.refCount ?? 1,
+      ready: isAdminDirectoryReady(),
+      error: wait.ok ? null : (wait.error || 'timeout'),
+    };
+  })().finally(() => {
+    _adminDirPromise = null;
+  });
+
+  return _adminDirPromise;
+}
+
+export function getAdminDirectoryHydrationReport() {
+  const entry = _registryEntry(ADMIN_DIRECTORY_PATH);
+  return {
+    phase: 'S5b',
+    scope: SCOPE_ADMIN_DIRECTORY,
+    path: ADMIN_DIRECTORY_PATH,
+    ready: isAdminDirectoryReady(),
+    active: _adminDirUnsub != null,
+    subscriptionId: _adminDirSubId,
+    refCount: entry?.refCount ?? (_adminDirUnsub ? 1 : 0),
+    startedAt: _adminDirStartedAt,
+    inFlight: _adminDirPromise != null,
+  };
+}
+
+/**
+ * Release Admin-selected player. Never releases auth current-player scope.
+ * @param {{ preserveInFlight?: boolean }} [options] — set preserveInFlight when switching
+ *   selection inside ensureAdminSelectedPlayerScope so the new target stays current.
+ */
+export function releaseAdminSelectedPlayerScope(options = {}) {
+  const prev = _adminSelectedUsername;
+  const wasBorrowed = _adminSelectedBorrowed;
+  if (!_adminSelectedBorrowed && _adminSelectedUnsub) {
+    try { _adminSelectedUnsub(); } catch { /* ignore */ }
+  }
+  _adminSelectedUnsub = null;
+  _adminSelectedSubId = null;
+  _adminSelectedUsername = null;
+  _adminSelectedBorrowed = false;
+  _adminSelectedPromise = null;
+  if (options.preserveInFlight !== true) {
+    _adminSelectedInFlightKey = null;
+  }
+  return { released: prev != null, previousUsername: prev, borrowed: wasBorrowed };
+}
+
+/**
+ * Ensure Admin selected-player scope. Self → borrow auth current-player (no second network sub).
+ * @param {string} username
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ */
+export function ensureAdminSelectedPlayerScope(username, options = {}) {
+  const playerKey = resolvePlayerDirectoryKey(username);
+  if (!playerKey || playerKey === '__admin__') {
+    return Promise.resolve({
+      ok: false,
+      scope: SCOPE_ADMIN_SELECTED_PLAYER,
+      path: '',
+      error: 'Invalid selected username',
+    });
+  }
+
+  // Auth current-player paths are normalized lowercase; prefer that path when self.
+  const isSelf = _isAuthOwnedCurrentPlayer(playerKey);
+  const authPath = isSelf && _currentPlayerUsername
+    ? _playerPath(_currentPlayerUsername)
+    : `players/${playerKey}`;
+  const path = authPath;
+  const force = options.force === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  if (
+    !force
+    && _adminSelectedUsername === playerKey
+    && (_adminSelectedBorrowed || _adminSelectedUnsub)
+    && db.isPathReady(path)
+  ) {
+    return Promise.resolve({
+      ok: true,
+      scope: SCOPE_ADMIN_SELECTED_PLAYER,
+      path,
+      username: playerKey,
+      reused: true,
+      borrowedFromCurrentPlayer: _adminSelectedBorrowed,
+      subscriptionActive: _adminSelectedBorrowed ? false : _adminSelectedUnsub != null,
+      subscriptionRefCount: _registryEntry(path)?.refCount ?? 1,
+      ready: true,
+    });
+  }
+
+  if (_adminSelectedPromise && _adminSelectedInFlightKey === playerKey && !force) {
+    return _adminSelectedPromise.then((r) => ({ ...r, reused: true }));
+  }
+
+  _adminSelectedInFlightKey = playerKey;
+  const run = (async () => {
+    // Switching selection: release prior Admin-owned sub (not auth)
+    if (_adminSelectedUsername && _adminSelectedUsername !== playerKey) {
+      releaseAdminSelectedPlayerScope({ preserveInFlight: true });
+    } else if (force && _adminSelectedUsername === playerKey && !_adminSelectedBorrowed) {
+      releaseAdminSelectedPlayerScope({ preserveInFlight: true });
+    }
+
+    const superseded = () => _adminSelectedInFlightKey !== playerKey;
+
+    // Self → always borrow auth-owned current-player; never open a second players/{me} sub
+    if (isSelf) {
+      if (!_currentPlayerUnsub) {
+        const waitAuth = await waitForCurrentPlayer(_currentPlayerUsername, { timeoutMs });
+        if (!waitAuth.ok || !_currentPlayerUnsub) {
+          return {
+            ok: false,
+            scope: SCOPE_ADMIN_SELECTED_PLAYER,
+            path,
+            username: playerKey,
+            borrowedFromCurrentPlayer: true,
+            error: waitAuth.error || 'Auth current-player scope not active; cannot borrow',
+            ready: false,
+          };
+        }
+      }
+      if (superseded()) {
+        return {
+          ok: false,
+          scope: SCOPE_ADMIN_SELECTED_PLAYER,
+          path,
+          username: playerKey,
+          superseded: true,
+          error: 'Selection superseded',
+          ready: false,
+        };
+      }
+
+      _adminSelectedUsername = playerKey;
+      _adminSelectedBorrowed = true;
+      _adminSelectedUnsub = null;
+      _adminSelectedSubId = _currentPlayerSubId;
+
+      if (!db.isPathReady(path)) {
+        const wait = await db.waitForPath(path, { timeoutMs });
+        if (!wait.ok) {
+          if (!superseded()) releaseAdminSelectedPlayerScope();
+          return {
+            ok: false,
+            scope: SCOPE_ADMIN_SELECTED_PLAYER,
+            path,
+            username: playerKey,
+            borrowedFromCurrentPlayer: true,
+            error: wait.error || 'timeout',
+            ready: false,
+          };
+        }
+      }
+
+      return {
+        ok: true,
+        scope: SCOPE_ADMIN_SELECTED_PLAYER,
+        path,
+        username: playerKey,
+        reused: false,
+        borrowedFromCurrentPlayer: true,
+        subscriptionActive: false,
+        subscriptionRefCount: _registryEntry(path)?.refCount ?? 1,
+        ready: true,
+        note: 'Borrowed auth-owned current-player subscription; no second network listener',
+      };
+    }
+
+    // Explicit scoped load — do not treat root cache as success without scoped ready
+    const load = await db.loadPathOnce(path, { timeoutMs, force: true });
+    if (!load.ok) {
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_SELECTED_PLAYER,
+        path,
+        username: playerKey,
+        error: load.error || 'Selected player load failed',
+        ready: false,
+      };
+    }
+
+    if (!db.get(path)) {
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_SELECTED_PLAYER,
+        path,
+        username: playerKey,
+        error: 'Player not found',
+        ready: false,
+      };
+    }
+
+    if (superseded()) {
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_SELECTED_PLAYER,
+        path,
+        username: playerKey,
+        superseded: true,
+        error: 'Selection superseded',
+        ready: false,
+      };
+    }
+
+    let createdHandle = null;
+    if (!(_adminSelectedUnsub && _adminSelectedUsername === playerKey)) {
+      const handle = db.subscribePath(path);
+      createdHandle = handle;
+      const entryAfter = _registryEntry(path);
+      // Auth owns players/{me}; never share. Other unexpected owners also refuse.
+      if (entryAfter && entryAfter.refCount > 1) {
+        try { handle.unsubscribe(); } catch { /* ignore */ }
+        return {
+          ok: false,
+          scope: SCOPE_ADMIN_SELECTED_PLAYER,
+          path,
+          username: playerKey,
+          error: 'Path already has a network subscription; cannot acquire Admin selected-player share',
+          ready: false,
+        };
+      }
+      if (superseded()) {
+        try { handle.unsubscribe(); } catch { /* ignore */ }
+        return {
+          ok: false,
+          scope: SCOPE_ADMIN_SELECTED_PLAYER,
+          path,
+          username: playerKey,
+          superseded: true,
+          error: 'Selection superseded',
+          ready: false,
+        };
+      }
+      _adminSelectedUnsub = handle.unsubscribe;
+      _adminSelectedSubId = handle.id;
+    }
+
+    _adminSelectedUsername = playerKey;
+    _adminSelectedBorrowed = false;
+
+    const wait = await db.waitForPath(path, { timeoutMs });
+    if (!wait.ok) {
+      if (!superseded()) releaseAdminSelectedPlayerScope();
+      else if (createdHandle) {
+        try { createdHandle.unsubscribe(); } catch { /* ignore */ }
+      }
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_SELECTED_PLAYER,
+        path,
+        username: playerKey,
+        error: wait.error || 'timeout',
+        ready: false,
+      };
+    }
+
+    if (superseded()) {
+      if (createdHandle) {
+        try { createdHandle.unsubscribe(); } catch { /* ignore */ }
+      }
+      // Do not releaseAdminSelectedPlayerScope — a newer selection owns Admin state
+      return {
+        ok: false,
+        scope: SCOPE_ADMIN_SELECTED_PLAYER,
+        path,
+        username: playerKey,
+        superseded: true,
+        error: 'Selection superseded',
+        ready: false,
+      };
+    }
+
+    return {
+      ok: true,
+      scope: SCOPE_ADMIN_SELECTED_PLAYER,
+      path,
+      username: playerKey,
+      reused: false,
+      borrowedFromCurrentPlayer: false,
+      subscriptionActive: _adminSelectedUnsub != null,
+      subscriptionId: _adminSelectedSubId,
+      subscriptionRefCount: _registryEntry(path)?.refCount ?? 1,
+      ready: true,
+    };
+  })();
+
+  _adminSelectedPromise = run;
+  run.finally(() => {
+    if (_adminSelectedInFlightKey === playerKey) _adminSelectedInFlightKey = null;
+    if (_adminSelectedPromise === run) _adminSelectedPromise = null;
+  });
+
+  return run;
+}
+
+export function getAdminSelectedPlayerReport() {
+  const path = _adminSelectedUsername
+    ? (_adminSelectedBorrowed && _currentPlayerUsername
+      ? _playerPath(_currentPlayerUsername)
+      : `players/${_adminSelectedUsername}`)
+    : null;
+  const entry = path ? _registryEntry(path) : null;
+  return {
+    phase: 'S5b',
+    scope: SCOPE_ADMIN_SELECTED_PLAYER,
+    username: _adminSelectedUsername,
+    path,
+    ready: path ? db.isPathReady(path) : false,
+    active: _adminSelectedUnsub != null || _adminSelectedBorrowed,
+    borrowedFromCurrentPlayer: _adminSelectedBorrowed,
+    subscriptionId: _adminSelectedSubId,
+    refCount: entry?.refCount ?? (_adminSelectedUnsub ? 1 : (_adminSelectedBorrowed ? (entry?.refCount ?? 1) : 0)),
+    inFlight: _adminSelectedPromise != null,
+  };
+}
+
+/**
+ * Named-scope status snapshot (S2–S5b).
  * @returns {object}
  */
 export function getHydrationStatus() {
@@ -721,16 +1183,18 @@ export function getHydrationStatus() {
         lastStatus: _currentPlayerLastResult?.status || (_currentPlayerUnsub ? 'subscribed' : 'idle'),
         inFlight: _currentPlayerPromise != null,
       },
+      [SCOPE_ADMIN_DIRECTORY]: getAdminDirectoryHydrationReport(),
+      [SCOPE_ADMIN_SELECTED_PLAYER]: getAdminSelectedPlayerReport(),
     },
     deferredScopes: [
       'trading',
       'leaderboard',
-      'adminDirectory',
-      'adminSelectedPlayer',
       'bootstrapPublicAccessCodes',
     ],
     shared: getSharedHydrationReport(),
     currentPlayer: getCurrentPlayerHydrationReport(),
+    adminDirectory: getAdminDirectoryHydrationReport(),
+    adminSelectedPlayer: getAdminSelectedPlayerReport(),
   };
 }
 
@@ -740,6 +1204,8 @@ function _installWindowApi() {
     SHARED_DEF_PATHS,
     SCOPE_SHARED_DEFS,
     SCOPE_CURRENT_PLAYER,
+    SCOPE_ADMIN_DIRECTORY,
+    SCOPE_ADMIN_SELECTED_PLAYER,
     hydrateSharedDefs,
     isSharedDefsReady,
     waitForSharedDefs,
@@ -748,11 +1214,16 @@ function _installWindowApi() {
     getCurrentPlayerHydrationReport,
     isCurrentPlayerReady,
     waitForCurrentPlayer,
-    // Safe reuse probe — does not expose releaseCurrentPlayerScope (auth-owned)
     ensureCurrentPlayerScope,
+    ensureAdminDirectoryScope,
+    isAdminDirectoryReady,
+    waitForAdminDirectory,
+    getAdminDirectoryHydrationReport,
+    ensureAdminSelectedPlayerScope,
+    getAdminSelectedPlayerReport,
+    // release* retained for auth/Admin UI only — not exposed here
     getScopedLoadingFlagState,
     isScopedLoadingDevFlagEnabled,
-    // Thin mirrors for console verification
     isPathReady: (path) => db.isPathReady(path),
     waitForPath: (path, options) => db.waitForPath(path, options),
     loadPathOnce: (path, options) => db.loadPathOnce(path, options),
@@ -760,15 +1231,11 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (Phase S2–S3)
-Shared paths: ${SHARED_DEF_PATHS.join(', ')} (accessCodes excluded)
-Current player: auth-owned ensure/hydrate/subscribe — release is NOT on this mirror
-API:
-  qcDbHydration.getSharedHydrationReport()
-  qcDbHydration.getCurrentPlayerHydrationReport()
-  qcDbHydration.getHydrationStatus()
-  qcDbHydration.isCurrentPlayerReady()
-  await qcDbHydration.ensureCurrentPlayerScope(username)  // reuse only; auth owns lifecycle
+      console.info(`DB Hydration (Phase S2–S5b)
+Shared: ${SHARED_DEF_PATHS.join(', ')}
+Current player: auth-owned (release not on mirror)
+Admin directory / selected-player: ui-owned ensure; release not on mirror
+API: getHydrationStatus | getAdminDirectoryHydrationReport | getAdminSelectedPlayerReport
 Root remains the legacy safety net; no bandwidth claim yet.`);
     },
   };

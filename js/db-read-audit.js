@@ -482,7 +482,8 @@ API:
   qcPersonalAudit.summary()
   qcPersonalAudit.report()
   qcPersonalAudit.reset()
-  qcPersonalAudit.workflow()   // print guided steps
+  qcPersonalAudit.workflow()   // print guided steps (S4 personal tabs)
+  qcPersonalAudit.workflowS5b() // Admin directory + selected-player scopes
 
 Known blocker: projects → trades/direct + trades/listings (reported as PARTIAL; not remediating here).
 Never logs values/passwords/sessions/inventories. Root listener unchanged.`);
@@ -552,6 +553,75 @@ Disable: localStorage flags false + reload
 `);
 }
 
+/**
+ * Print guided pasteable workflow for Phase S5b Admin directory + selected-player scopes.
+ */
+export function workflowS5b() {
+  console.info(`
+=== S5b Admin Directory + Selected-Player Verification ===
+
+Prereq: logged in as a player-admin (has players/{me}) OR standalone __admin__.
+Optional audit: localStorage.setItem('qc-personal-scope-audit','true'); location.reload();
+
+----- A) Directory scope (Admin list) -----
+1) Before Admin:
+   qcDbHydration.getSubscriptionRegistry()
+   // player-admin: only players/{me} refCount 1
+   // __admin__: no players/{me}
+
+2) Open Admin main tab (once):
+   qcDbHydration.getAdminDirectoryHydrationReport()
+   // expect: path 'playerDirectory', active true, refCount 1, ready true
+   qcDbHydration.getSubscriptionRegistry()
+   // + playerDirectory refCount 1
+
+3) Switch Admin sub-tabs (Overview ↔ Players) and change filters / search.
+   Re-check registry — playerDirectory refCount must stay 1 (no bump).
+   renderAdminPlayers must NOT call ensureAdminDirectoryScope.
+
+4) Overview Players count must match directory children (not getAllPlayers).
+
+----- B) Selected-player switching -----
+5) Manage player A (not self):
+   qcDbHydration.getAdminSelectedPlayerReport()
+   // borrowedFromCurrentPlayer false; path players/{A}; refCount 1
+   Registry: players/{me}? + playerDirectory + players/{A}
+
+6) Manage player B:
+   // A released before B loads — no players/{A} left; players/{B} refCount 1
+
+7) Close detail (X):
+   getAdminSelectedPlayerReport() → username null / inactive
+   // playerDirectory still active while Admin open
+
+----- C) Self-selection borrow -----
+8) As player-admin, Manage your own username:
+   getAdminSelectedPlayerReport()
+   // borrowedFromCurrentPlayer true; subscriptionActive false (no Admin-owned sub)
+   Registry: still exactly one players/{me} (refCount 1) — no second listener
+
+9) Standalone __admin__: skip self-borrow; managing others uses Admin selected scope only.
+   // no current-player scope ever
+
+----- D) Read auditing (Admin browsing) -----
+10) qcPersonalAudit.begin('admin-s5b', { allowedPrefixes: ['config','cards','packs','groups','playerDirectory','players/'] });
+    // Browse Admin overview + Players list only (do not open Trading/LB).
+    // List/overview should read playerDirectory — not bare players dump.
+    // Opening Manage {other} may read players/{selected} after scoped hydrate.
+    qcPersonalAudit.end('admin-s5b');
+
+----- E) Cleanup -----
+11) Leave Admin (open Collection/Packs/etc.):
+    getAdminDirectoryHydrationReport() → active false
+    getAdminSelectedPlayerReport() → inactive
+    Registry: only players/{me} for player-admin; none of those for __admin__
+
+12) Re-enter Admin repeatedly — directory refCount must remain 1 each visit (not accumulate).
+
+PASS when A–E match Expected subscription states in ARCHITECTURE Phase S5b.
+`);
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcPersonalAudit = {
@@ -567,6 +637,7 @@ function _installWindowApi() {
     reset,
     help,
     workflow,
+    workflowS5b,
     enableAudit,
     disableAudit,
     enableIsolation,

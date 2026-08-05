@@ -30,7 +30,15 @@ import {
   rebuildPlayerDirectory,
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
+  DIRECTORY_ROOT,
 } from './player-directory.js';
+import {
+  ensureAdminDirectoryScope,
+  releaseAdminDirectoryScope,
+  isAdminDirectoryReady,
+  ensureAdminSelectedPlayerScope,
+  releaseAdminSelectedPlayerScope,
+} from './db-hydration.js';
 import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
@@ -144,7 +152,8 @@ function setupTabs() {
       else { cleanupShop(); }
       if (tab === 'profile') renderProfile();
       if (tab === 'leaderboard') renderLeaderboard();
-      if (tab === 'admin') renderAdmin();
+      if (tab === 'admin') { void enterAdminTab(); }
+      else { cleanupAdmin(); }
     });
   });
 
@@ -578,9 +587,50 @@ async function openPackUI(packId) {
 
 // ===================== ADMIN =====================
 
+/**
+ * Admin main-tab entry: sole network owner for playerDirectory scope.
+ * Sub-tab renders (including renderAdminPlayers) must only read cached directory data.
+ */
+async function enterAdminTab() {
+  if (!auth.isAdmin()) return;
+
+  const listEl = document.getElementById('admin-players-list');
+  if (listEl) {
+    listEl.innerHTML = '<div class="p-4 text-surface-500 text-center">Loading player directory…</div>';
+  }
+
+  const scoped = await ensureAdminDirectoryScope();
+  if (!scoped.ok) {
+    toast.error(scoped.error || 'Failed to load player directory');
+    if (listEl) {
+      listEl.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
+        Player directory failed to load. Use <strong>Rebuild Directory</strong> on the Players tab, then re-open Admin.
+      </div>`;
+    }
+    // Still show overview chrome without player count from /players
+    renderAdminSubTab('overview');
+    return;
+  }
+
+  renderAdmin();
+}
+
+/**
+ * Leave Admin main tab: release Admin-owned directory + selected-player scopes.
+ * Does not release auth current-player scope.
+ */
+function cleanupAdmin() {
+  releaseAdminSelectedPlayerScope();
+  releaseAdminDirectoryScope();
+  document.getElementById('player-detail-modal')?.classList.add('hidden');
+}
+
 function renderAdmin() {
   if (!auth.isAdmin()) return;
-  renderAdminSubTab('overview');
+  // Prefer currently active admin sub-tab if any; default overview
+  const activeBtn = document.querySelector('.admin-tab-btn.active');
+  const tab = activeBtn?.dataset?.adminTab || 'overview';
+  renderAdminSubTab(tab);
 }
 
 function renderAdminSubTab(tab) {
@@ -602,13 +652,17 @@ function renderAdminSubTab(tab) {
 }
 
 function renderAdminOverview() {
-  const allPlayers = player.getAllPlayers();
+  // Player count from directory only — never getAllPlayers() during browsing
+  const directoryEntries = isAdminDirectoryReady()
+    ? db.getChildren(DIRECTORY_ROOT)
+    : [];
+  const playerCount = directoryEntries.length;
   const allCards = cards.getAllCards();
   const allPacks = packs.getAllPackTypes();
   const allGroups = groups.getAllGroups();
 
   document.getElementById('admin-stats-grid').innerHTML = `
-    <div class="stat-card"><div class="stat-value text-blue-400">${allPlayers.length}</div><div class="stat-label">Players</div></div>
+    <div class="stat-card"><div class="stat-value text-blue-400">${playerCount}</div><div class="stat-label">Players</div></div>
     <div class="stat-card"><div class="stat-value text-green-400">${allCards.length}</div><div class="stat-label">Cards</div></div>
     <div class="stat-card"><div class="stat-value text-purple-400">${allPacks.length}</div><div class="stat-label">Pack Types</div></div>
     <div class="stat-card"><div class="stat-value text-amber-400">${allGroups.length}</div><div class="stat-label">Groups</div></div>
@@ -687,6 +741,7 @@ function _setupPlayerFilters() {
             `Directory rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}, unchanged: ${result.unchanged}`,
           );
         }
+        renderAdminPlayers();
       } finally {
         rebuildBtn.disabled = false;
       }
@@ -695,46 +750,66 @@ function _setupPlayerFilters() {
 }
 
 function renderAdminPlayers() {
-  const allPlayers = player.getAllPlayers();
+  // Cache-only directory read — never ensureAdminDirectoryScope() here (Admin tab owns network).
+  const list = document.getElementById('admin-players-list');
+  if (!list) return;
+
+  if (!isAdminDirectoryReady()) {
+    list.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
+      Player directory is not ready. Re-open the Admin tab, or use <strong>Rebuild Directory</strong>.
+      Do not fall back to scanning all players.
+    </div>`;
+    return;
+  }
+
+  const allDirectory = db.getChildren(DIRECTORY_ROOT);
   const searchEl = document.getElementById('admin-player-search');
   const search = (searchEl?.value || '').toLowerCase();
   const filterGroupId = document.getElementById('admin-player-filter-group')?.value || '';
   const filterSubgroupId = document.getElementById('admin-player-filter-subgroup')?.value || '';
 
-  let filtered = allPlayers;
+  let filtered = allDirectory;
   if (search) {
-    filtered = filtered.filter(p => p.value.username.toLowerCase().includes(search));
+    filtered = filtered.filter(({ key, value: p }) => {
+      const name = (p?.username || key || '').toLowerCase();
+      return name.includes(search);
+    });
   }
   if (filterGroupId) {
-    filtered = filtered.filter(p => p.value.groupId === filterGroupId);
+    filtered = filtered.filter(({ value: p }) => p?.groupId === filterGroupId);
   }
   if (filterSubgroupId) {
-    filtered = filtered.filter(p => p.value.subgroupId === filterSubgroupId);
+    filtered = filtered.filter(({ value: p }) => p?.subgroupId === filterSubgroupId);
   }
 
-  const list = document.getElementById('admin-players-list');
+  if (allDirectory.length === 0) {
+    list.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
+      Player directory is empty. Click <strong>Rebuild Directory</strong> to project entries from players
+      (one-time admin repair). Normal browsing will not scan /players.
+    </div>`;
+    return;
+  }
+
   if (filtered.length === 0) {
     list.innerHTML = '<div class="p-4 text-surface-500 text-center">No players found</div>';
     return;
   }
 
   list.innerHTML = filtered.map(({ key, value: p }) => {
-    const inv = Object.keys(p.inventory || {}).length;
-    const packCount = Object.values(p.packs || {}).reduce((s, v) => s + v, 0);
-    const adminBadge = p.isAdmin === true ? '<span class="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-yellow-600 text-white rounded uppercase">Admin</span>' : '';
-    const tradeBadge = p.isTradeRestricted === true ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-700 text-white rounded uppercase">Trade Locked</span>' : '';
-    const groupLabel = groups.getGroupName(p.groupId);
-    const subgroupLabel = p.subgroupId ? ` / ${groups.getSubgroupName(p.groupId, p.subgroupId)}` : '';
+    const displayName = p?.username || key;
+    const adminBadge = p?.isAdmin === true ? '<span class="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-yellow-600 text-white rounded uppercase">Admin</span>' : '';
+    const tradeBadge = p?.isTradeRestricted === true ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-700 text-white rounded uppercase">Trade Locked</span>' : '';
+    const groupLabel = groups.getGroupName(p?.groupId);
+    const subgroupLabel = p?.subgroupId ? ` / ${groups.getSubgroupName(p.groupId, p.subgroupId)}` : '';
+    const safeKey = String(key).replace(/"/g, '&quot;');
     return `
-      <div class="p-3 flex items-center justify-between hover:bg-surface-800 cursor-pointer player-row" data-username="${p.username}">
+      <div class="p-3 flex items-center justify-between hover:bg-surface-800 cursor-pointer player-row" data-username="${safeKey}">
         <div>
-          <span class="font-medium">${p.username}</span>${adminBadge}${tradeBadge}
+          <span class="font-medium">${displayName}</span>${adminBadge}${tradeBadge}
           <span class="text-xs text-surface-500 ml-2">${groupLabel}${subgroupLabel}</span>
         </div>
         <div class="flex items-center gap-3 text-xs text-surface-400">
-          <span>🃏 ${inv} unique</span>
-          <span>📦 ${packCount} packs</span>
-          <button class="btn-admin-player-detail bg-surface-700 hover:bg-surface-600 px-2 py-1 rounded text-white" data-username="${p.username}">
+          <button class="btn-admin-player-detail bg-surface-700 hover:bg-surface-600 px-2 py-1 rounded text-white" data-username="${safeKey}">
             Manage
           </button>
         </div>
@@ -747,7 +822,7 @@ function renderAdminPlayers() {
   list.querySelectorAll('.btn-admin-player-detail').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      showPlayerDetail(btn.dataset.username);
+      void showPlayerDetail(btn.dataset.username);
     });
   });
 }
@@ -862,11 +937,40 @@ function _renderAdminRuntimeSnapshot(p) {
   `;
 }
 
-function showPlayerDetail(username) {
-  const p = player.getPlayer(username);
-  if (!p) return;
+async function showPlayerDetail(username) {
+  const modal = document.getElementById('player-detail-modal');
+  const content = document.getElementById('player-detail-content');
+  const nameEl = document.getElementById('player-detail-name');
+  if (nameEl) nameEl.textContent = username;
+  if (modal) modal.classList.remove('hidden');
+  if (content) {
+    content.innerHTML = '<div class="p-4 text-surface-500 text-center text-sm">Loading player…</div>';
+  }
 
-  document.getElementById('player-detail-name').textContent = username;
+  const scoped = await ensureAdminSelectedPlayerScope(username);
+  if (!scoped.ok) {
+    if (scoped.superseded) return;
+    toast.error(scoped.error || 'Failed to load selected player');
+    if (content) {
+      content.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
+        ${scoped.error || 'Selected player failed to hydrate.'}
+        Close and try again. Admin will not fall back to the root-populated cache.
+      </div>`;
+    }
+    return;
+  }
+
+  username = scoped.username || resolvePlayerDirectoryKey(username);
+  const p = player.getPlayer(username);
+  if (!p) {
+    toast.error('Player data missing after scoped load');
+    if (content) {
+      content.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
+        Selected player did not hydrate. Close and try again — no root-cache fallback.
+      </div>`;
+    }
+    return;
+  }
 
   const allCardsList = cards.sortCardsByRarityAndName([...cards.getAllCards()]);
   const allPackTypes = packs.getAllPackTypes();
@@ -884,7 +988,7 @@ function showPlayerDetail(username) {
 
   const pdGrantCosmeticCat = _pickInitialAdminGrantCosmeticCategory();
 
-  const content = document.getElementById('player-detail-content');
+  if (!content) return;
   content.innerHTML = `
     <div class="space-y-4">
       <!-- Group & Subgroup Assignment -->
@@ -1078,7 +1182,7 @@ function showPlayerDetail(username) {
     }
     toast.success(`Group assignment updated for ${username}`);
     renderAdminPlayers();
-    showPlayerDetail(username);
+    void showPlayerDetail(username);
   });
 
   content.querySelector('#pd-give-card').addEventListener('click', () => {
@@ -1086,7 +1190,7 @@ function showPlayerDetail(username) {
     const qty = parseInt(content.querySelector('#pd-card-qty').value) || 1;
     player.addCard(username, cardId, qty);
     toast.success(`Gave ${qty} card(s) to ${username}`);
-    showPlayerDetail(username);
+    void showPlayerDetail(username);
   });
 
   content.querySelector('#pd-give-pack').addEventListener('click', () => {
@@ -1094,7 +1198,7 @@ function showPlayerDetail(username) {
     const qty = parseInt(content.querySelector('#pd-pack-qty').value) || 1;
     player.addPack(username, packId, qty);
     toast.success(`Gave ${qty} pack(s) to ${username}`);
-    showPlayerDetail(username);
+    void showPlayerDetail(username);
   });
 
   content.querySelector('#pd-give-rp')?.addEventListener('click', () => {
@@ -1105,7 +1209,7 @@ function showPlayerDetail(username) {
       return;
     }
     toast.success(`Gave ${result.amount} RP to ${username}`);
-    showPlayerDetail(username);
+    void showPlayerDetail(username);
   });
 
   content.querySelector('#pd-give-consumable')?.addEventListener('click', () => {
@@ -1117,7 +1221,7 @@ function showPlayerDetail(username) {
       return;
     }
     toast.success(`Granted ${qty} item(s) to ${username}`);
-    showPlayerDetail(username);
+    void showPlayerDetail(username);
   });
 
   content.querySelector('#pd-give-cosmetic')?.addEventListener('click', () => {
@@ -1132,7 +1236,7 @@ function showPlayerDetail(username) {
       return;
     }
     toast.success(`Cosmetic unlocked for ${username}`);
-    showPlayerDetail(username);
+    void showPlayerDetail(username);
   });
 
   content.querySelector('#pd-cosmetic-category')?.addEventListener('change', () => {
@@ -1155,6 +1259,7 @@ function showPlayerDetail(username) {
     }
     toast.info(`Player "${username}" deleted`);
     document.getElementById('player-detail-modal').classList.add('hidden');
+    releaseAdminSelectedPlayerScope();
     renderAdminPlayers();
   });
 
@@ -1171,7 +1276,7 @@ function showPlayerDetail(username) {
       if (!confirmed) return;
       player.removeCard(username, cardId);
       toast.info(`Removed card from ${username}`);
-      showPlayerDetail(username);
+      void showPlayerDetail(username);
     });
   });
 
@@ -1195,7 +1300,7 @@ function showPlayerDetail(username) {
         return;
       }
       toast.success(`${username} promoted to admin`);
-      showPlayerDetail(username);
+      void showPlayerDetail(username);
       renderAdminPlayers();
     });
   }
@@ -1220,7 +1325,7 @@ function showPlayerDetail(username) {
         return;
       }
       toast.success(`Admin access removed from ${username}`);
-      showPlayerDetail(username);
+      void showPlayerDetail(username);
       renderAdminPlayers();
     });
   }
@@ -1248,7 +1353,7 @@ function showPlayerDetail(username) {
         return;
       }
       toast.success(`Trade restriction ${isRestricted ? 'removed from' : 'enabled for'} ${username}`);
-      showPlayerDetail(username);
+      void showPlayerDetail(username);
       renderAdminPlayers();
     });
   }
@@ -3052,6 +3157,7 @@ export function init() {
   initFeaturedCardPicker();
   document.getElementById('btn-close-player-detail')?.addEventListener('click', () => {
     document.getElementById('player-detail-modal').classList.add('hidden');
+    releaseAdminSelectedPlayerScope();
   });
 
   // Edit Card modal wiring
