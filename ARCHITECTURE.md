@@ -10,9 +10,10 @@ main.js              - Entry point, async init (DB → sharedDefs hydrate → Au
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
 js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
-  db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 auth-owned currentPlayer subscribe)
-  db-read-audit.js   - S4 dev-only personal cache-read audit + optional isolation read-gate (off by default)
+  db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 currentPlayer; S5b Admin directory + selected-player)
+  db-read-audit.js   - S4/S5b dev-only cache-read audit + optional isolation read-gate (off by default)
   player-directory.js - S5a derived playerDirectory projection, drift report, admin rebuild
+  trade-index.js     - S5c-A trade index schema, readiness meta, drift report, admin rebuild (no consumer cutover)
   database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; root listener legacy safety net)
   config.js          - Centralized live config (reads from /config DB node)
   auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
@@ -557,7 +558,55 @@ Live writers dual-path via one `updateAcknowledged`: registration, group assign,
 
 Admin **Rebuild Directory** (Players tab): confirm → create/update/remove orphans → omit unchanged → skip Firebase when in sync → report counts only. Never writes `players/*`.
 
-Consumers still read `/players` (Trading/Admin unchanged). No directory hydration/subscriptions yet. Root listener unchanged.
+Consumers still read `/players` for Trading (unchanged). Admin browsing moved to directory in S5b. No Trading/Leaderboard/gameplay changes. Root listener unchanged.
+
+### Phase S5b — Admin directory browsing + selected-player scope
+Admin overview player count and Players list read **only** `playerDirectory` (via Admin-owned scoped subscription). Normal browsing never calls `getAllPlayers()` or bare `/players`. Missing/empty directory shows rebuild guidance — no `/players` scan fallback.
+
+**List rows** drop inventory/pack counts; full inventory remains in the selected-player detail view only.
+
+**Lifecycle (sole network owners):**
+- Entering Admin main tab → `enterAdminTab()` → exactly one `ensureAdminDirectoryScope()` (`playerDirectory` refCount 1)
+- `renderAdminPlayers()` is cache-only — never calls `ensureAdminDirectoryScope()` (Players sub-tab may re-render while Admin stays open)
+- Leaving Admin main tab → `cleanupAdmin()` releases Admin directory + Admin selected-player scopes (never auth `players/{me}`)
+- Close player-detail → `releaseAdminSelectedPlayerScope()`
+- Select player B → releases Admin-owned sub for A before loading B
+- Select authenticated self → **borrow** auth-owned current-player scope (no second `players/{me}` network listener)
+- Standalone `__admin__` → directory + selected-player scopes normally; no current-player scope
+
+**Expected registry:**
+| State | Subscriptions |
+|---|---|
+| Normal game | `players/{me}` ×1 |
+| Admin list | + `playerDirectory` ×1 |
+| Manage other | + `players/{selected}` ×1 |
+| Manage self | no second `players/{me}` |
+| Leave Admin | only `players/{me}` ×1 |
+
+S5a mutation writers remain canonical; projected field edits refresh the directory-backed list without scanning all players. Bulk rebuild / season rotation may still one-time scan. Root, Trading, Leaderboard, directory schema, session enforcement, gameplay unchanged.
+
+Dev: `qcDbHydration.getAdminDirectoryHydrationReport()` / `getAdminSelectedPlayerReport()` / `getHydrationStatus()`.
+
+### Phase S5c-A — Trade index schema + rebuild (no consumer cutover)
+Derived discovery indexes beside canonical `trades/direct` and `trades/listings`. **Readers still use canonical trees.** No lifecycle fan-out, no trade-index subscriptions, no reservation cutover.
+
+**Roots**
+- `tradeIndexMeta/schemaVersion`, `tradeIndexMeta/rebuiltAt`
+- `playerTradeIndex/{username}/_meta` + `direct/{tradeId}` + `listings/{listingId}`
+- `listingsByGroup/{groupId}/_meta` + `{listingId}`
+
+**`_meta`:** `{ ready: true, v: CURRENT_TRADE_INDEX_SCHEMA_VERSION, rebuiltAt }` — required because RTDB drops empty objects. Unready / wrong `v` must never mean zero reservations (`getReservationIndexSource`).
+
+**Projection fields**
+- Direct: `id`, `status`, `offeringPlayerId`, `targetPlayerId`, `offeredCardId`, `requestedCardId`, `createdAt`, `respondedAt`
+- Owner listing: `id`, `status` (`active`|`processing`), `offeredCardId`, `requestedCardIds`, `expiresAt`, `groupId`, `createdAt`
+- Group listing: `id`, `ownerId`, `offeredCardId`, `requestedCardIds`, `expiresAt`, `status: active`, `createdAt` (processing never browsable)
+
+[`js/trade-index.js`](js/trade-index.js): builders, readiness predicates, `getTradeIndexDriftReport`, idempotent `rebuildTradeIndexes` (explicit canonical scan only when Admin invokes; seeds all players/groups including zero-trade; omits unchanged; second clean run writes 0; never touches inventories or canonical trades).
+
+**Seeds:** registration writes empty ready `playerTradeIndex/{u}/_meta`; `createGroup` writes empty ready `listingsByGroup/{g}/_meta`; `deleteGroup` nulls `listingsByGroup/{g}`.
+
+Admin **Rebuild Trade Indexes** (Players tab). Dev: `qcTradeIndex.*`.
 
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation
