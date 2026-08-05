@@ -27,6 +27,12 @@ import {
   releaseCurrentPlayerScope,
   subscribeCurrentPlayer,
 } from './db-hydration.js';
+import {
+  buildDirectoryEntry,
+  directoryPathsForPlayer,
+  resolvePlayerDirectoryKey,
+  syncDirectoryUpdateFromPlayer,
+} from './player-directory.js';
 import { syncProjects } from './project-sync.js';
 import { getProjectConfig } from './project-config.js';
 import * as cards from './cards.js';
@@ -291,8 +297,9 @@ export function getCurrentUsername() {
   return session ? session.username : null;
 }
 
-function applyPostLoginPlayerMaintenance(username) {
-  const player = db.get(`players/${username}`);
+async function applyPostLoginPlayerMaintenance(username) {
+  const playerKey = resolvePlayerDirectoryKey(username);
+  const player = db.get(`players/${playerKey}`);
   if (!player) return;
 
   const defaults = {};
@@ -307,23 +314,47 @@ function applyPostLoginPlayerMaintenance(username) {
   if (player.isTradeRestricted === undefined) defaults.isTradeRestricted = false;
   if (player.isTradeProfileHidden === undefined) defaults.isTradeProfileHidden = false;
 
-  // Child/shallow updates only — never whole-player overwrite (preserves activeSession).
-  db.update(`players/${username}`, {
+  const flagDefaultsApplied =
+    defaults.isAdmin !== undefined
+    || defaults.isTradeRestricted !== undefined
+    || defaults.isTradeProfileHidden !== undefined;
+
+  const playerPatch = {
     lastLogin: Date.now(),
-    ...defaults
-  });
+    ...defaults,
+  };
+
+  // When directory-relevant flags are first seeded, commit player leaves + directory
+  // in one acknowledged multi-path update (no second fire-and-forget directory write).
+  if (flagDefaultsApplied) {
+    const updates = {};
+    for (const [field, value] of Object.entries(playerPatch)) {
+      updates[`players/${playerKey}/${field}`] = value;
+    }
+    Object.assign(
+      updates,
+      syncDirectoryUpdateFromPlayer(playerKey, { ...player, ...defaults }),
+    );
+    const ack = await db.updateAcknowledged(updates);
+    if (!ack.ok) {
+      console.warn('[Auth] Post-login player+directory sync failed:', ack.error);
+    }
+  } else {
+    // lastLogin (+ non-directory defaults only) — player path only
+    db.update(`players/${playerKey}`, playerPatch);
+  }
 
   // Phase B: per-player backfill that used to run via startup migrateAll* bulk passes.
   // Order: RP + uniqueCardsOwned before normalize (normalize seeds uniqueCardsOwned to 0).
-  ensurePlayerRPFields(username);
-  ensurePlayerUniqueCardsOwned(username);
-  checkAndResetWeeklyCycle(username);
+  ensurePlayerRPFields(playerKey);
+  ensurePlayerUniqueCardsOwned(playerKey);
+  checkAndResetWeeklyCycle(playerKey);
 
   // Path-specific child writes only — must not clobber activeSession.
-  normalizePlayerSchema(username);
-  runLoginAchievementEvaluation(username);
+  normalizePlayerSchema(playerKey);
+  runLoginAchievementEvaluation(playerKey);
 
-  const freshPlayer = db.get(`players/${username}`);
+  const freshPlayer = db.get(`players/${playerKey}`);
   const prevRefreshAt = freshPlayer.lastProjectRefreshAt ?? 0;
   const syncResult = syncProjects({
     projects:      freshPlayer.projects      ?? [],
@@ -339,7 +370,7 @@ function applyPostLoginPlayerMaintenance(username) {
     syncResult.prunedCount > 0 ||
     syncResult.refreshAt !== prevRefreshAt
   ) {
-    db.update(`players/${username}`, {
+    db.update(`players/${playerKey}`, {
       projects:             syncResult.projects,
       lastProjectRefreshAt: syncResult.refreshAt,
     });
@@ -424,7 +455,7 @@ export async function initAuth() {
   }
 
   startSessionGuard(session.username);
-  applyPostLoginPlayerMaintenance(session.username);
+  await applyPostLoginPlayerMaintenance(session.username);
   console.log(`[Auth] Session restored for: ${session.username}`);
 }
 
@@ -489,7 +520,7 @@ export async function login(username, password) {
   }
 
   startSessionGuard(username);
-  applyPostLoginPlayerMaintenance(username);
+  await applyPostLoginPlayerMaintenance(username);
 
   return { success: true, session };
 }
@@ -563,6 +594,7 @@ export async function register(username, password, accessCode) {
     [`accessCodes/${accessCode}/used`]: true,
     [`accessCodes/${accessCode}/usedBy`]: username,
     [`accessCodes/${accessCode}/usedAt`]: issuedAt,
+    ...directoryPathsForPlayer(username, buildDirectoryEntry(username, playerRecord)),
   });
 
   if (!ack.ok) {
@@ -746,7 +778,7 @@ function buildPlayerRecord(username, hashedPassword, group) {
  * on their player profile (persists across sessions). Otherwise falls back
  * to the standalone __admin__ session (only account exempt from activeSession).
  */
-export function adminLogin(password) {
+export async function adminLogin(password) {
   const adminPw = config.getValue('adminPassword');
   if (password !== adminPw) {
     return { success: false, error: 'Incorrect admin password.' };
@@ -754,12 +786,19 @@ export function adminLogin(password) {
 
   const existing = getSession();
   if (existing && existing.username && existing.username !== '__admin__') {
-    const playerData = db.get(`players/${existing.username}`);
+    const playerKey = resolvePlayerDirectoryKey(existing.username);
+    const playerData = db.get(`players/${playerKey}`);
     if (playerData) {
-      db.update(`players/${existing.username}`, { isAdmin: true });
+      const ack = await db.updateAcknowledged({
+        [`players/${playerKey}/isAdmin`]: true,
+        ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isAdmin: true }),
+      });
+      if (!ack.ok) {
+        return { success: false, error: ack.error || 'Could not promote player to admin.' };
+      }
       existing.isAdmin = true;
       setSession(existing);
-      console.log(`[Auth] Player permanently promoted to admin: ${existing.username}`);
+      console.log(`[Auth] Player permanently promoted to admin: ${playerKey}`);
       return { success: true, session: existing };
     }
   }

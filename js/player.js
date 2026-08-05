@@ -4,6 +4,10 @@
 
 import * as db from './database.js';
 import { notifyCardInventoryChanged, recordCardCollectionGain } from './achievements.js';
+import {
+  resolvePlayerDirectoryKey,
+  syncDirectoryUpdateFromPlayer,
+} from './player-directory.js';
 
 /**
  * Create a new player profile
@@ -135,13 +139,26 @@ export function getAllPlayers() {
 }
 
 /**
- * Set player group and optional subgroup.
+ * Set player group and optional subgroup (canonical + directory, one ack).
  * @param {string} username
  * @param {string|null} groupId
  * @param {string|null} subgroupId
+ * @returns {Promise<{ ok: boolean, mode?: string, error?: string }>}
  */
-export function setPlayerGroup(username, groupId, subgroupId = null) {
-  db.update(`players/${username}`, { groupId: groupId || null, subgroupId: subgroupId || null });
+export async function setPlayerGroup(username, groupId, subgroupId = null) {
+  const playerKey = resolvePlayerDirectoryKey(username);
+  const playerData = db.get(`players/${playerKey}`) || {};
+  const nextGroupId = groupId || null;
+  const nextSubgroupId = subgroupId || null;
+  return db.updateAcknowledged({
+    [`players/${playerKey}/groupId`]: nextGroupId,
+    [`players/${playerKey}/subgroupId`]: nextSubgroupId,
+    ...syncDirectoryUpdateFromPlayer(playerKey, {
+      ...playerData,
+      groupId: nextGroupId,
+      subgroupId: nextSubgroupId,
+    }),
+  });
 }
 
 /**
@@ -154,8 +171,14 @@ export function incrementStat(username, statKey, amount = 1) {
 }
 
 /**
- * Delete a player entirely
+ * Delete a player and directory projection in one acknowledged multi-path update.
+ * @param {string} username
+ * @returns {Promise<{ ok: boolean, mode?: string, error?: string }>}
  */
-export function deletePlayer(username) {
-  db.remove(`players/${username}`);
+export async function deletePlayer(username) {
+  const playerKey = resolvePlayerDirectoryKey(username);
+  return db.updateAcknowledged({
+    [`players/${playerKey}`]: null,
+    [`playerDirectory/${playerKey}`]: null,
+  });
 }

@@ -17,6 +17,10 @@ import * as cards from './cards.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
 import {
+  resolvePlayerDirectoryKey,
+  syncDirectoryUpdateFromPlayer,
+} from './player-directory.js';
+import {
   createTradeOffer,
   respondToTrade,
   confirmTrade,
@@ -805,14 +809,24 @@ function _buildCardOptions(cardList, snapshot) {
 // ─── Event Wiring ───────────────────────────────────────────────────────────
 
 function _wireTradeEvents(username) {
-  // Hide Trading Profile toggle
+  // Hide Trading Profile toggle (canonical + directory in one ack)
   const hideToggle = document.getElementById('trade-hide-toggle');
   if (hideToggle) {
-    hideToggle.addEventListener('click', () => {
-      const current = db.get(`players/${username}/isTradeProfileHidden`) === true;
-      db.set(`players/${username}/isTradeProfileHidden`, !current);
-      console.log(`[Trading] ${username} set isTradeProfileHidden = ${!current}`);
-      toast.info(!current ? 'Trading profile hidden.' : 'Trading profile visible.');
+    hideToggle.addEventListener('click', async () => {
+      const playerKey = resolvePlayerDirectoryKey(username);
+      const playerData = db.get(`players/${playerKey}`) || {};
+      const current = playerData.isTradeProfileHidden === true;
+      const next = !current;
+      const result = await db.updateAcknowledged({
+        [`players/${playerKey}/isTradeProfileHidden`]: next,
+        ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isTradeProfileHidden: next }),
+      });
+      if (!result.ok) {
+        toast.error(result.error || 'Failed to update trading profile visibility');
+        return;
+      }
+      console.log(`[Trading] ${playerKey} set isTradeProfileHidden = ${next}`);
+      toast.info(next ? 'Trading profile hidden.' : 'Trading profile visible.');
       renderTrading(); // Re-render to reflect new state
     });
   }

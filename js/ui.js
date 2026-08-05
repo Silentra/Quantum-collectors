@@ -26,6 +26,11 @@ import * as config from './config.js';
 import * as db from './database.js';
 import * as toast from './toast.js';
 import * as metrics from './db-metrics.js';
+import {
+  rebuildPlayerDirectory,
+  resolvePlayerDirectoryKey,
+  syncDirectoryUpdateFromPlayer,
+} from './player-directory.js';
 import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
@@ -210,9 +215,9 @@ export function setupLoginScreen() {
     }
   });
 
-  document.getElementById('btn-admin-login').addEventListener('click', () => {
+  document.getElementById('btn-admin-login').addEventListener('click', async () => {
     const pw = document.getElementById('admin-password').value;
-    const result = auth.adminLogin(pw);
+    const result = await auth.adminLogin(pw);
     if (result.success) {
       toast.success('Admin access granted');
       enterGame();
@@ -651,13 +656,42 @@ function _setupPlayerFilters() {
         subs.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
       subSel.disabled = false;
     } else {
-      subSel.innerHTML = '<option value="">All Subgroups</option>';
+      subSel.innerHTML = `<option value="">All Subgroups</option>`;
       subSel.disabled = true;
     }
     renderAdminPlayers();
   };
 
   subSel.onchange = () => renderAdminPlayers();
+
+  const rebuildBtn = document.getElementById('btn-rebuild-player-directory');
+  if (rebuildBtn && !rebuildBtn.dataset.wired) {
+    rebuildBtn.dataset.wired = '1';
+    rebuildBtn.addEventListener('click', async () => {
+      const confirmed = await confirmAction(
+        'Rebuild the derived playerDirectory from all player records? This does not change player data. Orphan directory entries will be removed.',
+        'Rebuild Player Directory?'
+      );
+      if (!confirmed) return;
+      rebuildBtn.disabled = true;
+      try {
+        const result = await rebuildPlayerDirectory();
+        if (!result.ok) {
+          toast.error(result.error || 'Directory rebuild failed');
+          return;
+        }
+        if (result.skipped) {
+          toast.info(`Directory already in sync (unchanged: ${result.unchanged})`);
+        } else {
+          toast.success(
+            `Directory rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}, unchanged: ${result.unchanged}`,
+          );
+        }
+      } finally {
+        rebuildBtn.disabled = false;
+      }
+    });
+  }
 }
 
 function renderAdminPlayers() {
@@ -1034,10 +1068,14 @@ function showPlayerDetail(username) {
   });
 
   // Wire up actions
-  content.querySelector('#pd-set-group').addEventListener('click', () => {
+  content.querySelector('#pd-set-group').addEventListener('click', async () => {
     const grpId = content.querySelector('#pd-group-select').value || null;
     const subId = content.querySelector('#pd-subgroup-select').value || null;
-    player.setPlayerGroup(username, grpId, subId);
+    const result = await player.setPlayerGroup(username, grpId, subId);
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to update group assignment');
+      return;
+    }
     toast.success(`Group assignment updated for ${username}`);
     renderAdminPlayers();
     showPlayerDetail(username);
@@ -1103,14 +1141,18 @@ function showPlayerDetail(username) {
     if (sel) sel.innerHTML = _renderAdminGrantCosmeticItemOptions(cat);
   });
 
-  // Delete player — DESTRUCTIVE (requires confirmation)
+  // Delete player — DESTRUCTIVE (requires confirmation); clears directory in same ack
   content.querySelector('#pd-delete-player').addEventListener('click', async () => {
     const confirmed = await confirmAction(
       `This will permanently delete "${username}" and all their data. This cannot be undone.`,
       `Delete player "${username}"?`
     );
     if (!confirmed) return;
-    db.remove(`players/${username}`);
+    const result = await player.deletePlayer(username);
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to delete player');
+      return;
+    }
     toast.info(`Player "${username}" deleted`);
     document.getElementById('player-detail-modal').classList.add('hidden');
     renderAdminPlayers();
@@ -1142,7 +1184,16 @@ function showPlayerDetail(username) {
         'Promote to admin?'
       );
       if (!confirmed) return;
-      db.update(`players/${username}`, { isAdmin: true });
+      const playerKey = resolvePlayerDirectoryKey(username);
+      const playerData = player.getPlayer(playerKey) || {};
+      const result = await db.updateAcknowledged({
+        [`players/${playerKey}/isAdmin`]: true,
+        ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isAdmin: true }),
+      });
+      if (!result.ok) {
+        toast.error(result.error || 'Failed to promote admin');
+        return;
+      }
       toast.success(`${username} promoted to admin`);
       showPlayerDetail(username);
       renderAdminPlayers();
@@ -1158,7 +1209,16 @@ function showPlayerDetail(username) {
         'Remove admin access?'
       );
       if (!confirmed) return;
-      db.update(`players/${username}`, { isAdmin: false });
+      const playerKey = resolvePlayerDirectoryKey(username);
+      const playerData = player.getPlayer(playerKey) || {};
+      const result = await db.updateAcknowledged({
+        [`players/${playerKey}/isAdmin`]: false,
+        ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isAdmin: false }),
+      });
+      if (!result.ok) {
+        toast.error(result.error || 'Failed to remove admin');
+        return;
+      }
       toast.success(`Admin access removed from ${username}`);
       showPlayerDetail(username);
       renderAdminPlayers();
@@ -1169,7 +1229,8 @@ function showPlayerDetail(username) {
   const toggleTradeBtn = content.querySelector('#pd-toggle-trade');
   if (toggleTradeBtn) {
     toggleTradeBtn.addEventListener('click', async () => {
-      const currentPlayer = player.getPlayer(username);
+      const playerKey = resolvePlayerDirectoryKey(username);
+      const currentPlayer = player.getPlayer(playerKey);
       const isRestricted = currentPlayer && currentPlayer.isTradeRestricted === true;
       const action = isRestricted ? 'Remove' : 'Enable';
       const confirmed = await confirmAction(
@@ -1177,7 +1238,15 @@ function showPlayerDetail(username) {
         `${action} trade restriction?`
       );
       if (!confirmed) return;
-      db.update(`players/${username}`, { isTradeRestricted: !isRestricted });
+      const next = !isRestricted;
+      const result = await db.updateAcknowledged({
+        [`players/${playerKey}/isTradeRestricted`]: next,
+        ...syncDirectoryUpdateFromPlayer(playerKey, { ...(currentPlayer || {}), isTradeRestricted: next }),
+      });
+      if (!result.ok) {
+        toast.error(result.error || 'Failed to update trade restriction');
+        return;
+      }
       toast.success(`Trade restriction ${isRestricted ? 'removed from' : 'enabled for'} ${username}`);
       showPlayerDetail(username);
       renderAdminPlayers();
