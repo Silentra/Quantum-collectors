@@ -22,7 +22,7 @@ import * as config from './js/config.js';
 import * as cards from './js/cards.js';
 import * as packs from './js/packs.js';
 import * as auth from './js/auth.js';
-import * as ui from './js/ui.js';
+import * as ui from './js/ui.js?v=s5cb-respond-diag-1';
 import { initCardArtFallback } from './js/card-art.js';
 import { initPackArtFallback } from './js/pack-art.js';
 
@@ -30,7 +30,7 @@ import { initPackArtFallback } from './js/pack-art.js';
 import { ensureLeaderboardSeasonsSchema } from './js/leaderboard-seasons.js';
 
 // Placeholder module init (safe to call, no-ops)
-import { initTrading } from './js/trading.js';
+import { initTrading } from './js/trading.js?v=s5cb-respond-diag-1';
 import { initQuests } from './js/quests.js';
 import { initAchievements } from './js/achievements.js';
 import { initSeasonal } from './js/seasonal.js';
