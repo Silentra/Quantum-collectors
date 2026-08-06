@@ -44,7 +44,7 @@ import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
 import { renderAdminSeasons } from './leaderboard-admin.js';
-import { renderTrading, cleanupTrading } from './trade-ui.js?v=s5cb-respond-diag-1';
+import { renderTrading, cleanupTrading } from './trade-ui.js';
 import { ITEM_TYPES } from './shop-definitions.js';
 import { renderShopAdminPanel } from './shop-admin.js';
 import { renderAchievementsAdminPanel } from './achievements-admin.js';
@@ -69,7 +69,7 @@ import {
   renderResearchProjects,
   startProjectHeartbeat,
   stopProjectHeartbeat,
-} from './project-ui.js?v=s5cb-respond-diag-1';
+} from './project-ui.js';
 
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
 import { getEquippedAura, getEquippedShimmer, initFeaturedCardPicker, renderProfile } from './profile-ui.js';

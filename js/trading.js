@@ -29,16 +29,6 @@ import {
   directIndexRemovalsForTrade,
 } from './trade-index.js';
 
-/**
- * Temporary load marker for S5c-B respond dual-write diagnosis.
- * Bump when forcing browsers to pick up a fresh trading.js module.
- * Remove once respond index dual-write is confirmed in the live UI path.
- */
-export const RESPOND_DUALWRITE_MODULE_VERSION = 's5cb-respond-diag-1';
-console.log(
-  `[S5c-B-respond-diag] trading.js loaded version=${RESPOND_DUALWRITE_MODULE_VERSION}`,
-);
-
 // ─── Phase T-8: Trading config helpers ───────────────────────────────────────
 
 /** Check if trading is globally enabled. */
@@ -679,26 +669,12 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
   ];
   const missingExpected = expectedPaths.filter((p) => !Object.prototype.hasOwnProperty.call(finalUpdates, p));
   if (finalUpdateKeys.length !== 3 || missingExpected.length > 0) {
-    console.error('[S5c-B-respond-diag] refuse commit — unexpected finalUpdates keys', {
-      finalUpdateKeys,
-      missingExpected,
-    });
     return {
       success: false,
       reason: 'WRITE_FAILED',
       error: 'Respond dual-write payload missing required index paths',
     };
   }
-
-  // Temporary development-only diagnostics (no inventories / sessions / player records).
-  console.log('[S5c-B-respond-diag] pre-commit', {
-    moduleVersion: RESPOND_DUALWRITE_MODULE_VERSION,
-    tradeId: postResponseTrade.id,
-    'postResponseTrade.status': postResponseTrade.status,
-    'postResponseTrade.requestedCardId': postResponseTrade.requestedCardId,
-    'Object.keys(indexUpdates)': indexUpdateKeys,
-    'Object.keys(finalUpdates)': finalUpdateKeys,
-  });
 
   const ack = await db.updateAcknowledged(finalUpdates);
   metrics.recordTradeIndexLifecycle({

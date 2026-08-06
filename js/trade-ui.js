@@ -22,11 +22,12 @@ import {
 } from './player-directory.js';
 import {
   createTradeOffer,
+  respondToTrade,
   confirmTrade,
   declineTrade,
   cancelTrade,
   getPendingTrades,
-} from './trading.js?v=s5cb-respond-diag-1';
+} from './trading.js';
 import {
   getDirectTradeCooldown,
   formatCooldown,
@@ -54,8 +55,6 @@ import {
 } from './trade-availability.js';
 import { showTradeConfirmModal } from './trade-confirm-modal.js';
 
-/** Must match RESPOND_DUALWRITE_MODULE_VERSION in trading.js — busts stale ES module cache. */
-const RESPOND_TRADING_MODULE_BUST = 's5cb-respond-diag-1';
 const TRADE_PROJECT_IN_USE_HINT =
   'Cards in use on research projects are not available.';
 
@@ -915,25 +914,7 @@ function _wireDirectTradeActionButtons(username, root = document) {
       });
       if (!confirmed) return;
 
-      // Cache-busted dynamic import so the respond path cannot keep a stale static
-      // trading.js (soft reload often reuses cached ES modules).
-      const tradingMod = await import(`./trading.js?v=${RESPOND_TRADING_MODULE_BUST}`);
-      const respondFn = tradingMod.respondToTrade;
-      const moduleVersion = tradingMod.RESPOND_DUALWRITE_MODULE_VERSION;
-      console.log('[S5c-B-respond-diag] UI response button → respondToTrade', {
-        handler: '_wireDirectTradeActionButtons .trade-respond-btn',
-        import: `./trading.js?v=${RESPOND_TRADING_MODULE_BUST}`,
-        moduleVersion,
-        tradeId,
-        requestedCardId: returnCardId,
-        fnType: typeof respondFn,
-      });
-      if (typeof respondFn !== 'function' || moduleVersion !== RESPOND_TRADING_MODULE_BUST) {
-        toast.error('Stale trading module loaded — hard reload (Ctrl+Shift+R) and retry.');
-        return;
-      }
-
-      const result = await respondFn(tradeId, username, returnCardId);
+      const result = await respondToTrade(tradeId, username, returnCardId);
       if (result.success) {
         delete _returnCardSelections[tradeId];
         toast.success('Trade response submitted.');

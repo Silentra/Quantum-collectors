@@ -11,7 +11,7 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
-import { validateDirectTrade, isDetailedLogging } from './trading.js?v=s5cb-respond-diag-1';
+import { validateDirectTrade, isDetailedLogging } from './trading.js';
 import {
   buildDirectTradeAcceptPlan,
   commitDirectTradeAcceptPlan,

@@ -43,7 +43,7 @@ import { renderMiniCardArtHtml } from './card-art.js';
 import { renderPackCardWrapper } from './card-render.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
-import { confirmAction } from './ui.js?v=s5cb-respond-diag-1';
+import { confirmAction } from './ui.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
 
