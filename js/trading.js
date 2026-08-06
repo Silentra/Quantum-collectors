@@ -614,20 +614,47 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
     return { success: false, reason: 'TRADE_NOT_AWAITING_TARGET' };
   }
 
+  if (
+    freshTrade.offeringPlayerId == null
+    || freshTrade.targetPlayerId == null
+    || freshTrade.offeredCardId == null
+  ) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: 'Trade missing participant fields for index dual-write',
+    };
+  }
+
   const now = Date.now();
-  const nextTrade = {
-    ...freshTrade,
-    id: freshTrade.id || tradeId,
-    requestedCardId,
+  // Build the post-response canonical object first (explicit fields only — never
+  // pass the pre-response trade into the index planner).
+  const postResponseTrade = {
+    id: String(freshTrade.id || tradeId),
+    offeringPlayerId: String(freshTrade.offeringPlayerId),
+    targetPlayerId: String(freshTrade.targetPlayerId),
+    offeredCardId: String(freshTrade.offeredCardId),
+    requestedCardId: String(requestedCardId),
     status: 'awaiting_offerer_confirmation',
+    createdAt: Number(freshTrade.createdAt) || now,
     respondedAt: now,
+    completedAt: freshTrade.completedAt != null ? freshTrade.completedAt : null,
   };
 
+  // Both participant projections from the post-response object only.
+  const indexUpdates = directIndexUpdatesForTrade(postResponseTrade);
+  if (Object.keys(indexUpdates).length !== 2) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: 'Could not build post-response trade index projections',
+    };
+  }
+
+  // One ack: full canonical trade + both participant index leaves (create-style).
   const updates = {
-    [`trades/direct/${tradeId}/requestedCardId`]: requestedCardId,
-    [`trades/direct/${tradeId}/status`]: 'awaiting_offerer_confirmation',
-    [`trades/direct/${tradeId}/respondedAt`]: now,
-    ...directIndexUpdatesForTrade(nextTrade),
+    [`trades/direct/${postResponseTrade.id}`]: postResponseTrade,
+    ...indexUpdates,
   };
 
   const ack = await db.updateAcknowledged(updates);
