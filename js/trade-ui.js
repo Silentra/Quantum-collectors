@@ -234,7 +234,7 @@ export function renderTrading() {
   }
 
   // Expire stale listings on render
-  expireStaleListings();
+  void expireStaleListings();
 
   // Reset reactive hashes so first reactive tick after render detects fresh state correctly
   _lastIncomingHash = '';
@@ -914,7 +914,7 @@ function _wireDirectTradeActionButtons(username, root = document) {
       });
       if (!confirmed) return;
 
-      const result = respondToTrade(tradeId, username, returnCardId);
+      const result = await respondToTrade(tradeId, username, returnCardId);
       if (result.success) {
         delete _returnCardSelections[tradeId];
         toast.success('Trade response submitted.');
@@ -973,9 +973,9 @@ function _wireDirectTradeActionButtons(username, root = document) {
 
   // Decline (B at await response, or A at final confirm)
   root.querySelectorAll('.trade-decline-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const tradeId = btn.dataset.tradeId;
-      const result = declineTrade(tradeId, username);
+      const result = await declineTrade(tradeId, username);
       if (result.success) {
         delete _returnCardSelections[tradeId];
         toast.info('Trade declined.');
@@ -988,9 +988,9 @@ function _wireDirectTradeActionButtons(username, root = document) {
 
   // Cancel (A before B responds)
   root.querySelectorAll('.trade-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const tradeId = btn.dataset.tradeId;
-      const result = cancelTrade(tradeId, username);
+      const result = await cancelTrade(tradeId, username);
       if (result.success) {
         toast.info('Offer cancelled.');
       } else {
@@ -1004,9 +1004,9 @@ function _wireDirectTradeActionButtons(username, root = document) {
 function _wireListingEvents(username) {
   // Cancel listing buttons
   document.querySelectorAll('.listing-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const listingId = btn.dataset.listingId;
-      const result = cancelListing(listingId, username);
+      const result = await cancelListing(listingId, username);
       if (result.success) {
         toast.info('Listing cancelled.');
       } else {
@@ -1402,7 +1402,7 @@ async function _handleSendTrade(username) {
   });
   if (!confirmed) return;
 
-  const result = createTradeOffer(username, _selectedTarget, _offeredCardId);
+  const result = await createTradeOffer(username, _selectedTarget, _offeredCardId);
   if (result.success) {
     toast.success(`Offer sent to ${_selectedTarget}.`);
     _selectedTarget = null;
@@ -1677,9 +1677,9 @@ export function refreshMyListingsSection(username) {
 
   // Re-wire cancel listing buttons in this section
   section.querySelectorAll('.listing-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const listingId = btn.dataset.listingId;
-      const result = cancelListing(listingId, username);
+      const result = await cancelListing(listingId, username);
       if (result.success) {
         toast.info('Listing cancelled.');
       } else {
@@ -1782,13 +1782,14 @@ function _startCooldownTimer(username) {
 
     const availSection = document.getElementById('available-listings-section');
     if (availSection) {
-      expireStaleListings();
-      const visible = getVisibleListings(username).filter(l => l.ownerId !== username);
-      const newHash = _hashArray(visible);
-      if (newHash !== _lastAvailableListingsHash) {
-        _lastAvailableListingsHash = newHash;
-        refreshAvailableListingsSection(username);
-      }
+      expireStaleListings().then(() => {
+        const visible = getVisibleListings(username).filter(l => l.ownerId !== username);
+        const newHash = _hashArray(visible);
+        if (newHash !== _lastAvailableListingsHash) {
+          _lastAvailableListingsHash = newHash;
+          refreshAvailableListingsSection(username);
+        }
+      });
     }
 
     if (!userFillingListingForm) {

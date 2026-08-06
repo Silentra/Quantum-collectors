@@ -14,6 +14,7 @@
  */
 
 import * as db from './database.js';
+import * as metrics from './db-metrics.js';
 import {
   STAT_KEYS,
   getPlayerStat,
@@ -21,6 +22,7 @@ import {
 } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
+import { listingIndexRemovalsForListing } from './trade-index.js';
 
 /**
  * RTDB multi-path updates cannot include both an ancestor and a descendant.
@@ -112,6 +114,7 @@ export function buildListingFulfillPlan({
   chosenCardId,
   ownerPlayer,
   accepterPlayer,
+  groupId = null,
   now,
 } = {}) {
   if (!listingId || !claimId || !ownerId || !accepterId || !offeredCardId || !chosenCardId) {
@@ -142,6 +145,8 @@ export function buildListingFulfillPlan({
   if (accepterInv[chosenCardId] <= 0) delete accepterInv[chosenCardId];
   accepterInv[offeredCardId] = (accepterInv[offeredCardId] || 0) + 1;
 
+  const resolvedGroupId = groupId || db.get(`trades/listings/${listingId}`)?.groupId || null;
+
   const updates = {
     [`trades/listings/${listingId}/status`]: 'fulfilled',
     [`trades/listings/${listingId}/respondedAt`]: now,
@@ -155,6 +160,11 @@ export function buildListingFulfillPlan({
     [`players/${accepterId}/lastListingAcceptAt`]: now,
     [`players/${ownerId}/progression/firstTrade`]: true,
     [`players/${accepterId}/progression/firstTrade`]: true,
+    ...listingIndexRemovalsForListing({
+      id: listingId,
+      ownerId,
+      groupId: resolvedGroupId,
+    }),
   };
 
   appendInventorySwapPaths(updates, ownerId, ownerInv, offeredCardId, chosenCardId);
@@ -254,11 +264,16 @@ export async function commitListingFulfillPlan(listingId, claimId, plan, { accep
 
     const ack = await db.updateAcknowledged(plan.updates);
     if (ack.ok) {
+      metrics.recordTradeIndexLifecycle({
+        tag: 'listing-index-dual-write',
+        ops: 1,
+        ok: true,
+      });
       return {
         success: true,
         notifiedAccepter: plan.notifiedAccepter || [],
         notifiedOwner: plan.notifiedOwner || [],
-        writeCount: 2, // claim txn + fulfill update
+        writeCount: 3, // claim txn + index transition + fulfill update
       };
     }
 
@@ -279,7 +294,7 @@ export async function commitListingFulfillPlan(listingId, claimId, plan, { accep
         notifiedAccepter: plan.notifiedAccepter || [],
         notifiedOwner: plan.notifiedOwner || [],
         recovered: true,
-        writeCount: 2,
+        writeCount: 3,
       };
     }
 

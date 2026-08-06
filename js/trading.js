@@ -17,12 +17,17 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
+import * as metrics from './db-metrics.js';
 import { executeDirectTrade, getDirectTradeCooldown } from './trade-execution.js';
 import {
   buildAvailabilitySnapshot,
   canOfferCardInTrade,
   getAvailabilityFailureReason,
 } from './trade-availability.js';
+import {
+  directIndexUpdatesForTrade,
+  directIndexRemovalsForTrade,
+} from './trade-index.js';
 
 // ─── Phase T-8: Trading config helpers ───────────────────────────────────────
 
@@ -458,13 +463,14 @@ function _migrateTradesStructure() {
 
 /**
  * Create a one-card direct trade offer (no requested card yet).
+ * One acknowledged multi-path: canonical trade + both participant index leaves.
  *
  * @param {string} offeringPlayerId
  * @param {string} targetPlayerId
  * @param {string} offeredCardId
- * @returns {{ success: boolean, tradeId?: string, reason?: string }}
+ * @returns {Promise<{ success: boolean, tradeId?: string, reason?: string, error?: string, writeCount?: number }>}
  */
-export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId) {
+export async function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
@@ -507,25 +513,46 @@ export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId
     }
   }
 
-  const tradeId = db.push('trades/direct', {
+  const tradeId = db.generatePushKey('trades/direct');
+  const now = Date.now();
+  const trade = {
+    id: tradeId,
     offeringPlayerId,
     targetPlayerId,
     offeredCardId,
     requestedCardId: null,
     status: 'awaiting_target_response',
-    createdAt: Date.now(),
+    createdAt: now,
     respondedAt: null,
     completedAt: null,
-  });
+  };
 
-  db.set(`trades/direct/${tradeId}/id`, tradeId);
+  const updates = {
+    [`trades/direct/${tradeId}`]: trade,
+    ...directIndexUpdatesForTrade(trade),
+  };
+
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: offeringPlayerId,
+  });
+  if (!ack.ok) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: ack.error || 'Could not create trade',
+    };
+  }
 
   if (isDetailedLogging()) {
     console.log(`[Trading][DETAIL] Trade ${tradeId} created: ${offeringPlayerId} → ${targetPlayerId}, offered=${offeredCardId}`);
   } else {
     console.log(`[Trading] Trade ${tradeId} created: ${offeringPlayerId} → ${targetPlayerId}`);
   }
-  return { success: true, tradeId };
+  return { success: true, tradeId, writeCount: 1 };
 }
 
 /**
@@ -534,9 +561,9 @@ export function createTradeOffer(offeringPlayerId, targetPlayerId, offeredCardId
  * @param {string} tradeId
  * @param {string} targetPlayerId
  * @param {string} requestedCardId
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, error?: string, writeCount?: number }>}
  */
-export function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
+export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
@@ -588,18 +615,42 @@ export function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
   }
 
   const now = Date.now();
-  db.update(`trades/direct/${tradeId}`, {
+  const nextTrade = {
+    ...freshTrade,
+    id: freshTrade.id || tradeId,
     requestedCardId,
     status: 'awaiting_offerer_confirmation',
     respondedAt: now,
+  };
+
+  const updates = {
+    [`trades/direct/${tradeId}/requestedCardId`]: requestedCardId,
+    [`trades/direct/${tradeId}/status`]: 'awaiting_offerer_confirmation',
+    [`trades/direct/${tradeId}/respondedAt`]: now,
+    ...directIndexUpdatesForTrade(nextTrade),
+  };
+
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: targetPlayerId,
   });
+  if (!ack.ok) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: ack.error || 'Could not respond to trade',
+    };
+  }
 
   if (isDetailedLogging()) {
     console.log(`[Trading][DETAIL] Trade ${tradeId} response: ${targetPlayerId} offered return ${requestedCardId}`);
   } else {
     console.log(`[Trading] Trade ${tradeId} response submitted by ${targetPlayerId}`);
   }
-  return { success: true };
+  return { success: true, writeCount: 1 };
 }
 
 /**
@@ -640,33 +691,53 @@ export async function confirmTrade(tradeId, offeringPlayerId) {
  *
  * @param {string} tradeId
  * @param {string} decliningPlayerId
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, error?: string, writeCount?: number }>}
  */
-export function declineTrade(tradeId, decliningPlayerId) {
+export async function declineTrade(tradeId, decliningPlayerId) {
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
 
   const now = Date.now();
+  const id = trade.id || tradeId;
+  /** @type {Record<string, object|null|number|string>} */
+  let updates = null;
 
   if (trade.status === 'awaiting_target_response') {
     if (trade.targetPlayerId !== decliningPlayerId) {
       return { success: false, reason: 'NOT_TARGET_PLAYER' };
     }
-    db.update(`trades/direct/${tradeId}`, {
-      status: 'declined',
-      respondedAt: now,
-      completedAt: now,
-    });
+    updates = {
+      [`trades/direct/${id}/status`]: 'declined',
+      [`trades/direct/${id}/respondedAt`]: now,
+      [`trades/direct/${id}/completedAt`]: now,
+      ...directIndexRemovalsForTrade({ ...trade, id }),
+    };
   } else if (trade.status === 'awaiting_offerer_confirmation') {
     if (trade.offeringPlayerId !== decliningPlayerId) {
       return { success: false, reason: 'NOT_OFFERING_PLAYER' };
     }
-    db.update(`trades/direct/${tradeId}`, {
-      status: 'declined',
-      completedAt: now,
-    });
+    updates = {
+      [`trades/direct/${id}/status`]: 'declined',
+      [`trades/direct/${id}/completedAt`]: now,
+      ...directIndexRemovalsForTrade({ ...trade, id }),
+    };
   } else {
     return { success: false, reason: 'TRADE_NOT_DECLINABLE' };
+  }
+
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: decliningPlayerId,
+  });
+  if (!ack.ok) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: ack.error || 'Could not decline trade',
+    };
   }
 
   if (isDetailedLogging()) {
@@ -674,7 +745,7 @@ export function declineTrade(tradeId, decliningPlayerId) {
   } else {
     console.log(`[Trading] Trade ${tradeId} declined by ${decliningPlayerId}`);
   }
-  return { success: true };
+  return { success: true, writeCount: 1 };
 }
 
 /**
@@ -682,9 +753,9 @@ export function declineTrade(tradeId, decliningPlayerId) {
  *
  * @param {string} tradeId
  * @param {string} cancellingPlayerId
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, error?: string, writeCount?: number }>}
  */
-export function cancelTrade(tradeId, cancellingPlayerId) {
+export async function cancelTrade(tradeId, cancellingPlayerId) {
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
   if (trade.status !== 'awaiting_target_response') {
@@ -695,18 +766,35 @@ export function cancelTrade(tradeId, cancellingPlayerId) {
   }
 
   const now = Date.now();
-  db.update(`trades/direct/${tradeId}`, {
-    status: 'cancelled',
-    respondedAt: now,
-    completedAt: now,
+  const id = trade.id || tradeId;
+  const updates = {
+    [`trades/direct/${id}/status`]: 'cancelled',
+    [`trades/direct/${id}/respondedAt`]: now,
+    [`trades/direct/${id}/completedAt`]: now,
+    ...directIndexRemovalsForTrade({ ...trade, id }),
+  };
+
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: cancellingPlayerId,
   });
+  if (!ack.ok) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: ack.error || 'Could not cancel trade',
+    };
+  }
 
   if (isDetailedLogging()) {
     console.log(`[Trading][DETAIL] Trade ${tradeId} cancelled by ${cancellingPlayerId}`);
   } else {
     console.log(`[Trading] Trade ${tradeId} cancelled by ${cancellingPlayerId}`);
   }
-  return { success: true };
+  return { success: true, writeCount: 1 };
 }
 
 const _ACTIVE_DIRECT_STATUSES = new Set([

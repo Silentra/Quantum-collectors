@@ -16,6 +16,7 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
+import * as metrics from './db-metrics.js';
 import { validateListingTrade, isCardTradable, isTradingEnabled, isListingsEnabled, isDetailedLogging } from './trading.js';
 import { executeListingTrade } from './trade-listing-execution.js';
 import {
@@ -23,6 +24,10 @@ import {
   canOfferCardInTrade,
   getAvailabilityFailureReason,
 } from './trade-availability.js';
+import {
+  listingIndexUpdatesForListing,
+  listingIndexRemovalsForListing,
+} from './trade-index.js';
 
 // ─── Helpers ─────────────────────────────────���──────────────────────────────
 
@@ -84,9 +89,11 @@ export function getListingCooldown(username) {
 
 /**
  * Scan all active listings and expire any past their expiresAt.
- * Safe to call frequently (e.g., on tab render). No-op if nothing to expire.
+ * One acknowledged multi-path per expired listing (canonical + index removals).
+ * Safe to call frequently (e.g., on tab render).
+ * @returns {Promise<number>} number expired
  */
-export function expireStaleListings() {
+export async function expireStaleListings() {
   const allListings = db.get('trades/listings') || {};
   const now = Date.now();
   let expired = 0;
@@ -94,17 +101,27 @@ export function expireStaleListings() {
   for (const [id, listing] of Object.entries(allListings)) {
     if (!listing || listing.status !== 'active') continue;
     if (listing.expiresAt && now > listing.expiresAt) {
-      db.update(`trades/listings/${id}`, {
-        status: 'expired',
-        respondedAt: now,
+      const listingId = listing.id || id;
+      const updates = {
+        [`trades/listings/${listingId}/status`]: 'expired',
+        [`trades/listings/${listingId}/respondedAt`]: now,
+        ...listingIndexRemovalsForListing({ ...listing, id: listingId }),
+      };
+      const ack = await db.updateAcknowledged(updates);
+      metrics.recordTradeIndexLifecycle({
+        tag: 'listing-index-dual-write',
+        ops: 1,
+        ok: ack.ok,
+        username: listing.ownerId,
       });
-      expired++;
+      if (ack.ok) expired += 1;
     }
   }
 
   if (expired > 0) {
     console.log(`[Listings] Expired ${expired} stale listing(s)`);
   }
+  return expired;
 }
 
 // ─── Listing Lifecycle ──────────────────────────────────────────────────────
@@ -216,21 +233,30 @@ export async function createListing(ownerId, offeredCardId, requestedCardIds) {
     const expiresAt = now + _getListingExpirationMs();
     const listingId = db.generatePushKey('trades/listings');
 
+    const listing = {
+      id: listingId,
+      ownerId,
+      offeredCardId,
+      requestedCardIds,
+      createdAt: now,
+      expiresAt,
+      groupId: check.ownerGroup,
+      status: 'active',
+    };
+
     const updates = {
-      [`trades/listings/${listingId}`]: {
-        id: listingId,
-        ownerId,
-        offeredCardId,
-        requestedCardIds,
-        createdAt: now,
-        expiresAt,
-        groupId: check.ownerGroup,
-        status: 'active',
-      },
+      [`trades/listings/${listingId}`]: listing,
       [`players/${ownerId}/lastListingCreatedAt`]: now,
+      ...listingIndexUpdatesForListing(listing, now),
     };
 
     const ack = await db.updateAcknowledged(updates);
+    metrics.recordTradeIndexLifecycle({
+      tag: 'listing-index-dual-write',
+      ops: 1,
+      ok: ack.ok,
+      username: ownerId,
+    });
     if (!ack.ok) {
       return {
         success: false,
@@ -261,26 +287,44 @@ export async function createListing(ownerId, offeredCardId, requestedCardIds) {
  *
  * @param {string} listingId
  * @param {string} cancellingPlayerId
- * @returns {{ success: boolean, reason?: string }}
+ * @returns {Promise<{ success: boolean, reason?: string, error?: string, writeCount?: number }>}
  */
-export function cancelListing(listingId, cancellingPlayerId) {
+export async function cancelListing(listingId, cancellingPlayerId) {
   // Phase T-8: Global toggle check (allow cancellation even if listings disabled — player should be able to clean up)
   const listing = db.get(`trades/listings/${listingId}`);
   if (!listing) return { success: false, reason: 'LISTING_NOT_FOUND' };
   if (listing.status !== 'active') return { success: false, reason: 'LISTING_NOT_ACTIVE' };
   if (listing.ownerId !== cancellingPlayerId) return { success: false, reason: 'NOT_LISTING_OWNER' };
 
-  db.update(`trades/listings/${listingId}`, {
-    status: 'cancelled',
-    respondedAt: Date.now(),
+  const now = Date.now();
+  const id = listing.id || listingId;
+  const updates = {
+    [`trades/listings/${id}/status`]: 'cancelled',
+    [`trades/listings/${id}/respondedAt`]: now,
+    ...listingIndexRemovalsForListing({ ...listing, id }),
+  };
+
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'listing-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: cancellingPlayerId,
   });
+  if (!ack.ok) {
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: ack.error || 'Could not cancel listing',
+    };
+  }
 
   if (isDetailedLogging()) {
     console.log(`[Listings][DETAIL] Listing ${listingId} cancelled by ${cancellingPlayerId}, offeredCard=${listing.offeredCardId}`);
   } else {
     console.log(`[Listings] Listing ${listingId} cancelled by ${cancellingPlayerId}`);
   }
-  return { success: true };
+  return { success: true, writeCount: 1 };
 }
 
 /**

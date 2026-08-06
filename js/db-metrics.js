@@ -130,6 +130,9 @@ export function pathCategory(path) {
     if (parts[1] === 'listings') return 'trades/listings';
     return 'trades';
   }
+  if (parts[0] === 'playerTradeIndex') return 'playerTradeIndex';
+  if (parts[0] === 'listingsByGroup') return 'listingsByGroup';
+  if (parts[0] === 'tradeIndexMeta') return 'tradeIndexMeta';
   return parts[0];
 }
 
@@ -162,7 +165,9 @@ function _emptyState() {
       scopedSubscriptionAdd: 0,
       scopedSubscriptionReuse: 0,
       scopedSubscriptionRemove: 0,
+      tradeIndexLifecycleByTag: {},
     },
+    tradeIndexLifecycle: [],
   };
 }
 
@@ -421,6 +426,30 @@ export function recordFirebaseWrite(opts) {
 }
 
 /**
+ * S5c-B trade-index lifecycle diagnostics (ops = distinct server operations, not path count).
+ * @param {{ tag: string, ops?: number, ok?: boolean, username?: string }} opts
+ */
+export function recordTradeIndexLifecycle(opts) {
+  if (!_enabled) return;
+  if (!_state.tradeIndexLifecycle) _state.tradeIndexLifecycle = [];
+  const tag = String(opts.tag || 'unknown');
+  const entry = {
+    ts: Date.now(),
+    tag,
+    ops: Number.isFinite(Number(opts.ops)) ? Number(opts.ops) : 0,
+    ok: opts.ok === undefined ? null : !!opts.ok,
+    usernameRedacted: opts.username ? '[user]' : null,
+  };
+  _state.tradeIndexLifecycle.push(entry);
+  if (!_state.totals.tradeIndexLifecycleByTag) _state.totals.tradeIndexLifecycleByTag = {};
+  _state.totals.tradeIndexLifecycleByTag[tag] =
+    (_state.totals.tradeIndexLifecycleByTag[tag] || 0) + 1;
+  if (_verbose) {
+    console.info(`[DB Metrics] TradeIndex ${tag} ops=${entry.ops} ok=${entry.ok}`);
+  }
+}
+
+/**
  * @param {any} cacheRoot - full _db object (serialized for size only; not logged)
  * @param {string} reason
  */
@@ -628,6 +657,10 @@ export function summary() {
       recentFanIns: _state.listenerFanIns.slice(-20),
     },
     majorNodes: _state.majorNodes,
+    tradeIndexLifecycle: {
+      byTag: _state.totals.tradeIndexLifecycleByTag || {},
+      recent: (_state.tradeIndexLifecycle || []).slice(-30),
+    },
   };
 
   console.info('[DB Metrics] Summary', report);
@@ -649,6 +682,7 @@ function _installWindowApi() {
     disable,
     isEnabled,
     measureMajorNodes: measureMajorNodesNow,
+    recordTradeIndexLifecycle,
     help() {
       console.info(`DB Metrics (Phase 1A)
 Enable:  localStorage.setItem('qc-db-metrics-enabled','true'); location.reload()

@@ -16,6 +16,7 @@
  */
 
 import * as db from './database.js';
+import * as metrics from './db-metrics.js';
 import {
   STAT_KEYS,
   getPlayerStat,
@@ -23,6 +24,7 @@ import {
 } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
+import { directIndexRemovalsForTrade } from './trade-index.js';
 
 /**
  * RTDB multi-path updates cannot include both an ancestor and a descendant.
@@ -170,6 +172,11 @@ export function buildDirectTradeAcceptPlan({
     [`players/${targetPlayerId}/lastDirectTradeAt`]: now,
     [`players/${offeringPlayerId}/progression/firstTrade`]: true,
     [`players/${targetPlayerId}/progression/firstTrade`]: true,
+    ...directIndexRemovalsForTrade({
+      id: tradeId,
+      offeringPlayerId,
+      targetPlayerId,
+    }),
   };
 
   appendInventorySwapPaths(updates, offeringPlayerId, offeringInv, offeredCardId, requestedCardId);
@@ -195,9 +202,10 @@ export function buildDirectTradeAcceptPlan({
 /**
  * Mark trade failed only while still awaiting offerer confirmation.
  * Never clobber accepted / declined / cancelled / failed / processing.
- * @returns {{ marked: boolean, reason?: string, currentStatus?: string }}
+ * Removes both participant index leaves in the same acknowledged write.
+ * @returns {Promise<{ marked: boolean, reason?: string, currentStatus?: string, error?: string }>}
  */
-export function markDirectTradeFailedIfAwaiting(tradeId, failureReason, now = Date.now()) {
+export async function markDirectTradeFailedIfAwaiting(tradeId, failureReason, now = Date.now()) {
   const trade = db.get(`trades/direct/${tradeId}`);
   if (!trade) {
     return { marked: false, reason: 'TRADE_NOT_FOUND', currentStatus: null };
@@ -209,11 +217,28 @@ export function markDirectTradeFailedIfAwaiting(tradeId, failureReason, now = Da
       currentStatus: trade.status,
     };
   }
-  db.update(`trades/direct/${tradeId}`, {
-    status: 'failed',
-    completedAt: now,
-    failureReason,
+  const id = trade.id || tradeId;
+  const updates = {
+    [`trades/direct/${id}/status`]: 'failed',
+    [`trades/direct/${id}/completedAt`]: now,
+    [`trades/direct/${id}/failureReason`]: failureReason,
+    ...directIndexRemovalsForTrade({ ...trade, id }),
+  };
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: trade.offeringPlayerId,
   });
+  if (!ack.ok) {
+    return {
+      marked: false,
+      reason: 'WRITE_FAILED',
+      currentStatus: trade.status,
+      error: ack.error,
+    };
+  }
   return { marked: true, currentStatus: 'failed' };
 }
 
@@ -254,6 +279,12 @@ export async function commitDirectTradeAcceptPlan(tradeId, plan) {
         error: ack.error || 'Could not save trade. Check your connection and try again.',
       };
     }
+
+    metrics.recordTradeIndexLifecycle({
+      tag: 'direct-index-dual-write',
+      ops: 1,
+      ok: true,
+    });
 
     return {
       success: true,

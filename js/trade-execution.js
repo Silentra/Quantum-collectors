@@ -94,10 +94,10 @@ export function formatReadyAt(readyAtMs) {
 
 /**
  * Attempt to mark trade failed only if still awaiting offerer confirmation.
- * @returns {{ success: false, reason: string, stale?: boolean, currentStatus?: string }}
+ * @returns {Promise<{ success: false, reason: string, stale?: boolean, currentStatus?: string }>}
  */
-function failTradeIfActionable(tradeId, reason) {
-  const result = markDirectTradeFailedIfAwaiting(tradeId, reason);
+async function failTradeIfActionable(tradeId, reason) {
+  const result = await markDirectTradeFailedIfAwaiting(tradeId, reason);
   if (!result.marked) {
     return {
       success: false,
@@ -144,7 +144,7 @@ export async function executeDirectTrade(trade) {
 
   const resolvedRequestedId = freshTrade.requestedCardId || requestedCardId;
   if (!resolvedRequestedId) {
-    return failTradeIfActionable(tradeId, 'REQUESTED_CARD_NOT_FOUND');
+    return await failTradeIfActionable(tradeId, 'REQUESTED_CARD_NOT_FOUND');
   }
 
   const resolvedOfferedId = freshTrade.offeredCardId || offeredCardId;
@@ -152,7 +152,7 @@ export async function executeDirectTrade(trade) {
   const resolvedTarget = freshTrade.targetPlayerId || targetPlayerId;
 
   if (resolvedOfferedId === resolvedRequestedId) {
-    return failTradeIfActionable(tradeId, 'SAME_CARD_BOTH_SIDES');
+    return await failTradeIfActionable(tradeId, 'SAME_CARD_BOTH_SIDES');
   }
 
   // ── 1. Reload fresh player state (cache) ──────────────────────────────────
@@ -185,17 +185,17 @@ export async function executeDirectTrade(trade) {
     if (isDetailedLogging()) {
       console.log(`[Trading][DETAIL] Trade ${tradeId} failed validation: ${validation.reason} (${resolvedOffering} → ${resolvedTarget}, offered=${resolvedOfferedId}, requested=${resolvedRequestedId})`);
     }
-    return failTradeIfActionable(tradeId, validation.reason);
+    return await failTradeIfActionable(tradeId, validation.reason);
   }
 
   // ── 4. Check cooldowns for BOTH players ───────────────────────────────────
   const offeringCooldown = getDirectTradeCooldown(resolvedOffering);
   if (offeringCooldown.onCooldown) {
-    return failTradeIfActionable(tradeId, 'OFFERING_PLAYER_ON_COOLDOWN');
+    return await failTradeIfActionable(tradeId, 'OFFERING_PLAYER_ON_COOLDOWN');
   }
   const targetCooldown = getDirectTradeCooldown(resolvedTarget);
   if (targetCooldown.onCooldown) {
-    return failTradeIfActionable(tradeId, 'TARGET_PLAYER_ON_COOLDOWN');
+    return await failTradeIfActionable(tradeId, 'TARGET_PLAYER_ON_COOLDOWN');
   }
 
   // ── 5. One shared timestamp for completedAt + both lastDirectTradeAt ─────
@@ -213,7 +213,7 @@ export async function executeDirectTrade(trade) {
   });
 
   if (!plan.ok) {
-    return failTradeIfActionable(tradeId, plan.reason || 'INVALID_TRADE_PLAN');
+    return await failTradeIfActionable(tradeId, plan.reason || 'INVALID_TRADE_PLAN');
   }
 
   // ── 6. Lock + revalidate + acknowledged multi-path commit ─────────────────

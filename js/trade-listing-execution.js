@@ -16,11 +16,17 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
+import * as metrics from './db-metrics.js';
 import { validateListingTrade, isDetailedLogging } from './trading.js';
 import {
   buildListingFulfillPlan,
   commitListingFulfillPlan,
 } from './trade-listing-plan.js';
+import {
+  listingClaimIndexTransitionPaths,
+  listingReleaseIndexRestorePaths,
+  listingIndexRemovalsForListing,
+} from './trade-index.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -79,6 +85,45 @@ async function _releaseOwnedClaim(listingId, claimId, reason) {
   return release;
 }
 
+/**
+ * Release claim and restore index projections (owner active + group browsable).
+ * @returns {Promise<{ ok: boolean, released?: boolean, indexRestored?: boolean, error?: string }>}
+ */
+async function _releaseOwnedClaimAndRestoreIndex(listingId, claimId, reason) {
+  const release = await _releaseOwnedClaim(listingId, claimId, reason);
+  if (!release.ok || !release.released) {
+    return { ok: false, released: false, indexRestored: false, error: release.error };
+  }
+  const restoredListing = release.listing || db.get(`trades/listings/${listingId}`);
+  if (!restoredListing) {
+    return { ok: true, released: true, indexRestored: false, error: 'Listing missing after release' };
+  }
+  const restorePaths = listingReleaseIndexRestorePaths({
+    ...restoredListing,
+    id: restoredListing.id || listingId,
+    status: 'active',
+  });
+  if (Object.keys(restorePaths).length === 0) {
+    return { ok: true, released: true, indexRestored: true };
+  }
+  const ack = await db.updateAcknowledged(restorePaths);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'listing-release-index-restore',
+    ops: 1,
+    ok: ack.ok,
+    username: restoredListing.ownerId,
+  });
+  if (!ack.ok) {
+    console.warn(
+      `[TradeIndex] Claim released but index restore failed for listing ${listingId}. ` +
+        'Rebuild Trade Indexes. Listing is active canonical.',
+      ack.error,
+    );
+    return { ok: false, released: true, indexRestored: false, error: ack.error };
+  }
+  return { ok: true, released: true, indexRestored: true };
+}
+
 // ─── Atomic Listing Execution ───────────────────────────────────────────────
 
 /**
@@ -108,7 +153,12 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     // Expire only while still active — never overwrite terminals
     const still = db.get(`trades/listings/${listingId}`);
     if (still && still.status === 'active') {
-      db.update(`trades/listings/${listingId}`, { status: 'expired', respondedAt: now });
+      const id = still.id || listingId;
+      await db.updateAcknowledged({
+        [`trades/listings/${id}/status`]: 'expired',
+        [`trades/listings/${id}/respondedAt`]: now,
+        ...listingIndexRemovalsForListing({ ...still, id }),
+      });
     }
     return { success: false, reason: 'LISTING_EXPIRED' };
   }
@@ -146,16 +196,62 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   const claimedListing = claim.listing || db.get(`trades/listings/${listingId}`);
   const ownerId = claimedListing.ownerId || freshListing.ownerId;
 
+  // ── 1b. Required index transition (processing owner leaf; remove group leaf) ─
+  const transitionPaths = listingClaimIndexTransitionPaths({
+    ...claimedListing,
+    id: claimedListing.id || listingId,
+    status: 'processing',
+  }, now);
+  if (Object.keys(transitionPaths).length === 0) {
+    console.warn(`[TradeIndex] Empty claim index transition for ${listingId}; releasing claim.`);
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'EMPTY_INDEX_TRANSITION');
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: 'Could not build trade index transition after claim.',
+      indexTransitionFailed: true,
+    };
+  }
+  const transitionAck = await db.updateAcknowledged(transitionPaths);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'listing-claim-index-transition',
+    ops: 1,
+    ok: transitionAck.ok,
+    username: ownerId,
+  });
+  if (!transitionAck.ok) {
+    console.warn(
+      `[TradeIndex] Post-claim index transition failed for ${listingId}; releasing claim.`,
+      transitionAck.error,
+    );
+    const released = await _releaseOwnedClaimAndRestoreIndex(
+      listingId,
+      claimId,
+      'INDEX_TRANSITION_FAILED',
+    );
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error:
+        transitionAck.error
+        || (released.released
+          ? 'Could not update trade indexes after claim; listing restored when possible.'
+          : 'Could not update trade indexes after claim; listing may still be processing — rebuild/repair.'),
+      indexTransitionFailed: true,
+      claimReleased: !!released.released,
+    };
+  }
+
   // ── 2. Reload players / cards after claim ─────────────────────────────────
   const freshOwner = db.get(`players/${ownerId}`);
   const freshAccepter = db.get(`players/${accepterId}`);
 
   if (!freshOwner) {
-    await _releaseOwnedClaim(listingId, claimId, 'LISTING_OWNER_NOT_FOUND');
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'LISTING_OWNER_NOT_FOUND');
     return { success: false, reason: 'LISTING_OWNER_NOT_FOUND' };
   }
   if (!freshAccepter) {
-    await _releaseOwnedClaim(listingId, claimId, 'ACCEPTER_NOT_FOUND');
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'ACCEPTER_NOT_FOUND');
     return { success: false, reason: 'ACCEPTER_NOT_FOUND' };
   }
 
@@ -183,14 +279,14 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
           `(owner=${ownerId}, accepter=${accepterId}, chosen=${chosenCardId})`,
       );
     }
-    await _releaseOwnedClaim(listingId, claimId, validation.reason);
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, validation.reason);
     return { success: false, reason: validation.reason };
   }
 
   // Re-check cooldown after claim (stale race)
   const cooldownAfterClaim = _getListingAcceptCooldown(accepterId);
   if (cooldownAfterClaim.onCooldown) {
-    await _releaseOwnedClaim(listingId, claimId, 'ACCEPTER_ON_COOLDOWN');
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'ACCEPTER_ON_COOLDOWN');
     return { success: false, reason: 'ACCEPTER_ON_COOLDOWN' };
   }
 
@@ -206,15 +302,16 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     chosenCardId,
     ownerPlayer: freshOwner,
     accepterPlayer: freshAccepter,
+    groupId: claimedListing.groupId || freshListing.groupId,
     now,
   });
 
   if (!plan.ok) {
-    await _releaseOwnedClaim(listingId, claimId, plan.reason);
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, plan.reason);
     return { success: false, reason: plan.reason || 'INVALID_LISTING_PLAN' };
   }
 
-  // ── 4. Commit fulfill (write 2); recover safely on ack error ──────────────
+  // ── 4. Commit fulfill (write 3); recover safely on ack error ──────────────
   const result = await commitListingFulfillPlan(listingId, claimId, plan, {
     accepterId,
     chosenCardId,
@@ -223,10 +320,27 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   if (!result.success) {
     // Stale before write: claim may still be ours — release if still processing/ours
     if (result.stale || result.reason === 'LISTING_NOT_ACTIVE') {
-      await _releaseOwnedClaim(listingId, claimId, 'STALE_BEFORE_FULFILL');
+      await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'STALE_BEFORE_FULFILL');
+    } else if (result.released) {
+      // Recovery already released claim — restore indexes
+      const listingAfter = db.get(`trades/listings/${listingId}`);
+      if (listingAfter && listingAfter.status === 'active') {
+        const restorePaths = listingReleaseIndexRestorePaths({
+          ...listingAfter,
+          id: listingAfter.id || listingId,
+        });
+        if (Object.keys(restorePaths).length > 0) {
+          await db.updateAcknowledged(restorePaths);
+          metrics.recordTradeIndexLifecycle({
+            tag: 'listing-release-index-restore',
+            ops: 1,
+            ok: true,
+            username: ownerId,
+          });
+        }
+      }
     }
-    // WRITE_FAILED with released: already released by recovery
-    // WRITE_UNCERTAIN: leave processing
+    // WRITE_UNCERTAIN: leave processing; owner index already processing, group absent
     return result;
   }
 
@@ -244,6 +358,6 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   return {
     success: true,
     notifiedAccepter: result.notifiedAccepter || [],
-    writeCount: result.writeCount || 2,
+    writeCount: result.writeCount || 3,
   };
 }

@@ -18,6 +18,7 @@
 
 import * as db from './database.js';
 import { emptyGroupListingsIndexPaths, LISTINGS_BY_GROUP_ROOT } from './trade-index.js';
+import * as metrics from './db-metrics.js';
 
 // ---------- ID Generation ----------
 
@@ -91,6 +92,11 @@ export async function deleteGroup(id) {
   const ack = await db.updateAcknowledged({
     [`groups/${id}`]: null,
     [`${LISTINGS_BY_GROUP_ROOT}/${id}`]: null,
+  });
+  metrics.recordTradeIndexLifecycle({
+    tag: 'trade-index-delete-cleanup',
+    ops: 1,
+    ok: ack.ok,
   });
   if (!ack.ok) {
     return { ok: false, error: ack.error || 'Group delete failed' };

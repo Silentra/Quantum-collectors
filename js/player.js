@@ -3,11 +3,17 @@
  */
 
 import * as db from './database.js';
+import * as metrics from './db-metrics.js';
 import { notifyCardInventoryChanged, recordCardCollectionGain } from './achievements.js';
 import {
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
 } from './player-directory.js';
+import {
+  buildPlayerDeleteTradeCleanupUpdates,
+  listOwnedProcessingListingClaims,
+  PLAYER_TRADE_INDEX_ROOT,
+} from './trade-index.js';
 
 /**
  * Create a new player profile
@@ -171,14 +177,59 @@ export function incrementStat(username, statKey, amount = 1) {
 }
 
 /**
- * Delete a player and directory projection in one acknowledged multi-path update.
+ * Delete a player: terminalize open trades/listings as cancelled, clear indexes,
+ * remove player + directory. Processing listings are claim-released first when possible.
  * @param {string} username
- * @returns {Promise<{ ok: boolean, mode?: string, error?: string }>}
+ * @returns {Promise<{ ok: boolean, mode?: string, error?: string, claimReleases?: number }>}
  */
 export async function deletePlayer(username) {
   const playerKey = resolvePlayerDirectoryKey(username);
-  return db.updateAcknowledged({
+  if (!playerKey) {
+    return { ok: false, error: 'Invalid username' };
+  }
+
+  let claimReleases = 0;
+  const processingClaims = listOwnedProcessingListingClaims(playerKey);
+  for (const { listingId, claimId } of processingClaims) {
+    const release = await db.releaseListingClaimIfOwned(listingId, claimId);
+    if (release.ok && release.released) claimReleases += 1;
+    else {
+      console.warn(
+        `[Player] Could not release processing claim on listing ${listingId} before delete; ` +
+          'continuing with cancel+clear in multi-path.',
+        release.error,
+      );
+    }
+  }
+
+  const now = Date.now();
+  const tradeCleanup = buildPlayerDeleteTradeCleanupUpdates(playerKey, now);
+  // tradeCleanup already nulls playerTradeIndex/{key}; avoid overlapping with directory/player
+  const updates = {
+    ...tradeCleanup,
     [`players/${playerKey}`]: null,
     [`playerDirectory/${playerKey}`]: null,
+  };
+
+  // Safety: ensure trade index root for deleted user is cleared even if no actives
+  if (!Object.prototype.hasOwnProperty.call(updates, `${PLAYER_TRADE_INDEX_ROOT}/${playerKey}`)) {
+    updates[`${PLAYER_TRADE_INDEX_ROOT}/${playerKey}`] = null;
+  }
+
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'trade-index-delete-cleanup',
+    ops: 1 + claimReleases,
+    ok: ack.ok,
+    username: playerKey,
   });
+  if (!ack.ok) {
+    return {
+      ok: false,
+      mode: ack.mode,
+      error: ack.error || 'Player delete failed',
+      claimReleases,
+    };
+  }
+  return { ok: true, mode: ack.mode, claimReleases };
 }

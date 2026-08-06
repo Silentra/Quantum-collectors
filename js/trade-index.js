@@ -1,5 +1,5 @@
 /**
- * trade-index.js — Phase S5c-A derived trade indexes (schema + rebuild only)
+ * trade-index.js — Phase S5c-A/B derived trade indexes
  *
  * Canonical records remain:
  *   trades/direct/{tradeId}
@@ -10,15 +10,16 @@
  *   listingsByGroup/{groupId}/_meta|{listingId}
  *   tradeIndexMeta/schemaVersion + rebuiltAt
  *
- * S5c-A: builders, readiness predicates, drift report, Admin rebuild,
- * registration/group empty-index seeds. Does NOT change Trading/Projects reads,
- * lifecycle fan-out, or subscriptions.
+ * S5c-A: builders, readiness, drift, Admin rebuild, registration/group seeds.
+ * S5c-B: lifecycle dual-write path planners + shadowCompare (consumers still canonical).
  *
  * Safety: missing / stale / unready / wrong-version must never be treated as
  * “zero reservations” by future consumers (predicates exported here).
  */
 
 import * as db from './database.js';
+import { buildTradeReservationCounts } from './trade-availability.js';
+import * as metrics from './db-metrics.js';
 
 /** Bump when projection field shapes change; rebuild rewrites all `_meta.v`. */
 export const CURRENT_TRADE_INDEX_SCHEMA_VERSION = 1;
@@ -763,6 +764,353 @@ export async function rebuildTradeIndexes(opts = {}) {
   };
 }
 
+// ─── S5c-B: lifecycle path planners (single source of projection fields) ─────
+
+/**
+ * Warn once-ish when writing indexes for a player whose _meta is missing/old.
+ * Does not block writes — S5c-B gameplay still uses canonical trees.
+ * @param {string} username
+ * @param {string} context
+ */
+export function warnIfPlayerTradeIndexUnready(username, context = '') {
+  if (isPlayerTradeIndexReady(username)) return;
+  console.warn(
+    `[TradeIndex] Unready playerTradeIndex for "${username}" during ${context || 'mutation'}. ` +
+      'Run Rebuild Trade Indexes. Gameplay still uses canonical trades.',
+  );
+}
+
+/**
+ * Set both participant direct leaves from a canonical-shaped trade object.
+ * @param {object} trade - must include id + participant/card/status fields
+ * @returns {Record<string, object>}
+ */
+export function directIndexUpdatesForTrade(trade) {
+  const entry = buildDirectTradeIndexEntry(trade, trade?.id);
+  if (!entry) return {};
+  warnIfPlayerTradeIndexUnready(entry.offeringPlayerId, 'directIndexUpdates');
+  warnIfPlayerTradeIndexUnready(entry.targetPlayerId, 'directIndexUpdates');
+  return {
+    [`${PLAYER_TRADE_INDEX_ROOT}/${entry.offeringPlayerId}/direct/${entry.id}`]: entry,
+    [`${PLAYER_TRADE_INDEX_ROOT}/${entry.targetPlayerId}/direct/${entry.id}`]: entry,
+  };
+}
+
+/**
+ * Remove both participant direct leaves.
+ * @param {object} trade
+ * @returns {Record<string, null>}
+ */
+export function directIndexRemovalsForTrade(trade) {
+  const id = trade?.id != null ? String(trade.id) : '';
+  const offerer = trade?.offeringPlayerId != null ? String(trade.offeringPlayerId) : '';
+  const target = trade?.targetPlayerId != null ? String(trade.targetPlayerId) : '';
+  /** @type {Record<string, null>} */
+  const updates = {};
+  if (offerer && id) updates[`${PLAYER_TRADE_INDEX_ROOT}/${offerer}/direct/${id}`] = null;
+  if (target && id) updates[`${PLAYER_TRADE_INDEX_ROOT}/${target}/direct/${id}`] = null;
+  return updates;
+}
+
+/**
+ * Owner + group listing projections for an active (browsable) listing.
+ * @param {object} listing
+ * @param {number} [now]
+ * @returns {Record<string, object>}
+ */
+export function listingIndexUpdatesForListing(listing, now = Date.now()) {
+  /** @type {Record<string, object>} */
+  const updates = {};
+  const ownerEntry = buildOwnerListingIndexEntry(listing, listing?.id, now);
+  if (ownerEntry && listing?.ownerId) {
+    warnIfPlayerTradeIndexUnready(String(listing.ownerId), 'listingIndexUpdates');
+    updates[`${PLAYER_TRADE_INDEX_ROOT}/${listing.ownerId}/listings/${ownerEntry.id}`] = ownerEntry;
+  }
+  const groupEntry = buildGroupListingIndexEntry(listing, listing?.id, now);
+  if (groupEntry && listing?.groupId) {
+    if (!isGroupListingsIndexReady(String(listing.groupId))) {
+      console.warn(
+        `[TradeIndex] Unready listingsByGroup for "${listing.groupId}". Run Rebuild Trade Indexes.`,
+      );
+    }
+    updates[`${LISTINGS_BY_GROUP_ROOT}/${listing.groupId}/${groupEntry.id}`] = groupEntry;
+  }
+  return updates;
+}
+
+/**
+ * Remove owner + group listing projections.
+ * @param {object} listing
+ * @returns {Record<string, null>}
+ */
+export function listingIndexRemovalsForListing(listing) {
+  const id = listing?.id != null ? String(listing.id) : '';
+  /** @type {Record<string, null>} */
+  const updates = {};
+  if (listing?.ownerId && id) {
+    updates[`${PLAYER_TRADE_INDEX_ROOT}/${listing.ownerId}/listings/${id}`] = null;
+  }
+  if (listing?.groupId && id) {
+    updates[`${LISTINGS_BY_GROUP_ROOT}/${listing.groupId}/${id}`] = null;
+  }
+  return updates;
+}
+
+/**
+ * After successful canonical claim: owner leaf → processing, group leaf removed.
+ * @param {object} listing - canonical listing after claim (status processing)
+ * @param {number} [now]
+ * @returns {Record<string, object|null>}
+ */
+export function listingClaimIndexTransitionPaths(listing, now = Date.now()) {
+  const processing = { ...listing, status: 'processing' };
+  const ownerEntry = buildOwnerListingIndexEntry(processing, listing?.id, now);
+  /** @type {Record<string, object|null>} */
+  const updates = {};
+  if (ownerEntry && listing?.ownerId) {
+    warnIfPlayerTradeIndexUnready(String(listing.ownerId), 'listingClaimIndexTransition');
+    updates[`${PLAYER_TRADE_INDEX_ROOT}/${listing.ownerId}/listings/${ownerEntry.id}`] = ownerEntry;
+  }
+  if (listing?.groupId && listing?.id) {
+    updates[`${LISTINGS_BY_GROUP_ROOT}/${listing.groupId}/${listing.id}`] = null;
+  }
+  return updates;
+}
+
+/**
+ * After ownership-safe release back to active: restore owner + group projections.
+ * @param {object} listing - canonical listing after release (status active)
+ * @param {number} [now]
+ * @returns {Record<string, object>}
+ */
+export function listingReleaseIndexRestorePaths(listing, now = Date.now()) {
+  const active = { ...listing, status: 'active' };
+  return listingIndexUpdatesForListing(active, now);
+}
+
+/**
+ * Build multi-path updates that terminalize a deleted player's open trades/listings
+ * and clear related index leaves. Does not include players/ directory nulls.
+ *
+ * Avoids overlapping paths: deleted user's index is cleared via one whole-tree null;
+ * counterpart direct leaves and group listing leaves are nulled individually.
+ *
+ * @param {string} playerKey
+ * @param {number} [now]
+ * @returns {Record<string, object|null>}
+ */
+export function buildPlayerDeleteTradeCleanupUpdates(playerKey, now = Date.now()) {
+  const key = String(playerKey || '').trim();
+  if (!key) return {};
+  /** @type {Record<string, object|null>} */
+  const updates = {};
+
+  const allDirect = db.get('trades/direct') || {};
+  for (const [tradeId, trade] of Object.entries(allDirect)) {
+    if (!trade || typeof trade !== 'object') continue;
+    const involves =
+      trade.offeringPlayerId === key || trade.targetPlayerId === key;
+    if (!involves) continue;
+    if (!INDEXED_DIRECT_STATUSES.has(trade.status)) continue;
+
+    const id = trade.id || tradeId;
+    updates[`trades/direct/${id}/status`] = 'cancelled';
+    updates[`trades/direct/${id}/completedAt`] = now;
+    updates[`trades/direct/${id}/respondedAt`] = trade.respondedAt != null ? trade.respondedAt : now;
+    updates[`trades/direct/${id}/cancellationReason`] = 'player_deleted';
+
+    const other =
+      trade.offeringPlayerId === key
+        ? trade.targetPlayerId
+        : trade.offeringPlayerId;
+    if (other && id) {
+      updates[`${PLAYER_TRADE_INDEX_ROOT}/${other}/direct/${id}`] = null;
+    }
+  }
+
+  const allListings = db.get('trades/listings') || {};
+  for (const [listingId, listing] of Object.entries(allListings)) {
+    if (!listing || listing.ownerId !== key) continue;
+    if (listing.status !== 'active' && listing.status !== 'processing') continue;
+    const id = listing.id || listingId;
+    updates[`trades/listings/${id}/status`] = 'cancelled';
+    updates[`trades/listings/${id}/respondedAt`] = now;
+    updates[`trades/listings/${id}/cancellationReason`] = 'player_deleted';
+    updates[`trades/listings/${id}/processingBy`] = null;
+    updates[`trades/listings/${id}/processingAt`] = null;
+    updates[`trades/listings/${id}/claimId`] = null;
+    updates[`trades/listings/${id}/fulfilledCardId`] = null;
+    if (listing.groupId && id) {
+      updates[`${LISTINGS_BY_GROUP_ROOT}/${listing.groupId}/${id}`] = null;
+    }
+  }
+
+  // Whole-tree null covers deleted user's direct + listings + _meta
+  updates[`${PLAYER_TRADE_INDEX_ROOT}/${key}`] = null;
+  return updates;
+}
+
+/**
+ * List processing listings owned by player that still need claim release before delete.
+ * @param {string} playerKey
+ * @returns {{ listingId: string, claimId: string }[]}
+ */
+export function listOwnedProcessingListingClaims(playerKey) {
+  const key = String(playerKey || '').trim();
+  const out = [];
+  if (!key) return out;
+  const allListings = db.get('trades/listings') || {};
+  for (const [listingId, listing] of Object.entries(allListings)) {
+    if (!listing || listing.ownerId !== key) continue;
+    if (listing.status !== 'processing') continue;
+    if (!listing.claimId) continue;
+    out.push({ listingId: listing.id || listingId, claimId: String(listing.claimId) });
+  }
+  return out;
+}
+
+function _indexMapsForPlayer(username) {
+  const direct = {};
+  const listings = {};
+  const directNode = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${username}/direct`) || {};
+  const listingNode = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${username}/listings`) || {};
+  for (const [id, entry] of Object.entries(directNode)) {
+    if (id === TRADE_INDEX_META_KEY || !entry || typeof entry !== 'object') continue;
+    direct[id] = entry;
+  }
+  for (const [id, entry] of Object.entries(listingNode)) {
+    if (id === TRADE_INDEX_META_KEY || !entry || typeof entry !== 'object') continue;
+    listings[id] = entry;
+  }
+  return { direct, listings };
+}
+
+function _countsToObject(map) {
+  /** @type {Record<string, { outgoing: number, listing: number, incoming: number, total: number }>} */
+  const obj = {};
+  if (!map) return obj;
+  for (const [cardId, b] of map.entries()) {
+    obj[cardId] = {
+      outgoing: b.outgoing || 0,
+      listing: b.listing || 0,
+      incoming: b.incoming || 0,
+      total: (b.outgoing || 0) + (b.listing || 0) + (b.incoming || 0),
+    };
+  }
+  return obj;
+}
+
+function _activeIdsFromMaps(directMap, listingMap) {
+  return {
+    direct: Object.keys(directMap || {}),
+    listings: Object.keys(listingMap || {}),
+  };
+}
+
+/**
+ * Dev/admin: compare reservation tallies from canonical trees vs playerTradeIndex.
+ * No Firebase writes. Does not change gameplay.
+ * @param {string} username
+ */
+export function shadowCompare(username) {
+  const key = String(username || '').trim();
+  const indexReady = isPlayerTradeIndexReady(key);
+  const canonicalDirect = db.get('trades/direct') || {};
+  const canonicalListings = db.get('trades/listings') || {};
+  const canonicalAvailable =
+    canonicalDirect != null && typeof canonicalDirect === 'object'
+    && canonicalListings != null && typeof canonicalListings === 'object';
+
+  const canonicalCountsMap = buildTradeReservationCounts(key, {
+    directTrades: canonicalDirect,
+    listings: canonicalListings,
+  });
+  const canonicalCounts = _countsToObject(canonicalCountsMap);
+
+  let indexCounts = null;
+  let indexActiveIds = { direct: [], listings: [] };
+  if (indexReady) {
+    const maps = _indexMapsForPlayer(key);
+    indexActiveIds = _activeIdsFromMaps(maps.direct, maps.listings);
+    indexCounts = _countsToObject(
+      buildTradeReservationCounts(key, {
+        directTrades: maps.direct,
+        listings: maps.listings,
+      }),
+    );
+  }
+
+  const diffs = [];
+  if (!indexReady) {
+    diffs.push({ type: 'index_unready', cardId: null, detail: 'playerTradeIndex _meta not ready' });
+  } else {
+    const allCards = new Set([
+      ...Object.keys(canonicalCounts),
+      ...Object.keys(indexCounts || {}),
+    ]);
+    for (const cardId of allCards) {
+      const c = canonicalCounts[cardId] || { outgoing: 0, listing: 0, incoming: 0, total: 0 };
+      const i = (indexCounts && indexCounts[cardId]) || { outgoing: 0, listing: 0, incoming: 0, total: 0 };
+      if (c.outgoing !== i.outgoing || c.listing !== i.listing || c.incoming !== i.incoming) {
+        diffs.push({
+          type: 'count_mismatch',
+          cardId,
+          canonical: c,
+          index: i,
+        });
+      }
+    }
+  }
+
+  const match = indexReady && diffs.length === 0;
+
+  // Canonical active ids involving this user (for diagnostics)
+  const canonicalActiveIds = { direct: [], listings: [] };
+  for (const [id, t] of Object.entries(canonicalDirect)) {
+    if (!t || !INDEXED_DIRECT_STATUSES.has(t.status)) continue;
+    if (t.offeringPlayerId === key || t.targetPlayerId === key) {
+      canonicalActiveIds.direct.push(t.id || id);
+    }
+  }
+  for (const [id, l] of Object.entries(canonicalListings)) {
+    if (!l || l.ownerId !== key) continue;
+    if (l.status !== 'active' && l.status !== 'processing') continue;
+    if (l.expiresAt && Date.now() > Number(l.expiresAt)) continue;
+    canonicalActiveIds.listings.push(l.id || id);
+  }
+
+  const report = {
+    username: key,
+    indexReady,
+    canonicalAvailable,
+    match,
+    canonicalCounts,
+    indexCounts,
+    diffs,
+    canonicalActiveIds,
+    indexActiveIds,
+  };
+
+  if (!match) {
+    console.warn('[TradeIndex] shadowCompare mismatch', {
+      username: key,
+      indexReady,
+      diffCount: diffs.length,
+      diffs: diffs.map((d) => ({ type: d.type, cardId: d.cardId || null })),
+    });
+    if (typeof metrics.recordTradeIndexLifecycle === 'function') {
+      metrics.recordTradeIndexLifecycle({
+        tag: 'trade-index-shadow-mismatch',
+        ops: 0,
+        ok: false,
+        username: key,
+      });
+    }
+  }
+
+  return report;
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcTradeIndex = {
@@ -779,12 +1127,20 @@ function _installWindowApi() {
     getTradeIndexDriftReport,
     rebuildTradeIndexes,
     deriveDesiredTradeIndexes,
+    directIndexUpdatesForTrade,
+    directIndexRemovalsForTrade,
+    listingIndexUpdatesForListing,
+    listingIndexRemovalsForListing,
+    listingClaimIndexTransitionPaths,
+    listingReleaseIndexRestorePaths,
+    buildPlayerDeleteTradeCleanupUpdates,
+    shadowCompare,
     help() {
-      console.info(`Trade Index (S5c-A)
+      console.info(`Trade Index (S5c-A/B)
 Roots: ${PLAYER_TRADE_INDEX_ROOT}, ${LISTINGS_BY_GROUP_ROOT}, ${TRADE_INDEX_META_ROOT}
-API: getTradeIndexDriftReport | rebuildTradeIndexes | isPlayerTradeIndexReady
-Safety: unready index must never mean zero reservations (use getReservationIndexSource).
-Readers still use canonical trades until later S5c phases.`);
+API: getTradeIndexDriftReport | rebuildTradeIndexes | shadowCompare | isPlayerTradeIndexReady
+S5c-B: lifecycle dual-writes keep indexes current; consumers still read canonical trades.
+Safety: unready index must never mean zero reservations.`);
     },
   };
 }
