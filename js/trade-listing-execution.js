@@ -17,7 +17,7 @@
 import * as db from './database.js';
 import * as config from './config.js';
 import * as metrics from './db-metrics.js';
-import { validateListingTrade, isDetailedLogging } from './trading.js';
+import { validateListingTrade, isDetailedLogging } from './trading.js?v=s5cb-respond-diag-1';
 import {
   buildListingFulfillPlan,
   commitListingFulfillPlan,
