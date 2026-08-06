@@ -1032,10 +1032,16 @@ export function shadowCompare(username) {
   if (indexReady) {
     const maps = _indexMapsForPlayer(key);
     indexActiveIds = _activeIdsFromMaps(maps.direct, maps.listings);
+    // Owner-listing projections omit ownerId (path implies ownership). Inject for
+    // comparison-only so buildTradeReservationCounts' ownerId === username check works.
+    const listingsForCompare = {};
+    for (const [id, entry] of Object.entries(maps.listings)) {
+      listingsForCompare[id] = { ...entry, ownerId: key };
+    }
     indexCounts = _countsToObject(
       buildTradeReservationCounts(key, {
         directTrades: maps.direct,
-        listings: maps.listings,
+        listings: listingsForCompare,
       }),
     );
   }
