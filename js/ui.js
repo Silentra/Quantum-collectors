@@ -44,7 +44,7 @@ import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
 import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
 import { renderAdminSeasons } from './leaderboard-admin.js';
-import { renderTrading, cleanupTrading } from './trade-ui.js';
+import { cleanupTrading, enterTradingTab } from './trade-ui.js';
 import { ITEM_TYPES } from './shop-definitions.js';
 import { renderShopAdminPanel } from './shop-admin.js';
 import { renderAchievementsAdminPanel } from './achievements-admin.js';
@@ -147,12 +147,18 @@ function setupTabs() {
       if (tab === 'packs') renderPacks();
       if (tab === 'research-projects') { renderResearchProjects(); startProjectHeartbeat(); }
       else { stopProjectHeartbeat(); }
-      if (tab === 'trading') { renderTrading(); }
-      else { cleanupTrading(); }
+      // S5c-D1: release Admin directory before Trading acquires the same path
+      if (tab === 'trading') {
+        cleanupAdmin();
+        void enterTradingTab();
+      } else {
+        cleanupTrading();
+      }
       if (tab === 'shop') { renderShop(); }
       else { cleanupShop(); }
       if (tab === 'profile') renderProfile();
       if (tab === 'leaderboard') renderLeaderboard();
+      // Leaving Trading already ran cleanupTrading above when tab !== trading
       if (tab === 'admin') { void enterAdminTab(); }
       else { cleanupAdmin(); }
     });
@@ -307,6 +313,7 @@ export function enterGame() {
   }
 
   document.getElementById('btn-logout').addEventListener('click', async () => {
+    cleanupTrading();
     await auth.logout();
     location.reload();
   });

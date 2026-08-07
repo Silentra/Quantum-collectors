@@ -1,5 +1,5 @@
 /**
- * db-hydration.js — Named cache hydration scopes (Phase S2–S5c-C)
+ * db-hydration.js — Named cache hydration scopes (Phase S2–S5c-D1)
  *
  * S2: sharedDefs — once-loads for config / cards / packs / groups.
  * S3: currentPlayer — auth-owned once-load + one subscribePath for players/{username}.
@@ -7,9 +7,11 @@
  *      adminSelectedPlayer — Admin-owned players/{selected} or borrow auth current-player.
  * S5c-C: playerTradeIndex — auth-owned once-load + one subscribePath for
  *      playerTradeIndex/{username}; loads tradeIndexMeta once (no permanent listener).
+ * S5c-D1: tradeDirectory — Trading-owned playerDirectory subscribe while Trading tab open.
+ *      Does not share Admin's handle. No listingsByGroup until S5c-D5. No consumer cutover.
  *
  * accessCodes is intentionally NOT part of sharedDefs (register-only; do not broaden).
- * Trading listingsByGroup / playerDirectory game subscriptions remain deferred.
+ * Trading listingsByGroup subscriptions remain deferred (S5c-D5).
  *
  * Root once('/') + on('value') remain the legacy safety net (unchanged). Root and scoped
  * player events may arrive in either order during coexistence — do not depend on root
@@ -1638,8 +1640,276 @@ export function getAdminSelectedPlayerReport() {
   };
 }
 
+// ---------- Phase S5c-D1: Trading-owned playerDirectory ----------
+
+export const SCOPE_TRADE_DIRECTORY = 'tradeDirectory';
+
+const TRADE_DIRECTORY_PATH = DIRECTORY_ROOT; // 'playerDirectory'
+
+/** @type {(() => void)|null} */
+let _tradeDirUnsub = null;
+/** @type {string|null} */
+let _tradeDirSubId = null;
+/** @type {number|null} */
+let _tradeDirStartedAt = null;
+/** @type {Promise<object>|null} */
+let _tradeDirPromise = null;
+/** @type {number} — bumped on release to cancel in-flight ensure */
+let _tradeDirGeneration = 0;
+/** @type {object|null} */
+let _tradeDirLastResult = null;
+
 /**
- * Named-scope status snapshot (S2–S5b).
+ * @returns {boolean}
+ */
+export function isTradeDirectoryReady() {
+  return db.isPathReady(TRADE_DIRECTORY_PATH);
+}
+
+/**
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export function waitForTradeDirectory(options = {}) {
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  return db.waitForPath(TRADE_DIRECTORY_PATH, { timeoutMs }).then((result) => ({
+    ok: result.ok === true,
+    scope: SCOPE_TRADE_DIRECTORY,
+    path: TRADE_DIRECTORY_PATH,
+    error: result.error,
+  }));
+}
+
+/**
+ * Release Trading-owned playerDirectory subscription. Does not clear cache/readiness.
+ * Does not touch Admin's directory handle. Bumps generation so late ensures discard handles.
+ */
+export function releaseTradeDirectoryScope() {
+  _tradeDirGeneration += 1;
+  if (_tradeDirUnsub) {
+    try { _tradeDirUnsub(); } catch { /* ignore */ }
+  }
+  _tradeDirUnsub = null;
+  _tradeDirSubId = null;
+  _tradeDirStartedAt = null;
+  _tradeDirPromise = null;
+  return { released: true, path: TRADE_DIRECTORY_PATH };
+}
+
+/**
+ * Ensure exactly one Trading-owned subscription to playerDirectory.
+ * Refuses to share with Admin (or any other) holder (refCount must stay 1 after acquire).
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export function ensureTradeDirectoryScope(options = {}) {
+  const force = options.force === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  if (!force && _tradeDirUnsub && isTradeDirectoryReady()) {
+    const entry = _registryEntry(TRADE_DIRECTORY_PATH);
+    const reused = {
+      ok: true,
+      scope: SCOPE_TRADE_DIRECTORY,
+      path: TRADE_DIRECTORY_PATH,
+      reused: true,
+      subscriptionActive: true,
+      subscriptionRefCount: entry?.refCount ?? 1,
+      subscriptionId: _tradeDirSubId,
+      ready: true,
+    };
+    _tradeDirLastResult = reused;
+    return Promise.resolve(reused);
+  }
+
+  if (_tradeDirPromise && !force) {
+    return _tradeDirPromise.then((r) => ({ ...r, reused: true }));
+  }
+
+  const myGen = _tradeDirGeneration;
+
+  _tradeDirPromise = (async () => {
+    metrics.mark('tradingDirectoryHydrateStart');
+
+    if (force) {
+      // force: drop our handle without cancelling this ensure's generation
+      if (_tradeDirUnsub) {
+        try { _tradeDirUnsub(); } catch { /* ignore */ }
+      }
+      _tradeDirUnsub = null;
+      _tradeDirSubId = null;
+      _tradeDirStartedAt = null;
+    }
+
+    if (myGen !== _tradeDirGeneration) {
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        error: 'Trading directory ensure cancelled',
+        ready: false,
+      };
+      _tradeDirLastResult = cancelled;
+      metrics.mark('tradingDirectoryHydrateFailed');
+      return cancelled;
+    }
+
+    const load = await db.loadPathOnce(TRADE_DIRECTORY_PATH, { timeoutMs, force });
+    if (myGen !== _tradeDirGeneration) {
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        error: 'Trading directory ensure cancelled',
+        ready: false,
+      };
+      _tradeDirLastResult = cancelled;
+      metrics.mark('tradingDirectoryHydrateFailed');
+      return cancelled;
+    }
+
+    if (!load.ok) {
+      const failed = {
+        ok: false,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        error: load.error || 'Directory load failed',
+        ready: false,
+      };
+      _tradeDirLastResult = failed;
+      metrics.mark('tradingDirectoryHydrateFailed');
+      return failed;
+    }
+
+    if (_tradeDirUnsub) {
+      const entry = _registryEntry(TRADE_DIRECTORY_PATH);
+      const reused = {
+        ok: true,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        reused: true,
+        subscriptionActive: true,
+        subscriptionRefCount: entry?.refCount ?? 1,
+        subscriptionId: _tradeDirSubId,
+        ready: isTradeDirectoryReady(),
+      };
+      _tradeDirLastResult = reused;
+      metrics.mark('tradingDirectoryHydrateComplete');
+      return reused;
+    }
+
+    const handle = db.subscribePath(TRADE_DIRECTORY_PATH);
+    if (myGen !== _tradeDirGeneration) {
+      try { handle.unsubscribe(); } catch { /* ignore */ }
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        error: 'Trading directory ensure cancelled',
+        ready: false,
+      };
+      _tradeDirLastResult = cancelled;
+      metrics.mark('tradingDirectoryHydrateFailed');
+      return cancelled;
+    }
+
+    const entryAfter = _registryEntry(TRADE_DIRECTORY_PATH);
+    if (entryAfter && entryAfter.refCount > 1) {
+      try { handle.unsubscribe(); } catch { /* ignore */ }
+      const failed = {
+        ok: false,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        error: 'Refusing to share playerDirectory subscription (Trading must be sole owner)',
+        ready: false,
+      };
+      _tradeDirLastResult = failed;
+      metrics.mark('tradingDirectoryHydrateFailed');
+      return failed;
+    }
+
+    _tradeDirUnsub = handle.unsubscribe;
+    _tradeDirSubId = handle.id;
+    _tradeDirStartedAt = Date.now();
+
+    const wait = await db.waitForPath(TRADE_DIRECTORY_PATH, { timeoutMs });
+    if (myGen !== _tradeDirGeneration) {
+      if (_tradeDirUnsub === handle.unsubscribe) {
+        try { handle.unsubscribe(); } catch { /* ignore */ }
+        _tradeDirUnsub = null;
+        _tradeDirSubId = null;
+        _tradeDirStartedAt = null;
+      }
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_TRADE_DIRECTORY,
+        path: TRADE_DIRECTORY_PATH,
+        error: 'Trading directory ensure cancelled',
+        ready: false,
+      };
+      _tradeDirLastResult = cancelled;
+      metrics.mark('tradingDirectoryHydrateFailed');
+      return cancelled;
+    }
+
+    const result = {
+      ok: wait.ok === true,
+      scope: SCOPE_TRADE_DIRECTORY,
+      path: TRADE_DIRECTORY_PATH,
+      reused: false,
+      subscriptionActive: _tradeDirUnsub != null,
+      subscriptionId: _tradeDirSubId,
+      subscriptionRefCount: entryAfter?.refCount ?? 1,
+      ready: isTradeDirectoryReady(),
+      error: wait.ok ? null : (wait.error || 'timeout'),
+    };
+    _tradeDirLastResult = result;
+    if (result.ok) {
+      metrics.mark('tradingDirectoryHydrateComplete');
+    } else {
+      metrics.mark('tradingDirectoryHydrateFailed');
+    }
+    return result;
+  })();
+
+  const run = _tradeDirPromise;
+  run.finally(() => {
+    if (_tradeDirPromise === run) {
+      _tradeDirPromise = null;
+    }
+  });
+
+  return run;
+}
+
+export function getTradeDirectoryHydrationReport() {
+  const entry = _registryEntry(TRADE_DIRECTORY_PATH);
+  return {
+    phase: 'S5c-D1',
+    scope: SCOPE_TRADE_DIRECTORY,
+    path: TRADE_DIRECTORY_PATH,
+    ready: isTradeDirectoryReady(),
+    active: _tradeDirUnsub != null,
+    subscriptionId: _tradeDirSubId,
+    refCount: entry?.refCount ?? (_tradeDirUnsub ? 1 : 0),
+    startedAt: _tradeDirStartedAt,
+    inFlight: _tradeDirPromise != null,
+    lastResult: _tradeDirLastResult
+      ? {
+        ok: _tradeDirLastResult.ok === true,
+        cancelled: _tradeDirLastResult.cancelled === true,
+        error: _tradeDirLastResult.error || null,
+        reused: _tradeDirLastResult.reused === true,
+      }
+      : null,
+  };
+}
+
+/**
+ * Named-scope status snapshot (S2–S5c-D1).
  * @returns {object}
  */
 export function getHydrationStatus() {
@@ -1673,9 +1943,10 @@ export function getHydrationStatus() {
       },
       [SCOPE_ADMIN_DIRECTORY]: getAdminDirectoryHydrationReport(),
       [SCOPE_ADMIN_SELECTED_PLAYER]: getAdminSelectedPlayerReport(),
+      [SCOPE_TRADE_DIRECTORY]: getTradeDirectoryHydrationReport(),
     },
     deferredScopes: [
-      'trading',
+      'listingsByGroup',
       'leaderboard',
       'bootstrapPublicAccessCodes',
     ],
@@ -1684,6 +1955,7 @@ export function getHydrationStatus() {
     playerTradeIndex: getPlayerTradeIndexHydrationReport(),
     adminDirectory: getAdminDirectoryHydrationReport(),
     adminSelectedPlayer: getAdminSelectedPlayerReport(),
+    tradeDirectory: getTradeDirectoryHydrationReport(),
   };
 }
 
@@ -1696,6 +1968,7 @@ function _installWindowApi() {
     SCOPE_PLAYER_TRADE_INDEX,
     SCOPE_ADMIN_DIRECTORY,
     SCOPE_ADMIN_SELECTED_PLAYER,
+    SCOPE_TRADE_DIRECTORY,
     hydrateSharedDefs,
     isSharedDefsReady,
     waitForSharedDefs,
@@ -1717,7 +1990,11 @@ function _installWindowApi() {
     getAdminDirectoryHydrationReport,
     ensureAdminSelectedPlayerScope,
     getAdminSelectedPlayerReport,
-    // release* retained for auth/Admin UI only — not exposed here
+    ensureTradeDirectoryScope,
+    isTradeDirectoryReady,
+    waitForTradeDirectory,
+    getTradeDirectoryHydrationReport,
+    // release* retained for auth/Admin/Trading UI only — not exposed here
     getScopedLoadingFlagState,
     isScopedLoadingDevFlagEnabled,
     isPathReady: (path) => db.isPathReady(path),
@@ -1727,13 +2004,14 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (Phase S2–S5c-C)
+      console.info(`DB Hydration (Phase S2–S5c-D1)
 Shared: ${SHARED_DEF_PATHS.join(', ')}
 Current player: auth-owned (release not on mirror)
 Player trade index: auth-owned playerTradeIndex/{me} (release not on mirror)
 Admin directory / selected-player: ui-owned ensure; release not on mirror
-API: getHydrationStatus | getPlayerTradeIndexHydrationReport | getAdminDirectoryHydrationReport
-Root remains the legacy safety net; no bandwidth claim yet.`);
+Trading directory: trade-ui-owned playerDirectory while Trading tab open (release not on mirror)
+API: getHydrationStatus | getTradeDirectoryHydrationReport | getPlayerTradeIndexHydrationReport
+Root remains the legacy safety net; no bandwidth claim yet. listingsByGroup deferred to S5c-D5.`);
     },
   };
 }

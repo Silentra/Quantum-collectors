@@ -54,6 +54,10 @@ import {
   isLastAvailableCopy,
 } from './trade-availability.js';
 import { showTradeConfirmModal } from './trade-confirm-modal.js';
+import {
+  ensureTradeDirectoryScope,
+  releaseTradeDirectoryScope,
+} from './db-hydration.js';
 
 const TRADE_PROJECT_IN_USE_HINT =
   'Cards in use on research projects are not available.';
@@ -66,6 +70,8 @@ let _returnCardSelections = {}; // { [tradeId]: cardId } — preserve B's return
 let _toastedResponseTradeIds = new Set(); // avoid repeated "response received" toasts
 let _cooldownTimer = null;    // interval for live cooldown display
 let _activeSubTab = 'direct'; // 'direct' or 'listings'
+/** Bumped on cleanupTrading so leave-during-ensure skips late render. */
+let _tradingTabGeneration = 0;
 
 /**
  * Shared filter/sort state for trading card selection views.
@@ -202,8 +208,43 @@ function _renderTradeFilterBar(prefix, availableTypes) {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
+ * S5c-D1: Trading tab enter — sole ownership boundary for tradeDirectory.
+ * Ensures Trading-owned playerDirectory, then renders content.
+ * Does not cut over any Trading consumers (still canonical).
+ */
+export async function enterTradingTab() {
+  const enterGen = _tradingTabGeneration;
+  const session = auth.getSession();
+
+  // Standalone __admin__: never acquire Trading directory scope
+  if (!session || session.username === '__admin__') {
+    renderTrading();
+    return;
+  }
+
+  const scoped = await ensureTradeDirectoryScope();
+  if (enterGen !== _tradingTabGeneration) {
+    return;
+  }
+
+  if (!scoped.ok && !scoped.cancelled) {
+    console.warn(
+      '[Trading] playerDirectory hydration failed; rendering with canonical consumers:',
+      scoped.error || 'unknown',
+    );
+  }
+
+  if (enterGen !== _tradingTabGeneration) {
+    return;
+  }
+
+  renderTrading();
+}
+
+/**
  * Render the full trading tab content.
- * Called by ui.js when the Trading tab is activated.
+ * Content/re-render only — does NOT acquire hydration scopes (call enterTradingTab on tab enter).
+ * Called by ui.js via enterTradingTab, and by in-tab actions for full refresh.
  */
 export function renderTrading() {
   const container = document.getElementById('trading-content');
@@ -296,9 +337,11 @@ export function renderTrading() {
 }
 
 /**
- * Clean up timers when leaving the tab.
+ * Leave Trading main tab: cancel in-flight ensure, release Trading directory, clear timers.
  */
 export function cleanupTrading() {
+  _tradingTabGeneration += 1;
+  releaseTradeDirectoryScope();
   if (_cooldownTimer) {
     clearInterval(_cooldownTimer);
     _cooldownTimer = null;
