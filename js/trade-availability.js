@@ -5,11 +5,188 @@
  *   - Projects: binary per cardId (one active project maximum per card identity)
  *   - Trades/listings: copy-aware reservations (inventory minus reserved copies)
  *
+ * S5c-C: Research Projects resolve reservations via playerTradeIndex/{me} when verified;
+ * Trading callers keep using buildAvailabilitySnapshot defaults (canonical trades/*).
+ *
  * No inventory subtraction at reservation time — all math is derived.
  */
 
 import * as db from './database.js';
 import { PROJECT_STATES } from './project-state.js';
+import {
+  PLAYER_TRADE_INDEX_ROOT,
+  getReservationIndexSource,
+  isGlobalTradeIndexMetaCurrent,
+  isPlayerTradeIndexReady,
+} from './trade-index.js';
+import * as metrics from './db-metrics.js';
+
+/** @type {Set<string>} */
+const _fallbackWarningsShown = new Set();
+
+/**
+ * Whether legacy root coexistence can supply canonical trade trees for fallback.
+ * Personal isolation without a verified index → no silent zero; fail closed.
+ * @returns {boolean}
+ */
+function _canUseCanonicalFallback() {
+  try {
+    if (typeof localStorage !== 'undefined'
+      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
+      return false;
+    }
+  } catch { /* ignore */ }
+  // S1–S5: root once + on(value) remain the safety net (including local-only cache).
+  return true;
+}
+
+function _isTradeIndexHydrating(username) {
+  try {
+    const report = typeof window !== 'undefined'
+      && window.qcDbHydration
+      && typeof window.qcDbHydration.getPlayerTradeIndexHydrationReport === 'function'
+      ? window.qcDbHydration.getPlayerTradeIndexHydrationReport()
+      : null;
+    if (!report) return false;
+    if (report.inFlight === true) return true;
+    const key = String(username || '').trim().toLowerCase();
+    if (report.username && key && report.username !== key) return false;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function _recordResearchSource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `researchReservationSource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'index-unready-or-wrong-version' });
+  }
+  if (source === 'unavailable' && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'no-index-no-canonical-fallback' });
+  }
+}
+
+function _warnFallbackOnce(reason) {
+  const key = String(reason || 'default');
+  if (_fallbackWarningsShown.has(key)) return;
+  _fallbackWarningsShown.add(key);
+  console.warn(
+    `[TradeAvailability] Research using canonical-fallback (${key}). ` +
+      'Resolve trade-index readiness before S7. Gameplay still correct under root coexistence.',
+  );
+}
+
+/**
+ * Owner listing index leaves omit ownerId — inject comparison/assignment-only copies.
+ * @param {string} username
+ * @param {object} listingMap
+ * @returns {object}
+ */
+export function listingsWithOwnerIdForReservation(username, listingMap) {
+  const key = String(username || '');
+  const out = {};
+  for (const [id, entry] of Object.entries(listingMap || {})) {
+    if (!entry || typeof entry !== 'object') continue;
+    out[id] = { ...entry, ownerId: key };
+  }
+  return out;
+}
+
+/**
+ * Resolve reservation source for Research Projects (S5c-C).
+ * @param {string} username
+ * @param {{ forceUnavailable?: boolean }} [opts]
+ * @returns {'index'|'canonical-fallback'|'unavailable'|'loading'}
+ */
+export function resolveResearchReservationSource(username, opts = {}) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key || key === '__admin__') return 'unavailable';
+
+  const pathReady = db.isPathReady(`${PLAYER_TRADE_INDEX_ROOT}/${key}`);
+  const hydrating = _isTradeIndexHydrating(key);
+
+  const source = getReservationIndexSource(key, {
+    scopePathReady: pathReady,
+    hydrating,
+    allowCanonicalFallback: _canUseCanonicalFallback(),
+    forceUnavailable: opts.forceUnavailable === true,
+  });
+
+  if (source === 'canonical-fallback') {
+    const reason = !isPlayerTradeIndexReady(key)
+      ? 'player-meta-unready'
+      : (!isGlobalTradeIndexMetaCurrent() ? 'global-schema-mismatch' : 'scope-path-unready');
+    _warnFallbackOnce(reason);
+  }
+
+  _recordResearchSource(source);
+  return source;
+}
+
+/**
+ * Load current-player trade-index maps for reservation counting (no cache mutation).
+ * @param {string} username
+ * @returns {{ direct: object, listings: object }}
+ */
+export function loadPlayerTradeIndexReservationMaps(username) {
+  const key = String(username || '').trim();
+  const direct = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${key}/direct`) || {};
+  const rawListings = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${key}/listings`) || {};
+  return {
+    direct,
+    listings: listingsWithOwnerIdForReservation(key, rawListings),
+  };
+}
+
+/**
+ * Research Projects availability snapshot — uses verified index when ready.
+ * Trading must keep calling buildAvailabilitySnapshot (canonical defaults).
+ *
+ * @param {string} username
+ * @param {object} [opts] — same as buildAvailabilitySnapshot extras
+ * @returns {AvailabilitySnapshot & { reservationSource: string }}
+ */
+export function buildResearchAvailabilitySnapshot(username, opts = {}) {
+  const source = resolveResearchReservationSource(username);
+
+  if (source === 'loading' || source === 'unavailable') {
+    const playerData = opts.playerData ?? db.get(`players/${username}`);
+    return {
+      username,
+      inventory: { ...(opts.inventory ?? playerData?.inventory ?? {}) },
+      projects: opts.projects ?? playerData?.projects ?? [],
+      tradeCounts: new Map(),
+      excludeDirectTradeIds: opts.excludeDirectTradeIds ?? [],
+      excludeListingIds: opts.excludeListingIds ?? [],
+      reservationSource: source,
+      reservationsTrusted: false,
+    };
+  }
+
+  if (source === 'index') {
+    const maps = loadPlayerTradeIndexReservationMaps(username);
+    const snap = buildAvailabilitySnapshot(username, {
+      ...opts,
+      directTrades: maps.direct,
+      listings: maps.listings,
+    });
+    snap.reservationSource = 'index';
+    snap.reservationsTrusted = true;
+    return snap;
+  }
+
+  // canonical-fallback — existing algorithm over trades/* (root coexistence)
+  const snap = buildAvailabilitySnapshot(username, opts);
+  snap.reservationSource = 'canonical-fallback';
+  snap.reservationsTrusted = true;
+  return snap;
+}
 
 // ─── Project uniqueness (binary per cardId) ───────────────────────────────────
 
@@ -156,6 +333,8 @@ export function buildAvailabilitySnapshot(username, opts = {}) {
     }),
     excludeDirectTradeIds: opts.excludeDirectTradeIds ?? [],
     excludeListingIds: opts.excludeListingIds ?? [],
+    reservationSource: opts.reservationSource || 'canonical',
+    reservationsTrusted: opts.reservationsTrusted !== false,
   };
 }
 
@@ -200,6 +379,10 @@ export function isLastAvailableCopy(snapshot, cardId) {
  * @returns {boolean}
  */
 export function canAssignCardToProject(snapshot, cardId) {
+  if (snapshot?.reservationsTrusted === false) return false;
+  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationSource === 'loading') {
+    return false;
+  }
   if (isCardLockedByActiveProject(cardId, snapshot.projects)) return false;
   const owned = getOwnedCopyCount(snapshot, cardId);
   const trade = getTradeReservedCopies(snapshot.tradeCounts, cardId);
@@ -217,6 +400,12 @@ export function isProjectAssignmentLocked(snapshot, cardId) {
  * @returns {string|null}
  */
 export function getProjectAssignmentLockTooltip(snapshot, cardId) {
+  if (snapshot?.reservationSource === 'loading') {
+    return 'Checking card availability…';
+  }
+  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationsTrusted === false) {
+    return 'Trade reservation data is unavailable';
+  }
   if (getOwnedCopyCount(snapshot, cardId) < 1) return null;
 
   if (isCardLockedByActiveProject(cardId, snapshot.projects)) {
@@ -242,6 +431,13 @@ export function getProjectAssignmentLockTooltip(snapshot, cardId) {
  * @returns {string|null}
  */
 export function getAvailabilityFailureReason(snapshot, cardId, context = 'offer') {
+  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationsTrusted === false) {
+    return 'TRADE_RESERVATION_DATA_UNAVAILABLE';
+  }
+  if (snapshot?.reservationSource === 'loading') {
+    return 'TRADE_RESERVATION_DATA_LOADING';
+  }
+
   if (context === 'assign') {
     if (isCardLockedByActiveProject(cardId, snapshot.projects)) {
       return 'locked_cards_present';

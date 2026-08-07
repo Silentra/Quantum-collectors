@@ -12,23 +12,32 @@
  * Isolation is NOT applied at cold startup (avoids breaking accessCodes seed / init).
  * It only gates reads while a labeled personal-audit session is active.
  *
- * Known blocker (not remediating in S4 audit-infra): Research Projects → trades/direct
- * and trades/listings via buildAvailabilitySnapshot / trade-availability.js.
+ * S5c-C: Research Projects use playerTradeIndex/{me} when verified. Canonical
+ * trades/* reads during Research are fallback-only and must be flagged — not
+ * accepted as a permanent blocker.
  */
 
 const AUDIT_LS_KEY = 'qc-personal-scope-audit';
 const ISOLATION_LS_KEY = 'qc-personal-cache-isolation';
 const SESSION_KEY = 'scicards_session';
 
-/** Documented S4 partial-result blockers (gameplay unchanged). */
-export const KNOWN_SCOPED_BLOCKERS = Object.freeze([
+/**
+ * Historical S4 blocker — remediated by S5c-C index-backed Research reservations.
+ * Kept empty so unexplained trades/* reads during projects FAIL (or PARTIAL only
+ * when explicitly classified as canonical-fallback via workflow notes).
+ */
+export const KNOWN_SCOPED_BLOCKERS = Object.freeze([]);
+
+/** @deprecated Use empty KNOWN_SCOPED_BLOCKERS; retained for DevTools docs. */
+export const REMEDIATED_SCOPED_BLOCKERS = Object.freeze([
   {
     id: 'projects-trade-reservations',
     surfaces: ['projects'],
     paths: ['trades/direct', 'trades/listings'],
-    source: 'js/trade-availability.js → buildTradeReservationCounts via buildAvailabilitySnapshot',
+    source: 'js/trade-availability.js → buildResearchAvailabilitySnapshot (index) / canonical-fallback',
     callers: ['js/project-ui.js'],
-    note: 'Research Projects reads full trades trees for card availability. S5c trade indexes required; S4 does not disable trade-reservation checks.',
+    note: 'S5c-C: verified index → no trades/* reads. Canonical fallback is measured, not an accepted blocker.',
+    remediatedIn: 'S5c-C',
   },
 ]);
 
@@ -80,8 +89,11 @@ function _sessionUsername() {
  */
 export function defaultAllowedPrefixes(username) {
   const u = String(username || '').trim().toLowerCase();
-  const prefixes = ['config', 'cards', 'packs', 'groups'];
-  if (u) prefixes.push(`players/${u}`);
+  const prefixes = ['config', 'cards', 'packs', 'groups', 'tradeIndexMeta'];
+  if (u) {
+    prefixes.push(`players/${u}`);
+    prefixes.push(`playerTradeIndex/${u}`);
+  }
   return prefixes;
 }
 
@@ -108,6 +120,14 @@ function _redactPath(normalizedPath, me) {
   if (!normalizedPath) return '/';
   const parts = normalizedPath.split('/');
   if (parts[0] === 'players' && parts.length >= 2) {
+    const user = parts[1];
+    if (me && user === me) {
+      parts[1] = '{me}';
+    } else if (user !== '{me}' && user !== '{other-user}') {
+      parts[1] = '{other-user}';
+    }
+  }
+  if (parts[0] === 'playerTradeIndex' && parts.length >= 2) {
     const user = parts[1];
     if (me && user === me) {
       parts[1] = '{me}';
@@ -522,12 +542,13 @@ export function workflow() {
    // open Packs; open one pack (1 write)
    qcPersonalAudit.end('packs');   // expect PASS
 
-5) Projects (known blocker):
+5) Projects (S5c-C index-backed):
    qcPersonalAudit.begin('projects');
    // open Research Projects; browse cards panel / assignment (do not require claim)
    qcPersonalAudit.end('projects');
-   // expect PARTIAL: unexpected trades/direct + trades/listings
-   // (trade-reservation checks intentionally still active)
+   // expect PASS when index verified (playerTradeIndex/{me} + tradeIndexMeta only)
+   // canonical-fallback → PARTIAL/FAIL if trades/direct|listings appear (not an accepted blocker)
+   // See also: qcPersonalAudit.workflowS5cC()
 
 6) Shop:
    qcPersonalAudit.begin('shop');
@@ -622,12 +643,90 @@ PASS when A–E match Expected subscription states in ARCHITECTURE Phase S5b.
 `);
 }
 
+/**
+ * Pasteable verification workflow for Phase S5c-C (Research reservation cutover).
+ */
+export function workflowS5cC() {
+  console.info(`
+=== S5c-C Current-Player Trade Index + Research Cutover ===
+
+Prereq: normal player (not __admin__). Prefer hard reload after login.
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+Optional metrics: localStorage.setItem('qc-db-metrics-enabled','true');
+location.reload();
+
+DEFERRED (do not require for S5c-C pass):
+  - listing acceptance happy path
+  - two-browser listing-claim race
+
+----- 1) Registry after login -----
+qcDbHydration.getSubscriptionRegistry()
+// expect exactly:
+//   players/{me}            refCount 1
+//   playerTradeIndex/{me}   refCount 1
+// (no listingsByGroup, no playerDirectory unless Admin)
+
+qcDbHydration.getPlayerTradeIndexHydrationReport()
+// expect: ready true, metaReady true, globalVersionCurrent true, usable true,
+//         active true, refCount 1
+
+----- 2) Index readiness -----
+qcTradeIndex.isPlayerTradeIndexReady(qcDbHydration.getPlayerTradeIndexHydrationReport().username)
+// true
+// global: tradeIndexMeta schema matches CURRENT_TRADE_INDEX_SCHEMA_VERSION
+
+----- 3) Research audit (verified index) -----
+qcPersonalAudit.begin('projects');
+// Open Research Projects; open Available Cards panel; open one Start Project assignment UI
+// Do NOT open Trading during this begin()
+qcPersonalAudit.end('projects');
+// expect PASS
+// unexpected must NOT include trades/direct or trades/listings
+// allowed may include playerTradeIndex/{me} and tradeIndexMeta
+
+----- 4) Last-copy direct reservation -----
+// Create a direct offer that reserves your last copy of card X (Trading UI).
+// Return to Research — card X must show locked / not assignable.
+// Cancel or complete the trade — card X available again.
+
+----- 5) Last-copy listing reservation -----
+// Create a listing that reserves your last copy of card Y.
+// Research must block Y. Cancel listing — Y available again.
+// (Processing listing: if practical, same lock while processing.)
+
+----- 6) Fallback vs unavailable -----
+// While root coexistence is active, unready meta → canonical-fallback:
+//   Research still works; console may warn once per reason;
+//   qcDbMetrics.summary().tradeIndexLifecycle.fallbackCount increases (if metrics on)
+// With isolation ON and index forced unready → unavailable fail-closed:
+//   localStorage.setItem('qc-personal-cache-isolation','true'); // then reload / force unready
+//   Start Project / assign disabled; Retry calls ensurePlayerTradeIndexScope
+
+----- 7) Subscription stability -----
+// Re-open Research / re-render several times
+qcDbHydration.getSubscriptionRegistry()
+// playerTradeIndex/{me} refCount still 1
+
+----- 8) Logout cleanup -----
+// Logout
+qcDbHydration.getSubscriptionRegistry()
+// no playerTradeIndex/{me}
+
+----- 9) Trading unchanged -----
+// Trading tab still uses canonical getPendingTrades / listings APIs
+// Do not expect Trading to subscribe to playerTradeIndex
+
+PASS when 1–5 and 7–9 hold; 6 documents fallback/fail-closed policy.
+`);
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcPersonalAudit = {
     PERSONAL_AUDIT_LS_KEY,
     PERSONAL_ISOLATION_LS_KEY,
     KNOWN_SCOPED_BLOCKERS,
+    REMEDIATED_SCOPED_BLOCKERS,
     begin,
     end,
     start,
@@ -638,6 +737,7 @@ function _installWindowApi() {
     help,
     workflow,
     workflowS5b,
+    workflowS5cC,
     enableAudit,
     disableAudit,
     enableIsolation,

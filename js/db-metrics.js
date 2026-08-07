@@ -166,6 +166,8 @@ function _emptyState() {
       scopedSubscriptionReuse: 0,
       scopedSubscriptionRemove: 0,
       tradeIndexLifecycleByTag: {},
+      tradeIndexFallbackCount: 0,
+      tradeIndexFailClosedCount: 0,
     },
     tradeIndexLifecycle: [],
   };
@@ -450,6 +452,42 @@ export function recordTradeIndexLifecycle(opts) {
 }
 
 /**
+ * S5c-C: Research used canonical trades/* because index was unready.
+ * @param {{ reason?: string }} [opts]
+ */
+export function recordTradeIndexFallback(opts = {}) {
+  if (!_enabled) return;
+  _state.totals.tradeIndexFallbackCount =
+    (_state.totals.tradeIndexFallbackCount || 0) + 1;
+  recordTradeIndexLifecycle({
+    tag: 'tradeIndexFallbackCount',
+    ops: 0,
+    ok: true,
+  });
+  if (_verbose) {
+    console.info('[DB Metrics] TradeIndex fallback', opts.reason || '');
+  }
+}
+
+/**
+ * S5c-C: Research fail-closed (no verified index and no canonical fallback).
+ * @param {{ reason?: string }} [opts]
+ */
+export function recordTradeIndexFailClosed(opts = {}) {
+  if (!_enabled) return;
+  _state.totals.tradeIndexFailClosedCount =
+    (_state.totals.tradeIndexFailClosedCount || 0) + 1;
+  recordTradeIndexLifecycle({
+    tag: 'tradeIndexFailClosedCount',
+    ops: 0,
+    ok: false,
+  });
+  if (_verbose) {
+    console.info('[DB Metrics] TradeIndex fail-closed', opts.reason || '');
+  }
+}
+
+/**
  * @param {any} cacheRoot - full _db object (serialized for size only; not logged)
  * @param {string} reason
  */
@@ -602,18 +640,6 @@ export function summary() {
     cacheUpdateSources: {
       note: 'initial-root / root-listener / scoped-once / scoped-subscription — S3: root is legacy safety net; scoped player is eventual owner — do not claim bandwidth reduction or root-wins semantics',
     },
-    startupTimingMs: {
-      milestones: { ..._state.milestones },
-      domToInitDbStart: _milestoneDelta('dom-content-loaded', 'initDB-start'),
-      initDbStartToInitialSnapshot: _milestoneDelta('initDB-start', 'initial-root-snapshot'),
-      initDbStartToComplete: _milestoneDelta('initDB-start', 'initDB-complete'),
-      sharedHydrate: _milestoneDelta('shared-hydrate-start', 'shared-hydrate-complete'),
-      currentPlayerHydrate: _milestoneDelta('current-player-hydrate-start', 'current-player-hydrate-complete'),
-      initAuth: _milestoneDelta('initAuth-start', 'initAuth-complete'),
-      migrations: _milestoneDelta('migrations-start', 'migrations-complete'),
-      uiInit: _milestoneDelta('ui-init-start', 'ui-init-complete'),
-      domToReady: _milestoneDelta('dom-content-loaded', 'app-ready'),
-    },
     rootSnapshots: {
       total: snapCount,
       initialOnceBytes: _state.totals.initialOnceBytes,
@@ -660,6 +686,21 @@ export function summary() {
     tradeIndexLifecycle: {
       byTag: _state.totals.tradeIndexLifecycleByTag || {},
       recent: (_state.tradeIndexLifecycle || []).slice(-30),
+      fallbackCount: _state.totals.tradeIndexFallbackCount || 0,
+      failClosedCount: _state.totals.tradeIndexFailClosedCount || 0,
+    },
+    startupTimingMs: {
+      milestones: { ..._state.milestones },
+      domToInitDbStart: _milestoneDelta('dom-content-loaded', 'initDB-start'),
+      initDbStartToInitialSnapshot: _milestoneDelta('initDB-start', 'initial-root-snapshot'),
+      initDbStartToComplete: _milestoneDelta('initDB-start', 'initDB-complete'),
+      sharedHydrate: _milestoneDelta('shared-hydrate-start', 'shared-hydrate-complete'),
+      currentPlayerHydrate: _milestoneDelta('current-player-hydrate-start', 'current-player-hydrate-complete'),
+      playerTradeIndexHydrate: _milestoneDelta('playerTradeIndexHydrateStart', 'playerTradeIndexHydrateComplete'),
+      initAuth: _milestoneDelta('initAuth-start', 'initAuth-complete'),
+      migrations: _milestoneDelta('migrations-start', 'migrations-complete'),
+      uiInit: _milestoneDelta('ui-init-start', 'ui-init-complete'),
+      domToReady: _milestoneDelta('dom-content-loaded', 'app-ready'),
     },
   };
 
@@ -683,6 +724,8 @@ function _installWindowApi() {
     isEnabled,
     measureMajorNodes: measureMajorNodesNow,
     recordTradeIndexLifecycle,
+    recordTradeIndexFallback,
+    recordTradeIndexFailClosed,
     help() {
       console.info(`DB Metrics (Phase 1A)
 Enable:  localStorage.setItem('qc-db-metrics-enabled','true'); location.reload()
@@ -692,8 +735,8 @@ API: summary() | reset() | resetAll() | measureMajorNodes()
 Cache update sources: initial-root | root-listener | scoped-once | scoped-subscription
 (S3: root = legacy safety net; scoped player = eventual owner — no bandwidth claim)
 Bytes are Estimated JSON — not Firebase billed transfer.
-Hydration: qcDbHydration.getSharedHydrationReport() | getCurrentPlayerHydrationReport() | help()
-Personal audit (S4): qcPersonalAudit.help() | workflow()`);
+Hydration: qcDbHydration.getSharedHydrationReport() | getCurrentPlayerHydrationReport() | getPlayerTradeIndexHydrationReport() | help()
+Personal audit (S4/S5c-C): qcPersonalAudit.help() | workflow() | workflowS5cC()`);
     },
   };
 }

@@ -17,10 +17,14 @@ import * as db from './database.js';
 import { getLockedCardIds, PROJECT_STATES } from './project-state.js';
 import { activateProject } from './project-assignment.js';
 import {
-  buildAvailabilitySnapshot,
+  buildResearchAvailabilitySnapshot,
   canAssignCardToProject,
   getProjectAssignmentLockTooltip,
+  resolveResearchReservationSource,
 } from './trade-availability.js';
+import {
+  ensurePlayerTradeIndexScope,
+} from './db-hydration.js';
 import { evaluateProject } from './project-engine.js';
 import { getProjectConfig } from './project-config.js';
 import {
@@ -65,6 +69,42 @@ const PROJECT_HEARTBEAT_INTERVAL_MS = 20_000; // 20 seconds
 let _assigningProjectId = null;
 let _viewingReportProjectId = null;
 let _refreshTimerInterval = null;
+
+const RESERVATION_UNAVAILABLE_MSG =
+  'Trade reservation data is unavailable. Please reconnect or ask an administrator to rebuild trade indexes.';
+
+/**
+ * @param {string} source
+ * @returns {string}
+ */
+function _reservationStatusBannerHtml(source) {
+  if (source === 'loading') {
+    return `<div class="rp-reservation-banner rp-reservation-banner--loading text-xs text-surface-400 mb-2 px-2 py-1.5 rounded bg-surface-800 border border-surface-700" data-reservation-source="loading">Checking card availability…</div>`;
+  }
+  if (source === 'unavailable') {
+    return `<div class="rp-reservation-banner rp-reservation-banner--error text-xs text-amber-200 mb-2 px-2 py-1.5 rounded bg-surface-800 border border-amber-700/50" data-reservation-source="unavailable">
+      <p class="mb-1">${RESERVATION_UNAVAILABLE_MSG}</p>
+      <button type="button" class="rp-reservation-retry text-amber-100 underline text-xs" data-rp-reservation-retry="1">Retry</button>
+    </div>`;
+  }
+  return '';
+}
+
+/**
+ * @param {ParentNode} root
+ * @param {string} username
+ */
+function _wireReservationRetry(root, username) {
+  root.querySelectorAll('[data-rp-reservation-retry]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await ensurePlayerTradeIndexScope(username, { force: true });
+      } catch { /* ignore */ }
+      renderResearchProjects();
+    });
+  });
+}
 
 // ===================== RESEARCH PROJECT HEARTBEAT =====================
 
@@ -428,9 +468,27 @@ export function renderResearchProjects() {
 
   list.innerHTML = sorted.map(proj => renderProjectCard(proj)).join('');
 
+  const listReservationSource = resolveResearchReservationSource(session.username);
+  const listReservationsBlocked = listReservationSource === 'loading'
+    || listReservationSource === 'unavailable';
+
   // Wire "Start Project" buttons for AVAILABLE projects
   list.querySelectorAll('.rp-btn-start').forEach(btn => {
+    if (listReservationsBlocked) {
+      btn.disabled = true;
+      btn.title = listReservationSource === 'loading'
+        ? 'Checking card availability…'
+        : RESERVATION_UNAVAILABLE_MSG;
+    }
     btn.addEventListener('click', () => {
+      if (listReservationsBlocked) {
+        toast.error(
+          listReservationSource === 'loading'
+            ? 'Checking card availability… Please wait.'
+            : RESERVATION_UNAVAILABLE_MSG,
+        );
+        return;
+      }
       _assigningProjectId = btn.dataset.projectId;
       renderResearchProjects();
     });
@@ -485,7 +543,9 @@ function _renderCardsAvailabilityPanel(projects, username) {
   const panelBody = document.getElementById('rp-cards-panel-body');
   if (!panelBody) return;
 
-  const availabilitySnapshot = buildAvailabilitySnapshot(username, { projects });
+  const availabilitySnapshot = buildResearchAvailabilitySnapshot(username, { projects });
+  const reservationSource = availabilitySnapshot.reservationSource
+    || resolveResearchReservationSource(username);
 
   // Build owned card lists from inventory
   const inventory = player.getInventory(username);
@@ -563,6 +623,23 @@ function _renderCardsAvailabilityPanel(projects, username) {
   const totalOwned  = scientistCards.length + conceptCards.length;
 
   panelBody.innerHTML = '';
+
+  if (reservationSource === 'loading' || reservationSource === 'unavailable') {
+    const bannerWrap = document.createElement('div');
+    bannerWrap.innerHTML = _reservationStatusBannerHtml(reservationSource);
+    while (bannerWrap.firstChild) panelBody.appendChild(bannerWrap.firstChild);
+    _wireReservationRetry(panelBody, username);
+    if (reservationSource === 'unavailable' || reservationSource === 'loading') {
+      // Do not show unverified cards as available while loading/unavailable.
+      const note = document.createElement('div');
+      note.className = 'rp-cp-empty text-surface-500 text-xs';
+      note.textContent = reservationSource === 'loading'
+        ? 'Card availability will appear when reservation data is ready.'
+        : 'Assignment is disabled until trade reservation data is available.';
+      panelBody.appendChild(note);
+      return;
+    }
+  }
 
   // Status line
   if (totalOwned > 0) {
@@ -847,9 +924,14 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
   // Remove any pre-existing panel
   container.querySelector('.rp-assign-panel')?.remove();
 
-  const availabilitySnapshot = buildAvailabilitySnapshot(username, {
+  const availabilitySnapshot = buildResearchAvailabilitySnapshot(username, {
     projects: playerData.projects ?? [],
   });
+  const reservationSource = availabilitySnapshot.reservationSource
+    || resolveResearchReservationSource(username);
+  const reservationsBlocked = reservationSource === 'loading'
+    || reservationSource === 'unavailable'
+    || availabilitySnapshot.reservationsTrusted === false;
 
   // --- Build inventory card lists, typed ---
   const inventory = player.getInventory(username);
@@ -892,6 +974,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
   const accentColor = rarityColors[project.rarity] || '#64748b';
 
   panel.innerHTML = `
+    ${_reservationStatusBannerHtml(reservationSource)}
     <!-- Back nav -->
     <div class="rp-assign-back">
       <button class="rp-assign-back-btn" id="rp-btn-back">← Back to Projects</button>
@@ -1137,8 +1220,10 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
       if (telConcepts) telConcepts.textContent = `${evaluation.conceptsApplied?.length ?? 0}`;
     }
 
-    // Enable button only when selection is complete
-    const ready = selectedScientists.length === 5 && selectedConcepts.length === 2;
+    // Enable button only when selection is complete and reservations are trusted
+    const ready = !reservationsBlocked
+      && selectedScientists.length === 5
+      && selectedConcepts.length === 2;
     activateBtn.disabled = !ready;
 
     // Clear error on any change
@@ -1297,10 +1382,22 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
       return;
     }
 
-    const availabilitySnapshot = buildAvailabilitySnapshot(username, {
+    const availabilitySnapshot = buildResearchAvailabilitySnapshot(username, {
       playerData: freshPlayer,
       projects: allProjects,
     });
+
+    if (
+      availabilitySnapshot.reservationSource === 'unavailable'
+      || availabilitySnapshot.reservationSource === 'loading'
+      || availabilitySnapshot.reservationsTrusted === false
+    ) {
+      errEl.textContent = availabilitySnapshot.reservationSource === 'loading'
+        ? 'Checking card availability… Please wait and try again.'
+        : RESERVATION_UNAVAILABLE_MSG;
+      errEl.classList.add('visible');
+      return;
+    }
 
     const result = activateProject({
       project:        freshProject,
@@ -1322,6 +1419,8 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
         CARD_RESERVED_BY_OUTGOING_TRADE: 'A selected card\'s last copy is offered in a trade.',
         CARD_RESERVED_BY_INCOMING_TRADE: 'A selected card\'s last copy is reserved for an incoming trade.',
         INSUFFICIENT_AVAILABLE_COPIES: 'One or more selected cards have no available copies.',
+        TRADE_RESERVATION_DATA_UNAVAILABLE: RESERVATION_UNAVAILABLE_MSG,
+        TRADE_RESERVATION_DATA_LOADING: 'Checking card availability… Please wait and try again.',
       };
       errEl.textContent = reasons[result.reason] ?? result.reason;
       errEl.classList.add('visible');
@@ -1345,5 +1444,6 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
   });
 
   // Initial preview render
+  _wireReservationRetry(panel, username);
   updatePreview();
 }

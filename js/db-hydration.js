@@ -1,13 +1,15 @@
 /**
- * db-hydration.js — Named cache hydration scopes (Phase S2–S5b)
+ * db-hydration.js — Named cache hydration scopes (Phase S2–S5c-C)
  *
  * S2: sharedDefs — once-loads for config / cards / packs / groups.
  * S3: currentPlayer — auth-owned once-load + one subscribePath for players/{username}.
  * S5b: adminDirectory — Admin-owned playerDirectory subscribe;
  *      adminSelectedPlayer — Admin-owned players/{selected} or borrow auth current-player.
+ * S5c-C: playerTradeIndex — auth-owned once-load + one subscribePath for
+ *      playerTradeIndex/{username}; loads tradeIndexMeta once (no permanent listener).
  *
  * accessCodes is intentionally NOT part of sharedDefs (register-only; do not broaden).
- * Trading / leaderboard remain deferred.
+ * Trading listingsByGroup / playerDirectory game subscriptions remain deferred.
  *
  * Root once('/') + on('value') remain the legacy safety net (unchanged). Root and scoped
  * player events may arrive in either order during coexistence — do not depend on root
@@ -17,6 +19,14 @@
 import * as db from './database.js';
 import * as metrics from './db-metrics.js';
 import { DIRECTORY_ROOT, resolvePlayerDirectoryKey } from './player-directory.js';
+import {
+  CURRENT_TRADE_INDEX_SCHEMA_VERSION,
+  PLAYER_TRADE_INDEX_ROOT,
+  TRADE_INDEX_META_KEY,
+  TRADE_INDEX_META_ROOT,
+  isGlobalTradeIndexMetaCurrent,
+  isPlayerTradeIndexReady as isPlayerTradeIndexMetaReady,
+} from './trade-index.js';
 
 /** Dev flag prep (S7 cutover later). Does not disable the root listener. */
 export const SCOPED_LOADING_LS_KEY = 'qc_scoped_loading';
@@ -30,6 +40,7 @@ export const SHARED_DEF_PATHS = Object.freeze(['config', 'cards', 'packs', 'grou
 
 export const SCOPE_SHARED_DEFS = 'sharedDefs';
 export const SCOPE_CURRENT_PLAYER = 'currentPlayer';
+export const SCOPE_PLAYER_TRADE_INDEX = 'playerTradeIndex';
 
 /** @type {Promise<object>|null} */
 let _sharedDefsPromise = null;
@@ -687,6 +698,474 @@ export function getCurrentPlayerHydrationReport() {
   };
 }
 
+// ---------- Phase S5c-C: player trade index (auth-owned) ----------
+
+/** @type {string|null} */
+let _ptiUsername = null;
+/** @type {(() => void)|null} */
+let _ptiUnsub = null;
+/** @type {string|null} */
+let _ptiSubId = null;
+/** @type {number|null} */
+let _ptiStartedAt = null;
+/** @type {Promise<object>|null} */
+let _ptiPromise = null;
+/** @type {object|null} */
+let _ptiLastResult = null;
+/** @type {object|null} */
+let _ptiGlobalMetaLast = null;
+
+function _ptiPath(username) {
+  const u = _normalizeUsername(username);
+  return u ? `${PLAYER_TRADE_INDEX_ROOT}/${u}` : '';
+}
+
+function _registryEntryForPlayerTradeIndex() {
+  const path = _ptiUsername ? _ptiPath(_ptiUsername) : '';
+  if (!path) return null;
+  return db.getSubscriptionRegistry().find((e) => e.path === path) || null;
+}
+
+/**
+ * Release the auth-owned playerTradeIndex/{me} subscription.
+ * Does not clear cache or readiness. Auth is the sole caller — not on DevTools mirror.
+ * @returns {{ released: boolean, previousUsername: string|null }}
+ */
+export function releasePlayerTradeIndexScope() {
+  const previousUsername = _ptiUsername;
+  if (_ptiUnsub) {
+    try { _ptiUnsub(); } catch { /* ignore */ }
+  }
+  _ptiUnsub = null;
+  _ptiSubId = null;
+  _ptiUsername = null;
+  _ptiStartedAt = null;
+  _ptiPromise = null;
+  _ptiLastResult = null;
+  return { released: previousUsername != null, previousUsername };
+}
+
+/**
+ * Scoped path subscribed and marked ready (does not alone prove reservation usability).
+ * @param {string} [username]
+ * @returns {boolean}
+ */
+export function isPlayerTradeIndexScopeReady(username) {
+  const u = username != null && username !== ''
+    ? _normalizeUsername(username)
+    : _ptiUsername;
+  if (!u) return false;
+  if (_ptiUsername && u !== _ptiUsername) return false;
+  return db.isPathReady(_ptiPath(u));
+}
+
+/**
+ * Usable Research reservation index: scoped path ready + player _meta + global schema.
+ * @param {string} [username]
+ * @returns {boolean}
+ */
+export function isPlayerTradeIndexReady(username) {
+  const u = username != null && username !== ''
+    ? _normalizeUsername(username)
+    : _ptiUsername;
+  if (!u || u === '__admin__') return false;
+  if (!isPlayerTradeIndexScopeReady(u)) return false;
+  if (!isPlayerTradeIndexMetaReady(u)) return false;
+  return isGlobalTradeIndexMetaCurrent();
+}
+
+/**
+ * @param {string} [username]
+ * @param {{ timeoutMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, scope: string, path?: string, error?: string }>}
+ */
+export function waitForPlayerTradeIndex(username, options = {}) {
+  const u = username != null && username !== ''
+    ? _normalizeUsername(username)
+    : _ptiUsername;
+  if (!u) {
+    return Promise.resolve({
+      ok: false,
+      scope: SCOPE_PLAYER_TRADE_INDEX,
+      error: 'No player trade-index username',
+    });
+  }
+  const path = _ptiPath(u);
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  return db.waitForPath(path, { timeoutMs }).then((result) => ({
+    ok: result.ok === true,
+    scope: SCOPE_PLAYER_TRADE_INDEX,
+    path,
+    error: result.error,
+  }));
+}
+
+/**
+ * Once-load tradeIndexMeta (no permanent listener). Safe to call repeatedly.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export async function hydrateTradeIndexMeta(options = {}) {
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const force = options.force === true;
+  const load = await db.loadPathOnce(TRADE_INDEX_META_ROOT, { timeoutMs, force });
+  _ptiGlobalMetaLast = {
+    ok: load.ok === true,
+    mode: load.mode,
+    reused: load.reused === true,
+    schemaVersion: db.get(`${TRADE_INDEX_META_ROOT}/schemaVersion`),
+    rebuiltAt: db.get(`${TRADE_INDEX_META_ROOT}/rebuiltAt`),
+    current: isGlobalTradeIndexMetaCurrent(),
+    expectedVersion: CURRENT_TRADE_INDEX_SCHEMA_VERSION,
+    error: load.ok ? null : (load.error || 'Load failed'),
+  };
+  return _ptiGlobalMetaLast;
+}
+
+/**
+ * @param {string} username
+ * @returns {{ ok: boolean, path: string, username: string, reused: boolean, id: string, refCount?: number, error?: string }}
+ */
+export function subscribePlayerTradeIndex(username) {
+  const u = _normalizeUsername(username);
+  if (!u || u === '__admin__') {
+    return {
+      ok: false,
+      path: '',
+      username: u || '',
+      reused: false,
+      id: '',
+      error: u === '__admin__' ? 'Standalone __admin__ has no player trade-index scope' : 'Invalid username',
+    };
+  }
+
+  const path = _ptiPath(u);
+
+  if (_ptiUsername === u && _ptiUnsub) {
+    const entry = _registryEntryForPlayerTradeIndex();
+    return {
+      ok: true,
+      path,
+      username: u,
+      reused: true,
+      id: _ptiSubId || entry?.id || '',
+      refCount: entry?.refCount ?? 1,
+    };
+  }
+
+  if (_ptiUsername && _ptiUsername !== u) {
+    releasePlayerTradeIndexScope();
+  }
+
+  const existingSame = db.getSubscriptionRegistry().find((e) => e.path === path);
+  if (existingSame && !_ptiUnsub) {
+    return {
+      ok: false,
+      path,
+      username: u,
+      reused: false,
+      id: existingSame.id,
+      error: 'Player trade-index path already subscribed without auth owner handle',
+    };
+  }
+
+  const handle = db.subscribePath(path);
+  const entryAfter = db.getSubscriptionRegistry().find((e) => e.path === path);
+  if (entryAfter && entryAfter.refCount > 1) {
+    try { handle.unsubscribe(); } catch { /* ignore */ }
+    return {
+      ok: false,
+      path,
+      username: u,
+      reused: false,
+      id: handle.id,
+      error: 'Refusing to share playerTradeIndex subscription (auth must be sole owner)',
+    };
+  }
+
+  _ptiUsername = u;
+  _ptiUnsub = handle.unsubscribe;
+  _ptiSubId = handle.id;
+  _ptiStartedAt = _ptiStartedAt || Date.now();
+
+  return {
+    ok: true,
+    path,
+    username: u,
+    reused: handle.reused === true,
+    id: handle.id,
+    refCount: entryAfter?.refCount ?? 1,
+  };
+}
+
+/**
+ * Auth-owned ensure: once-load playerTradeIndex/{u} + subscribe + once-load tradeIndexMeta.
+ * Concurrent same-username callers share one in-flight Promise. refCount stays 1.
+ *
+ * @param {string} username
+ * @param {{ timeoutMs?: number, force?: boolean, ackCacheFallback?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export function ensurePlayerTradeIndexScope(username, options = {}) {
+  const u = _normalizeUsername(username);
+  if (!u || u === '__admin__') {
+    return Promise.resolve({
+      ok: false,
+      scope: SCOPE_PLAYER_TRADE_INDEX,
+      path: '',
+      username: u || '',
+      error: u === '__admin__' ? 'Standalone __admin__ has no player trade-index scope' : 'Invalid username',
+    });
+  }
+
+  const force = options.force === true;
+
+  if (
+    !force
+    && _ptiUsername === u
+    && _ptiUnsub
+    && db.isPathReady(_ptiPath(u))
+  ) {
+    return Promise.resolve({
+      ok: true,
+      scope: SCOPE_PLAYER_TRADE_INDEX,
+      path: _ptiPath(u),
+      username: u,
+      reused: true,
+      subscriptionActive: true,
+      subscriptionRefCount: _registryEntryForPlayerTradeIndex()?.refCount ?? 1,
+      ready: true,
+      metaReady: isPlayerTradeIndexMetaReady(u),
+      globalVersionCurrent: isGlobalTradeIndexMetaCurrent(),
+      usable: isPlayerTradeIndexReady(u),
+    });
+  }
+
+  if (_ptiPromise && _ptiUsername === u && !force) {
+    return _ptiPromise.then((result) => ({ ...result, reused: true }));
+  }
+
+  _ptiPromise = _runEnsurePlayerTradeIndex(u, options).then((result) => {
+    _ptiLastResult = result;
+    return result;
+  }).finally(() => {
+    _ptiPromise = null;
+  });
+
+  return _ptiPromise;
+}
+
+/**
+ * @param {string} u
+ * @param {{ timeoutMs?: number, force?: boolean, ackCacheFallback?: boolean }} options
+ */
+async function _runEnsurePlayerTradeIndex(u, options = {}) {
+  const path = _ptiPath(u);
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const force = options.force === true;
+  const ackCacheFallback = options.ackCacheFallback === true;
+  const startedAt = Date.now();
+
+  metrics.mark('playerTradeIndexHydrateStart');
+  if (typeof metrics.recordTradeIndexLifecycle === 'function') {
+    metrics.recordTradeIndexLifecycle({
+      tag: 'playerTradeIndexHydrateStart',
+      ops: 0,
+      ok: true,
+      username: u,
+    });
+  }
+
+  if (_ptiUsername && _ptiUsername !== u) {
+    releasePlayerTradeIndexScope();
+  }
+
+  // Global meta once (no permanent listener)
+  await hydrateTradeIndexMeta({ timeoutMs, force: false });
+
+  let scopedOnceFailed = false;
+  let load = await db.loadPathOnce(path, { timeoutMs, force });
+
+  if (!load.ok) {
+    if (ackCacheFallback && db.get(path)) {
+      scopedOnceFailed = true;
+      console.warn(
+        '[Hydration] Player trade-index once-load failed after acknowledged write; using ack cache + subscribe:',
+        load.error,
+      );
+    } else {
+      metrics.mark('playerTradeIndexHydrateFailed');
+      if (typeof metrics.recordTradeIndexLifecycle === 'function') {
+        metrics.recordTradeIndexLifecycle({
+          tag: 'playerTradeIndexHydrateFailed',
+          ops: 0,
+          ok: false,
+          username: u,
+        });
+      }
+      return {
+        ok: false,
+        scope: SCOPE_PLAYER_TRADE_INDEX,
+        path,
+        username: u,
+        status: 'failed',
+        error: load.error || 'Load failed',
+        scopedOnceFailed: true,
+        startedAt,
+        completedAt: Date.now(),
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
+  _ptiUsername = u;
+  _ptiStartedAt = startedAt;
+
+  const sub = subscribePlayerTradeIndex(u);
+  if (!sub.ok) {
+    metrics.mark('playerTradeIndexHydrateFailed');
+    if (typeof metrics.recordTradeIndexLifecycle === 'function') {
+      metrics.recordTradeIndexLifecycle({
+        tag: 'playerTradeIndexHydrateFailed',
+        ops: 0,
+        ok: false,
+        username: u,
+      });
+    }
+    return {
+      ok: false,
+      scope: SCOPE_PLAYER_TRADE_INDEX,
+      path,
+      username: u,
+      status: 'failed',
+      error: sub.error || 'Subscribe failed',
+      scopedOnceFailed,
+      startedAt,
+      completedAt: Date.now(),
+      durationMs: Date.now() - startedAt,
+    };
+  }
+
+  const wait = await db.waitForPath(path, { timeoutMs });
+  if (!wait.ok) {
+    if (ackCacheFallback && db.get(path)) {
+      console.warn(
+        '[Hydration] waitForPath timeout on playerTradeIndex after register ack; continuing with cache present',
+      );
+    } else {
+      metrics.mark('playerTradeIndexHydrateFailed');
+      if (typeof metrics.recordTradeIndexLifecycle === 'function') {
+        metrics.recordTradeIndexLifecycle({
+          tag: 'playerTradeIndexHydrateFailed',
+          ops: 0,
+          ok: false,
+          username: u,
+        });
+      }
+      return {
+        ok: false,
+        scope: SCOPE_PLAYER_TRADE_INDEX,
+        path,
+        username: u,
+        status: 'failed',
+        error: wait.error || 'timeout',
+        scopedOnceFailed,
+        subscriptionActive: true,
+        startedAt,
+        completedAt: Date.now(),
+        durationMs: Date.now() - startedAt,
+      };
+    }
+  }
+
+  metrics.mark('playerTradeIndexHydrateComplete');
+  if (typeof metrics.recordTradeIndexLifecycle === 'function') {
+    metrics.recordTradeIndexLifecycle({
+      tag: 'playerTradeIndexHydrateComplete',
+      ops: 0,
+      ok: true,
+      username: u,
+    });
+  }
+
+  const entry = _registryEntryForPlayerTradeIndex();
+  const completedAt = Date.now();
+  const metaReady = isPlayerTradeIndexMetaReady(u);
+  const globalVersionCurrent = isGlobalTradeIndexMetaCurrent();
+
+  return {
+    ok: true,
+    scope: SCOPE_PLAYER_TRADE_INDEX,
+    path,
+    username: u,
+    status: scopedOnceFailed ? 'ready-with-once-fallback' : 'ready',
+    reused: false,
+    scopedOnceFailed,
+    subscriptionActive: _ptiUnsub != null,
+    subscriptionId: _ptiSubId,
+    subscriptionRefCount: entry?.refCount ?? 1,
+    ready: db.isPathReady(path),
+    metaReady,
+    globalVersionCurrent,
+    usable: metaReady && globalVersionCurrent && db.isPathReady(path),
+    startedAt,
+    completedAt,
+    durationMs: completedAt - startedAt,
+    note: 'S5c-C playerTradeIndex once + subscribe beside legacy root safety net. No bandwidth claim.',
+  };
+}
+
+/**
+ * Dev report — no index payloads, inventories, or sessions.
+ * @returns {object}
+ */
+export function getPlayerTradeIndexHydrationReport() {
+  const entry = _registryEntryForPlayerTradeIndex();
+  const path = _ptiUsername ? _ptiPath(_ptiUsername) : null;
+  const meta = _ptiUsername
+    ? db.get(`${PLAYER_TRADE_INDEX_ROOT}/${_ptiUsername}/${TRADE_INDEX_META_KEY}`)
+    : null;
+
+  return {
+    phase: 'S5c-C',
+    scope: SCOPE_PLAYER_TRADE_INDEX,
+    username: _ptiUsername,
+    path,
+    ready: isPlayerTradeIndexScopeReady(),
+    metaReady: _ptiUsername ? isPlayerTradeIndexMetaReady(_ptiUsername) : false,
+    metaPresent: meta != null,
+    metaVersion: meta?.v ?? null,
+    expectedMetaVersion: CURRENT_TRADE_INDEX_SCHEMA_VERSION,
+    globalVersionCurrent: isGlobalTradeIndexMetaCurrent(),
+    globalSchemaVersion: db.get(`${TRADE_INDEX_META_ROOT}/schemaVersion`) ?? null,
+    usable: isPlayerTradeIndexReady(),
+    active: _ptiUnsub != null,
+    refCount: entry?.refCount ?? (_ptiUnsub ? 1 : 0),
+    subscriptionId: _ptiSubId,
+    subscriptionStartedAt: _ptiStartedAt,
+    lastEnsure: _ptiLastResult
+      ? {
+        ok: _ptiLastResult.ok,
+        status: _ptiLastResult.status,
+        scopedOnceFailed: _ptiLastResult.scopedOnceFailed === true,
+        durationMs: _ptiLastResult.durationMs,
+        usable: _ptiLastResult.usable === true,
+        error: _ptiLastResult.error || null,
+      }
+      : null,
+    globalMetaLast: _ptiGlobalMetaLast
+      ? {
+        ok: _ptiGlobalMetaLast.ok,
+        current: _ptiGlobalMetaLast.current,
+        schemaVersion: _ptiGlobalMetaLast.schemaVersion,
+        error: _ptiGlobalMetaLast.error,
+      }
+      : null,
+    inFlight: _ptiPromise != null,
+    rootListenerNote: 'Canonical fallback allowed only while legacy root coexistence provides trades trees.',
+  };
+}
+
 // ---------- Phase S5b: Admin directory + selected player ----------
 
 export const SCOPE_ADMIN_DIRECTORY = 'adminDirectory';
@@ -1183,6 +1662,15 @@ export function getHydrationStatus() {
         lastStatus: _currentPlayerLastResult?.status || (_currentPlayerUnsub ? 'subscribed' : 'idle'),
         inFlight: _currentPlayerPromise != null,
       },
+      [SCOPE_PLAYER_TRADE_INDEX]: {
+        ready: isPlayerTradeIndexScopeReady(),
+        usable: isPlayerTradeIndexReady(),
+        username: _ptiUsername,
+        path: _ptiUsername ? _ptiPath(_ptiUsername) : null,
+        subscriptionActive: _ptiUnsub != null,
+        lastStatus: _ptiLastResult?.status || (_ptiUnsub ? 'subscribed' : 'idle'),
+        inFlight: _ptiPromise != null,
+      },
       [SCOPE_ADMIN_DIRECTORY]: getAdminDirectoryHydrationReport(),
       [SCOPE_ADMIN_SELECTED_PLAYER]: getAdminSelectedPlayerReport(),
     },
@@ -1193,6 +1681,7 @@ export function getHydrationStatus() {
     ],
     shared: getSharedHydrationReport(),
     currentPlayer: getCurrentPlayerHydrationReport(),
+    playerTradeIndex: getPlayerTradeIndexHydrationReport(),
     adminDirectory: getAdminDirectoryHydrationReport(),
     adminSelectedPlayer: getAdminSelectedPlayerReport(),
   };
@@ -1204,6 +1693,7 @@ function _installWindowApi() {
     SHARED_DEF_PATHS,
     SCOPE_SHARED_DEFS,
     SCOPE_CURRENT_PLAYER,
+    SCOPE_PLAYER_TRADE_INDEX,
     SCOPE_ADMIN_DIRECTORY,
     SCOPE_ADMIN_SELECTED_PLAYER,
     hydrateSharedDefs,
@@ -1215,6 +1705,12 @@ function _installWindowApi() {
     isCurrentPlayerReady,
     waitForCurrentPlayer,
     ensureCurrentPlayerScope,
+    ensurePlayerTradeIndexScope,
+    isPlayerTradeIndexScopeReady,
+    isPlayerTradeIndexReady,
+    waitForPlayerTradeIndex,
+    getPlayerTradeIndexHydrationReport,
+    hydrateTradeIndexMeta,
     ensureAdminDirectoryScope,
     isAdminDirectoryReady,
     waitForAdminDirectory,
@@ -1231,11 +1727,12 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (Phase S2–S5b)
+      console.info(`DB Hydration (Phase S2–S5c-C)
 Shared: ${SHARED_DEF_PATHS.join(', ')}
 Current player: auth-owned (release not on mirror)
+Player trade index: auth-owned playerTradeIndex/{me} (release not on mirror)
 Admin directory / selected-player: ui-owned ensure; release not on mirror
-API: getHydrationStatus | getAdminDirectoryHydrationReport | getAdminSelectedPlayerReport
+API: getHydrationStatus | getPlayerTradeIndexHydrationReport | getAdminDirectoryHydrationReport
 Root remains the legacy safety net; no bandwidth claim yet.`);
     },
   };

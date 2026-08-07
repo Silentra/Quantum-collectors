@@ -11,10 +11,12 @@
  *   tradeIndexMeta/schemaVersion + rebuiltAt
  *
  * S5c-A: builders, readiness, drift, Admin rebuild, registration/group seeds.
- * S5c-B: lifecycle dual-write path planners + shadowCompare (consumers still canonical).
+ * S5c-B: lifecycle dual-write path planners + shadowCompare (Trading still canonical).
+ * S5c-C: Research uses verified playerTradeIndex via trade-availability
+ *   buildResearchAvailabilitySnapshot (Trading still canonical).
  *
  * Safety: missing / stale / unready / wrong-version must never be treated as
- * “zero reservations” by future consumers (predicates exported here).
+ * “zero reservations” by consumers (predicates exported here).
  */
 
 import * as db from './database.js';
@@ -100,22 +102,45 @@ export function isGroupListingsIndexReady(groupId) {
 }
 
 /**
- * @typedef {'index'|'canonical-fallback'|'unavailable'} TradeIndexReservationSource
+ * @typedef {'index'|'canonical-fallback'|'unavailable'|'loading'} TradeIndexReservationSource
  */
 
 /**
- * Future consumer helper — S5c-A does not switch readers yet.
+ * Resolve reservation data source for a player.
+ * Unready / wrong-version index must never be treated as zero reservations.
+ *
  * @param {string} username
- * @param {{ allowCanonicalFallback?: boolean }} [opts]
+ * @param {{
+ *   allowCanonicalFallback?: boolean,
+ *   scopePathReady?: boolean,
+ *   forceUnavailable?: boolean,
+ *   hydrating?: boolean,
+ * }} [opts]
  * @returns {TradeIndexReservationSource}
  */
 export function getReservationIndexSource(username, opts = {}) {
-  if (isPlayerTradeIndexReady(username) && isGlobalTradeIndexMetaCurrent()) {
-    return 'index';
+  const key = String(username || '').trim();
+  if (!key || key === '__admin__') return 'unavailable';
+  if (opts.forceUnavailable === true) return 'unavailable';
+
+  const pathReady = opts.scopePathReady != null
+    ? opts.scopePathReady === true
+    : (typeof db.isPathReady === 'function'
+      ? db.isPathReady(`${PLAYER_TRADE_INDEX_ROOT}/${key}`)
+      : false);
+
+  const metaOk = isPlayerTradeIndexReady(key) && isGlobalTradeIndexMetaCurrent();
+
+  if (metaOk && pathReady) return 'index';
+
+  if (opts.hydrating === true || (!pathReady && metaOk)) {
+    return 'loading';
   }
+
   if (opts.allowCanonicalFallback === true) {
     return 'canonical-fallback';
   }
+
   return 'unavailable';
 }
 

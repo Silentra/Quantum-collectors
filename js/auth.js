@@ -23,8 +23,10 @@ import * as db from './database.js';
 import * as config from './config.js';
 import {
   ensureCurrentPlayerScope,
+  ensurePlayerTradeIndexScope,
   hydrateCurrentPlayer,
   releaseCurrentPlayerScope,
+  releasePlayerTradeIndexScope,
   subscribeCurrentPlayer,
 } from './db-hydration.js';
 import {
@@ -158,14 +160,46 @@ function stopSessionGuard() {
 }
 
 /**
+ * Release auth-owned gameplay scopes (player record + trade index).
+ * Does not clear cache. Used on logout / force exit / __admin__ / failed establish.
+ */
+function releaseAuthOwnedScopes() {
+  releasePlayerTradeIndexScope();
+  releaseCurrentPlayerScope();
+}
+
+/**
+ * After current-player scope is live: ensure playerTradeIndex/{me}.
+ * Failure does not revoke login — Research fail-closes until retry/rebuild.
+ * @param {string} username
+ * @param {{ ackCacheFallback?: boolean }} [options]
+ */
+async function ensureAuthPlayerTradeIndex(username, options = {}) {
+  if (!username || username === '__admin__') return { ok: false, skipped: true };
+  try {
+    const result = await ensurePlayerTradeIndexScope(username, options);
+    if (!result.ok) {
+      console.warn(
+        '[Auth] Player trade-index scope failed — Research reservations fail-closed until retry/rebuild:',
+        result.error,
+      );
+    }
+    return result;
+  } catch (e) {
+    console.warn('[Auth] Player trade-index scope threw — Research fail-closed:', e?.message || e);
+    return { ok: false, error: e?.message || String(e) };
+  }
+}
+
+/**
  * Force local exit without clearing the server session (already invalid or cleared elsewhere).
- * Releases the current-player scoped subscription; never calls clearActiveSessionIfOwned.
+ * Releases auth-owned scoped subscriptions; never calls clearActiveSessionIfOwned.
  */
 function forceLocalExit(message) {
   if (_exitingLocally) return;
   _exitingLocally = true;
   stopSessionGuard();
-  releaseCurrentPlayerScope();
+  releaseAuthOwnedScopes();
   clearLocalSessionOnly();
   if (message) setPendingAuthMessage(message);
   location.reload();
@@ -213,7 +247,7 @@ export function ensureSessionGuard() {
   const session = getSession();
   if (!session || session.username === '__admin__') {
     stopSessionGuard();
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     return;
   }
   if (!session.sessionId) return;
@@ -231,7 +265,7 @@ function setupCrossTabSessionWatch() {
     if (e.newValue == null) {
       if (_localSessionSnapshot) {
         stopSessionGuard();
-        releaseCurrentPlayerScope();
+        releaseAuthOwnedScopes();
         rememberSessionSnapshot(null);
         resetLoginAchievementEvaluation();
         location.reload();
@@ -274,7 +308,7 @@ export async function logout() {
   if (session && session.username && session.username !== '__admin__' && session.sessionId) {
     await db.clearActiveSessionIfOwned(session.username, session.sessionId);
   }
-  releaseCurrentPlayerScope();
+  releaseAuthOwnedScopes();
   clearLocalSessionOnly();
 }
 
@@ -399,7 +433,7 @@ export async function initAuth() {
 
   // Only username === '__admin__' is exempt from activeSession enforcement.
   if (session.isAdmin && session.username === '__admin__') {
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     console.log('[Auth] Admin session restored');
     return;
   }
@@ -420,7 +454,7 @@ export async function initAuth() {
   const hydrated = await hydrateCurrentPlayer(session.username);
   if (!hydrated.ok) {
     console.warn('[Auth] Stale session cleared (current-player hydrate failed)', hydrated.error);
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     clearLocalSessionOnly();
     setPendingAuthMessage(MSG_SESSION_INVALID);
     return;
@@ -429,7 +463,7 @@ export async function initAuth() {
   const player = db.get(`players/${session.username}`);
   if (!player) {
     console.warn('[Auth] Stale session cleared (player not found)');
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     clearLocalSessionOnly();
     setPendingAuthMessage(MSG_SESSION_INVALID);
     return;
@@ -440,7 +474,7 @@ export async function initAuth() {
   // Exact match only — no grace window on restore.
   if (serverId !== session.sessionId) {
     console.warn('[Auth] Stale session cleared (session id mismatch)');
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     clearLocalSessionOnly();
     setPendingAuthMessage(MSG_SESSION_INVALID);
     return;
@@ -449,11 +483,13 @@ export async function initAuth() {
   const sub = subscribeCurrentPlayer(session.username);
   if (!sub.ok) {
     console.warn('[Auth] Stale session cleared (current-player subscribe failed)', sub.error);
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     clearLocalSessionOnly();
     setPendingAuthMessage(MSG_SESSION_INVALID);
     return;
   }
+
+  await ensureAuthPlayerTradeIndex(session.username);
 
   startSessionGuard(session.username);
   await applyPostLoginPlayerMaintenance(session.username);
@@ -514,11 +550,13 @@ export async function login(username, password) {
   const scoped = await ensureCurrentPlayerScope(username);
   if (!scoped.ok) {
     console.warn('[Auth] Current-player scope failed after login claim', scoped.error);
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     // Do not clear server activeSession we just claimed — next login replaces it.
     clearLocalSessionOnly();
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
+
+  await ensureAuthPlayerTradeIndex(username);
 
   startSessionGuard(username);
   await applyPostLoginPlayerMaintenance(username);
@@ -625,17 +663,20 @@ export async function register(username, password, accessCode) {
     if (db.get(`players/${username}`)) {
       const sub = subscribeCurrentPlayer(username);
       if (sub.ok) {
+        await ensureAuthPlayerTradeIndex(username, { ackCacheFallback: true });
         startSessionGuard(username);
         return { success: true, session, scopedWarning: scoped.error };
       }
     }
-    releaseCurrentPlayerScope();
+    releaseAuthOwnedScopes();
     clearLocalSessionOnly();
     return {
       success: false,
       error: 'Account was created but profile hydration failed. Please sign in.',
     };
   }
+
+  await ensureAuthPlayerTradeIndex(username, { ackCacheFallback: true });
 
   startSessionGuard(username);
 
@@ -806,7 +847,7 @@ export async function adminLogin(password) {
   }
 
   stopSessionGuard();
-  releaseCurrentPlayerScope();
+  releaseAuthOwnedScopes();
   const session = { username: '__admin__', isAdmin: true, loginTime: Date.now() };
   setSession(session);
   return { success: true, session };
