@@ -19,6 +19,7 @@ import * as toast from './toast.js';
 import {
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
+  DIRECTORY_ROOT,
 } from './player-directory.js';
 import {
   createTradeOffer,
@@ -57,6 +58,7 @@ import { showTradeConfirmModal } from './trade-confirm-modal.js';
 import {
   ensureTradeDirectoryScope,
   releaseTradeDirectoryScope,
+  getTradeDirectoryHydrationReport,
 } from './db-hydration.js';
 
 const TRADE_PROJECT_IN_USE_HINT =
@@ -72,6 +74,8 @@ let _cooldownTimer = null;    // interval for live cooldown display
 let _activeSubTab = 'direct'; // 'direct' or 'listings'
 /** Bumped on cleanupTrading so leave-during-ensure skips late render. */
 let _tradingTabGeneration = 0;
+/** Eligible peer-key hash for S5c-D2 picker reactive refresh. */
+let _lastPickerHash = '';
 
 /**
  * Shared filter/sort state for trading card selection views.
@@ -282,6 +286,7 @@ export function renderTrading() {
   _lastOutgoingHash = '';
   _lastAvailableListingsHash = '';
   _lastMyListingsHash = '';
+  _lastPickerHash = '';
   _reactiveTickCounter = 0;
   _lastListingCooldownState = null; // T-8.6: reset so transition detection starts fresh
 
@@ -334,6 +339,10 @@ export function renderTrading() {
   _wireTradeEvents(username);
   _wireListingEvents(username);
   _startCooldownTimer(username);
+  // Seed picker hash after DOM build so first 5s tick only fires on real changes
+  _lastPickerHash = _isTradeDirectoryTrusted()
+    ? _hashEligiblePickerKeys(username, myGroup)
+    : '__untrusted__';
 }
 
 /**
@@ -750,24 +759,66 @@ function _renderOutgoingTrade(trade, myUsername) {
   return '';
 }
 
-function _renderPlayerPicker(username, myGroup) {
-  // Get all players in the same group
-  const allPlayers = player.getAllPlayers();
-  const groupPlayers = allPlayers
-    .filter(({ key, value }) =>
-      key !== username &&
-      key !== '__admin__' &&
-      (value.groupId || value.group) === myGroup &&
-      !value.isTradeRestricted &&
-      !value.isTradeProfileHidden
-    )
-    .sort((a, b) => a.key.localeCompare(b.key));
+function _isTradeDirectoryTrusted() {
+  try {
+    const report = getTradeDirectoryHydrationReport();
+    return report && report.active === true && report.ready === true;
+  } catch {
+    return false;
+  }
+}
 
-  if (groupPlayers.length === 0) {
-    return '<p class="text-surface-500 text-sm">No other players in your group to trade with.</p>';
+/**
+ * Eligible direct-trade peers from trusted playerDirectory (discovery only).
+ * @param {string} username
+ * @param {string} myGroup
+ * @returns {{ key: string, value: object }[]}
+ */
+function _listEligibleDirectoryPeers(username, myGroup) {
+  const entries = db.getChildren(DIRECTORY_ROOT);
+  return entries
+    .filter(({ key, value }) => {
+      if (!value || typeof value !== 'object') return false;
+      if (key === username || key === '__admin__') return false;
+      if (value.groupId !== myGroup) return false;
+      if (value.isTradeRestricted) return false;
+      if (value.isTradeProfileHidden) return false;
+      return true;
+    })
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function _hashEligiblePickerKeys(username, myGroup) {
+  if (!_isTradeDirectoryTrusted()) return '__untrusted__';
+  const peers = _listEligibleDirectoryPeers(username, myGroup);
+  return peers.map(({ key }) => key).join('|') || '__empty__';
+}
+
+function _renderPlayerPickerUnavailable() {
+  return `<div id="trade-picker-unavailable" class="mb-4 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm" data-picker-state="unavailable">
+    Player directory is unavailable. Leave and re-open the Trading tab to retry loading trade partners.
+    <div class="mt-2">
+      <select id="trade-target-select" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-surface-500" disabled>
+        <option value="">— Directory unavailable —</option>
+      </select>
+    </div>
+  </div>
+  <div id="trade-card-pickers" class="hidden"></div>`;
+}
+
+function _renderPlayerPicker(username, myGroup) {
+  // S5c-D2: discovery from Trading-owned playerDirectory only (never getAllPlayers)
+  if (!_isTradeDirectoryTrusted()) {
+    return _renderPlayerPickerUnavailable();
   }
 
-  return `<div class="mb-4">
+  const groupPlayers = _listEligibleDirectoryPeers(username, myGroup);
+
+  if (groupPlayers.length === 0) {
+    return '<p class="text-surface-500 text-sm" data-picker-state="empty">No other players in your group to trade with.</p>';
+  }
+
+  return `<div class="mb-4" data-picker-state="ready">
     <label class="text-sm text-surface-400 block mb-1">Select a player</label>
     <select id="trade-target-select" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
       <option value="">— Choose a player —</option>
@@ -775,6 +826,112 @@ function _renderPlayerPicker(username, myGroup) {
     </select>
   </div>
   <div id="trade-card-pickers" class="hidden"></div>`;
+}
+
+/**
+ * S5c-D2: refresh target-picker options from trusted directory without full renderTrading.
+ * Preserves card-pickers / offered card when selected target remains eligible.
+ * @param {string} username
+ */
+function refreshTradePlayerPicker(username) {
+  const newSection = document.getElementById('trade-new-section');
+  if (!newSection) return;
+
+  const me = player.getPlayer(username);
+  if (!me) return;
+  const myGroup = me.groupId || me.group || null;
+  if (!myGroup) return;
+
+  if (!_isTradeDirectoryTrusted()) {
+    if (newSection.querySelector('[data-picker-state="unavailable"]')) return;
+    _selectedTarget = null;
+    _offeredCardId = null;
+    newSection.innerHTML = _renderPlayerPickerUnavailable();
+    return;
+  }
+
+  const peers = _listEligibleDirectoryPeers(username, myGroup);
+  const eligibleKeys = new Set(peers.map(({ key }) => key));
+  const select = document.getElementById('trade-target-select');
+  const pickerArea = document.getElementById('trade-card-pickers');
+  const wasUnavailable = !!newSection.querySelector('[data-picker-state="unavailable"]');
+  const wasEmpty = !!newSection.querySelector('[data-picker-state="empty"]');
+
+  // Structural rebuild when transitioning unavailable/empty ↔ ready
+  if (wasUnavailable || wasEmpty || !select || peers.length === 0) {
+    const prevTarget = _selectedTarget;
+    const keepTarget = prevTarget && eligibleKeys.has(prevTarget);
+    const keepCardPickers = keepTarget && pickerArea && !pickerArea.classList.contains('hidden');
+    const savedCardHtml = keepCardPickers ? pickerArea.innerHTML : null;
+
+    newSection.innerHTML = _renderPlayerPicker(username, myGroup);
+
+    if (peers.length === 0) {
+      _selectedTarget = null;
+      _offeredCardId = null;
+      return;
+    }
+
+    const newSelect = document.getElementById('trade-target-select');
+    const newPickerArea = document.getElementById('trade-card-pickers');
+    if (keepTarget && newSelect) {
+      newSelect.value = prevTarget;
+      _selectedTarget = prevTarget;
+      if (savedCardHtml && newPickerArea) {
+        newPickerArea.innerHTML = savedCardHtml;
+        newPickerArea.classList.remove('hidden');
+        _wirePickerFilterEvents(username);
+        _wireCardSelectionEvents(username);
+      }
+    } else if (prevTarget && !keepTarget) {
+      _selectedTarget = null;
+      _offeredCardId = null;
+    }
+
+    // Re-wire target select only (hide-toggle / subtabs live outside #trade-new-section)
+    if (newSelect) {
+      newSelect.addEventListener('change', () => {
+        _selectedTarget = newSelect.value || null;
+        _offeredCardId = null;
+        const area = document.getElementById('trade-card-pickers');
+        if (area) {
+          if (_selectedTarget) {
+            area.innerHTML = _renderCardPickers(username, _selectedTarget);
+            area.classList.remove('hidden');
+            _wirePickerFilterEvents(username);
+            _wireCardSelectionEvents(username);
+          } else {
+            area.innerHTML = '';
+            area.classList.add('hidden');
+          }
+        }
+      });
+    }
+    return;
+  }
+
+  // In-place options update (ready → ready)
+  const previousValue = select.value || _selectedTarget || '';
+  const optionsHtml = `<option value="">— Choose a player —</option>${
+    peers.map(({ key }) => `<option value="${key}">${key}</option>`).join('')
+  }`;
+  select.innerHTML = optionsHtml;
+
+  if (previousValue && eligibleKeys.has(previousValue)) {
+    select.value = previousValue;
+    _selectedTarget = previousValue;
+    // Leave #trade-card-pickers and offered-card state untouched
+  } else {
+    select.value = '';
+    if (_selectedTarget) {
+      _selectedTarget = null;
+      _offeredCardId = null;
+      if (pickerArea) {
+        pickerArea.innerHTML = '';
+        pickerArea.classList.add('hidden');
+      }
+    }
+  }
 }
 
 function _renderCardPickers(username, targetUsername) {
@@ -884,9 +1041,10 @@ function _wireTradeEvents(username) {
 
   // Player picker
   const targetSelect = document.getElementById('trade-target-select');
-  if (targetSelect) {
+  if (targetSelect && !targetSelect.disabled) {
     targetSelect.addEventListener('change', () => {
       _selectedTarget = targetSelect.value || null;
+      _offeredCardId = null;
       const pickerArea = document.getElementById('trade-card-pickers');
       if (pickerArea) {
         if (_selectedTarget) {
@@ -1820,6 +1978,19 @@ function _startCooldownTimer(username) {
       if (newHash !== _lastOutgoingHash) {
         _lastOutgoingHash = newHash;
         refreshOutgoingTradesSection(username);
+      }
+    }
+
+    // S5c-D2: directory eligibility hash → refresh picker options only
+    if (directTab && document.getElementById('trade-new-section')) {
+      const me = player.getPlayer(username);
+      const myGroup = me ? (me.groupId || me.group || null) : null;
+      if (myGroup) {
+        const pickerHash = _hashEligiblePickerKeys(username, myGroup);
+        if (pickerHash !== _lastPickerHash) {
+          _lastPickerHash = pickerHash;
+          refreshTradePlayerPicker(username);
+        }
       }
     }
 

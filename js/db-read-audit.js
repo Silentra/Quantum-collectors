@@ -504,9 +504,11 @@ API:
   qcPersonalAudit.reset()
   qcPersonalAudit.workflow()   // print guided steps (S4 personal tabs)
   qcPersonalAudit.workflowS5b() // Admin directory + selected-player scopes
+  qcPersonalAudit.workflowS5cC() // Research reservation cutover
+  qcPersonalAudit.workflowS5cD2() // Direct-trade picker → playerDirectory
 
-Known blocker: projects → trades/direct + trades/listings (reported as PARTIAL; not remediating here).
-Never logs values/passwords/sessions/inventories. Root listener unchanged.`);
+Never logs values/passwords/sessions/inventories. Root listener unchanged.
+Does not claim all Trading is scoped-clean until later S5c-D phases.`);
 }
 
 /**
@@ -720,6 +722,72 @@ PASS when 1–5 and 7–9 hold; 6 documents fallback/fail-closed policy.
 `);
 }
 
+/**
+ * Pasteable verification workflow for Phase S5c-D2 (direct-trade picker → playerDirectory).
+ * Does NOT claim all Trading is scoped-clean — pending/listings/reservations remain canonical.
+ */
+export function workflowS5cD2() {
+  console.info(`
+=== S5c-D2 Direct Trade Picker → playerDirectory ===
+
+Prereq: normal player (not __admin__). D1 COMPLETE + VERIFIED.
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+DEFERRED (still canonical — do not require for D2 pass):
+  - getPendingTrades / listings / expire / reservations
+  - listingsByGroup subscription
+
+----- 1) Registry while Trading open -----
+qcDbHydration.getSubscriptionRegistry()
+// players/{me} ×1, playerTradeIndex/{me} ×1, playerDirectory ×1
+// NO listingsByGroup
+
+qcDbHydration.getTradeDirectoryHydrationReport()
+// active true, ready true, refCount 1
+
+----- 2) Picker audit (options only — do not send offer yet) -----
+qcPersonalAudit.begin('trading-picker', {
+  allowedPrefixes: [
+    'config', 'cards', 'packs', 'groups', 'tradeIndexMeta',
+    'playerDirectory',
+    'players/' + (qcDbHydration.getCurrentPlayerHydrationReport().username || ''),
+    'playerTradeIndex/' + (qcDbHydration.getCurrentPlayerHydrationReport().username || ''),
+  ],
+});
+// Open Trading → Direct Trades; open the target <select> only
+// Do NOT send an offer (createTradeOffer still reads players/{target} canonically)
+qcPersonalAudit.end('trading-picker');
+// unexpected must NOT include bare path 'players' or players/{other-user}
+// allowed may include playerDirectory
+
+----- 3) Semantics -----
+// Same-group peers appear; self / __admin__ / restricted / hidden excluded
+// Persistent player-admin accounts still appear for others
+// Legitimate empty group → "No other players in your group to trade with."
+
+----- 4) Untrusted ≠ empty -----
+// If directory ensure fails / active false: unavailable message
+// must NOT show the legitimate-empty copy
+
+----- 5) Reactive refresh (~5s) -----
+// Peer hides profile / Admin trade-locks / group change:
+//   options update without full tab wipe
+// If that peer was selected: selection clears; card pickers clear
+// If another peer still selected: offered-card UI preserved
+
+----- 6) Canonical create still authoritative -----
+// Send offer to a visible peer → createTradeOffer validates players/{target}
+// Orphan directory row (if any) may appear but create rejects missing player
+
+----- 7) Unchanged -----
+// Pending trades, listings, expire, reservations still scan canonical trades/*
+// playerDirectory refCount stays 1 (D1 ownership); no new Firebase listener
+
+PASS when 1–6 hold; 7 documents deferred consumers.
+`);
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcPersonalAudit = {
@@ -738,6 +806,7 @@ function _installWindowApi() {
     workflow,
     workflowS5b,
     workflowS5cC,
+    workflowS5cD2,
     enableAudit,
     disableAudit,
     enableIsolation,
