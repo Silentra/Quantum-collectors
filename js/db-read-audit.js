@@ -507,6 +507,7 @@ API:
   qcPersonalAudit.workflowS5cC() // Research reservation cutover
   qcPersonalAudit.workflowS5cD2() // Direct-trade picker → playerDirectory
   qcPersonalAudit.workflowS5cD3() // Pending directs + duplicate → PTI
+  qcPersonalAudit.workflowS5cD4() // My Listings + max-active → PTI listings
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -853,6 +854,77 @@ PASS when 1–6 hold; listings remaining canonical is expected until D4+.
 `);
 }
 
+/**
+ * Pasteable verification workflow for Phase S5c-D4 (My Listings + max-active → PTI).
+ * Narrow: My Listings reader + max-active source proof only.
+ * Full Listings-tab trades/listings hits from getVisibleListings / expireStaleListings /
+ * create-path reservations are EXPECTED D5/D6 noise — not a D4 fail.
+ */
+export function workflowS5cD4() {
+  console.info(`
+=== S5c-D4 My Listings + Max-Active → playerTradeIndex/{me}/listings ===
+
+Prereq: normal player; D3 COMPLETE + VERIFIED.
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+----- 1) Registry -----
+qcDbHydration.getSubscriptionRegistry()
+// players/{me} ×1, playerTradeIndex/{me} ×1, playerDirectory ×1 (Trading open)
+// playerTradeIndex refCount === 1 (no second PTI sub)
+// NO listingsByGroup
+
+qcTradeIndex.isPlayerTradeIndexReady(meUsername) // true
+qcTradeIndex.shadowCompare(meUsername) // match preferred
+
+----- 2) Isolated My Listings reader (D4 claim) -----
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+qcPersonalAudit.begin('trading-my-listings', {
+  allowedPrefixes: [
+    'config','cards','packs','groups','tradeIndexMeta','playerDirectory',
+    'players/' + me,
+    'playerTradeIndex/' + me,
+  ],
+});
+qcTradeListings.getMyActiveListings(me);
+qcPersonalAudit.end('trading-my-listings');
+// PASS: no bare 'trades/listings' in unexpected
+// FAIL only if getMyActiveListings itself full-scanned trades/listings while verified
+
+NOTE: Opening/rendering the full Listings tab ALWAYS also runs expireStaleListings
++ getVisibleListings (D5). Those trades/listings hits are EXPECTED — ignore for D4.
+
+----- 3) UI parity -----
+// Trusted empty → "You have no active listings."
+// Trusted with listings → cards, expires, cancel ids, (n/max) count
+// processing listings do NOT appear as active/cancellable
+// Untrusted → amber unavailable panel, NOT empty copy; count shows (—/max); no create form
+
+----- 4) Create + max-active (behavioral + source proof) -----
+// Create listing → success; appears in My Listings
+// At maxActiveListingsPerPlayer → create blocked (MAX_ACTIVE_LISTINGS_REACHED)
+// After create attempt at max (or any create), prove max-active used index:
+qcTradeListings.getLastMaxActiveListingSource()  // expect 'index'
+// Also: qcDbMetrics.summary() / lifecycle tags include tradingListingSource:index
+
+DO NOT require zero trades/listings during full create — buildAvailabilitySnapshot
+still scans canonical listings until D6 (expected noise).
+
+// Cancel → frees capacity; create works again
+qcTradeIndex.shadowCompare(me) // still clean after create/cancel
+
+----- 5) Untrusted ≠ zero -----
+// Isolation ON + unready index: unavailable UI; create → TRADE_INDEX_UNAVAILABLE
+
+----- 6) Canonical actions + unchanged D5+ -----
+// cancelListing still trades/listings/{id}
+// Available Listings / expireStaleListings / listingsByGroup unchanged
+// Root unchanged; PTI refCount still 1
+
+PASS when 1–6 hold for D4 consumers; D5/D6 listings scans remain expected.
+`);
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcPersonalAudit = {
@@ -873,6 +945,7 @@ function _installWindowApi() {
     workflowS5cC,
     workflowS5cD2,
     workflowS5cD3,
+    workflowS5cD4,
     enableAudit,
     disableAudit,
     enableIsolation,

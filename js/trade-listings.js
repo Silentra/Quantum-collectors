@@ -27,7 +27,17 @@ import {
 import {
   listingIndexUpdatesForListing,
   listingIndexRemovalsForListing,
+  getReservationIndexSource,
+  PLAYER_TRADE_INDEX_ROOT,
+  isPlayerTradeIndexReady,
+  isGlobalTradeIndexMetaCurrent,
 } from './trade-index.js';
+
+/** @type {Set<string>} */
+const _tradingListingFallbackWarnings = new Set();
+
+/** Last source used by max-active validation (audit / DevTools). */
+let _lastMaxActiveListingSource = null;
 
 // ─── Helpers ─────────────────────────────────���──────────────────────────────
 
@@ -162,11 +172,23 @@ function _validateCreateListing(ownerId, offeredCardId, requestedCardIds) {
   }
 
   const maxListings = _getMaxActiveListings();
-  const allListings = db.get('trades/listings') || {};
+  const listingSource = resolveTradingListingSource(ownerId);
+  _lastMaxActiveListingSource = listingSource;
+  if (listingSource !== 'index' && listingSource !== 'canonical-fallback') {
+    return { ok: false, reason: 'TRADE_INDEX_UNAVAILABLE' };
+  }
   let activeCount = 0;
-  for (const listing of Object.values(allListings)) {
-    if (listing && listing.ownerId === ownerId && listing.status === 'active') {
-      activeCount++;
+  if (listingSource === 'index') {
+    const indexMap = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${ownerId}/listings`) || {};
+    for (const listing of Object.values(indexMap)) {
+      if (listing && listing.status === 'active') activeCount++;
+    }
+  } else {
+    const allListings = db.get('trades/listings') || {};
+    for (const listing of Object.values(allListings)) {
+      if (listing && listing.ownerId === ownerId && listing.status === 'active') {
+        activeCount++;
+      }
     }
   }
   if (activeCount >= maxListings) {
@@ -400,6 +422,124 @@ export function getVisibleListings(username) {
 }
 
 /**
+ * Whether legacy root coexistence can supply canonical trades/listings for fallback.
+ * Personal isolation without a verified index → fail closed.
+ * @returns {boolean}
+ */
+function _canUseCanonicalListingFallback() {
+  try {
+    if (typeof localStorage !== 'undefined'
+      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
+      return false;
+    }
+  } catch { /* ignore */ }
+  return true;
+}
+
+function _isPlayerTradeIndexHydrating(username) {
+  try {
+    const report = typeof window !== 'undefined'
+      && window.qcDbHydration
+      && typeof window.qcDbHydration.getPlayerTradeIndexHydrationReport === 'function'
+      ? window.qcDbHydration.getPlayerTradeIndexHydrationReport()
+      : null;
+    if (!report) return false;
+    if (report.inFlight === true) return true;
+    const key = String(username || '').trim().toLowerCase();
+    if (report.username && key && String(report.username).toLowerCase() !== key) return false;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function _recordTradingListingSource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `tradingListingSource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'trading-listing-index-unready' });
+  }
+  if (source === 'unavailable' && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'trading-listing-no-index-no-fallback' });
+  }
+}
+
+function _warnTradingListingFallbackOnce(reason) {
+  const key = String(reason || 'default');
+  if (_tradingListingFallbackWarnings.has(key)) return;
+  _tradingListingFallbackWarnings.add(key);
+  console.warn(
+    `[Listings] My Listings / max-active using canonical-fallback (${key}). ` +
+      'Resolve playerTradeIndex readiness before S7. Gameplay still correct under root coexistence.',
+  );
+}
+
+/**
+ * S5c-D4: resolve source for My Listings + create max-active count.
+ * Reuses getReservationIndexSource — does not create another PTI subscription.
+ *
+ * @param {string} username
+ * @param {{ forceUnavailable?: boolean }} [opts]
+ * @returns {'index'|'canonical-fallback'|'loading'|'unavailable'}
+ */
+export function resolveTradingListingSource(username, opts = {}) {
+  const key = String(username || '').trim();
+  if (!key || key === '__admin__') return 'unavailable';
+
+  const pathReady = typeof db.isPathReady === 'function'
+    ? db.isPathReady(`${PLAYER_TRADE_INDEX_ROOT}/${key}`)
+    : false;
+  const hydrating = _isPlayerTradeIndexHydrating(key);
+
+  const source = getReservationIndexSource(key, {
+    scopePathReady: pathReady,
+    hydrating,
+    allowCanonicalFallback: _canUseCanonicalListingFallback(),
+    forceUnavailable: opts.forceUnavailable === true,
+  });
+
+  if (source === 'canonical-fallback') {
+    const reason = !isPlayerTradeIndexReady(key)
+      ? 'player-meta-unready'
+      : (!isGlobalTradeIndexMetaCurrent() ? 'global-schema-mismatch' : 'scope-path-unready');
+    _warnTradingListingFallbackOnce(reason);
+  }
+
+  _recordTradingListingSource(source);
+  return source;
+}
+
+/**
+ * Last source used by `_validateCreateListing` max-active check (DevTools / audit).
+ * @returns {'index'|'canonical-fallback'|'loading'|'unavailable'|null}
+ */
+export function getLastMaxActiveListingSource() {
+  return _lastMaxActiveListingSource;
+}
+
+/**
+ * Collect status===active listings for an owner from a listing map.
+ * Does not filter expiresAt — matches pre-D4 getMyActiveListings (expireStaleListings owns soft-expire).
+ * @param {object} listingMap
+ * @param {string} [ownerId] - when set, require listing.ownerId match (canonical map)
+ * @returns {object[]}
+ */
+function _collectActiveOwnedListings(listingMap, ownerId = null) {
+  const result = [];
+  for (const listing of Object.values(listingMap || {})) {
+    if (!listing || listing.status !== 'active') continue;
+    if (ownerId != null && listing.ownerId !== ownerId) continue;
+    result.push(listing);
+  }
+  result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return result;
+}
+
+/**
  * Get the active listing for a specific player (max 1).
  * @deprecated Use getMyActiveListings() for multi-listing support.
  *
@@ -407,26 +547,53 @@ export function getVisibleListings(username) {
  * @returns {object|null}
  */
 export function getMyActiveListing(username) {
-  const all = getMyActiveListings(username);
-  return all.length > 0 ? all[0] : null;
+  const { listings, trusted } = getMyActiveListings(username);
+  if (!trusted || !listings.length) return null;
+  return listings[0];
 }
 
 /**
  * Get ALL active listings for a specific player.
- * Returns newest-first. Respects maxActiveListingsPerPlayer config.
+ * S5c-D4: verified playerTradeIndex/{me}/listings when ready; never treat untrusted as zero.
+ * Filters status === 'active' only (processing excluded). Soft-expire wall-clock is not
+ * filtered here — same as pre-D4; expireStaleListings clears canonical + index leaves.
  *
  * @param {string} username
- * @returns {object[]}
+ * @returns {{
+ *   listings: object[],
+ *   source: 'index'|'canonical-fallback'|'loading'|'unavailable',
+ *   trusted: boolean
+ * }}
  */
 export function getMyActiveListings(username) {
-  const allListings = db.get('trades/listings') || {};
-  const result = [];
-  for (const listing of Object.values(allListings)) {
-    if (listing && listing.ownerId === username && listing.status === 'active') {
-      result.push(listing);
-    }
+  const key = String(username || '').trim();
+  const source = resolveTradingListingSource(key);
+  const trusted = source === 'index' || source === 'canonical-fallback';
+
+  if (!trusted) {
+    return { listings: [], source, trusted: false };
   }
-  // Sort newest first
-  result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  return result;
+
+  const listings = source === 'index'
+    ? _collectActiveOwnedListings(db.get(`${PLAYER_TRADE_INDEX_ROOT}/${key}/listings`) || {})
+    : _collectActiveOwnedListings(db.get('trades/listings') || {}, key);
+
+  return { listings, source, trusted: true };
 }
+
+function _installWindowApi() {
+  if (typeof window === 'undefined') return;
+  window.qcTradeListings = {
+    resolveTradingListingSource,
+    getMyActiveListings,
+    getMyActiveListing,
+    getMaxActiveListingsPerPlayer,
+    getLastMaxActiveListingSource,
+    createListing,
+    cancelListing,
+    getVisibleListings,
+    expireStaleListings,
+  };
+}
+
+_installWindowApi();

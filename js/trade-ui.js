@@ -39,7 +39,6 @@ import {
   cancelListing,
   acceptListing,
   getVisibleListings,
-  getMyActiveListing,
   getMyActiveListings,
   getMaxActiveListingsPerPlayer,
   getListingCooldown,
@@ -444,7 +443,8 @@ function _renderDirectTradesContent(username, myGroup) {
 // ─── Listings Content ───────────────────────────────────────���───────────────
 
 function _renderListingsContent(username, myGroup) {
-  const ownedListings = getMyActiveListings(username);
+  const { listings: ownedListings, source: myListingsSource, trusted: myListingsTrusted } =
+    getMyActiveListings(username);
   const maxListings = getMaxActiveListingsPerPlayer();
   const visibleListings = getVisibleListings(username);
   const listingCooldown = getListingCooldown(username);
@@ -463,22 +463,27 @@ function _renderListingsContent(username, myGroup) {
   </div>`;
 
   // My Active Listings
-  html += `<div id="my-listings-section" class="mb-6">
+  const countLabel = myListingsTrusted
+    ? `(${ownedListings.length}/${maxListings})`
+    : `(—/${maxListings})`;
+  html += `<div id="my-listings-section" class="mb-6" data-my-listings-state="${myListingsTrusted ? 'trusted' : 'unavailable'}" data-my-listings-source="${myListingsSource || 'unavailable'}">
     <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
       📌 My Listings
-      <span class="text-sm font-normal text-surface-400">(${ownedListings.length}/${maxListings})</span>
+      <span class="text-sm font-normal text-surface-400">${countLabel}</span>
     </h3>`;
 
-  if (ownedListings.length > 0) {
+  if (!myListingsTrusted) {
+    html += _renderMyListingsUnavailable(myListingsSource);
+  } else if (ownedListings.length > 0) {
     html += ownedListings.map(l => _renderMyListing(l)).join('');
   } else {
     html += `<p class="text-surface-500 text-sm mb-3">You have no active listings.</p>`;
   }
 
-  // Only show create form if below max
-  if (ownedListings.length < maxListings) {
+  // Only show create form if trusted and below max
+  if (myListingsTrusted && ownedListings.length < maxListings) {
     html += _renderCreateListingForm(username);
-  } else {
+  } else if (myListingsTrusted && ownedListings.length >= maxListings) {
     html += `<p class="text-amber-400 text-sm mt-2">You've reached the maximum of ${maxListings} active listing${maxListings !== 1 ? 's' : ''}. Cancel one to post a new listing.</p>`;
   }
 
@@ -502,6 +507,15 @@ function _renderListingsContent(username, myGroup) {
   html += `</div>`;
 
   return html;
+}
+
+function _renderMyListingsUnavailable(source) {
+  const label = source === 'loading'
+    ? 'Loading your listings…'
+    : 'Listing index unavailable. Leave and re-open Trading to retry.';
+  return `<div class="mb-3 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm" data-my-listings-panel="unavailable">
+    ${label}
+  </div>`;
 }
 
 function _renderMyListing(listing) {
@@ -1884,23 +1898,33 @@ export function refreshMyListingsSection(username) {
   const section = document.getElementById('my-listings-section');
   if (!section) return;
 
-  const ownedListings = getMyActiveListings(username);
+  const { listings: ownedListings, source: myListingsSource, trusted: myListingsTrusted } =
+    getMyActiveListings(username);
   const maxListings = getMaxActiveListingsPerPlayer();
+
+  const countLabel = myListingsTrusted
+    ? `(${ownedListings.length}/${maxListings})`
+    : `(—/${maxListings})`;
+
+  section.dataset.myListingsState = myListingsTrusted ? 'trusted' : 'unavailable';
+  section.dataset.myListingsSource = myListingsSource || 'unavailable';
 
   let inner = `<h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
     📌 My Listings
-    <span class="text-sm font-normal text-surface-400">(${ownedListings.length}/${maxListings})</span>
+    <span class="text-sm font-normal text-surface-400">${countLabel}</span>
   </h3>`;
 
-  if (ownedListings.length > 0) {
+  if (!myListingsTrusted) {
+    inner += _renderMyListingsUnavailable(myListingsSource);
+  } else if (ownedListings.length > 0) {
     inner += ownedListings.map(l => _renderMyListing(l)).join('');
   } else {
     inner += `<p class="text-surface-500 text-sm mb-3">You have no active listings.</p>`;
   }
 
-  if (ownedListings.length < maxListings) {
+  if (myListingsTrusted && ownedListings.length < maxListings) {
     inner += _renderCreateListingForm(username);
-  } else {
+  } else if (myListingsTrusted && ownedListings.length >= maxListings) {
     inner += `<p class="text-amber-400 text-sm mt-2">You've reached the maximum of ${maxListings} active listing${maxListings !== 1 ? 's' : ''}. Cancel one to post a new listing.</p>`;
   }
 
@@ -2050,11 +2074,19 @@ function _startCooldownTimer(username) {
     if (!userFillingListingForm) {
       const mySection = document.getElementById('my-listings-section');
       if (mySection) {
-        const owned = getMyActiveListings(username);
-        const newHash = _hashArray(owned);
-        if (newHash !== _lastMyListingsHash) {
-          _lastMyListingsHash = newHash;
-          refreshMyListingsSection(username);
+        const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
+        if (!myTrusted) {
+          const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
+          if (untrustedHash !== _lastMyListingsHash) {
+            _lastMyListingsHash = untrustedHash;
+            refreshMyListingsSection(username);
+          }
+        } else {
+          const newHash = _hashArray(owned);
+          if (newHash !== _lastMyListingsHash) {
+            _lastMyListingsHash = newHash;
+            refreshMyListingsSection(username);
+          }
         }
       }
     }
