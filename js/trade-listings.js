@@ -366,11 +366,25 @@ export async function acceptListing(listingId, accepterId, chosenCardId) {
   if (!listing) return { success: false, reason: 'LISTING_NOT_FOUND' };
   if (listing.status !== 'active') return { success: false, reason: 'LISTING_NOT_ACTIVE' };
 
-  // Check expiry — only mark expired while still active (never overwrite terminals)
+  // Check expiry — only mark expired while still active (never overwrite terminals).
+  // S5c-D5a: acknowledged multi-path (canonical + index removals) — parity with expireStaleListings.
   if (listing.expiresAt && Date.now() > listing.expiresAt) {
     const still = db.get(`trades/listings/${listingId}`);
     if (still && still.status === 'active') {
-      db.update(`trades/listings/${listingId}`, { status: 'expired', respondedAt: Date.now() });
+      const id = still.id || listingId;
+      const now = Date.now();
+      const updates = {
+        [`trades/listings/${id}/status`]: 'expired',
+        [`trades/listings/${id}/respondedAt`]: now,
+        ...listingIndexRemovalsForListing({ ...still, id }),
+      };
+      const ack = await db.updateAcknowledged(updates);
+      metrics.recordTradeIndexLifecycle({
+        tag: 'listing-index-dual-write',
+        ops: 1,
+        ok: ack.ok,
+        username: still.ownerId,
+      });
     }
     return { success: false, reason: 'LISTING_EXPIRED' };
   }
