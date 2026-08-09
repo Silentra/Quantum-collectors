@@ -385,8 +385,17 @@ function _buildConfirmSummary(giveCardId, receiveCardId, giveIsLastCopy, receive
 
 // ─── Direct Trades Content ──────────────────────────────────────────────────
 
+function _renderPendingDirectsUnavailable(source) {
+  const label = source === 'loading'
+    ? 'Loading your direct trades…'
+    : 'Direct trade index unavailable. Leave and re-open Trading to retry.';
+  return `<div class="mb-6 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm" data-pending-state="unavailable" data-pending-source="${source || 'unavailable'}">
+    ${label}
+  </div>`;
+}
+
 function _renderDirectTradesContent(username, myGroup) {
-  const { incoming, outgoing } = getPendingTrades(username);
+  const { incoming, outgoing, source, trusted } = getPendingTrades(username);
   const cooldown = getDirectTradeCooldown(username);
 
   let html = '';
@@ -396,24 +405,30 @@ function _renderDirectTradesContent(username, myGroup) {
     Trade cooldown active: <span id="trade-cooldown-timer">${formatCooldown(cooldown.remainingMs)}</span>
   </div>`;
 
-  // Incoming trades
-  html += `<div class="mb-6" data-section="incoming-trades">
+  if (!trusted) {
+    html += `<div data-section="incoming-trades">${_renderPendingDirectsUnavailable(source)}</div>`;
+    html += `<div data-section="outgoing-trades"></div>`;
+  } else {
+    const countBadge = incoming.length > 0
+      ? `<span class="bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">${incoming.length}</span>`
+      : '';
+    html += `<div class="mb-6" data-section="incoming-trades" data-pending-state="trusted">
     <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
       📥 Incoming Trades
-      ${incoming.length > 0 ? `<span class="bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">${incoming.length}</span>` : ''}
+      ${countBadge}
     </h3>
     ${incoming.length === 0
       ? '<p class="text-surface-500 text-sm">No incoming trade requests.</p>'
       : incoming.map(t => _renderIncomingTrade(t, username)).join('')}
   </div>`;
 
-  // Outgoing trades
-  html += `<div class="mb-6" data-section="outgoing-trades">
+    html += `<div class="mb-6" data-section="outgoing-trades" data-pending-state="trusted">
     <h3 class="text-lg font-semibold mb-3">📤 Outgoing Trades</h3>
     ${outgoing.length === 0
       ? '<p class="text-surface-500 text-sm">No outgoing trade offers.</p>'
       : outgoing.map(t => _renderOutgoingTrade(t, username)).join('')}
   </div>`;
+  }
 
   // New Trade section
   html += `<div class="border-t border-surface-700 pt-6">
@@ -1702,9 +1717,14 @@ export function refreshIncomingTradesSection(username) {
     }
   });
 
-  const { incoming } = getPendingTrades(username);
+  const { incoming, source, trusted } = getPendingTrades(username);
   const incomingSection = directTab.querySelector('[data-section="incoming-trades"]');
   if (!incomingSection) return;
+
+  if (!trusted) {
+    incomingSection.innerHTML = _renderPendingDirectsUnavailable(source);
+    return;
+  }
 
   const countBadge = incoming.length > 0
     ? `<span class="bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">${incoming.length}</span>`
@@ -1735,11 +1755,21 @@ export function refreshOutgoingTradesSection(username) {
   const directTab = document.getElementById('trade-subtab-direct');
   if (!directTab) return;
 
-  const { outgoing } = getPendingTrades(username);
+  const { outgoing, source, trusted } = getPendingTrades(username);
   const outgoingSection = directTab.querySelector('[data-section="outgoing-trades"]');
   if (!outgoingSection) return;
 
-  // Detect newly received responses for toast (once per trade id)
+  if (!trusted) {
+    // Keep a single unavailable message on the incoming section; clear outgoing shell
+    outgoingSection.innerHTML = '';
+    const incomingSection = directTab.querySelector('[data-section="incoming-trades"]');
+    if (incomingSection && !incomingSection.querySelector('[data-pending-state="unavailable"]')) {
+      incomingSection.innerHTML = _renderPendingDirectsUnavailable(source);
+    }
+    return;
+  }
+
+  // Detect newly received responses for toast (once per trade id) — trusted only
   for (const t of outgoing) {
     if (
       t.status === 'awaiting_offerer_confirmation' &&
@@ -1961,23 +1991,34 @@ function _startCooldownTimer(username) {
     // (we still refresh but restore selection via _returnCardSelections)
 
     const directTab = document.getElementById('trade-subtab-direct');
-    const { incoming, outgoing } = getPendingTrades(username);
+    const pending = getPendingTrades(username);
+    const { incoming, outgoing, source, trusted } = pending;
 
-    const incomingSection = directTab && directTab.querySelector('[data-section="incoming-trades"]');
-    if (incomingSection) {
-      const newHash = _hashDirectTrades(incoming);
-      if (newHash !== _lastIncomingHash) {
-        _lastIncomingHash = newHash;
+    if (!trusted) {
+      const untrustedHash = `__untrusted__:${source || 'unavailable'}`;
+      if (untrustedHash !== _lastIncomingHash || untrustedHash !== _lastOutgoingHash) {
+        _lastIncomingHash = untrustedHash;
+        _lastOutgoingHash = untrustedHash;
         refreshIncomingTradesSection(username);
-      }
-    }
-
-    const outgoingSection = directTab && directTab.querySelector('[data-section="outgoing-trades"]');
-    if (outgoingSection) {
-      const newHash = _hashDirectTrades(outgoing);
-      if (newHash !== _lastOutgoingHash) {
-        _lastOutgoingHash = newHash;
         refreshOutgoingTradesSection(username);
+      }
+    } else {
+      const incomingSection = directTab && directTab.querySelector('[data-section="incoming-trades"]');
+      if (incomingSection) {
+        const newHash = _hashDirectTrades(incoming);
+        if (newHash !== _lastIncomingHash) {
+          _lastIncomingHash = newHash;
+          refreshIncomingTradesSection(username);
+        }
+      }
+
+      const outgoingSection = directTab && directTab.querySelector('[data-section="outgoing-trades"]');
+      if (outgoingSection) {
+        const newHash = _hashDirectTrades(outgoing);
+        if (newHash !== _lastOutgoingHash) {
+          _lastOutgoingHash = newHash;
+          refreshOutgoingTradesSection(username);
+        }
       }
     }
 
@@ -2066,6 +2107,7 @@ const ERROR_MESSAGES = {
   OFFERING_PLAYER_ON_COOLDOWN: 'Trade failed: one of the players is currently on trade cooldown.',
   TARGET_PLAYER_ON_COOLDOWN: 'Trade failed: one of the players is currently on trade cooldown.',
   DUPLICATE_PENDING_TRADE: 'You already have an active offer for this card.',
+  TRADE_INDEX_UNAVAILABLE: 'Trade index unavailable. Re-open Trading and try again.',
   TRADE_NOT_FOUND: 'Trade not found.',
   TRADE_NOT_PENDING: 'This trade is no longer active.',
   TRADE_NOT_AWAITING_TARGET: 'This offer is no longer waiting for a response.',

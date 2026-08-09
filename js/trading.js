@@ -27,6 +27,10 @@ import {
 import {
   directIndexUpdatesForTrade,
   directIndexRemovalsForTrade,
+  getReservationIndexSource,
+  PLAYER_TRADE_INDEX_ROOT,
+  isPlayerTradeIndexReady,
+  isGlobalTradeIndexMetaCurrent,
 } from './trade-index.js';
 
 // ─── Phase T-8: Trading config helpers ───────────────────────────────────────
@@ -501,7 +505,14 @@ export async function createTradeOffer(offeringPlayerId, targetPlayerId, offered
   }
 
   // Duplicate: same offerer + same offered card already awaiting response/confirmation
-  const existingTrades = db.get('trades/direct') || {};
+  // S5c-D3: verified PTI direct map (never treat untrusted as "no duplicate")
+  const dupSource = resolveTradingDirectSource(offeringPlayerId);
+  if (dupSource === 'loading' || dupSource === 'unavailable') {
+    return { success: false, reason: 'TRADE_INDEX_UNAVAILABLE' };
+  }
+  const existingTrades = dupSource === 'index'
+    ? (db.get(`${PLAYER_TRADE_INDEX_ROOT}/${offeringPlayerId}/direct`) || {})
+    : (db.get('trades/direct') || {});
   for (const t of Object.values(existingTrades)) {
     if (
       t &&
@@ -848,18 +859,111 @@ const _ACTIVE_DIRECT_STATUSES = new Set([
   'awaiting_offerer_confirmation',
 ]);
 
+/** @type {Set<string>} */
+const _tradingDirectFallbackWarnings = new Set();
+
 /**
- * Get active direct trades for a player (as sender or target).
+ * Whether legacy root coexistence can supply canonical trades/direct for fallback.
+ * Personal isolation without a verified index → fail closed.
+ * @returns {boolean}
+ */
+function _canUseCanonicalDirectFallback() {
+  try {
+    if (typeof localStorage !== 'undefined'
+      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
+      return false;
+    }
+  } catch { /* ignore */ }
+  return true;
+}
+
+function _isPlayerTradeIndexHydrating(username) {
+  try {
+    const report = typeof window !== 'undefined'
+      && window.qcDbHydration
+      && typeof window.qcDbHydration.getPlayerTradeIndexHydrationReport === 'function'
+      ? window.qcDbHydration.getPlayerTradeIndexHydrationReport()
+      : null;
+    if (!report) return false;
+    if (report.inFlight === true) return true;
+    const key = String(username || '').trim().toLowerCase();
+    if (report.username && key && String(report.username).toLowerCase() !== key) return false;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function _recordTradingDirectSource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `tradingDirectSource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'trading-direct-index-unready' });
+  }
+  if (source === 'unavailable' && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'trading-direct-no-index-no-fallback' });
+  }
+}
+
+function _warnTradingDirectFallbackOnce(reason) {
+  const key = String(reason || 'default');
+  if (_tradingDirectFallbackWarnings.has(key)) return;
+  _tradingDirectFallbackWarnings.add(key);
+  console.warn(
+    `[Trading] Pending/direct discovery using canonical-fallback (${key}). ` +
+      'Resolve playerTradeIndex readiness before S7. Gameplay still correct under root coexistence.',
+  );
+}
+
+/**
+ * S5c-D3: resolve source for pending directs + duplicate-offer discovery.
+ * Reuses getReservationIndexSource — does not create another PTI subscription.
  *
+ * @param {string} username
+ * @param {{ forceUnavailable?: boolean }} [opts]
+ * @returns {'index'|'canonical-fallback'|'loading'|'unavailable'}
+ */
+export function resolveTradingDirectSource(username, opts = {}) {
+  const key = String(username || '').trim();
+  if (!key || key === '__admin__') return 'unavailable';
+
+  const pathReady = typeof db.isPathReady === 'function'
+    ? db.isPathReady(`${PLAYER_TRADE_INDEX_ROOT}/${key}`)
+    : false;
+  const hydrating = _isPlayerTradeIndexHydrating(key);
+
+  const source = getReservationIndexSource(key, {
+    scopePathReady: pathReady,
+    hydrating,
+    allowCanonicalFallback: _canUseCanonicalDirectFallback(),
+    forceUnavailable: opts.forceUnavailable === true,
+  });
+
+  if (source === 'canonical-fallback') {
+    const reason = !isPlayerTradeIndexReady(key)
+      ? 'player-meta-unready'
+      : (!isGlobalTradeIndexMetaCurrent() ? 'global-schema-mismatch' : 'scope-path-unready');
+    _warnTradingDirectFallbackOnce(reason);
+  }
+
+  _recordTradingDirectSource(source);
+  return source;
+}
+
+/**
+ * Split a direct-trade map into incoming/outgoing pending lists (existing UI rules).
+ * @param {object} tradeMap
  * @param {string} username
  * @returns {{ incoming: object[], outgoing: object[] }}
  */
-export function getPendingTrades(username) {
-  const allTrades = db.get('trades/direct') || {};
+function _partitionPendingDirects(tradeMap, username) {
   const incoming = [];
   const outgoing = [];
-
-  for (const trade of Object.values(allTrades)) {
+  for (const trade of Object.values(tradeMap || {})) {
     if (!trade || !_ACTIVE_DIRECT_STATUSES.has(trade.status)) continue;
     if (trade.targetPlayerId === username && trade.status === 'awaiting_target_response') {
       incoming.push(trade);
@@ -867,9 +971,36 @@ export function getPendingTrades(username) {
       outgoing.push(trade);
     }
   }
-
   incoming.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   outgoing.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
   return { incoming, outgoing };
+}
+
+/**
+ * Get active direct trades for a player (as sender or target).
+ * S5c-D3: verified playerTradeIndex/{me}/direct when ready; never treat untrusted as zero pending.
+ *
+ * @param {string} username
+ * @returns {{
+ *   incoming: object[],
+ *   outgoing: object[],
+ *   source: 'index'|'canonical-fallback'|'loading'|'unavailable',
+ *   trusted: boolean
+ * }}
+ */
+export function getPendingTrades(username) {
+  const key = String(username || '').trim();
+  const source = resolveTradingDirectSource(key);
+  const trusted = source === 'index' || source === 'canonical-fallback';
+
+  if (!trusted) {
+    return { incoming: [], outgoing: [], source, trusted: false };
+  }
+
+  const tradeMap = source === 'index'
+    ? (db.get(`${PLAYER_TRADE_INDEX_ROOT}/${key}/direct`) || {})
+    : (db.get('trades/direct') || {});
+
+  const { incoming, outgoing } = _partitionPendingDirects(tradeMap, key);
+  return { incoming, outgoing, source, trusted: true };
 }

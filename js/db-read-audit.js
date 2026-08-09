@@ -506,6 +506,7 @@ API:
   qcPersonalAudit.workflowS5b() // Admin directory + selected-player scopes
   qcPersonalAudit.workflowS5cC() // Research reservation cutover
   qcPersonalAudit.workflowS5cD2() // Direct-trade picker → playerDirectory
+  qcPersonalAudit.workflowS5cD3() // Pending directs + duplicate → PTI
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -788,6 +789,70 @@ PASS when 1–6 hold; 7 documents deferred consumers.
 `);
 }
 
+/**
+ * Pasteable verification workflow for Phase S5c-D3 (pending directs + duplicate → PTI).
+ * Narrow: Direct Trades only. trades/listings hits are expected from later phases — not a D3 fail.
+ */
+export function workflowS5cD3() {
+  console.info(`
+=== S5c-D3 Pending Directs + Duplicate → playerTradeIndex/{me}/direct ===
+
+Prereq: normal player; D2 COMPLETE + VERIFIED.
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+STAY ON DIRECT TRADES — do not open Listings during the pending audit.
+
+----- 1) Registry -----
+qcDbHydration.getSubscriptionRegistry()
+// players/{me} ×1, playerTradeIndex/{me} ×1, playerDirectory ×1 (Trading open)
+// playerTradeIndex refCount === 1 (no second PTI sub)
+// NO listingsByGroup
+
+qcTradeIndex.isPlayerTradeIndexReady(meUsername) // true
+qcTradeIndex.shadowCompare(meUsername) // match preferred
+
+----- 2) Pending panel audit (Direct tab only; do NOT send offer yet) -----
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+qcPersonalAudit.begin('trading-pending', {
+  allowedPrefixes: [
+    'config','cards','packs','groups','tradeIndexMeta','playerDirectory',
+    'players/' + me,
+    'playerTradeIndex/' + me,
+  ],
+});
+// View Incoming + Outgoing only
+qcPersonalAudit.end('trading-pending');
+// FAIL if unexpected includes bare 'trades/direct' (full tree)
+// IGNORE trades/listings if somehow present — out of D3 scope
+// PASS when no full trades/direct read
+
+----- 3) Parity -----
+// Incoming/outgoing/status/sort/toasts match pre-D3
+// processing trades do not appear as pending
+
+----- 4) Duplicate-offer step (separate) -----
+// Create offer for card X → success
+// Try second offer same card X → DUPLICATE_PENDING_TRADE
+// With verified index, create path must not full-scan trades/direct for duplicate
+// (per-id trades/direct/{id} on later actions is OK)
+
+----- 5) Untrusted ≠ empty -----
+// If PTI unready + isolation ON: unavailable panels, not "No incoming/outgoing"
+// Send Offer blocked with TRADE_INDEX_UNAVAILABLE
+
+----- 6) Actions still canonical -----
+// respond / confirm / decline / cancel still use trades/direct/{id}
+// Write counts unchanged from S5c-B
+
+----- 7) Metrics -----
+// qcDbMetrics.summary() — tradingDirectSource:index present when healthy
+// fallbackCount should be 0 during healthy verified-index use
+
+PASS when 1–6 hold; listings remaining canonical is expected until D4+.
+`);
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcPersonalAudit = {
@@ -807,6 +872,7 @@ function _installWindowApi() {
     workflowS5b,
     workflowS5cC,
     workflowS5cD2,
+    workflowS5cD3,
     enableAudit,
     disableAudit,
     enableIsolation,
