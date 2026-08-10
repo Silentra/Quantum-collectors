@@ -5,13 +5,15 @@
  *   - Projects: binary per cardId (one active project maximum per card identity)
  *   - Trades/listings: copy-aware reservations (inventory minus reserved copies)
  *
- * S5c-C: Research Projects resolve reservations via playerTradeIndex/{me} when verified;
- * Trading callers keep using buildAvailabilitySnapshot defaults (canonical trades/*).
+ * S5c-C: Research Projects resolve reservations via playerTradeIndex/{me} when verified.
+ * S5c-D6: Trading self-availability uses the same PTI maps via buildTradingSelfAvailabilitySnapshot
+ * (current-player only). Counterparty validation remains canonical until D7.
  *
  * No inventory subtraction at reservation time — all math is derived.
  */
 
 import * as db from './database.js';
+import { getSession } from './auth.js';
 import { PROJECT_STATES } from './project-state.js';
 import {
   PLAYER_TRADE_INDEX_ROOT,
@@ -23,6 +25,9 @@ import * as metrics from './db-metrics.js';
 
 /** @type {Set<string>} */
 const _fallbackWarningsShown = new Set();
+
+/** @type {Set<string>} */
+const _tradingFallbackWarningsShown = new Set();
 
 /**
  * Whether legacy root coexistence can supply canonical trade trees for fallback.
@@ -146,7 +151,6 @@ export function loadPlayerTradeIndexReservationMaps(username) {
 
 /**
  * Research Projects availability snapshot — uses verified index when ready.
- * Trading must keep calling buildAvailabilitySnapshot (canonical defaults).
  *
  * @param {string} username
  * @param {object} [opts] — same as buildAvailabilitySnapshot extras
@@ -186,6 +190,219 @@ export function buildResearchAvailabilitySnapshot(username, opts = {}) {
   snap.reservationSource = 'canonical-fallback';
   snap.reservationsTrusted = true;
   return snap;
+}
+
+/**
+ * Authenticated current-player username (Trading self-scope guard).
+ * @returns {string}
+ */
+function _getAuthenticatedUsername() {
+  try {
+    const session = getSession();
+    if (session?.username && session.username !== '__admin__') {
+      return String(session.username).trim();
+    }
+  } catch { /* ignore */ }
+  try {
+    const report = typeof window !== 'undefined'
+      && window.qcDbHydration
+      && typeof window.qcDbHydration.getCurrentPlayerHydrationReport === 'function'
+      ? window.qcDbHydration.getCurrentPlayerHydrationReport()
+      : null;
+    if (report?.username) return String(report.username).trim();
+  } catch { /* ignore */ }
+  return '';
+}
+
+function _recordTradingAvailabilitySource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `tradingAvailabilitySource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'trading-availability-index-unready' });
+  }
+  if (source === 'unavailable' && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'trading-availability-no-index-no-fallback' });
+  }
+}
+
+function _warnTradingAvailabilityFallbackOnce(reason) {
+  const key = String(reason || 'default');
+  if (_tradingFallbackWarningsShown.has(key)) return;
+  _tradingFallbackWarningsShown.add(key);
+  console.warn(
+    `[TradeAvailability] Trading self-availability using canonical-fallback (${key}). ` +
+      'Resolve playerTradeIndex readiness before S7. Gameplay still correct under root coexistence.',
+  );
+}
+
+/**
+ * S5c-D6: resolve reservation source for Trading current-player availability.
+ * Reuses getReservationIndexSource — same readiness as Research.
+ *
+ * @param {string} username
+ * @param {{ forceUnavailable?: boolean }} [opts]
+ * @returns {'index'|'canonical-fallback'|'unavailable'|'loading'}
+ */
+export function resolveTradingReservationSource(username, opts = {}) {
+  const key = String(username || '').trim().toLowerCase();
+  if (!key || key === '__admin__') return 'unavailable';
+
+  const pathReady = typeof db.isPathReady === 'function'
+    ? db.isPathReady(`${PLAYER_TRADE_INDEX_ROOT}/${key}`)
+    : false;
+  const hydrating = _isTradeIndexHydrating(key);
+
+  const source = getReservationIndexSource(key, {
+    scopePathReady: pathReady,
+    hydrating,
+    allowCanonicalFallback: _canUseCanonicalFallback(),
+    forceUnavailable: opts.forceUnavailable === true,
+  });
+
+  if (source === 'canonical-fallback') {
+    const reason = !isPlayerTradeIndexReady(key)
+      ? 'player-meta-unready'
+      : (!isGlobalTradeIndexMetaCurrent() ? 'global-schema-mismatch' : 'scope-path-unready');
+    _warnTradingAvailabilityFallbackOnce(reason);
+  }
+
+  _recordTradingAvailabilitySource(source);
+  return source;
+}
+
+/**
+ * Untrusted empty snap used when self-scope is rejected or index is loading/unavailable.
+ * @param {string} username
+ * @param {object} [opts]
+ * @param {string} source
+ * @param {boolean} [selfScopedRejected]
+ */
+function _untrustedTradingSelfSnapshot(username, opts, source, selfScopedRejected = false) {
+  const playerData = opts.playerData ?? db.get(`players/${username}`);
+  return {
+    username,
+    inventory: { ...(opts.inventory ?? playerData?.inventory ?? {}) },
+    projects: opts.projects ?? playerData?.projects ?? [],
+    tradeCounts: new Map(),
+    excludeDirectTradeIds: opts.excludeDirectTradeIds ?? [],
+    excludeListingIds: opts.excludeListingIds ?? [],
+    reservationSource: source,
+    reservationsTrusted: false,
+    selfScopedRejected: selfScopedRejected === true,
+  };
+}
+
+/**
+ * S5c-D6: Trading current-player availability snapshot.
+ * Self-scoped only — username must equal the authenticated player.
+ * Non-self callers receive fail-closed untrusted (never silent PTI for another user).
+ * Reservation counting reuses buildAvailabilitySnapshot + loadPlayerTradeIndexReservationMaps
+ * (same algorithm as Research).
+ *
+ * @param {string} username — must be the logged-in player
+ * @param {object} [opts]
+ * @returns {AvailabilitySnapshot & { reservationSource: string, reservationsTrusted: boolean, selfScopedRejected?: boolean }}
+ */
+export function buildTradingSelfAvailabilitySnapshot(username, opts = {}) {
+  const key = String(username || '').trim();
+  const me = _getAuthenticatedUsername();
+  if (!key || !me || key.toLowerCase() !== me.toLowerCase()) {
+    console.warn(
+      '[TradeAvailability] buildTradingSelfAvailabilitySnapshot refused non-self username; ' +
+        'use buildAvailabilitySnapshot for counterparty (canonical until D7).',
+    );
+    _recordTradingAvailabilitySource('unavailable');
+    return _untrustedTradingSelfSnapshot(key || me || '', opts, 'unavailable', true);
+  }
+
+  const source = resolveTradingReservationSource(key, opts);
+
+  if (source === 'loading' || source === 'unavailable') {
+    return _untrustedTradingSelfSnapshot(key, opts, source);
+  }
+
+  if (source === 'index') {
+    const maps = loadPlayerTradeIndexReservationMaps(key);
+    const snap = buildAvailabilitySnapshot(key, {
+      ...opts,
+      directTrades: maps.direct,
+      listings: maps.listings,
+    });
+    snap.reservationSource = 'index';
+    snap.reservationsTrusted = true;
+    return snap;
+  }
+
+  const snap = buildAvailabilitySnapshot(key, opts);
+  snap.reservationSource = 'canonical-fallback';
+  snap.reservationsTrusted = true;
+  return snap;
+}
+
+/**
+ * Compare Research vs Trading self reservation outputs for DevTools parity proof.
+ * @param {string} [username]
+ * @returns {object}
+ */
+export function compareResearchTradingSelfAvailability(username) {
+  const key = String(username || _getAuthenticatedUsername() || '').trim();
+  const research = buildResearchAvailabilitySnapshot(key);
+  const trading = buildTradingSelfAvailabilitySnapshot(key);
+
+  const cards = new Set([
+    ...Object.keys(research.inventory || {}),
+    ...Object.keys(trading.inventory || {}),
+    ...(research.tradeCounts ? [...research.tradeCounts.keys()] : []),
+    ...(trading.tradeCounts ? [...trading.tradeCounts.keys()] : []),
+  ]);
+
+  const countDiffs = [];
+  const availableDiffs = [];
+  for (const cardId of cards) {
+    const rc = research.tradeCounts?.get(cardId) || { outgoing: 0, listing: 0, incoming: 0 };
+    const tc = trading.tradeCounts?.get(cardId) || { outgoing: 0, listing: 0, incoming: 0 };
+    if (rc.outgoing !== tc.outgoing || rc.listing !== tc.listing || rc.incoming !== tc.incoming) {
+      countDiffs.push({ cardId, research: rc, trading: tc });
+    }
+    const ra = getAvailableCopyCount(research, cardId);
+    const ta = getAvailableCopyCount(trading, cardId);
+    if (ra !== ta) {
+      availableDiffs.push({ cardId, research: ra, trading: ta });
+    }
+  }
+
+  const match = countDiffs.length === 0
+    && availableDiffs.length === 0
+    && research.reservationsTrusted === trading.reservationsTrusted
+    && (research.reservationSource === trading.reservationSource
+      || (research.reservationsTrusted && trading.reservationsTrusted
+        && research.reservationSource !== 'loading'
+        && trading.reservationSource !== 'loading'));
+
+  const report = {
+    username: key,
+    match,
+    researchSource: research.reservationSource,
+    tradingSource: trading.reservationSource,
+    researchTrusted: research.reservationsTrusted === true,
+    tradingTrusted: trading.reservationsTrusted === true,
+    countDiffs,
+    availableDiffs,
+  };
+  if (!match) {
+    console.warn('[TradeAvailability] Research/Trading self parity mismatch', report);
+  } else {
+    console.info('[TradeAvailability] Research/Trading self reservation parity OK', {
+      username: key,
+      researchSource: report.researchSource,
+      tradingSource: report.tradingSource,
+    });
+  }
+  return report;
 }
 
 // ─── Project uniqueness (binary per cardId) ───────────────────────────────────
@@ -353,6 +570,11 @@ export function getOwnedCopyCount(snapshot, cardId) {
  * @returns {number}
  */
 export function getAvailableCopyCount(snapshot, cardId) {
+  // Fail closed: untrusted reservation maps must never look like free inventory.
+  if (snapshot?.reservationsTrusted === false) return 0;
+  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationSource === 'loading') {
+    return 0;
+  }
   const owned = getOwnedCopyCount(snapshot, cardId);
   const projectCopy = isCardLockedByActiveProject(cardId, snapshot.projects) ? 1 : 0;
   const trade = getTradeReservedCopies(snapshot.tradeCounts, cardId);
@@ -360,10 +582,15 @@ export function getAvailableCopyCount(snapshot, cardId) {
 }
 
 export function canOfferCardInTrade(snapshot, cardId) {
+  if (snapshot?.reservationsTrusted === false) return false;
+  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationSource === 'loading') {
+    return false;
+  }
   return getAvailableCopyCount(snapshot, cardId) >= 1;
 }
 
 export function isLastAvailableCopy(snapshot, cardId) {
+  if (snapshot?.reservationsTrusted === false) return false;
   return getAvailableCopyCount(snapshot, cardId) === 1;
 }
 
@@ -431,11 +658,12 @@ export function getProjectAssignmentLockTooltip(snapshot, cardId) {
  * @returns {string|null}
  */
 export function getAvailabilityFailureReason(snapshot, cardId, context = 'offer') {
-  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationsTrusted === false) {
-    return 'TRADE_RESERVATION_DATA_UNAVAILABLE';
-  }
+  // loading before untrusted: Research/Trading untrusted snaps set reservationsTrusted=false
   if (snapshot?.reservationSource === 'loading') {
     return 'TRADE_RESERVATION_DATA_LOADING';
+  }
+  if (snapshot?.reservationSource === 'unavailable' || snapshot?.reservationsTrusted === false) {
+    return 'TRADE_RESERVATION_DATA_UNAVAILABLE';
   }
 
   if (context === 'assign') {
@@ -503,3 +731,23 @@ export function countHiddenByReservations(snapshot, ownedTradableCardIds) {
   }
   return hidden;
 }
+
+// ─── DevTools / parity surface ───────────────────────────────────────────────
+
+function _installWindowApi() {
+  if (typeof window === 'undefined') return;
+  window.qcTradeAvailability = {
+    buildAvailabilitySnapshot,
+    buildResearchAvailabilitySnapshot,
+    buildTradingSelfAvailabilitySnapshot,
+    resolveResearchReservationSource,
+    resolveTradingReservationSource,
+    loadPlayerTradeIndexReservationMaps,
+    compareResearchTradingSelfAvailability,
+    canOfferCardInTrade,
+    getAvailableCopyCount,
+    getAvailabilityFailureReason,
+  };
+}
+
+_installWindowApi();

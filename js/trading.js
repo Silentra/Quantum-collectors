@@ -18,9 +18,11 @@
 import * as db from './database.js';
 import * as config from './config.js';
 import * as metrics from './db-metrics.js';
+import { getSession } from './auth.js';
 import { executeDirectTrade, getDirectTradeCooldown } from './trade-execution.js';
 import {
   buildAvailabilitySnapshot,
+  buildTradingSelfAvailabilitySnapshot,
   canOfferCardInTrade,
   getAvailabilityFailureReason,
 } from './trade-availability.js';
@@ -33,6 +35,25 @@ import {
   isGlobalTradeIndexMetaCurrent,
 } from './trade-index.js';
 
+/**
+ * S5c-D6: self-side Trading uses PTI via buildTradingSelfAvailabilitySnapshot;
+ * any other actor stays on canonical buildAvailabilitySnapshot (D7).
+ * @param {string} username
+ * @param {object} [opts]
+ */
+function _availabilityForTradeActor(username, opts = {}) {
+  let me = '';
+  try {
+    const session = getSession();
+    if (session?.username && session.username !== '__admin__') {
+      me = String(session.username).trim();
+    }
+  } catch { /* ignore */ }
+  if (me && String(username || '').trim().toLowerCase() === me.toLowerCase()) {
+    return buildTradingSelfAvailabilitySnapshot(username, opts);
+  }
+  return buildAvailabilitySnapshot(username, opts);
+}
 // ─── Phase T-8: Trading config helpers ───────────────────────────────────────
 
 /** Check if trading is globally enabled. */
@@ -128,7 +149,7 @@ export function validateDirectTradeOffer({
   }
 
   const excludeIds = excludeDirectTradeId ? [excludeDirectTradeId] : [];
-  const offeringSnapshot = buildAvailabilitySnapshot(offeringPlayerId, {
+  const offeringSnapshot = _availabilityForTradeActor(offeringPlayerId, {
     playerData: offering,
     excludeDirectTradeIds: excludeIds,
   });
@@ -217,7 +238,8 @@ export function validateDirectTrade({
   // ── 11. Copy-aware availability (project + trade reservations) ───────────
   const excludeIds = excludeDirectTradeId ? [excludeDirectTradeId] : [];
 
-  const offeringSnapshot = buildAvailabilitySnapshot(offeringPlayerId, {
+  // Offerer: PTI when offerer === me (S5c-D6); otherwise canonical until D7.
+  const offeringSnapshot = _availabilityForTradeActor(offeringPlayerId, {
     playerData: offering,
     excludeDirectTradeIds: excludeIds,
   });
@@ -226,6 +248,7 @@ export function validateDirectTrade({
     return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
+  // Target/counterparty: always canonical (D7).
   const targetSnapshot = buildAvailabilitySnapshot(targetPlayerId, {
     playerData: target,
     excludeDirectTradeIds: excludeIds,
@@ -355,6 +378,7 @@ export function validateListingTrade({
   // ── 18. Copy-aware availability (project + trade reservations) ───────────
   const excludeIds = excludeListingId ? [excludeListingId] : [];
 
+  // Listing owner/counterparty: always canonical (D7).
   const ownerSnapshot = buildAvailabilitySnapshot(listing.ownerId, {
     playerData: owner,
     excludeListingIds: excludeIds,
@@ -364,7 +388,8 @@ export function validateListingTrade({
     return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
-  const accepterSnapshot = buildAvailabilitySnapshot(accepterId, {
+  // Accepter: PTI when accepter === me (S5c-D6); otherwise canonical until D7.
+  const accepterSnapshot = _availabilityForTradeActor(accepterId, {
     playerData: accepter,
     excludeListingIds: excludeIds,
   });

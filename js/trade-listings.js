@@ -20,7 +20,7 @@ import * as metrics from './db-metrics.js';
 import { validateListingTrade, isCardTradable, isTradingEnabled, isListingsEnabled, isDetailedLogging } from './trading.js';
 import { executeListingTrade } from './trade-listing-execution.js';
 import {
-  buildAvailabilitySnapshot,
+  buildTradingSelfAvailabilitySnapshot,
   canOfferCardInTrade,
   getAvailabilityFailureReason,
 } from './trade-availability.js';
@@ -213,7 +213,7 @@ function _validateCreateListing(ownerId, offeredCardId, requestedCardIds) {
     return { ok: false, reason: 'OWNER_MISSING_OFFERED_CARD' };
   }
 
-  const ownerSnapshot = buildAvailabilitySnapshot(ownerId, { playerData: owner });
+  const ownerSnapshot = buildTradingSelfAvailabilitySnapshot(ownerId, { playerData: owner });
   if (!canOfferCardInTrade(ownerSnapshot, offeredCardId)) {
     const reason = getAvailabilityFailureReason(ownerSnapshot, offeredCardId, 'offer');
     return { ok: false, reason: reason ?? 'INSUFFICIENT_AVAILABLE_COPIES' };

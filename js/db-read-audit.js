@@ -509,6 +509,7 @@ API:
   qcPersonalAudit.workflowS5cD3() // Pending directs + duplicate → PTI
   qcPersonalAudit.workflowS5cD4() // My Listings + max-active → PTI listings
   qcPersonalAudit.workflowS5cD5b() // Available → listingsByGroup
+  qcPersonalAudit.workflowS5cD6() // Trading self-reservations → PTI
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -908,8 +909,9 @@ NOTE: Opening/rendering the full Listings tab ALWAYS also runs expireStaleListin
 qcTradeListings.getLastMaxActiveListingSource()  // expect 'index'
 // Also: qcDbMetrics.summary() / lifecycle tags include tradingListingSource:index
 
-DO NOT require zero trades/listings during full create — buildAvailabilitySnapshot
-still scans canonical listings until D6 (expected noise).
+DO NOT require zero trades/listings during full create — create validation
+now uses buildTradingSelfAvailabilitySnapshot (D6). expireStaleListings /
+Available discovery noise may still appear until D7.
 
 // Cancel → frees capacity; create works again
 qcTradeIndex.shadowCompare(me) // still clean after create/cancel
@@ -983,7 +985,89 @@ qcDbHydration.getSubscriptionRegistry()
 // Admin reassign group → within ~5s: old group released, new subscribed, Trading full reset
 // Never two listingsByGroup paths at once
 
-PASS when 1–4 hold; expire/reservation listings scans remain expected until D6/D7.
+PASS when 1–4 hold; expire listings scans remain expected until D7.
+Reservation self-scans remediated in D6 (see workflowS5cD6).
+`);
+}
+
+/**
+ * Pasteable verification workflow for Phase S5c-D6 (Trading self-reservations → PTI).
+ * Narrow: isolated buildTradingSelfAvailabilitySnapshot only.
+ * Full Trading render may still hit trades/listings via expireStaleListings (D7)
+ * and counterparty validation (canonical/D7) — those are NOT D6 fails.
+ */
+export function workflowS5cD6() {
+  console.info(`
+=== S5c-D6 Trading self-reservations → playerTradeIndex/{me} ===
+
+Prereq: normal player; D5 COMPLETE + VERIFIED. Open Trading once so modules load
+(or open Research — both install qcTradeAvailability).
+
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+----- 1) Registry -----
+qcDbHydration.getSubscriptionRegistry()
+// players/{me} ×1, playerTradeIndex/{me} ×1 (refCount === 1)
+// + directory / listingsByGroup while Trading open — NO second PTI listener
+
+----- 2) Isolated Trading self availability (D6 claim) -----
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+qcPersonalAudit.begin('trading-self-availability', {
+  allowedPrefixes: [
+    'config','cards','packs','groups','tradeIndexMeta',
+    'players/' + me,
+    'playerTradeIndex/' + me,
+  ],
+});
+const tradingSnap = qcTradeAvailability.buildTradingSelfAvailabilitySnapshot(me);
+console.log({
+  source: tradingSnap.reservationSource,
+  trusted: tradingSnap.reservationsTrusted,
+  tradeCountSize: tradingSnap.tradeCounts && tradingSnap.tradeCounts.size,
+});
+qcPersonalAudit.end('trading-self-availability');
+// PASS: source==='index', trusted===true
+// PASS: no bare trades/direct or trades/listings full-tree reads in unexpected
+// FAIL if isolated snapshot scanned trades/direct or trades/listings while verified
+
+NOTE: Full Trading tab render ALWAYS also runs expireStaleListings (D7).
+Accept/respond counterparty validation may still scan trades/* (canonical/D7).
+Those are EXPECTED — ignore for D6.
+
+----- 3) Trading / Research parity -----
+const researchSnap = qcTradeAvailability.buildResearchAvailabilitySnapshot(me);
+const parity = qcTradeAvailability.compareResearchTradingSelfAvailability(me);
+console.log(parity);
+// Expect: tradingSnap.reservationSource === 'index'
+//         researchSnap.reservationSource === 'index'
+//         parity.match === true
+qcTradeIndex.shadowCompare(me)
+// Expect: .match === true
+
+----- 4) Misuse guard (self-scoped API) -----
+const other = 'definitely_not_me_xyz';
+const rejected = qcTradeAvailability.buildTradingSelfAvailabilitySnapshot(other);
+console.log(rejected.reservationsTrusted, rejected.selfScopedRejected, rejected.reservationSource);
+// Expect: trusted===false, selfScopedRejected===true, source==='unavailable'
+
+----- 5) Behavioral (manual / non-programmer) -----
+// No open trades/listings → pickers show available owned copies
+// Create outgoing direct → offered card reserved (qty 2 → 1 available)
+// Cancel direct → released
+// Active listing → owner offered card reserved; cancel → released
+// Direct + listing on different cards (or qty) add correctly
+// Target respond → their requested card incoming-reserved after response
+// Listing processing (if testable) → owner copy stays reserved
+// Untrusted/isolation: pickers disabled + amber message (NOT empty-free list)
+// create offer / create listing blocked with reservation unavailable/loading toast
+
+----- 6) Metrics -----
+// Healthy: tradingAvailabilitySource:index (and researchAvailabilitySource:index)
+// Zero tradingAvailabilitySource:canonical-fallback / unavailable in normal use
+qcDbMetrics.summary()
+
+PASS when 1–4 hold for D6 self path; D7 expiry/counterparty scans remain expected.
 `);
 }
 
@@ -1009,6 +1093,7 @@ function _installWindowApi() {
     workflowS5cD3,
     workflowS5cD4,
     workflowS5cD5b,
+    workflowS5cD6,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -13,7 +13,9 @@
  * S5c-A: builders, readiness, drift, Admin rebuild, registration/group seeds.
  * S5c-B: lifecycle dual-write path planners + shadowCompare (Trading still canonical).
  * S5c-C: Research uses verified playerTradeIndex via trade-availability
- *   buildResearchAvailabilitySnapshot (Trading still canonical).
+ *   buildResearchAvailabilitySnapshot.
+ * S5c-D6: Trading self-availability uses the same PTI maps via
+ *   buildTradingSelfAvailabilitySnapshot (current-player only; counterparty canonical until D7).
  *
  * Safety: missing / stale / unready / wrong-version must never be treated as
  * “zero reservations” by consumers (predicates exported here).

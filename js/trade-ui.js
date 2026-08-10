@@ -48,7 +48,7 @@ import {
   getListingAcceptCooldown,
 } from './trade-listing-execution.js';
 import {
-  buildAvailabilitySnapshot,
+  buildTradingSelfAvailabilitySnapshot,
   getAvailableCopyCount,
   canOfferCardInTrade,
   isLastAvailableCopy,
@@ -66,6 +66,40 @@ import {
 const TRADE_PROJECT_IN_USE_HINT =
   'Cards in use on research projects are not available.';
 
+const TRADE_RESERVATION_UNAVAILABLE_MSG =
+  'Trade reservation data is unavailable. Card selection is disabled until availability can be verified.';
+
+const TRADE_RESERVATION_LOADING_MSG =
+  'Checking card availability… Please wait.';
+
+/**
+ * @param {import('./trade-availability.js').AvailabilitySnapshot} snapshot
+ * @returns {boolean}
+ */
+function _isSelfReservationUntrusted(snapshot) {
+  return snapshot?.reservationsTrusted === false
+    || snapshot?.reservationSource === 'loading'
+    || snapshot?.reservationSource === 'unavailable';
+}
+
+/**
+ * @param {import('./trade-availability.js').AvailabilitySnapshot} snapshot
+ * @returns {string}
+ */
+function _selfReservationBlockedMessage(snapshot) {
+  if (snapshot?.reservationSource === 'loading') return TRADE_RESERVATION_LOADING_MSG;
+  return TRADE_RESERVATION_UNAVAILABLE_MSG;
+}
+
+/**
+ * @param {import('./trade-availability.js').AvailabilitySnapshot} snapshot
+ * @returns {string}
+ */
+function _selfReservationBlockedHtml(snapshot) {
+  const msg = _selfReservationBlockedMessage(snapshot);
+  const source = snapshot?.reservationSource || 'unavailable';
+  return `<p class="text-amber-300 text-sm border border-amber-700/40 bg-amber-900/20 rounded-lg px-3 py-2" data-reservation-source="${source}">${msg}</p>`;
+}
 // ─── State ──────────────────────────────────────────────────────────────────
 
 let _selectedTarget = null;   // username of selected trade partner
@@ -600,7 +634,13 @@ function _renderCreateListingForm(username) {
   }
 
   const myInv = player.getInventory(username);
-  const mySnapshot = buildAvailabilitySnapshot(username);
+  const mySnapshot = buildTradingSelfAvailabilitySnapshot(username);
+  if (_isSelfReservationUntrusted(mySnapshot)) {
+    return `<div class="bg-surface-800 rounded-lg p-4 border border-surface-700">
+      <div class="text-sm font-medium text-surface-200 mb-3">Create a Listing</div>
+      ${_selfReservationBlockedHtml(mySnapshot)}
+    </div>`;
+  }
   const myCardsAll = _getTradableCards(myInv, mySnapshot);
 
   if (myCardsAll.length === 0) {
@@ -646,14 +686,17 @@ function _renderAvailableListing(listing, myUsername) {
   const timeLeft = _formatTimeLeft(listing.expiresAt);
   const acceptCd = getListingAcceptCooldown(myUsername);
 
-  const mySnapshot = buildAvailabilitySnapshot(myUsername);
+  const mySnapshot = buildTradingSelfAvailabilitySnapshot(myUsername);
+  const reservationsUntrusted = _isSelfReservationUntrusted(mySnapshot);
 
-  const canFulfillWith = requestedIds.filter(id => canOfferCardInTrade(mySnapshot, id));
+  const canFulfillWith = reservationsUntrusted
+    ? []
+    : requestedIds.filter(id => canOfferCardInTrade(mySnapshot, id));
 
   const requestedCards = requestedIds.map(id => {
     const c = cards.getCard(id);
     const owns = (mySnapshot.inventory[id] || 0) >= 1;
-    const locked = !canOfferCardInTrade(mySnapshot, id);
+    const locked = reservationsUntrusted || !canOfferCardInTrade(mySnapshot, id);
     return {
       id,
       name: c ? c.name : id,
@@ -688,7 +731,9 @@ function _renderAvailableListing(listing, myUsername) {
         }).join('')}
       </div>
     </div>
-    ${canFulfillWith.length > 0
+    ${reservationsUntrusted
+      ? _selfReservationBlockedHtml(mySnapshot)
+      : canFulfillWith.length > 0
       ? `<div class="flex gap-2 flex-wrap">
           ${canFulfillWith.map(cardId => {
             const c = cards.getCard(cardId);
@@ -720,12 +765,16 @@ function _renderIncomingTrade(trade, myUsername) {
 
   // Incoming for B: awaiting their response (pick a return card)
   if (trade.status === 'awaiting_target_response') {
-    const mySnapshot = buildAvailabilitySnapshot(myUsername);
+    const mySnapshot = buildTradingSelfAvailabilitySnapshot(myUsername);
+    const reservationsUntrusted = _isSelfReservationUntrusted(mySnapshot);
     const myInv = player.getInventory(myUsername);
-    const eligibleAll = _getTradableCards(myInv, mySnapshot)
-      .filter(({ card }) => card.rarity === offeredRarity);
+    const eligibleAll = reservationsUntrusted
+      ? []
+      : _getTradableCards(myInv, mySnapshot)
+        .filter(({ card }) => card.rarity === offeredRarity);
     const preserved = _returnCardSelections[trade.id] || '';
     const onCooldown = myCd.onCooldown;
+    const pickerDisabled = onCooldown || reservationsUntrusted;
 
     return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700" data-trade-id="${trade.id}">
       <div class="flex items-center justify-between mb-2">
@@ -740,11 +789,14 @@ function _renderIncomingTrade(trade, myUsername) {
       ${onCooldown
         ? `<p class="text-amber-300 text-xs mb-3 text-center">Trade unavailable: you are currently on trade cooldown.</p>`
         : ''}
+      ${reservationsUntrusted
+        ? `<div class="mb-3">${_selfReservationBlockedHtml(mySnapshot)}</div>`
+        : ''}
       <div class="mb-3">
         <label class="text-sm text-surface-400 block mb-1">Choose one of your ${offeredRarity} cards to offer in return</label>
         <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
         <select class="trade-return-card w-full bg-surface-900 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white"
-          data-trade-id="${trade.id}" ${onCooldown ? 'disabled' : ''}>
+          data-trade-id="${trade.id}" ${pickerDisabled ? 'disabled' : ''}>
           <option value="">— Select a card —</option>
           ${_buildCardOptions(eligibleAll, mySnapshot)}
         </select>
@@ -753,7 +805,7 @@ function _renderIncomingTrade(trade, myUsername) {
         <button class="trade-respond-btn flex-1 bg-green-600 hover:bg-green-700 text-white text-sm py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           data-trade-id="${trade.id}"
           data-offered-name="${offeredName}" data-offered-rarity="${offeredRarity}"
-          ${onCooldown ? 'disabled' : ''}>Submit Trade Proposal</button>
+          ${pickerDisabled ? 'disabled' : ''}>Submit Trade Proposal</button>
         <button class="trade-decline-btn flex-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 text-sm py-2 rounded-lg border border-red-700 transition-colors"
           data-trade-id="${trade.id}">Decline</button>
       </div>
@@ -791,7 +843,7 @@ function _renderOutgoingTrade(trade, myUsername) {
     const requestedCard = cards.getCard(trade.requestedCardId);
     const requestedName = requestedCard ? requestedCard.name : trade.requestedCardId;
     const requestedRarity = requestedCard ? requestedCard.rarity : 'common';
-    const mySnapshot = buildAvailabilitySnapshot(myUsername, {
+    const mySnapshot = buildTradingSelfAvailabilitySnapshot(myUsername, {
       excludeDirectTradeIds: trade.id ? [trade.id] : [],
     });
     const isLast = isLastAvailableCopy(mySnapshot, trade.offeredCardId);
@@ -1008,7 +1060,10 @@ function refreshTradePlayerPicker(username) {
 
 function _renderCardPickers(username, targetUsername) {
   const myInv = player.getInventory(username);
-  const mySnapshot = buildAvailabilitySnapshot(username);
+  const mySnapshot = buildTradingSelfAvailabilitySnapshot(username);
+  if (_isSelfReservationUntrusted(mySnapshot)) {
+    return `<div class="mt-3">${_selfReservationBlockedHtml(mySnapshot)}</div>`;
+  }
   const myCardsAll = _getTradableCards(myInv, mySnapshot);
 
   if (myCardsAll.length === 0) {
@@ -1169,7 +1224,7 @@ function _wireDirectTradeActionButtons(username, root = document) {
       const returnCard = cards.getCard(returnCardId);
       const returnName = returnCard ? returnCard.name : returnCardId;
       const returnRarity = returnCard ? returnCard.rarity : '';
-      const mySnapshot = buildAvailabilitySnapshot(username);
+      const mySnapshot = buildTradingSelfAvailabilitySnapshot(username);
       const isLast = isLastAvailableCopy(mySnapshot, returnCardId);
 
       let msg = `They offer:\n${offeredName}`;
@@ -1375,12 +1430,23 @@ function _wireListingFilterEvents(username) {
 
     // Rebuild only the offered-card select in the listing form + count
     const myInv = player.getInventory(username);
-    const mySnapshot = buildAvailabilitySnapshot(username);
+    const mySnapshot = buildTradingSelfAvailabilitySnapshot(username);
+    if (_isSelfReservationUntrusted(mySnapshot)) {
+      const listingSelect = document.getElementById('listing-offered-card');
+      if (listingSelect) {
+        listingSelect.innerHTML = `<option value="">— Select a card —</option>`;
+        listingSelect.disabled = true;
+      }
+      const countEl = document.querySelector('.listing-filter-count');
+      if (countEl) countEl.textContent = _selfReservationBlockedMessage(mySnapshot);
+      return;
+    }
     const myCardsAll = _getTradableCards(myInv, mySnapshot);
     const myCards = _applyTradeFilters(myCardsAll);
 
     const listingSelect = document.getElementById('listing-offered-card');
     if (listingSelect) {
+      listingSelect.disabled = false;
       const prevVal = listingSelect.value;
       listingSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(myCards, mySnapshot)}`;
       if (prevVal && listingSelect.querySelector(`option[value="${prevVal}"]`)) {
@@ -1513,7 +1579,19 @@ async function _handleCreateListing(username) {
 
   // T-6: Sandbox-safe confirmation modal for listing creation
   const offeredCard = cards.getCard(offeredCardId);
-  const listingSnapshot = buildAvailabilitySnapshot(username);
+  const listingSnapshot = buildTradingSelfAvailabilitySnapshot(username);
+  if (_isSelfReservationUntrusted(listingSnapshot)) {
+    if (errorEl) {
+      errorEl.textContent = _selfReservationBlockedMessage(listingSnapshot);
+      errorEl.classList.remove('hidden');
+    }
+    toast.error(_friendlyError(
+      listingSnapshot.reservationSource === 'loading'
+        ? 'TRADE_RESERVATION_DATA_LOADING'
+        : 'TRADE_RESERVATION_DATA_UNAVAILABLE',
+    ));
+    return;
+  }
   const isLast = isLastAvailableCopy(listingSnapshot, offeredCardId);
   const requestedNames = requestedCardIds.map(id => {
     const c = cards.getCard(id);
@@ -1573,12 +1651,23 @@ function _wirePickerFilterEvents(username) {
     if (!_selectedTarget) return;
 
     const myInv = player.getInventory(username);
-    const mySnapshot = buildAvailabilitySnapshot(username);
+    const mySnapshot = buildTradingSelfAvailabilitySnapshot(username);
+    if (_isSelfReservationUntrusted(mySnapshot)) {
+      const offeredSelect = document.getElementById('trade-offered-card');
+      if (offeredSelect) {
+        offeredSelect.innerHTML = `<option value="">— Select a card —</option>`;
+        offeredSelect.disabled = true;
+      }
+      const countEl = document.getElementById('picker-filter-result-count');
+      if (countEl) countEl.textContent = _selfReservationBlockedMessage(mySnapshot);
+      return;
+    }
     const myCardsAll = _getTradableCards(myInv, mySnapshot);
     const myCards = _applyTradeFilters(myCardsAll);
 
     const offeredSelect = document.getElementById('trade-offered-card');
     if (offeredSelect) {
+      offeredSelect.disabled = false;
       const prevVal = offeredSelect.value;
       offeredSelect.innerHTML = `<option value="">— Select a card —</option>${_buildCardOptions(myCards, mySnapshot)}`;
       if (prevVal && offeredSelect.querySelector(`option[value="${prevVal}"]`)) {
@@ -1618,7 +1707,7 @@ function _wireCardSelectionEvents(username) {
     }
 
     const offeredCard = cards.getCard(_offeredCardId);
-    const pickerSnapshot = buildAvailabilitySnapshot(username);
+    const pickerSnapshot = buildTradingSelfAvailabilitySnapshot(username);
     const isLast = isLastAvailableCopy(pickerSnapshot, _offeredCardId);
     const lastCopyHtml = isLast
       ? '<div class="mt-2 p-1.5 rounded bg-amber-900/40 border border-amber-700 text-amber-300 text-xs text-center">⚠️ This is your LAST COPY of this card</div>'
@@ -1659,7 +1748,15 @@ async function _handleSendTrade(username) {
   }
 
   const offeredCard = cards.getCard(_offeredCardId);
-  const sendSnapshot = buildAvailabilitySnapshot(username);
+  const sendSnapshot = buildTradingSelfAvailabilitySnapshot(username);
+  if (_isSelfReservationUntrusted(sendSnapshot)) {
+    toast.error(_friendlyError(
+      sendSnapshot.reservationSource === 'loading'
+        ? 'TRADE_RESERVATION_DATA_LOADING'
+        : 'TRADE_RESERVATION_DATA_UNAVAILABLE',
+    ));
+    return;
+  }
   const isLast = isLastAvailableCopy(sendSnapshot, _offeredCardId);
 
   let msg = `You offer: ${offeredCard ? offeredCard.name : _offeredCardId}`;
@@ -2322,6 +2419,9 @@ const ERROR_MESSAGES = {
   CARD_RESERVED_BY_OUTGOING_TRADE: 'Your last available copy of this card is offered in a pending trade.',
   CARD_RESERVED_BY_INCOMING_TRADE: 'Your last available copy is reserved for an incoming trade offer.',
   INSUFFICIENT_AVAILABLE_COPIES: 'You have no available copies of this card to trade.',
+  TRADE_RESERVATION_DATA_UNAVAILABLE:
+    'Trade reservation data is unavailable. Please reconnect or ask an administrator to rebuild trade indexes.',
+  TRADE_RESERVATION_DATA_LOADING: 'Checking card availability… Please wait and try again.',
 };
 
 function _friendlyError(reason) {
