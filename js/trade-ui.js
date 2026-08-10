@@ -58,6 +58,9 @@ import {
   ensureTradeDirectoryScope,
   releaseTradeDirectoryScope,
   getTradeDirectoryHydrationReport,
+  ensureGroupListingsScope,
+  releaseGroupListingsScope,
+  getGroupListingsHydrationReport,
 } from './db-hydration.js';
 
 const TRADE_PROJECT_IN_USE_HINT =
@@ -75,6 +78,8 @@ let _activeSubTab = 'direct'; // 'direct' or 'listings'
 let _tradingTabGeneration = 0;
 /** Eligible peer-key hash for S5c-D2 picker reactive refresh. */
 let _lastPickerHash = '';
+/** True while a Trading group-listings switch is awaiting ensure (coalesced in hydration). */
+let _groupListingsSwitchPending = false;
 
 /**
  * Shared filter/sort state for trading card selection views.
@@ -211,15 +216,14 @@ function _renderTradeFilterBar(prefix, availableTypes) {
 // ─── Public API ─────────────────────────────────────────────────────────────
 
 /**
- * S5c-D1: Trading tab enter — sole ownership boundary for tradeDirectory.
- * Ensures Trading-owned playerDirectory, then renders content.
- * Does not cut over any Trading consumers (still canonical).
+ * S5c-D1/D5b: Trading tab enter — sole ownership for tradeDirectory + listingsByGroup.
+ * Directory first, then group listings when group known; group failure does not block Direct.
  */
 export async function enterTradingTab() {
   const enterGen = _tradingTabGeneration;
   const session = auth.getSession();
 
-  // Standalone __admin__: never acquire Trading directory scope
+  // Standalone __admin__: never acquire Trading directory / group scopes
   if (!session || session.username === '__admin__') {
     renderTrading();
     return;
@@ -235,6 +239,27 @@ export async function enterTradingTab() {
       '[Trading] playerDirectory hydration failed; rendering with canonical consumers:',
       scoped.error || 'unknown',
     );
+  }
+
+  if (enterGen !== _tradingTabGeneration) {
+    return;
+  }
+
+  const me = player.getPlayer(session.username);
+  const myGroup = me ? (me.groupId || me.group || null) : null;
+  if (myGroup) {
+    const groupScoped = await ensureGroupListingsScope(myGroup);
+    if (enterGen !== _tradingTabGeneration) {
+      return;
+    }
+    if (!groupScoped.ok && !groupScoped.cancelled) {
+      console.warn(
+        '[Trading] listingsByGroup hydration failed; Available Listings will be untrusted:',
+        groupScoped.error || 'unknown',
+      );
+    }
+  } else {
+    releaseGroupListingsScope();
   }
 
   if (enterGen !== _tradingTabGeneration) {
@@ -345,11 +370,12 @@ export function renderTrading() {
 }
 
 /**
- * Leave Trading main tab: cancel in-flight ensure, release Trading directory, clear timers.
+ * Leave Trading main tab: cancel in-flight ensure, release Trading directory + group listings, clear timers.
  */
 export function cleanupTrading() {
   _tradingTabGeneration += 1;
   releaseTradeDirectoryScope();
+  releaseGroupListingsScope();
   if (_cooldownTimer) {
     clearInterval(_cooldownTimer);
     _cooldownTimer = null;
@@ -446,7 +472,6 @@ function _renderListingsContent(username, myGroup) {
   const { listings: ownedListings, source: myListingsSource, trusted: myListingsTrusted } =
     getMyActiveListings(username);
   const maxListings = getMaxActiveListingsPerPlayer();
-  const visibleListings = getVisibleListings(username);
   const listingCooldown = getListingCooldown(username);
 
   let html = '';
@@ -490,15 +515,24 @@ function _renderListingsContent(username, myGroup) {
   html += `</div>`;
 
   // Available Listings (from other players in group)
-  const otherListings = visibleListings.filter(l => l.ownerId !== username);
+  const {
+    listings: visibleListings,
+    source: availableSource,
+    trusted: availableTrusted,
+  } = getVisibleListings(username);
+  const otherListings = availableTrusted
+    ? visibleListings.filter(l => l.ownerId !== username)
+    : [];
 
-  html += `<div id="available-listings-section" class="border-t border-surface-700 pt-6">
+  html += `<div id="available-listings-section" class="border-t border-surface-700 pt-6" data-available-listings-state="${availableTrusted ? 'trusted' : 'unavailable'}" data-available-listings-source="${availableSource || 'unavailable'}">
     <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
       🏪 Available Listings
-      ${otherListings.length > 0 ? `<span class="bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">${otherListings.length}</span>` : ''}
+      ${availableTrusted && otherListings.length > 0 ? `<span class="bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">${otherListings.length}</span>` : ''}
     </h3>`;
 
-  if (otherListings.length === 0) {
+  if (!availableTrusted) {
+    html += _renderAvailableListingsUnavailable(availableSource);
+  } else if (otherListings.length === 0) {
     html += '<p class="text-surface-500 text-sm">No listings available in your group right now.</p>';
   } else {
     html += otherListings.map(l => _renderAvailableListing(l, username)).join('');
@@ -514,6 +548,15 @@ function _renderMyListingsUnavailable(source) {
     ? 'Loading your listings…'
     : 'Listing index unavailable. Leave and re-open Trading to retry.';
   return `<div class="mb-3 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm" data-my-listings-panel="unavailable">
+    ${label}
+  </div>`;
+}
+
+function _renderAvailableListingsUnavailable(source) {
+  const label = source === 'loading'
+    ? 'Loading available listings…'
+    : 'Group listings unavailable. Leave and re-open Trading to retry.';
+  return `<div class="mb-3 p-3 rounded-lg bg-amber-900/30 border border-amber-700 text-amber-300 text-sm" data-available-listings-panel="unavailable">
     ${label}
   </div>`;
 }
@@ -1819,22 +1862,38 @@ export function refreshAvailableListingsSection(username) {
   const section = document.getElementById('available-listings-section');
   if (!section) return;
 
-  const visibleListings = getVisibleListings(username);
-  const otherListings = visibleListings.filter(l => l.ownerId !== username);
+  const {
+    listings: visibleListings,
+    source: availableSource,
+    trusted: availableTrusted,
+  } = getVisibleListings(username);
+  const otherListings = availableTrusted
+    ? visibleListings.filter(l => l.ownerId !== username)
+    : [];
 
-  const countBadge = otherListings.length > 0
+  section.dataset.availableListingsState = availableTrusted ? 'trusted' : 'unavailable';
+  section.dataset.availableListingsSource = availableSource || 'unavailable';
+
+  const countBadge = availableTrusted && otherListings.length > 0
     ? `<span class="bg-primary-600 text-white text-xs px-2 py-0.5 rounded-full">${otherListings.length}</span>`
     : '';
+
+  let body;
+  if (!availableTrusted) {
+    body = _renderAvailableListingsUnavailable(availableSource);
+  } else if (otherListings.length === 0) {
+    body = '<p class="text-surface-500 text-sm">No listings available in your group right now.</p>';
+  } else {
+    body = otherListings.map(l => _renderAvailableListing(l, username)).join('');
+  }
 
   section.innerHTML = `
     <h3 class="text-lg font-semibold mb-3 flex items-center gap-2">
       🏪 Available Listings ${countBadge}
     </h3>
-    ${otherListings.length === 0
-      ? '<p class="text-surface-500 text-sm">No listings available in your group right now.</p>'
-      : otherListings.map(l => _renderAvailableListing(l, username)).join('')}`;
+    ${body}`;
 
-  // Re-wire accept listing buttons
+  // Re-wire accept listing buttons (trusted rows only)
   section.querySelectorAll('.listing-accept-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       if (btn.dataset.acceptInFlight === '1') return;
@@ -1999,6 +2058,66 @@ function _hashArray(arr) {
   return arr.map(x => (x.id || '') + ':' + (x.status || '') + ':' + (x.expiresAt || 0)).join('|');
 }
 
+/**
+ * S5c-D5b: sync Trading-owned listingsByGroup scope to current player group.
+ * At most one switch in flight (hydration coalesces duplicate ensures).
+ * On confirmed group change: clear group-dependent form state and full renderTrading.
+ * @param {string} username
+ * @returns {Promise<boolean>} true if a group-change rerender was performed
+ */
+async function _syncTradingGroupListingsScope(username) {
+  if (_groupListingsSwitchPending) return false;
+
+  const me = player.getPlayer(username);
+  const myGroup = me ? (me.groupId || me.group || null) : null;
+  const report = getGroupListingsHydrationReport();
+  const subscribed = report.groupId || null;
+  const desiredInFlight = report.inFlight === true ? (report.desiredGroupId || null) : null;
+
+  // Already correct (active or ensuring same group)
+  if (myGroup && (subscribed === myGroup || desiredInFlight === myGroup)) {
+    return false;
+  }
+  if (!myGroup && !subscribed && !report.inFlight) {
+    return false;
+  }
+
+  _groupListingsSwitchPending = true;
+  const switchGen = _tradingTabGeneration;
+  const previousGroup = subscribed;
+
+  try {
+    if (!myGroup) {
+      releaseGroupListingsScope();
+      if (switchGen !== _tradingTabGeneration) return false;
+      _selectedTarget = null;
+      _offeredCardId = null;
+      renderTrading();
+      return true;
+    }
+
+    const result = await ensureGroupListingsScope(myGroup);
+    if (switchGen !== _tradingTabGeneration) return false;
+
+    const me2 = player.getPlayer(username);
+    const g2 = me2 ? (me2.groupId || me2.group || null) : null;
+    // Late completion for a superseded group must not drive UI
+    if (g2 !== myGroup) return false;
+    if (result.cancelled) return false;
+
+    // Confirmed desired group — reset group-dependent forms and full-rerender
+    if (previousGroup !== myGroup || result.ok) {
+      _selectedTarget = null;
+      _offeredCardId = null;
+      renderTrading();
+      return true;
+    }
+  } finally {
+    _groupListingsSwitchPending = false;
+  }
+  return false;
+}
+
 function _startCooldownTimer(username) {
   if (_cooldownTimer) clearInterval(_cooldownTimer);
 
@@ -2014,90 +2133,105 @@ function _startCooldownTimer(username) {
     // Preserve B's return-card form: skip incoming refresh while a return select has focus/value mid-edit
     // (we still refresh but restore selection via _returnCardSelections)
 
-    const directTab = document.getElementById('trade-subtab-direct');
-    const pending = getPendingTrades(username);
-    const { incoming, outgoing, source, trusted } = pending;
+    // S5c-D5b: group switch (release A → ensure B once; full reset on confirmed change)
+    void _syncTradingGroupListingsScope(username).then((didRerender) => {
+      if (didRerender) return;
 
-    if (!trusted) {
-      const untrustedHash = `__untrusted__:${source || 'unavailable'}`;
-      if (untrustedHash !== _lastIncomingHash || untrustedHash !== _lastOutgoingHash) {
-        _lastIncomingHash = untrustedHash;
-        _lastOutgoingHash = untrustedHash;
-        refreshIncomingTradesSection(username);
-        refreshOutgoingTradesSection(username);
-      }
-    } else {
-      const incomingSection = directTab && directTab.querySelector('[data-section="incoming-trades"]');
-      if (incomingSection) {
-        const newHash = _hashDirectTrades(incoming);
-        if (newHash !== _lastIncomingHash) {
-          _lastIncomingHash = newHash;
+      const directTab = document.getElementById('trade-subtab-direct');
+      const pending = getPendingTrades(username);
+      const { incoming, outgoing, source, trusted } = pending;
+
+      if (!trusted) {
+        const untrustedHash = `__untrusted__:${source || 'unavailable'}`;
+        if (untrustedHash !== _lastIncomingHash || untrustedHash !== _lastOutgoingHash) {
+          _lastIncomingHash = untrustedHash;
+          _lastOutgoingHash = untrustedHash;
           refreshIncomingTradesSection(username);
-        }
-      }
-
-      const outgoingSection = directTab && directTab.querySelector('[data-section="outgoing-trades"]');
-      if (outgoingSection) {
-        const newHash = _hashDirectTrades(outgoing);
-        if (newHash !== _lastOutgoingHash) {
-          _lastOutgoingHash = newHash;
           refreshOutgoingTradesSection(username);
         }
-      }
-    }
-
-    // S5c-D2: directory eligibility hash → refresh picker options only
-    if (directTab && document.getElementById('trade-new-section')) {
-      const me = player.getPlayer(username);
-      const myGroup = me ? (me.groupId || me.group || null) : null;
-      if (myGroup) {
-        const pickerHash = _hashEligiblePickerKeys(username, myGroup);
-        if (pickerHash !== _lastPickerHash) {
-          _lastPickerHash = pickerHash;
-          refreshTradePlayerPicker(username);
-        }
-      }
-    }
-
-    const availSection = document.getElementById('available-listings-section');
-    if (availSection) {
-      expireStaleListings().then(() => {
-        const visible = getVisibleListings(username).filter(l => l.ownerId !== username);
-        const newHash = _hashArray(visible);
-        if (newHash !== _lastAvailableListingsHash) {
-          _lastAvailableListingsHash = newHash;
-          refreshAvailableListingsSection(username);
-        }
-      });
-    }
-
-    if (!userFillingListingForm) {
-      const mySection = document.getElementById('my-listings-section');
-      if (mySection) {
-        const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
-        if (!myTrusted) {
-          const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
-          if (untrustedHash !== _lastMyListingsHash) {
-            _lastMyListingsHash = untrustedHash;
-            refreshMyListingsSection(username);
+      } else {
+        const incomingSection = directTab && directTab.querySelector('[data-section="incoming-trades"]');
+        if (incomingSection) {
+          const newHash = _hashDirectTrades(incoming);
+          if (newHash !== _lastIncomingHash) {
+            _lastIncomingHash = newHash;
+            refreshIncomingTradesSection(username);
           }
-        } else {
-          const newHash = _hashArray(owned);
-          if (newHash !== _lastMyListingsHash) {
-            _lastMyListingsHash = newHash;
-            refreshMyListingsSection(username);
+        }
+
+        const outgoingSection = directTab && directTab.querySelector('[data-section="outgoing-trades"]');
+        if (outgoingSection) {
+          const newHash = _hashDirectTrades(outgoing);
+          if (newHash !== _lastOutgoingHash) {
+            _lastOutgoingHash = newHash;
+            refreshOutgoingTradesSection(username);
           }
         }
       }
-    }
 
-    const cooldownNow = getListingCooldown(username).onCooldown;
-    if (cooldownNow !== _lastListingCooldownState) {
-      _lastListingCooldownState = cooldownNow;
+      // S5c-D2: directory eligibility hash → refresh picker options only
+      if (directTab && document.getElementById('trade-new-section')) {
+        const me = player.getPlayer(username);
+        const myGroup = me ? (me.groupId || me.group || null) : null;
+        if (myGroup) {
+          const pickerHash = _hashEligiblePickerKeys(username, myGroup);
+          if (pickerHash !== _lastPickerHash) {
+            _lastPickerHash = pickerHash;
+            refreshTradePlayerPicker(username);
+          }
+        }
+      }
+
+      const availSection = document.getElementById('available-listings-section');
+      if (availSection) {
+        expireStaleListings().then(() => {
+          const { listings: visible, source: availSource, trusted: availTrusted } =
+            getVisibleListings(username);
+          if (!availTrusted) {
+            const untrustedHash = `__untrusted__:${availSource || 'unavailable'}`;
+            if (untrustedHash !== _lastAvailableListingsHash) {
+              _lastAvailableListingsHash = untrustedHash;
+              refreshAvailableListingsSection(username);
+            }
+            return;
+          }
+          const others = visible.filter(l => l.ownerId !== username);
+          const newHash = _hashArray(others);
+          if (newHash !== _lastAvailableListingsHash) {
+            _lastAvailableListingsHash = newHash;
+            refreshAvailableListingsSection(username);
+          }
+        });
+      }
+
       if (!userFillingListingForm) {
-        refreshMyListingsSection(username);
+        const mySection = document.getElementById('my-listings-section');
+        if (mySection) {
+          const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
+          if (!myTrusted) {
+            const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
+            if (untrustedHash !== _lastMyListingsHash) {
+              _lastMyListingsHash = untrustedHash;
+              refreshMyListingsSection(username);
+            }
+          } else {
+            const newHash = _hashArray(owned);
+            if (newHash !== _lastMyListingsHash) {
+              _lastMyListingsHash = newHash;
+              refreshMyListingsSection(username);
+            }
+          }
+        }
       }
-    }
+
+      const cooldownNow = getListingCooldown(username).onCooldown;
+      if (cooldownNow !== _lastListingCooldownState) {
+        _lastListingCooldownState = cooldownNow;
+        if (!userFillingListingForm) {
+          refreshMyListingsSection(username);
+        }
+      }
+    });
   }, 1000);
 }
 

@@ -698,6 +698,7 @@ export function summary() {
       currentPlayerHydrate: _milestoneDelta('current-player-hydrate-start', 'current-player-hydrate-complete'),
       playerTradeIndexHydrate: _milestoneDelta('playerTradeIndexHydrateStart', 'playerTradeIndexHydrateComplete'),
       tradingDirectoryHydrate: _milestoneDelta('tradingDirectoryHydrateStart', 'tradingDirectoryHydrateComplete'),
+      groupListingsHydrate: _milestoneDelta('groupListingsHydrateStart', 'groupListingsHydrateComplete'),
       initAuth: _milestoneDelta('initAuth-start', 'initAuth-complete'),
       migrations: _milestoneDelta('migrations-start', 'migrations-complete'),
       uiInit: _milestoneDelta('ui-init-start', 'ui-init-complete'),

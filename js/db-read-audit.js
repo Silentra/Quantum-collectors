@@ -508,6 +508,7 @@ API:
   qcPersonalAudit.workflowS5cD2() // Direct-trade picker → playerDirectory
   qcPersonalAudit.workflowS5cD3() // Pending directs + duplicate → PTI
   qcPersonalAudit.workflowS5cD4() // My Listings + max-active → PTI listings
+  qcPersonalAudit.workflowS5cD5b() // Available → listingsByGroup
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -925,6 +926,67 @@ PASS when 1–6 hold for D4 consumers; D5/D6 listings scans remain expected.
 `);
 }
 
+/**
+ * Pasteable verification workflow for Phase S5c-D5b (Available → listingsByGroup).
+ * Narrow: isolated getVisibleListings only. Full Listings-tab expire + reservation
+ * trades/listings hits are EXPECTED D7/D6 noise — not a D5b fail.
+ */
+export function workflowS5cD5b() {
+  console.info(`
+=== S5c-D5b Available Listings → listingsByGroup/{groupId} ===
+
+Prereq: normal player; D5a COMPLETE + VERIFIED.
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+----- 1) Registry (Trading open) -----
+qcDbHydration.getSubscriptionRegistry()
+// players/{me} ×1, playerTradeIndex/{me} ×1, playerDirectory ×1,
+// listingsByGroup/{groupId} ×1
+// PTI refCount === 1; NO second group listener
+
+qcDbHydration.getGroupListingsHydrationReport()
+// ready, metaReady, globalVersionCurrent, active, groupId match
+
+----- 2) Isolated Available discovery (D5b claim) -----
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+const g = (qcDbHydration.getCached('players/' + me) || {}).groupId;
+qcPersonalAudit.begin('trading-visible-listings', {
+  allowedPrefixes: [
+    'config','cards','packs','groups','tradeIndexMeta','playerDirectory',
+    'players/' + me,
+    'playerTradeIndex/' + me,
+    'listingsByGroup/' + g,
+  ],
+});
+const visible = qcTradeListings.getVisibleListings(me);
+console.log(visible.source, visible.trusted, visible.listings && visible.listings.length);
+qcPersonalAudit.end('trading-visible-listings');
+// PASS: source==='index', trusted===true, no bare 'trades/listings' in unexpected
+// FAIL only if getVisibleListings itself full-scanned trades/listings while verified
+
+NOTE: Full Listings-tab render ALWAYS also runs expireStaleListings (D7).
+Create/accept may still scan trades/listings for reservations (D6).
+Those are EXPECTED — ignore for D5b.
+
+----- 3) UI parity -----
+// Trusted empty → "No listings available in your group right now."
+// Untrusted → amber unavailable (not empty copy); no accept buttons
+// Accept still uses trades/listings/{id} (canonical)
+
+----- 4) Leave Trading -----
+// Switch away from Trading
+qcDbHydration.getSubscriptionRegistry()
+// listingsByGroup + playerDirectory gone; auth pair remains
+
+----- 5) Optional group switch -----
+// Admin reassign group → within ~5s: old group released, new subscribed, Trading full reset
+// Never two listingsByGroup paths at once
+
+PASS when 1–4 hold; expire/reservation listings scans remain expected until D6/D7.
+`);
+}
+
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcPersonalAudit = {
@@ -946,6 +1008,7 @@ function _installWindowApi() {
     workflowS5cD2,
     workflowS5cD3,
     workflowS5cD4,
+    workflowS5cD5b,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -29,12 +29,18 @@ import {
   listingIndexRemovalsForListing,
   getReservationIndexSource,
   PLAYER_TRADE_INDEX_ROOT,
+  LISTINGS_BY_GROUP_ROOT,
+  TRADE_INDEX_META_KEY,
   isPlayerTradeIndexReady,
   isGlobalTradeIndexMetaCurrent,
+  isGroupListingsIndexReady,
 } from './trade-index.js';
 
 /** @type {Set<string>} */
 const _tradingListingFallbackWarnings = new Set();
+
+/** @type {Set<string>} */
+const _tradingGroupListingsFallbackWarnings = new Set();
 
 /** Last source used by max-active validation (audit / DevTools). */
 let _lastMaxActiveListingSource = null;
@@ -406,33 +412,176 @@ export async function acceptListing(listingId, accepterId, chosenCardId) {
 // ─── Queries ────────────────────────────────────────────────────────────────
 
 /**
- * Get all active listings visible to a specific player (same group, not own).
+ * Whether legacy root coexistence can supply canonical trades/listings for Available discovery.
+ * Personal isolation without a verified index → fail closed.
+ * @returns {boolean}
+ */
+function _canUseCanonicalGroupListingsFallback() {
+  try {
+    if (typeof localStorage !== 'undefined'
+      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
+      return false;
+    }
+  } catch { /* ignore */ }
+  return true;
+}
+
+function _isGroupListingsHydrating(groupId) {
+  try {
+    const report = typeof window !== 'undefined'
+      && window.qcDbHydration
+      && typeof window.qcDbHydration.getGroupListingsHydrationReport === 'function'
+      ? window.qcDbHydration.getGroupListingsHydrationReport()
+      : null;
+    if (!report || report.inFlight !== true) return false;
+    const key = String(groupId || '').trim();
+    const desired = report.desiredGroupId != null ? String(report.desiredGroupId) : '';
+    if (key && desired && desired !== key) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function _recordTradingGroupListingsSource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `tradingGroupListingsSource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'trading-group-listings-index-unready' });
+  }
+  if (source === 'unavailable' && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'trading-group-listings-no-index-no-fallback' });
+  }
+}
+
+function _warnTradingGroupListingsFallbackOnce(reason) {
+  const key = String(reason || 'default');
+  if (_tradingGroupListingsFallbackWarnings.has(key)) return;
+  _tradingGroupListingsFallbackWarnings.add(key);
+  console.warn(
+    `[Listings] Available discovery using canonical-fallback (${key}). ` +
+      'Resolve listingsByGroup readiness before S7. Gameplay still correct under root coexistence.',
+  );
+}
+
+/**
+ * S5c-D5b: resolve source for Available Listings discovery via listingsByGroup/{groupId}.
  *
  * @param {string} username
- * @returns {object[]} Array of listing objects (anonymous — ownerId NOT exposed to UI)
+ * @param {{ forceUnavailable?: boolean }} [opts]
+ * @returns {'index'|'canonical-fallback'|'loading'|'unavailable'}
  */
-export function getVisibleListings(username) {
-  const me = db.get(`players/${username}`);
-  if (!me) return [];
-  const myGroup = me.groupId || me.group || null;
-  if (!myGroup) return [];
+export function resolveTradingGroupListingsSource(username, opts = {}) {
+  const key = String(username || '').trim();
+  if (!key || key === '__admin__') return 'unavailable';
 
-  const allListings = db.get('trades/listings') || {};
-  const now = Date.now();
-  const result = [];
+  const me = db.get(`players/${key}`);
+  const myGroup = me ? (me.groupId || me.group || null) : null;
+  if (!myGroup) return 'unavailable';
 
-  for (const listing of Object.values(allListings)) {
-    if (!listing || listing.status !== 'active') continue;
-    if (listing.groupId !== myGroup) continue;
-    // Don't show expired listings
-    if (listing.expiresAt && now > listing.expiresAt) continue;
-    // Include own listings (so owner can see/cancel them)
-    result.push(listing);
+  if (opts.forceUnavailable === true) {
+    _recordTradingGroupListingsSource('unavailable');
+    return 'unavailable';
   }
 
-  // Sort newest first
+  let report = null;
+  try {
+    report = typeof window !== 'undefined'
+      && window.qcDbHydration
+      && typeof window.qcDbHydration.getGroupListingsHydrationReport === 'function'
+      ? window.qcDbHydration.getGroupListingsHydrationReport()
+      : null;
+  } catch { /* ignore */ }
+
+  const scopeActive = !!(report && report.active === true && report.groupId === myGroup);
+  const pathReady = typeof db.isPathReady === 'function'
+    ? db.isPathReady(`${LISTINGS_BY_GROUP_ROOT}/${myGroup}`)
+    : false;
+  const metaOk = isGroupListingsIndexReady(myGroup) && isGlobalTradeIndexMetaCurrent();
+  const hydrating = _isGroupListingsHydrating(myGroup);
+
+  let source;
+  if (scopeActive && pathReady && metaOk) {
+    source = 'index';
+  } else if (hydrating || (scopeActive && !pathReady && metaOk)) {
+    source = 'loading';
+  } else if (_canUseCanonicalGroupListingsFallback()) {
+    source = 'canonical-fallback';
+    const reason = !scopeActive
+      ? 'scope-inactive'
+      : (!metaOk
+        ? (!isGroupListingsIndexReady(myGroup) ? 'group-meta-unready' : 'global-schema-mismatch')
+        : 'scope-path-unready');
+    _warnTradingGroupListingsFallbackOnce(reason);
+  } else if (hydrating) {
+    source = 'loading';
+  } else {
+    source = 'unavailable';
+  }
+
+  _recordTradingGroupListingsSource(source);
+  return source;
+}
+
+/**
+ * Collect visible active listings from a map (newest-first).
+ * @param {object} listingMap
+ * @param {string|null} requireGroupId - when set, require listing.groupId match (canonical map)
+ * @returns {object[]}
+ */
+function _collectVisibleListings(listingMap, requireGroupId = null) {
+  const now = Date.now();
+  const result = [];
+  for (const [id, listing] of Object.entries(listingMap || {})) {
+    if (id === TRADE_INDEX_META_KEY || id === '_meta') continue;
+    if (!listing || typeof listing !== 'object') continue;
+    if (listing.status !== 'active') continue;
+    if (requireGroupId != null && listing.groupId !== requireGroupId) continue;
+    if (listing.expiresAt && now > Number(listing.expiresAt)) continue;
+    result.push(listing);
+  }
   result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return result;
+}
+
+/**
+ * Get active listings visible to a player (same group).
+ * S5c-D5b: verified listingsByGroup/{myGroup} when ready; never treat untrusted as empty.
+ * Own listings included (UI hides them for Available). Anonymous display is UI-only.
+ *
+ * @param {string} username
+ * @returns {{
+ *   listings: object[],
+ *   source: 'index'|'canonical-fallback'|'loading'|'unavailable',
+ *   trusted: boolean
+ * }}
+ */
+export function getVisibleListings(username) {
+  const key = String(username || '').trim();
+  const me = db.get(`players/${key}`);
+  if (!me) {
+    return { listings: [], source: 'unavailable', trusted: false };
+  }
+  const myGroup = me.groupId || me.group || null;
+  if (!myGroup) {
+    return { listings: [], source: 'unavailable', trusted: false };
+  }
+
+  const source = resolveTradingGroupListingsSource(key);
+  const trusted = source === 'index' || source === 'canonical-fallback';
+  if (!trusted) {
+    return { listings: [], source, trusted: false };
+  }
+
+  const listings = source === 'index'
+    ? _collectVisibleListings(db.get(`${LISTINGS_BY_GROUP_ROOT}/${myGroup}`) || {})
+    : _collectVisibleListings(db.get('trades/listings') || {}, myGroup);
+
+  return { listings, source, trusted: true };
 }
 
 /**
@@ -599,6 +748,7 @@ function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcTradeListings = {
     resolveTradingListingSource,
+    resolveTradingGroupListingsSource,
     getMyActiveListings,
     getMyActiveListing,
     getMaxActiveListingsPerPlayer,

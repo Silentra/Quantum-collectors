@@ -8,10 +8,10 @@
  * S5c-C: playerTradeIndex — auth-owned once-load + one subscribePath for
  *      playerTradeIndex/{username}; loads tradeIndexMeta once (no permanent listener).
  * S5c-D1: tradeDirectory — Trading-owned playerDirectory subscribe while Trading tab open.
- *      Does not share Admin's handle. No listingsByGroup until S5c-D5. No consumer cutover.
+ *      Does not share Admin's handle. No consumer cutover at D1.
+ * S5c-D5b: groupListings — Trading-owned listingsByGroup/{groupId} while Trading tab open.
  *
  * accessCodes is intentionally NOT part of sharedDefs (register-only; do not broaden).
- * Trading listingsByGroup subscriptions remain deferred (S5c-D5).
  *
  * Root once('/') + on('value') remain the legacy safety net (unchanged). Root and scoped
  * player events may arrive in either order during coexistence — do not depend on root
@@ -24,9 +24,11 @@ import { DIRECTORY_ROOT, resolvePlayerDirectoryKey } from './player-directory.js
 import {
   CURRENT_TRADE_INDEX_SCHEMA_VERSION,
   PLAYER_TRADE_INDEX_ROOT,
+  LISTINGS_BY_GROUP_ROOT,
   TRADE_INDEX_META_KEY,
   TRADE_INDEX_META_ROOT,
   isGlobalTradeIndexMetaCurrent,
+  isGroupListingsIndexReady,
   isPlayerTradeIndexReady as isPlayerTradeIndexMetaReady,
 } from './trade-index.js';
 
@@ -1908,8 +1910,350 @@ export function getTradeDirectoryHydrationReport() {
   };
 }
 
+// ---------- Phase S5c-D5b: Trading-owned listingsByGroup/{groupId} ----------
+
+export const SCOPE_GROUP_LISTINGS = 'groupListings';
+
+/** @type {(() => void)|null} */
+let _groupListingsUnsub = null;
+/** @type {string|null} */
+let _groupListingsSubId = null;
+/** @type {string|null} — actively subscribed group (null if none) */
+let _groupListingsGroupId = null;
+/** @type {string|null} — desired target during ensure/switch */
+let _groupListingsDesiredGroupId = null;
+/** @type {number|null} */
+let _groupListingsStartedAt = null;
+/** @type {Promise<object>|null} */
+let _groupListingsPromise = null;
+/** @type {number} — bumped on release/switch to cancel in-flight ensure */
+let _groupListingsGeneration = 0;
+/** @type {object|null} */
+let _groupListingsLastResult = null;
+
 /**
- * Named-scope status snapshot (S2–S5c-D1).
+ * @param {string} groupId
+ * @returns {string}
+ */
+function _groupListingsPath(groupId) {
+  return `${LISTINGS_BY_GROUP_ROOT}/${String(groupId || '').trim()}`;
+}
+
+/**
+ * Drop Trading-owned group-listings handle without bumping generation.
+ * Used when switching A→B inside a new ensure that already owns the generation bump.
+ */
+function _dropGroupListingsHandle() {
+  if (_groupListingsUnsub) {
+    try { _groupListingsUnsub(); } catch { /* ignore */ }
+  }
+  _groupListingsUnsub = null;
+  _groupListingsSubId = null;
+  _groupListingsStartedAt = null;
+  _groupListingsGroupId = null;
+}
+
+/**
+ * @param {string} [groupId]
+ * @returns {boolean}
+ */
+export function isGroupListingsReady(groupId) {
+  const key = groupId != null ? String(groupId).trim() : _groupListingsGroupId;
+  if (!key) return false;
+  if (_groupListingsGroupId !== key || !_groupListingsUnsub) return false;
+  return db.isPathReady(_groupListingsPath(key));
+}
+
+/**
+ * @param {string} [groupId]
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export function waitForGroupListings(groupId, options = {}) {
+  const key = groupId != null ? String(groupId).trim() : _groupListingsGroupId;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  if (!key) {
+    return Promise.resolve({
+      ok: false,
+      scope: SCOPE_GROUP_LISTINGS,
+      path: null,
+      groupId: null,
+      error: 'Missing groupId',
+    });
+  }
+  const path = _groupListingsPath(key);
+  return db.waitForPath(path, { timeoutMs }).then((result) => ({
+    ok: result.ok === true,
+    scope: SCOPE_GROUP_LISTINGS,
+    path,
+    groupId: key,
+    error: result.error,
+  }));
+}
+
+/**
+ * Release Trading-owned listingsByGroup subscription. Does not clear cache/readiness.
+ * Bumps generation so late ensures discard handles.
+ */
+export function releaseGroupListingsScope() {
+  _groupListingsGeneration += 1;
+  _groupListingsDesiredGroupId = null;
+  const prevPath = _groupListingsGroupId ? _groupListingsPath(_groupListingsGroupId) : null;
+  _dropGroupListingsHandle();
+  _groupListingsPromise = null;
+  return { released: true, path: prevPath, scope: SCOPE_GROUP_LISTINGS };
+}
+
+/**
+ * Ensure exactly one Trading-owned subscription to listingsByGroup/{groupId}.
+ * At most one ensure/switch in flight; group changes cancel prior ownership before acquiring.
+ * Never holds two group listeners simultaneously.
+ *
+ * @param {string} groupId
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export function ensureGroupListingsScope(groupId, options = {}) {
+  const key = String(groupId || '').trim();
+  if (!key) {
+    releaseGroupListingsScope();
+    const failed = {
+      ok: false,
+      scope: SCOPE_GROUP_LISTINGS,
+      path: null,
+      groupId: null,
+      error: 'Missing groupId',
+      ready: false,
+    };
+    _groupListingsLastResult = failed;
+    return Promise.resolve(failed);
+  }
+
+  const force = options.force === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const path = _groupListingsPath(key);
+
+  // Fast reuse: already sole-owning this group and path ready
+  if (!force && _groupListingsUnsub && _groupListingsGroupId === key && db.isPathReady(path)) {
+    const entry = _registryEntry(path);
+    const reused = {
+      ok: true,
+      scope: SCOPE_GROUP_LISTINGS,
+      path,
+      groupId: key,
+      reused: true,
+      subscriptionActive: true,
+      subscriptionRefCount: entry?.refCount ?? 1,
+      subscriptionId: _groupListingsSubId,
+      ready: true,
+    };
+    _groupListingsLastResult = reused;
+    return Promise.resolve(reused);
+  }
+
+  // Coalesce in-flight ensure for the same desired group (no duplicate network / refCount++)
+  if (!force && _groupListingsPromise && _groupListingsDesiredGroupId === key) {
+    return _groupListingsPromise.then((r) => ({ ...r, reused: true }));
+  }
+
+  // Invalidate/cancel prior ownership (A→B or B→C): bump gen, drop handle A, ensure B once
+  _groupListingsGeneration += 1;
+  _dropGroupListingsHandle();
+  _groupListingsDesiredGroupId = key;
+  const myGen = _groupListingsGeneration;
+
+  _groupListingsPromise = (async () => {
+    metrics.mark('groupListingsHydrateStart');
+
+    if (myGen !== _groupListingsGeneration || _groupListingsDesiredGroupId !== key) {
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        error: 'Group listings ensure cancelled',
+        ready: false,
+      };
+      _groupListingsLastResult = cancelled;
+      metrics.mark('groupListingsHydrateFailed');
+      return cancelled;
+    }
+
+    const load = await db.loadPathOnce(path, { timeoutMs, force: force === true });
+    if (myGen !== _groupListingsGeneration || _groupListingsDesiredGroupId !== key) {
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        error: 'Group listings ensure cancelled',
+        ready: false,
+      };
+      _groupListingsLastResult = cancelled;
+      metrics.mark('groupListingsHydrateFailed');
+      return cancelled;
+    }
+
+    if (!load.ok) {
+      const failed = {
+        ok: false,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        error: load.error || 'Group listings load failed',
+        ready: false,
+      };
+      _groupListingsLastResult = failed;
+      metrics.mark('groupListingsHydrateFailed');
+      return failed;
+    }
+
+    // If a handle somehow already exists for this path under our ownership, reuse
+    if (_groupListingsUnsub && _groupListingsGroupId === key) {
+      const entry = _registryEntry(path);
+      const reused = {
+        ok: true,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        reused: true,
+        subscriptionActive: true,
+        subscriptionRefCount: entry?.refCount ?? 1,
+        subscriptionId: _groupListingsSubId,
+        ready: isGroupListingsReady(key),
+      };
+      _groupListingsLastResult = reused;
+      metrics.mark('groupListingsHydrateComplete');
+      return reused;
+    }
+
+    const handle = db.subscribePath(path);
+    if (myGen !== _groupListingsGeneration || _groupListingsDesiredGroupId !== key) {
+      try { handle.unsubscribe(); } catch { /* ignore */ }
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        error: 'Group listings ensure cancelled',
+        ready: false,
+      };
+      _groupListingsLastResult = cancelled;
+      metrics.mark('groupListingsHydrateFailed');
+      return cancelled;
+    }
+
+    const entryAfter = _registryEntry(path);
+    if (entryAfter && entryAfter.refCount > 1) {
+      try { handle.unsubscribe(); } catch { /* ignore */ }
+      const failed = {
+        ok: false,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        error: 'Refusing to share listingsByGroup subscription (Trading must be sole owner)',
+        ready: false,
+      };
+      _groupListingsLastResult = failed;
+      metrics.mark('groupListingsHydrateFailed');
+      return failed;
+    }
+
+    _groupListingsUnsub = handle.unsubscribe;
+    _groupListingsSubId = handle.id;
+    _groupListingsGroupId = key;
+    _groupListingsStartedAt = Date.now();
+
+    const wait = await db.waitForPath(path, { timeoutMs });
+    if (myGen !== _groupListingsGeneration || _groupListingsDesiredGroupId !== key) {
+      if (_groupListingsUnsub === handle.unsubscribe) {
+        try { handle.unsubscribe(); } catch { /* ignore */ }
+        _groupListingsUnsub = null;
+        _groupListingsSubId = null;
+        _groupListingsStartedAt = null;
+        _groupListingsGroupId = null;
+      }
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_GROUP_LISTINGS,
+        path,
+        groupId: key,
+        error: 'Group listings ensure cancelled',
+        ready: false,
+      };
+      _groupListingsLastResult = cancelled;
+      metrics.mark('groupListingsHydrateFailed');
+      return cancelled;
+    }
+
+    const result = {
+      ok: wait.ok === true,
+      scope: SCOPE_GROUP_LISTINGS,
+      path,
+      groupId: key,
+      reused: false,
+      subscriptionActive: _groupListingsUnsub != null,
+      subscriptionId: _groupListingsSubId,
+      subscriptionRefCount: entryAfter?.refCount ?? 1,
+      ready: isGroupListingsReady(key),
+      error: wait.ok ? null : (wait.error || 'timeout'),
+    };
+    _groupListingsLastResult = result;
+    if (result.ok) {
+      metrics.mark('groupListingsHydrateComplete');
+    } else {
+      metrics.mark('groupListingsHydrateFailed');
+    }
+    return result;
+  })();
+
+  const run = _groupListingsPromise;
+  run.finally(() => {
+    if (_groupListingsPromise === run) {
+      _groupListingsPromise = null;
+    }
+  });
+
+  return run;
+}
+
+export function getGroupListingsHydrationReport() {
+  const path = _groupListingsGroupId ? _groupListingsPath(_groupListingsGroupId) : null;
+  const entry = path ? _registryEntry(path) : null;
+  const groupId = _groupListingsGroupId;
+  const metaReady = groupId ? isGroupListingsIndexReady(groupId) : false;
+  const globalVersionCurrent = isGlobalTradeIndexMetaCurrent();
+  return {
+    phase: 'S5c-D5b',
+    scope: SCOPE_GROUP_LISTINGS,
+    groupId,
+    desiredGroupId: _groupListingsDesiredGroupId,
+    path,
+    ready: groupId ? isGroupListingsReady(groupId) : false,
+    metaReady,
+    globalVersionCurrent,
+    active: _groupListingsUnsub != null,
+    subscriptionId: _groupListingsSubId,
+    refCount: entry?.refCount ?? (_groupListingsUnsub ? 1 : 0),
+    startedAt: _groupListingsStartedAt,
+    inFlight: _groupListingsPromise != null,
+    lastResult: _groupListingsLastResult
+      ? {
+        ok: _groupListingsLastResult.ok === true,
+        cancelled: _groupListingsLastResult.cancelled === true,
+        error: _groupListingsLastResult.error || null,
+        reused: _groupListingsLastResult.reused === true,
+        groupId: _groupListingsLastResult.groupId || null,
+      }
+      : null,
+  };
+}
+
+/**
+ * Named-scope status snapshot (S2–S5c-D5b).
  * @returns {object}
  */
 export function getHydrationStatus() {
@@ -1944,9 +2288,9 @@ export function getHydrationStatus() {
       [SCOPE_ADMIN_DIRECTORY]: getAdminDirectoryHydrationReport(),
       [SCOPE_ADMIN_SELECTED_PLAYER]: getAdminSelectedPlayerReport(),
       [SCOPE_TRADE_DIRECTORY]: getTradeDirectoryHydrationReport(),
+      [SCOPE_GROUP_LISTINGS]: getGroupListingsHydrationReport(),
     },
     deferredScopes: [
-      'listingsByGroup',
       'leaderboard',
       'bootstrapPublicAccessCodes',
     ],
@@ -1956,6 +2300,7 @@ export function getHydrationStatus() {
     adminDirectory: getAdminDirectoryHydrationReport(),
     adminSelectedPlayer: getAdminSelectedPlayerReport(),
     tradeDirectory: getTradeDirectoryHydrationReport(),
+    groupListings: getGroupListingsHydrationReport(),
   };
 }
 
@@ -1969,6 +2314,7 @@ function _installWindowApi() {
     SCOPE_ADMIN_DIRECTORY,
     SCOPE_ADMIN_SELECTED_PLAYER,
     SCOPE_TRADE_DIRECTORY,
+    SCOPE_GROUP_LISTINGS,
     hydrateSharedDefs,
     isSharedDefsReady,
     waitForSharedDefs,
@@ -1994,6 +2340,10 @@ function _installWindowApi() {
     isTradeDirectoryReady,
     waitForTradeDirectory,
     getTradeDirectoryHydrationReport,
+    ensureGroupListingsScope,
+    isGroupListingsReady,
+    waitForGroupListings,
+    getGroupListingsHydrationReport,
     // release* retained for auth/Admin/Trading UI only — not exposed here
     getScopedLoadingFlagState,
     isScopedLoadingDevFlagEnabled,
@@ -2004,14 +2354,15 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (Phase S2–S5c-D1)
+      console.info(`DB Hydration (Phase S2–S5c-D5b)
 Shared: ${SHARED_DEF_PATHS.join(', ')}
 Current player: auth-owned (release not on mirror)
 Player trade index: auth-owned playerTradeIndex/{me} (release not on mirror)
 Admin directory / selected-player: ui-owned ensure; release not on mirror
-Trading directory: trade-ui-owned playerDirectory while Trading tab open (release not on mirror)
-API: getHydrationStatus | getTradeDirectoryHydrationReport | getPlayerTradeIndexHydrationReport
-Root remains the legacy safety net; no bandwidth claim yet. listingsByGroup deferred to S5c-D5.`);
+Trading directory: trade-ui-owned playerDirectory while Trading tab open
+Trading group listings: trade-ui-owned listingsByGroup/{groupId} while Trading tab open
+API: getHydrationStatus | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getPlayerTradeIndexHydrationReport
+Root remains the legacy safety net; no bandwidth claim yet.`);
     },
   };
 }
