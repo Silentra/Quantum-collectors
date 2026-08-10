@@ -27,6 +27,11 @@ import {
   listingReleaseIndexRestorePaths,
   listingIndexRemovalsForListing,
 } from './trade-index.js';
+import {
+  loadTradingCounterpartyContext,
+  buildCounterpartyAvailabilitySnapshot,
+  buildTradingSelfAvailabilitySnapshot,
+} from './trade-availability.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -242,9 +247,28 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     };
   }
 
-  // ── 2. Reload players / cards after claim ─────────────────────────────────
-  const freshOwner = db.get(`players/${ownerId}`);
-  const freshAccepter = db.get(`players/${accepterId}`);
+  // ── 2. S5c-D7a: force-load owner (+ PTI) after claim; refresh accepter ─────
+  const ownerCtx = await loadTradingCounterpartyContext(ownerId, { force: true });
+  if (!ownerCtx.ok) {
+    await _releaseOwnedClaimAndRestoreIndex(
+      listingId,
+      claimId,
+      ownerCtx.reason || 'COUNTERPARTY_LOAD_FAILED',
+    );
+    return { success: false, reason: ownerCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+  }
+
+  let freshAccepter = db.get(`players/${accepterId}`);
+  if (typeof db.loadPathOnce === 'function') {
+    const accepterLoad = await db.loadPathOnce(`players/${accepterId}`, { force: true });
+    if (!accepterLoad || accepterLoad.ok !== true || !accepterLoad.value) {
+      await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'ACCEPTER_NOT_FOUND');
+      return { success: false, reason: 'ACCEPTER_NOT_FOUND' };
+    }
+    freshAccepter = accepterLoad.value;
+  }
+
+  const freshOwner = ownerCtx.player;
 
   if (!freshOwner) {
     await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'LISTING_OWNER_NOT_FOUND');
@@ -261,6 +285,16 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     [accepterId]: _normalizePlayer(freshAccepter),
   };
 
+  const excludeIds = listingId ? [listingId] : [];
+  const ownerSnapshot = buildCounterpartyAvailabilitySnapshot(ownerId, ownerCtx, {
+    playerData: players[ownerId],
+    excludeListingIds: excludeIds,
+  });
+  const accepterSnapshot = buildTradingSelfAvailabilitySnapshot(accepterId, {
+    playerData: players[accepterId],
+    excludeListingIds: excludeIds,
+  });
+
   // Validate against claimed listing; exclude self from reservation math.
   // Status may be processing — allow when excludeListingId matches this listing.
   const validation = validateListingTrade({
@@ -270,6 +304,8 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     players,
     cards: allCards,
     excludeListingId: listingId,
+    ownerAvailabilitySnapshot: ownerSnapshot,
+    accepterAvailabilitySnapshot: accepterSnapshot,
   });
 
   if (!validation.valid) {

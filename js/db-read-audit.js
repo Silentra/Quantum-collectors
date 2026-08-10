@@ -510,6 +510,7 @@ API:
   qcPersonalAudit.workflowS5cD4() // My Listings + max-active → PTI listings
   qcPersonalAudit.workflowS5cD5b() // Available → listingsByGroup
   qcPersonalAudit.workflowS5cD6() // Trading self-reservations → PTI
+  qcPersonalAudit.workflowS5cD7a() // Counterparty once-loads
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -1067,7 +1068,75 @@ console.log(rejected.reservationsTrusted, rejected.selfScopedRejected, rejected.
 // Zero tradingAvailabilitySource:canonical-fallback / unavailable in normal use
 qcDbMetrics.summary()
 
-PASS when 1–4 hold for D6 self path; D7 expiry/counterparty scans remain expected.
+PASS when 1–4 hold for D6 self path; D7b expiry scans remain expected;
+D7a remediates action-time foreign reservation trees (see workflowS5cD7a).
+`);
+}
+
+/**
+ * Pasteable verification workflow for Phase S5c-D7a (counterparty once-loads).
+ * Narrow: action-scoped players/{other} + playerTradeIndex/{other}.
+ * expireStaleListings full-tree is EXPECTED until D7b — not a D7a fail.
+ */
+export function workflowS5cD7a() {
+  console.info(`
+=== S5c-D7a Counterparty once-loads + foreign PTI ===
+
+Prereq: D6 COMPLETE + VERIFIED. Two players same group (e.g. Bobby / Bobby2).
+Open Trading so modules load.
+
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+----- 1) Registry while browsing (no foreign action yet) -----
+qcDbHydration.getSubscriptionRegistry()
+// players/{me} ×1, playerTradeIndex/{me} ×1 (refCount === 1),
+// playerDirectory ×1, listingsByGroup/{g} ×1
+// NO players/{other} or playerTradeIndex/{other} subscriptions
+
+----- 2) Isolated counterparty load helper -----
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+const other = 'PASTE_OTHER_USERNAME';
+qcPersonalAudit.begin('trading-counterparty-load', {
+  allowedPrefixes: [
+    'config','cards','packs','groups','tradeIndexMeta',
+    'players/' + me,
+    'playerTradeIndex/' + me,
+    'players/' + other,
+    'playerTradeIndex/' + other,
+  ],
+});
+const ctx = await qcTradeAvailability.loadTradingCounterpartyContext(other, { force: true });
+console.log(ctx.ok, ctx.reservationSource, ctx.reservationsTrusted);
+qcPersonalAudit.end('trading-counterparty-load');
+// PASS: ok===true, source==='index', trusted===true
+// PASS: no bare players / trades/direct / trades/listings
+
+----- 3) Direct smoke (two browsers) -----
+// Browser A (Bobby): send offer to Bobby2
+// Browser B (Bobby2): respond with a card
+// Browser A: confirm
+// Optional: cancel/decline on a fresh offer
+// After each action check registry still has NO foreign subscriptions
+qcTradeIndex.shadowCompare('Bobby')
+qcTradeIndex.shadowCompare('Bobby2')
+// Inventories swapped correctly on confirm
+
+----- 4) Listing smoke accept -----
+// Owner creates listing; peer accepts → claim/fulfill
+// Owner foreign context loaded via players/{owner} + playerTradeIndex/{owner} only
+// Indexes + inventories clean
+// Full two-browser race is D7c — not required to pass D7a
+
+----- 5) Metrics -----
+// foreignPlayerScopedLoad:ok, foreignTradeIndexScopedLoad:ok
+// foreignReservationSource:index (healthy)
+qcDbMetrics.summary()
+
+NOTE: Full Trading render still runs expireStaleListings (D7b).
+Ignore bare trades/listings from that sweep when judging D7a.
+
+PASS when 1–2 hold and 3–4 smoke succeed without bare-tree counterparty reads.
 `);
 }
 
@@ -1094,6 +1163,7 @@ function _installWindowApi() {
     workflowS5cD4,
     workflowS5cD5b,
     workflowS5cD6,
+    workflowS5cD7a,
     enableAudit,
     disableAudit,
     enableIsolation,

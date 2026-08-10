@@ -7,7 +7,8 @@
  *
  * S5c-C: Research Projects resolve reservations via playerTradeIndex/{me} when verified.
  * S5c-D6: Trading self-availability uses the same PTI maps via buildTradingSelfAvailabilitySnapshot
- * (current-player only). Counterparty validation remains canonical until D7.
+ * (current-player only).
+ * S5c-D7a: Action-scoped loadTradingCounterpartyContext for players/{other} + PTI/{other}.
  *
  * No inventory subtraction at reservation time — all math is derived.
  */
@@ -339,6 +340,235 @@ export function buildTradingSelfAvailabilitySnapshot(username, opts = {}) {
 
   const snap = buildAvailabilitySnapshot(key, opts);
   snap.reservationSource = 'canonical-fallback';
+  snap.reservationsTrusted = true;
+  return snap;
+}
+
+function _recordForeignPlayerLoad(ok) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: ok ? 'foreignPlayerScopedLoad:ok' : 'foreignPlayerScopedLoad:fail',
+    ops: 1,
+    ok: ok === true,
+  });
+}
+
+function _recordForeignTradeIndexLoad(ok) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: ok ? 'foreignTradeIndexScopedLoad:ok' : 'foreignTradeIndexScopedLoad:fail',
+    ops: 1,
+    ok: ok === true,
+  });
+}
+
+function _recordForeignReservationSource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `foreignReservationSource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'foreign-pti-index-unready' });
+  }
+  if ((source === 'unavailable' || source === 'loading')
+    && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'foreign-pti-untrusted' });
+  }
+}
+
+/**
+ * @typedef {object} TradingCounterpartyContext
+ * @property {boolean} ok
+ * @property {string|null} [reason]
+ * @property {object|null} player
+ * @property {{ direct: object, listings: object }|null} reservationMaps
+ * @property {string} reservationSource
+ * @property {boolean} reservationsTrusted
+ */
+
+/**
+ * S5c-D7a: action-scoped once-load of a counterparty player (+ optional PTI).
+ * No subscribe / no permanent listener. Mutation paths should pass `{ force: true }`.
+ *
+ * @param {string} username
+ * @param {{ force?: boolean, reservations?: boolean, forceUnavailable?: boolean }} [options]
+ *   - reservations: default true — set false for create-offer (player flags only)
+ * @returns {Promise<TradingCounterpartyContext>}
+ */
+export async function loadTradingCounterpartyContext(username, options = {}) {
+  const key = String(username || '').trim();
+  const force = options.force === true;
+  const needReservations = options.reservations !== false;
+
+  if (!key || key === '__admin__') {
+    return {
+      ok: false,
+      reason: 'COUNTERPARTY_INVALID',
+      player: null,
+      reservationMaps: null,
+      reservationSource: 'unavailable',
+      reservationsTrusted: false,
+    };
+  }
+
+  if (typeof db.loadPathOnce !== 'function') {
+    _recordForeignPlayerLoad(false);
+    return {
+      ok: false,
+      reason: 'COUNTERPARTY_LOAD_FAILED',
+      player: null,
+      reservationMaps: null,
+      reservationSource: 'unavailable',
+      reservationsTrusted: false,
+    };
+  }
+
+  const playerLoad = await db.loadPathOnce(`players/${key}`, { force });
+  _recordForeignPlayerLoad(playerLoad?.ok === true);
+  if (!playerLoad || playerLoad.ok !== true) {
+    return {
+      ok: false,
+      reason: 'COUNTERPARTY_LOAD_FAILED',
+      player: null,
+      reservationMaps: null,
+      reservationSource: 'unavailable',
+      reservationsTrusted: false,
+    };
+  }
+
+  const player = playerLoad.value;
+  if (!player || typeof player !== 'object') {
+    return {
+      ok: false,
+      reason: 'COUNTERPARTY_NOT_FOUND',
+      player: null,
+      reservationMaps: null,
+      reservationSource: 'unavailable',
+      reservationsTrusted: false,
+    };
+  }
+
+  if (!needReservations) {
+    return {
+      ok: true,
+      reason: null,
+      player,
+      reservationMaps: { direct: {}, listings: {} },
+      reservationSource: 'skipped',
+      reservationsTrusted: true,
+    };
+  }
+
+  const ptiPath = `${PLAYER_TRADE_INDEX_ROOT}/${key}`;
+  const ptiLoad = await db.loadPathOnce(ptiPath, { force });
+  _recordForeignTradeIndexLoad(ptiLoad?.ok === true);
+
+  const pathReady = ptiLoad?.ok === true
+    && (typeof db.isPathReady === 'function' ? db.isPathReady(ptiPath) : true);
+
+  const source = getReservationIndexSource(key, {
+    scopePathReady: pathReady,
+    hydrating: false,
+    allowCanonicalFallback: _canUseCanonicalFallback(),
+    forceUnavailable: options.forceUnavailable === true,
+  });
+
+  if (source === 'index') {
+    _recordForeignReservationSource('index');
+    const maps = loadPlayerTradeIndexReservationMaps(key);
+    return {
+      ok: true,
+      reason: null,
+      player,
+      reservationMaps: maps,
+      reservationSource: 'index',
+      reservationsTrusted: true,
+    };
+  }
+
+  if (source === 'canonical-fallback') {
+    _recordForeignReservationSource('canonical-fallback');
+    return {
+      ok: true,
+      reason: null,
+      player,
+      reservationMaps: null,
+      reservationSource: 'canonical-fallback',
+      reservationsTrusted: true,
+    };
+  }
+
+  _recordForeignReservationSource('unavailable');
+  return {
+    ok: false,
+    reason: 'COUNTERPARTY_TRADE_INDEX_UNAVAILABLE',
+    player,
+    reservationMaps: null,
+    reservationSource: source,
+    reservationsTrusted: false,
+  };
+}
+
+/**
+ * Build availability snapshot from a successful counterparty context (D7a).
+ * Reuses buildAvailabilitySnapshot / buildTradeReservationCounts — no second algorithm.
+ *
+ * @param {string} username
+ * @param {TradingCounterpartyContext} ctx
+ * @param {object} [opts]
+ * @returns {AvailabilitySnapshot & { reservationSource: string, reservationsTrusted: boolean }}
+ */
+export function buildCounterpartyAvailabilitySnapshot(username, ctx, opts = {}) {
+  const key = String(username || '').trim();
+  if (!ctx?.ok || ctx.reservationsTrusted === false) {
+    const playerData = opts.playerData ?? ctx?.player ?? null;
+    return {
+      username: key,
+      inventory: { ...(opts.inventory ?? playerData?.inventory ?? {}) },
+      projects: opts.projects ?? playerData?.projects ?? [],
+      tradeCounts: new Map(),
+      excludeDirectTradeIds: opts.excludeDirectTradeIds ?? [],
+      excludeListingIds: opts.excludeListingIds ?? [],
+      reservationSource: ctx?.reservationSource || 'unavailable',
+      reservationsTrusted: false,
+    };
+  }
+
+  if (ctx.reservationSource === 'index' && ctx.reservationMaps) {
+    const snap = buildAvailabilitySnapshot(key, {
+      ...opts,
+      playerData: opts.playerData ?? ctx.player,
+      directTrades: ctx.reservationMaps.direct,
+      listings: ctx.reservationMaps.listings,
+    });
+    snap.reservationSource = 'index';
+    snap.reservationsTrusted = true;
+    return snap;
+  }
+
+  if (ctx.reservationSource === 'skipped') {
+    // Player-only context (e.g. create offer) — not valid for reservation math.
+    const playerData = opts.playerData ?? ctx.player;
+    return {
+      username: key,
+      inventory: { ...(opts.inventory ?? playerData?.inventory ?? {}) },
+      projects: opts.projects ?? playerData?.projects ?? [],
+      tradeCounts: new Map(),
+      excludeDirectTradeIds: opts.excludeDirectTradeIds ?? [],
+      excludeListingIds: opts.excludeListingIds ?? [],
+      reservationSource: 'skipped',
+      reservationsTrusted: false,
+    };
+  }
+
+  // canonical-fallback — shared counting over trades/* during root coexistence
+  const snap = buildAvailabilitySnapshot(key, {
+    ...opts,
+    playerData: opts.playerData ?? ctx.player,
+  });
+  snap.reservationSource = ctx.reservationSource || 'canonical-fallback';
   snap.reservationsTrusted = true;
   return snap;
 }
@@ -740,6 +970,8 @@ function _installWindowApi() {
     buildAvailabilitySnapshot,
     buildResearchAvailabilitySnapshot,
     buildTradingSelfAvailabilitySnapshot,
+    buildCounterpartyAvailabilitySnapshot,
+    loadTradingCounterpartyContext,
     resolveResearchReservationSource,
     resolveTradingReservationSource,
     loadPlayerTradeIndexReservationMaps,

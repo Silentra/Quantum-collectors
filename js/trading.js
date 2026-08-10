@@ -23,6 +23,8 @@ import { executeDirectTrade, getDirectTradeCooldown } from './trade-execution.js
 import {
   buildAvailabilitySnapshot,
   buildTradingSelfAvailabilitySnapshot,
+  buildCounterpartyAvailabilitySnapshot,
+  loadTradingCounterpartyContext,
   canOfferCardInTrade,
   getAvailabilityFailureReason,
 } from './trade-availability.js';
@@ -36,8 +38,8 @@ import {
 } from './trade-index.js';
 
 /**
- * S5c-D6: self-side Trading uses PTI via buildTradingSelfAvailabilitySnapshot;
- * any other actor stays on canonical buildAvailabilitySnapshot (D7).
+ * S5c-D6/D7a: self → Trading self snapshot; other → canonical defaults unless
+ * caller injects a prebuilt snapshot (preferred after loadTradingCounterpartyContext).
  * @param {string} username
  * @param {object} [opts]
  */
@@ -122,6 +124,7 @@ export function validateDirectTradeOffer({
   players,
   cards,
   excludeDirectTradeId = null,
+  offeringAvailabilitySnapshot = null,
 }) {
   if (offeringPlayerId === targetPlayerId) return fail('SELF_TRADE');
 
@@ -149,7 +152,7 @@ export function validateDirectTradeOffer({
   }
 
   const excludeIds = excludeDirectTradeId ? [excludeDirectTradeId] : [];
-  const offeringSnapshot = _availabilityForTradeActor(offeringPlayerId, {
+  const offeringSnapshot = offeringAvailabilitySnapshot || _availabilityForTradeActor(offeringPlayerId, {
     playerData: offering,
     excludeDirectTradeIds: excludeIds,
   });
@@ -181,6 +184,8 @@ export function validateDirectTrade({
   cards,
   excludeDirectTradeId = null,
   skipHiddenTargetCheck = false,
+  offeringAvailabilitySnapshot = null,
+  targetAvailabilitySnapshot = null,
 }) {
   // ── 1. Players must not be the same person ──────────────────────────────────
   if (offeringPlayerId === targetPlayerId) {
@@ -238,8 +243,7 @@ export function validateDirectTrade({
   // ── 11. Copy-aware availability (project + trade reservations) ───────────
   const excludeIds = excludeDirectTradeId ? [excludeDirectTradeId] : [];
 
-  // Offerer: PTI when offerer === me (S5c-D6); otherwise canonical until D7.
-  const offeringSnapshot = _availabilityForTradeActor(offeringPlayerId, {
+  const offeringSnapshot = offeringAvailabilitySnapshot || _availabilityForTradeActor(offeringPlayerId, {
     playerData: offering,
     excludeDirectTradeIds: excludeIds,
   });
@@ -248,8 +252,7 @@ export function validateDirectTrade({
     return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
-  // Target/counterparty: always canonical (D7).
-  const targetSnapshot = buildAvailabilitySnapshot(targetPlayerId, {
+  const targetSnapshot = targetAvailabilitySnapshot || _availabilityForTradeActor(targetPlayerId, {
     playerData: target,
     excludeDirectTradeIds: excludeIds,
   });
@@ -294,6 +297,8 @@ export function validateListingTrade({
   players,
   cards,
   excludeListingId = null,
+  ownerAvailabilitySnapshot = null,
+  accepterAvailabilitySnapshot = null,
 }) {
   // ── 1. Listing must exist ───────────────────────────────────────────────────
   if (!listing) return fail('LISTING_NOT_FOUND');
@@ -378,8 +383,7 @@ export function validateListingTrade({
   // ── 18. Copy-aware availability (project + trade reservations) ───────────
   const excludeIds = excludeListingId ? [excludeListingId] : [];
 
-  // Listing owner/counterparty: always canonical (D7).
-  const ownerSnapshot = buildAvailabilitySnapshot(listing.ownerId, {
+  const ownerSnapshot = ownerAvailabilitySnapshot || buildAvailabilitySnapshot(listing.ownerId, {
     playerData: owner,
     excludeListingIds: excludeIds,
   });
@@ -388,8 +392,7 @@ export function validateListingTrade({
     return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
-  // Accepter: PTI when accepter === me (S5c-D6); otherwise canonical until D7.
-  const accepterSnapshot = _availabilityForTradeActor(accepterId, {
+  const accepterSnapshot = accepterAvailabilitySnapshot || _availabilityForTradeActor(accepterId, {
     playerData: accepter,
     excludeListingIds: excludeIds,
   });
@@ -508,8 +511,17 @@ export async function createTradeOffer(offeringPlayerId, targetPlayerId, offered
     return { success: false, reason: 'SENDER_ON_COOLDOWN' };
   }
 
+  // S5c-D7a: action-scoped once-load of target (flags/group only; no target reservations)
+  const targetCtx = await loadTradingCounterpartyContext(targetPlayerId, {
+    force: true,
+    reservations: false,
+  });
+  if (!targetCtx.ok) {
+    return { success: false, reason: targetCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+  }
+
   const freshOffering = db.get(`players/${offeringPlayerId}`);
-  const freshTarget = db.get(`players/${targetPlayerId}`);
+  const freshTarget = targetCtx.player;
   const allCards = db.get('cards') || {};
 
   const players = {
@@ -517,12 +529,17 @@ export async function createTradeOffer(offeringPlayerId, targetPlayerId, offered
     [targetPlayerId]:   _normalizePlayer(freshTarget),
   };
 
+  const offeringSnapshot = buildTradingSelfAvailabilitySnapshot(offeringPlayerId, {
+    playerData: players[offeringPlayerId],
+  });
+
   const validation = validateDirectTradeOffer({
     offeringPlayerId,
     targetPlayerId,
     offeredCardId,
     players,
     cards: allCards,
+    offeringAvailabilitySnapshot: offeringSnapshot,
   });
 
   if (!validation.valid) {
@@ -617,7 +634,13 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
     return { success: false, reason: 'RESPONDER_ON_COOLDOWN' };
   }
 
-  const freshOffering = db.get(`players/${trade.offeringPlayerId}`);
+  // S5c-D7a: force-load offerer player + PTI before foreign reservation checks
+  const offererCtx = await loadTradingCounterpartyContext(trade.offeringPlayerId, { force: true });
+  if (!offererCtx.ok) {
+    return { success: false, reason: offererCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+  }
+
+  const freshOffering = offererCtx.player;
   const freshTarget = db.get(`players/${targetPlayerId}`);
   const allCards = db.get('cards') || {};
 
@@ -630,6 +653,16 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
     return { success: false, reason: 'TARGET_PLAYER_TRADE_RESTRICTED' };
   }
 
+  const excludeIds = tradeId ? [tradeId] : [];
+  const offeringSnapshot = buildCounterpartyAvailabilitySnapshot(trade.offeringPlayerId, offererCtx, {
+    playerData: players[trade.offeringPlayerId],
+    excludeDirectTradeIds: excludeIds,
+  });
+  const targetSnapshot = buildTradingSelfAvailabilitySnapshot(targetPlayerId, {
+    playerData: players[targetPlayerId],
+    excludeDirectTradeIds: excludeIds,
+  });
+
   const validation = validateDirectTrade({
     offeringPlayerId: trade.offeringPlayerId,
     targetPlayerId,
@@ -638,6 +671,8 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
     players,
     cards: allCards,
     excludeDirectTradeId: tradeId,
+    offeringAvailabilitySnapshot: offeringSnapshot,
+    targetAvailabilitySnapshot: targetSnapshot,
   });
 
   if (!validation.valid) {

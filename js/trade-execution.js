@@ -17,6 +17,12 @@ import {
   commitDirectTradeAcceptPlan,
   markDirectTradeFailedIfAwaiting,
 } from './trade-direct-plan.js';
+import {
+  loadTradingCounterpartyContext,
+  buildCounterpartyAvailabilitySnapshot,
+  buildTradingSelfAvailabilitySnapshot,
+} from './trade-availability.js';
+import { getSession } from './auth.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -155,9 +161,26 @@ export async function executeDirectTrade(trade) {
     return await failTradeIfActionable(tradeId, 'SAME_CARD_BOTH_SIDES');
   }
 
-  // ── 1. Reload fresh player state (cache) ──────────────────────────────────
-  const freshOffering = db.get(`players/${resolvedOffering}`);
-  const freshTarget = db.get(`players/${resolvedTarget}`);
+  // ── 1. S5c-D7a: force once-load both participants (player + PTI) ───────────
+  let me = '';
+  try {
+    const session = getSession();
+    if (session?.username && session.username !== '__admin__') {
+      me = String(session.username).trim();
+    }
+  } catch { /* ignore */ }
+
+  const offeringCtx = await loadTradingCounterpartyContext(resolvedOffering, { force: true });
+  if (!offeringCtx.ok) {
+    return { success: false, reason: offeringCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+  }
+  const targetCtx = await loadTradingCounterpartyContext(resolvedTarget, { force: true });
+  if (!targetCtx.ok) {
+    return { success: false, reason: targetCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+  }
+
+  const freshOffering = offeringCtx.player;
+  const freshTarget = targetCtx.player;
 
   if (!freshOffering) return { success: false, reason: 'OFFERING_PLAYER_NOT_FOUND' };
   if (!freshTarget) return { success: false, reason: 'TARGET_PLAYER_NOT_FOUND' };
@@ -165,11 +188,32 @@ export async function executeDirectTrade(trade) {
   // ── 2. Reload all card definitions ────────────────────────────────────────
   const allCards = db.get('cards') || {};
 
-  // ── 3. Rerun T-1 validation with fresh data ───────────────────────────────
+  // ── 3. Rerun T-1 validation with fresh scoped data ───────────────────────
   const players = {
     [resolvedOffering]: _normalizePlayerForValidation(freshOffering),
     [resolvedTarget]:   _normalizePlayerForValidation(freshTarget),
   };
+
+  const excludeIds = tradeId ? [tradeId] : [];
+  const meKey = me.toLowerCase();
+  const offeringSnapshot = (meKey && resolvedOffering.toLowerCase() === meKey)
+    ? buildTradingSelfAvailabilitySnapshot(resolvedOffering, {
+      playerData: players[resolvedOffering],
+      excludeDirectTradeIds: excludeIds,
+    })
+    : buildCounterpartyAvailabilitySnapshot(resolvedOffering, offeringCtx, {
+      playerData: players[resolvedOffering],
+      excludeDirectTradeIds: excludeIds,
+    });
+  const targetSnapshot = (meKey && resolvedTarget.toLowerCase() === meKey)
+    ? buildTradingSelfAvailabilitySnapshot(resolvedTarget, {
+      playerData: players[resolvedTarget],
+      excludeDirectTradeIds: excludeIds,
+    })
+    : buildCounterpartyAvailabilitySnapshot(resolvedTarget, targetCtx, {
+      playerData: players[resolvedTarget],
+      excludeDirectTradeIds: excludeIds,
+    });
 
   const validation = validateDirectTrade({
     offeringPlayerId: resolvedOffering,
@@ -179,6 +223,8 @@ export async function executeDirectTrade(trade) {
     players,
     cards: allCards,
     excludeDirectTradeId: tradeId,
+    offeringAvailabilitySnapshot: offeringSnapshot,
+    targetAvailabilitySnapshot: targetSnapshot,
   });
 
   if (!validation.valid) {
