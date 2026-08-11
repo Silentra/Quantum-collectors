@@ -511,6 +511,7 @@ API:
   qcPersonalAudit.workflowS5cD5b() // Available → listingsByGroup
   qcPersonalAudit.workflowS5cD6() // Trading self-reservations → PTI
   qcPersonalAudit.workflowS5cD7a() // Counterparty once-loads
+  qcPersonalAudit.workflowS5cD7b() // Scoped listing expiry
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -1076,7 +1077,7 @@ D7a remediates action-time foreign reservation trees (see workflowS5cD7a).
 /**
  * Pasteable verification workflow for Phase S5c-D7a (counterparty once-loads).
  * Narrow: action-scoped players/{other} + playerTradeIndex/{other}.
- * expireStaleListings full-tree is EXPECTED until D7b — not a D7a fail.
+ * Scoped expiry may read trades/listings/{id} (D7b) — not a D7a fail.
  */
 export function workflowS5cD7a() {
   console.info(`
@@ -1133,10 +1134,71 @@ qcTradeIndex.shadowCompare('Bobby2')
 // foreignReservationSource:index (healthy)
 qcDbMetrics.summary()
 
-NOTE: Full Trading render still runs expireStaleListings (D7b).
-Ignore bare trades/listings from that sweep when judging D7a.
+NOTE: Full Trading render still runs expireKnownStaleListings (D7b) which may
+read trades/listings/{specific id} only — not bare trades/listings.
 
 PASS when 1–2 hold and 3–4 smoke succeed without bare-tree counterparty reads.
+`);
+}
+
+/**
+ * Pasteable verification workflow for Phase S5c-D7b (scoped listing expiry).
+ * Distinguishes allowed trades/listings/{id} from forbidden bare trades/listings.
+ */
+export function workflowS5cD7b() {
+  console.info(`
+=== S5c-D7b Scoped listing expiry (no student full-tree scan) ===
+
+Prereq: D7a COMPLETE + VERIFIED. Normal player; open Trading.
+
+Optional: localStorage.setItem('qc-personal-scope-audit','true');
+location.reload();
+
+----- 1) Idle Trading ≥2 reactive cycles (~10s+) -----
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+const g = (qcDbHydration.getCached('players/' + me) || {}).groupId;
+qcPersonalAudit.begin('trading-expiry-idle', {
+  allowedPrefixes: [
+    'config','cards','packs','groups','tradeIndexMeta','playerDirectory',
+    'players/' + me,
+    'playerTradeIndex/' + me,
+    'listingsByGroup/' + g,
+    'trades/listings/', // specific-id prefix only — bare 'trades/listings' must NOT appear
+  ],
+});
+// Wait ~12 seconds with Trading open (two+ 5s ticks)
+qcPersonalAudit.end('trading-expiry-idle');
+// PASS: no bare path 'trades/listings' (full tree) from expiry
+// Allowed: trades/listings/{specificId} if any scoped cleanup ran
+
+----- 2) Soft-expired own listing -----
+// Create listing; force expiresAt in the past (Admin/DevTools on that listing id)
+// Re-open / wait reactive tick:
+// - disappears from My Listings
+// - can create again (max-active free)
+// - card available to offer (not reserved)
+qcTradeListings.getMyActiveListings(me)
+// After cleanup: canonical status expired; PTI + group leaves gone
+qcTradeIndex.shadowCompare(me)
+
+----- 3) Soft-expired group listing -----
+// Peer Available: listing hidden
+// Accept attempt → LISTING_EXPIRED / fail (D5a soft-expire still works)
+// Indexes reconciled after scoped cleanup
+
+----- 4) Processing listing -----
+// If a listing is processing: D7b must NOT write expired
+// status remains processing
+
+----- 5) Full-tree repair still available (Admin/dev only) -----
+// qcTradeListings.expireStaleListings  // explicit repair — not student runtime
+
+----- 6) Registry -----
+qcDbHydration.getSubscriptionRegistry()
+// Still: players/{me}, playerTradeIndex/{me} refCount 1, directory, listingsByGroup
+// NO new listeners from D7b
+
+PASS when 1–4 hold; student Trading never full-scans trades/listings for expiry.
 `);
 }
 
@@ -1164,6 +1226,7 @@ function _installWindowApi() {
     workflowS5cD5b,
     workflowS5cD6,
     workflowS5cD7a,
+    workflowS5cD7b,
     enableAudit,
     disableAudit,
     enableIsolation,

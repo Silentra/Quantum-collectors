@@ -101,12 +101,54 @@ export function getListingCooldown(username) {
   return { onCooldown: true, remainingMs: readyAt - now, readyAt };
 }
 
-// ─── Expire stale listings ──────────────────────────────────────────────────
+/**
+ * Shared wall-clock expiry predicate (S5c-D7b).
+ * Matches historical sweep semantics: expiresAt truthy AND now > expiresAt (strict >).
+ * @param {object|null|undefined} listing
+ * @param {number} [now]
+ * @returns {boolean}
+ */
+export function isListingPastExpiry(listing, now = Date.now()) {
+  if (!listing || listing.expiresAt == null || listing.expiresAt === '') return false;
+  return now > Number(listing.expiresAt);
+}
+
+function _recordScopedListingExpiry(tag, ok = true) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `scopedListingExpiry:${tag}`,
+    ops: tag === 'expired' || tag === 'failed' ? 1 : 0,
+    ok: ok === true,
+  });
+}
 
 /**
- * Scan all active listings and expire any past their expiresAt.
- * One acknowledged multi-path per expired listing (canonical + index removals).
- * Safe to call frequently (e.g., on tab render).
+ * Acknowledged dual-write: active → expired + index removals.
+ * Caller must already confirm canonical status/active/pastExpiry.
+ * @param {object} listing
+ * @param {string} listingId
+ * @param {number} now
+ * @returns {Promise<boolean>}
+ */
+async function _writeListingExpired(listing, listingId, now) {
+  const updates = {
+    [`trades/listings/${listingId}/status`]: 'expired',
+    [`trades/listings/${listingId}/respondedAt`]: now,
+    ...listingIndexRemovalsForListing({ ...listing, id: listingId }),
+  };
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'listing-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: listing.ownerId,
+  });
+  return ack.ok === true;
+}
+
+/**
+ * Explicit full-tree repair: scan all cached `trades/listings` and expire past-due actives.
+ * NOT for student Trading runtime (use expireKnownStaleListings). Safe for Admin/DevTools.
  * @returns {Promise<number>} number expired
  */
 export async function expireStaleListings() {
@@ -116,26 +158,113 @@ export async function expireStaleListings() {
 
   for (const [id, listing] of Object.entries(allListings)) {
     if (!listing || listing.status !== 'active') continue;
-    if (listing.expiresAt && now > listing.expiresAt) {
-      const listingId = listing.id || id;
-      const updates = {
-        [`trades/listings/${listingId}/status`]: 'expired',
-        [`trades/listings/${listingId}/respondedAt`]: now,
-        ...listingIndexRemovalsForListing({ ...listing, id: listingId }),
-      };
-      const ack = await db.updateAcknowledged(updates);
-      metrics.recordTradeIndexLifecycle({
-        tag: 'listing-index-dual-write',
-        ops: 1,
-        ok: ack.ok,
-        username: listing.ownerId,
-      });
-      if (ack.ok) expired += 1;
+    if (!isListingPastExpiry(listing, now)) continue;
+    const listingId = listing.id || id;
+    if (await _writeListingExpired(listing, listingId, now)) expired += 1;
+  }
+
+  if (expired > 0) {
+    console.log(`[Listings] Expired ${expired} stale listing(s) (full-tree repair)`);
+  }
+  return expired;
+}
+
+/**
+ * Collect listing IDs whose scoped projections look active + wall-clock expired.
+ * Sources: playerTradeIndex/{me}/listings and listingsByGroup/{myGroup} only.
+ * @param {string} username
+ * @param {number} [now]
+ * @returns {string[]}
+ */
+function _collectScopedStaleListingIds(username, now = Date.now()) {
+  const key = String(username || '').trim();
+  const ids = new Set();
+  if (!key || key === '__admin__') return [];
+
+  const ptiMap = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${key}/listings`) || {};
+  for (const [id, listing] of Object.entries(ptiMap)) {
+    if (id === TRADE_INDEX_META_KEY || id === '_meta') continue;
+    if (!listing || typeof listing !== 'object') continue;
+    if (listing.status !== 'active') continue;
+    if (!isListingPastExpiry(listing, now)) continue;
+    ids.add(String(listing.id || id));
+  }
+
+  const me = db.get(`players/${key}`);
+  const myGroup = me ? (me.groupId || me.group || null) : null;
+  if (myGroup) {
+    const groupMap = db.get(`${LISTINGS_BY_GROUP_ROOT}/${myGroup}`) || {};
+    for (const [id, listing] of Object.entries(groupMap)) {
+      if (id === TRADE_INDEX_META_KEY || id === '_meta') continue;
+      if (!listing || typeof listing !== 'object') continue;
+      if (listing.status !== 'active') continue;
+      if (!isListingPastExpiry(listing, now)) continue;
+      ids.add(String(listing.id || id));
+    }
+  }
+
+  return [...ids].filter(Boolean);
+}
+
+/**
+ * S5c-D7b student path: expire only known scoped IDs after required canonical per-ID reread.
+ * Never full-scans trades/listings. Skips processing/terminals/missing. No-op when no candidates.
+ *
+ * @param {string} username
+ * @returns {Promise<number>} number successfully expired
+ */
+export async function expireKnownStaleListings(username) {
+  const now = Date.now();
+  const candidateIds = _collectScopedStaleListingIds(username, now);
+  if (candidateIds.length === 0) return 0;
+
+  _recordScopedListingExpiry('detected');
+  let expired = 0;
+
+  for (const listingId of candidateIds) {
+    let canonical = null;
+    if (typeof db.loadPathOnce === 'function') {
+      const load = await db.loadPathOnce(`trades/listings/${listingId}`, { force: true });
+      if (!load || load.ok !== true) {
+        _recordScopedListingExpiry('skipped');
+        continue;
+      }
+      canonical = load.value;
+    } else {
+      canonical = db.get(`trades/listings/${listingId}`);
+    }
+
+    if (!canonical || typeof canonical !== 'object') {
+      _recordScopedListingExpiry('skipped');
+      continue;
+    }
+    if (canonical.status !== 'active') {
+      // processing / terminal / already expired — never auto-expire processing
+      _recordScopedListingExpiry('skipped');
+      continue;
+    }
+    if (!isListingPastExpiry(canonical, now)) {
+      _recordScopedListingExpiry('skipped');
+      continue;
+    }
+
+    const id = canonical.id || listingId;
+    try {
+      const ok = await _writeListingExpired(canonical, id, now);
+      if (ok) {
+        expired += 1;
+        _recordScopedListingExpiry('expired', true);
+      } else {
+        _recordScopedListingExpiry('failed', false);
+      }
+    } catch (err) {
+      console.warn(`[Listings] Scoped expire failed for ${id}`, err);
+      _recordScopedListingExpiry('failed', false);
     }
   }
 
   if (expired > 0) {
-    console.log(`[Listings] Expired ${expired} stale listing(s)`);
+    console.log(`[Listings] Scoped-expired ${expired} stale listing(s)`);
   }
   return expired;
 }
@@ -184,15 +313,23 @@ function _validateCreateListing(ownerId, offeredCardId, requestedCardIds) {
     return { ok: false, reason: 'TRADE_INDEX_UNAVAILABLE' };
   }
   let activeCount = 0;
+  const now = Date.now();
   if (listingSource === 'index') {
     const indexMap = db.get(`${PLAYER_TRADE_INDEX_ROOT}/${ownerId}/listings`) || {};
     for (const listing of Object.values(indexMap)) {
-      if (listing && listing.status === 'active') activeCount++;
+      if (listing && listing.status === 'active' && !isListingPastExpiry(listing, now)) {
+        activeCount++;
+      }
     }
   } else {
     const allListings = db.get('trades/listings') || {};
     for (const listing of Object.values(allListings)) {
-      if (listing && listing.ownerId === ownerId && listing.status === 'active') {
+      if (
+        listing
+        && listing.ownerId === ownerId
+        && listing.status === 'active'
+        && !isListingPastExpiry(listing, now)
+      ) {
         activeCount++;
       }
     }
@@ -373,24 +510,12 @@ export async function acceptListing(listingId, accepterId, chosenCardId) {
   if (listing.status !== 'active') return { success: false, reason: 'LISTING_NOT_ACTIVE' };
 
   // Check expiry — only mark expired while still active (never overwrite terminals).
-  // S5c-D5a: acknowledged multi-path (canonical + index removals) — parity with expireStaleListings.
-  if (listing.expiresAt && Date.now() > listing.expiresAt) {
+  // S5c-D5a: acknowledged multi-path (canonical + index removals).
+  if (isListingPastExpiry(listing)) {
     const still = db.get(`trades/listings/${listingId}`);
-    if (still && still.status === 'active') {
+    if (still && still.status === 'active' && isListingPastExpiry(still)) {
       const id = still.id || listingId;
-      const now = Date.now();
-      const updates = {
-        [`trades/listings/${id}/status`]: 'expired',
-        [`trades/listings/${id}/respondedAt`]: now,
-        ...listingIndexRemovalsForListing({ ...still, id }),
-      };
-      const ack = await db.updateAcknowledged(updates);
-      metrics.recordTradeIndexLifecycle({
-        tag: 'listing-index-dual-write',
-        ops: 1,
-        ok: ack.ok,
-        username: still.ownerId,
-      });
+      await _writeListingExpired(still, id, Date.now());
     }
     return { success: false, reason: 'LISTING_EXPIRED' };
   }
@@ -541,7 +666,7 @@ function _collectVisibleListings(listingMap, requireGroupId = null) {
     if (!listing || typeof listing !== 'object') continue;
     if (listing.status !== 'active') continue;
     if (requireGroupId != null && listing.groupId !== requireGroupId) continue;
-    if (listing.expiresAt && now > Number(listing.expiresAt)) continue;
+    if (isListingPastExpiry(listing, now)) continue;
     result.push(listing);
   }
   result.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -685,16 +810,19 @@ export function getLastMaxActiveListingSource() {
 }
 
 /**
- * Collect status===active listings for an owner from a listing map.
- * Does not filter expiresAt — matches pre-D4 getMyActiveListings (expireStaleListings owns soft-expire).
+ * Collect status===active, wall-clock-unexpired listings for an owner (S5c-D7b).
+ * Soft-expired actives are omitted immediately (capacity + My Listings).
+ * Processing excluded. Does not require canonical status===expired yet.
  * @param {object} listingMap
  * @param {string} [ownerId] - when set, require listing.ownerId match (canonical map)
  * @returns {object[]}
  */
 function _collectActiveOwnedListings(listingMap, ownerId = null) {
+  const now = Date.now();
   const result = [];
   for (const listing of Object.values(listingMap || {})) {
     if (!listing || listing.status !== 'active') continue;
+    if (isListingPastExpiry(listing, now)) continue;
     if (ownerId != null && listing.ownerId !== ownerId) continue;
     result.push(listing);
   }
@@ -718,8 +846,8 @@ export function getMyActiveListing(username) {
 /**
  * Get ALL active listings for a specific player.
  * S5c-D4: verified playerTradeIndex/{me}/listings when ready; never treat untrusted as zero.
- * Filters status === 'active' only (processing excluded). Soft-expire wall-clock is not
- * filtered here — same as pre-D4; expireStaleListings clears canonical + index leaves.
+ * Filters status === 'active' only (processing excluded). S5c-D7b: also omits wall-clock
+ * soft-expired actives. Canonical cleanup via expireKnownStaleListings.
  *
  * @param {string} username
  * @returns {{
@@ -756,7 +884,9 @@ function _installWindowApi() {
     createListing,
     cancelListing,
     getVisibleListings,
-    expireStaleListings,
+    isListingPastExpiry,
+    expireKnownStaleListings,
+    expireStaleListings, // Admin/dev full-tree repair only — not student Trading runtime
   };
 }
 

@@ -42,7 +42,7 @@ import {
   getMyActiveListings,
   getMaxActiveListingsPerPlayer,
   getListingCooldown,
-  expireStaleListings,
+  expireKnownStaleListings,
 } from './trade-listings.js';
 import {
   getListingAcceptCooldown,
@@ -336,8 +336,8 @@ export function renderTrading() {
     return;
   }
 
-  // Expire stale listings on render
-  void expireStaleListings();
+  // S5c-D7b: scoped known-ID expiry (no full trades/listings scan)
+  void expireKnownStaleListings(username);
 
   // Reset reactive hashes so first reactive tick after render detects fresh state correctly
   _lastIncomingHash = '';
@@ -2279,9 +2279,10 @@ function _startCooldownTimer(username) {
         }
       }
 
-      const availSection = document.getElementById('available-listings-section');
-      if (availSection) {
-        expireStaleListings().then(() => {
+      // S5c-D7b: scoped known-ID expiry every ~5s (not gated on Available; no full-tree scan)
+      void expireKnownStaleListings(username).then(() => {
+        const availSection = document.getElementById('available-listings-section');
+        if (availSection) {
           const { listings: visible, source: availSource, trusted: availTrusted } =
             getVisibleListings(username);
           if (!availTrusted) {
@@ -2290,36 +2291,36 @@ function _startCooldownTimer(username) {
               _lastAvailableListingsHash = untrustedHash;
               refreshAvailableListingsSection(username);
             }
-            return;
-          }
-          const others = visible.filter(l => l.ownerId !== username);
-          const newHash = _hashArray(others);
-          if (newHash !== _lastAvailableListingsHash) {
-            _lastAvailableListingsHash = newHash;
-            refreshAvailableListingsSection(username);
-          }
-        });
-      }
-
-      if (!userFillingListingForm) {
-        const mySection = document.getElementById('my-listings-section');
-        if (mySection) {
-          const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
-          if (!myTrusted) {
-            const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
-            if (untrustedHash !== _lastMyListingsHash) {
-              _lastMyListingsHash = untrustedHash;
-              refreshMyListingsSection(username);
-            }
           } else {
-            const newHash = _hashArray(owned);
-            if (newHash !== _lastMyListingsHash) {
-              _lastMyListingsHash = newHash;
-              refreshMyListingsSection(username);
+            const others = visible.filter(l => l.ownerId !== username);
+            const newHash = _hashArray(others);
+            if (newHash !== _lastAvailableListingsHash) {
+              _lastAvailableListingsHash = newHash;
+              refreshAvailableListingsSection(username);
             }
           }
         }
-      }
+
+        if (!userFillingListingForm) {
+          const mySection = document.getElementById('my-listings-section');
+          if (mySection) {
+            const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
+            if (!myTrusted) {
+              const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
+              if (untrustedHash !== _lastMyListingsHash) {
+                _lastMyListingsHash = untrustedHash;
+                refreshMyListingsSection(username);
+              }
+            } else {
+              const newHash = _hashArray(owned);
+              if (newHash !== _lastMyListingsHash) {
+                _lastMyListingsHash = newHash;
+                refreshMyListingsSection(username);
+              }
+            }
+          }
+        }
+      });
 
       const cooldownNow = getListingCooldown(username).onCooldown;
       if (cooldownNow !== _lastListingCooldownState) {
