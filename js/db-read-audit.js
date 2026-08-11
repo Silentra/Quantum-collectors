@@ -82,8 +82,8 @@ function _sessionUsername() {
 }
 
 /**
- * Build allowlist prefixes for a username (no trailing slash variants needed —
- * matching uses exact or prefix+/).
+ * Build allowlist prefixes for a username (exact-or-descendant matching).
+ * Use trailing `/` or `/*` in custom begin() allowlists for children-only rules.
  * @param {string} username
  * @returns {string[]}
  */
@@ -98,17 +98,66 @@ export function defaultAllowedPrefixes(username) {
 }
 
 /**
+ * Parse a raw allowlist entry into a match rule.
+ * Children-only intent (detected BEFORE normalize):
+ *   - ends with `/*`  → descendants only
+ *   - ends with `/`   → descendants only
+ * Normal entries: exact path OR any descendant (existing behavior).
+ *
+ * @param {string} raw
+ * @returns {{ prefix: string, childrenOnly: boolean, display: string }|null}
+ */
+function _parseAllowRule(raw) {
+  if (raw == null) return null;
+  let s = String(raw).trim();
+  if (!s || s === '/') return null;
+
+  let childrenOnly = false;
+  if (s.endsWith('/*')) {
+    childrenOnly = true;
+    s = s.slice(0, -2);
+  } else if (s.endsWith('/')) {
+    childrenOnly = true;
+    s = s.slice(0, -1);
+  }
+
+  const prefix = _normalizePath(s);
+  if (!prefix) return null;
+  return {
+    prefix,
+    childrenOnly,
+    display: childrenOnly ? `${prefix}/*` : prefix,
+  };
+}
+
+/**
  * @param {string} normalizedPath
- * @param {string[]} allowedPrefixes
+ * @param {Array<{ prefix: string, childrenOnly: boolean }|string>} allowedRules
  * @returns {boolean}
  */
-function _isAllowed(normalizedPath, allowedPrefixes) {
+function _isAllowed(normalizedPath, allowedRules) {
   if (!normalizedPath) return false; // root / empty — not personal-scoped
-  for (const prefix of allowedPrefixes) {
+  for (const rule of allowedRules) {
+    if (!rule) continue;
+    // Backward-compatible: plain string = normal exact-or-descendant
+    if (typeof rule === 'string') {
+      if (normalizedPath === rule || normalizedPath.startsWith(`${rule}/`)) return true;
+      continue;
+    }
+    const { prefix, childrenOnly } = rule;
     if (!prefix) continue;
-    if (normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)) return true;
+    if (childrenOnly) {
+      // ALLOW prefix/{id…}; FORBID exact bare prefix
+      if (normalizedPath.startsWith(`${prefix}/`)) return true;
+    } else if (normalizedPath === prefix || normalizedPath.startsWith(`${prefix}/`)) {
+      return true;
+    }
   }
   return false;
+}
+
+function _formatAllowRules(rules) {
+  return (rules || []).map((r) => (typeof r === 'string' ? r : r.display || r.prefix)).join(',');
 }
 
 /**
@@ -312,8 +361,8 @@ export function begin(labelOrOpts, opts = {}) {
 
   const username = (options.username || _sessionUsername() || '').toLowerCase() || null;
   const allowedPrefixes = Array.isArray(options.allowedPrefixes)
-    ? options.allowedPrefixes.map(_normalizePath).filter(Boolean)
-    : defaultAllowedPrefixes(username || '');
+    ? options.allowedPrefixes.map(_parseAllowRule).filter(Boolean)
+    : defaultAllowedPrefixes(username || '').map((p) => _parseAllowRule(p)).filter(Boolean);
 
   _active = {
     label: String(label),
@@ -329,7 +378,7 @@ export function begin(labelOrOpts, opts = {}) {
 
   console.info(
     `[PersonalAudit] begin("${_active.label}") me=${username || '(none)'} ` +
-      `isolation=${isIsolationActive()} allow=${allowedPrefixes.join(',')}`,
+      `isolation=${isIsolationActive()} allow=${_formatAllowRules(allowedPrefixes)}`,
   );
 
   return { ok: true, label: _active.label, username, isolation: isIsolationActive() };
@@ -512,6 +561,7 @@ API:
   qcPersonalAudit.workflowS5cD6() // Trading self-reservations → PTI
   qcPersonalAudit.workflowS5cD7a() // Counterparty once-loads
   qcPersonalAudit.workflowS5cD7b() // Scoped listing expiry
+  qcPersonalAudit.workflowS5cD7()  // Final S5c-D Trading isolation umbrella
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -1163,7 +1213,7 @@ qcPersonalAudit.begin('trading-expiry-idle', {
     'players/' + me,
     'playerTradeIndex/' + me,
     'listingsByGroup/' + g,
-    'trades/listings/', // specific-id prefix only — bare 'trades/listings' must NOT appear
+    'trades/listings/*', // children-only: allows trades/listings/{id}; FORBIDS bare trades/listings
   ],
 });
 // Wait ~12 seconds with Trading open (two+ 5s ticks)
@@ -1189,6 +1239,7 @@ qcTradeIndex.shadowCompare(me)
 ----- 4) Processing listing -----
 // If a listing is processing: D7b must NOT write expired
 // status remains processing
+// (Static inspection: expireKnownStaleListings only writes when status==='active')
 
 ----- 5) Full-tree repair still available (Admin/dev only) -----
 // qcTradeListings.expireStaleListings  // explicit repair — not student runtime
@@ -1199,6 +1250,114 @@ qcDbHydration.getSubscriptionRegistry()
 // NO new listeners from D7b
 
 PASS when 1–4 hold; student Trading never full-scans trades/listings for expiry.
+`);
+}
+
+/**
+ * Pasteable final umbrella for Phase S5c-D7c / S5c-D Trading scoped cutover proof.
+ * Children-only prefixes (trades/direct/*, trades/listings/*) forbid bare trees.
+ * Healthy verified indexes must resolve source:index — any canonical-fallback FAILS the gate.
+ */
+export function workflowS5cD7() {
+  console.info(`
+=== S5c-D7 / S5c-D Final Trading Isolation Umbrella ===
+
+Prereq: D7a + D7b COMPLETE + VERIFIED. Two same-group players (e.g. Bobby / Bobby2).
+
+Enable audit (+ optional isolation):
+  localStorage.setItem('qc-personal-scope-audit','true');
+  // localStorage.setItem('qc-personal-cache-isolation','true');
+  location.reload();
+
+Helper — paste before each labeled begin (edit OTHER):
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+const g = (qcDbHydration.getCached('players/' + me) || {}).groupId;
+const OTHER = 'PASTE_COUNTERPARTY_USERNAME';
+const allowTrading = [
+  'config','cards','packs','groups','tradeIndexMeta',
+  'playerDirectory',
+  'players/' + me,
+  'playerTradeIndex/' + me,
+  'listingsByGroup/' + g,
+  'players/' + OTHER,
+  'playerTradeIndex/' + OTHER,
+  'trades/direct/*',    // children-only — FORBIDS bare trades/direct
+  'trades/listings/*',  // children-only — FORBIDS bare trades/listings
+];
+
+===== A) Registry / isolation baseline =====
+Open Trading. Do not start a foreign action yet.
+qcDbHydration.getSubscriptionRegistry()
+// EXPECT: players/{me}×1, playerTradeIndex/{me}×1 (refCount===1),
+//         playerDirectory×1, listingsByGroup/{g}×1
+// EXPECT: NO foreign player/PTI subscriptions
+
+qcPersonalAudit.begin('d7-registry', { allowedPrefixes: allowTrading });
+// Idle ~5s
+qcPersonalAudit.end('d7-registry');
+// PASS: unexpectedTotal===0; no exact bare players|trades/direct|trades/listings
+
+===== B) Two-browser direct happy path =====
+// Browser A (Bobby): create offer → Bobby2
+// Browser B (Bobby2): respond with a card
+// Browser A: confirm
+qcPersonalAudit.begin('d7-direct', { allowedPrefixes: allowTrading });
+// …perform create/respond/confirm while session active…
+qcPersonalAudit.end('d7-direct');
+qcTradeIndex.shadowCompare('Bobby');
+qcTradeIndex.shadowCompare('Bobby2');
+// PASS: inventories correct; statuses terminal; shadows match===true
+// PASS: no bare trees; foreign reads only players/{OTHER} + playerTradeIndex/{OTHER}
+// FAIL if tradingDirectSource / tradingAvailabilitySource / foreignReservationSource
+//      shows canonical-fallback during this healthy run
+
+===== C) Listing happy path =====
+// Owner creates listing; peer browses Available; peer accepts → claim → fulfill
+qcPersonalAudit.begin('d7-listing', { allowedPrefixes: allowTrading });
+// …perform create + accept…
+qcPersonalAudit.end('d7-listing');
+qcTradeIndex.shadowCompare(owner);
+qcTradeIndex.shadowCompare(accepter);
+// PASS: one swap; listing fulfilled; PTI+group leaves gone; shadows clean; no bare trees
+
+===== D) Two-browser same-listing race =====
+// Owner posts ONE listing. Two accepters each hold a requested card.
+// Both open Available, select card, sync countdown, BOTH click Accept.
+// PASS: exactly one success; other clean fail (LISTING_NOT_ACTIVE / stale);
+//       one inventory exchange; listing fulfilled once; indexes removed;
+//       shadowCompare both accepters + owner match===true
+
+===== E) Processing protection =====
+// STATIC ONLY — do not hand-edit processing.
+// Code: expireKnownStaleListings only expires canonical status==='active'.
+// PASS by inspection (no test-only lifecycle).
+
+===== F) Expiry =====
+// INHERIT D7b COMPLETE + VERIFIED.
+// Optional smoke: qcPersonalAudit.workflowS5cD7b() idle step with trades/listings/*
+
+===== G) Final isolation run =====
+// Representative flow under isolation (create direct OR accept listing) with:
+localStorage.setItem('qc-personal-cache-isolation','true'); // then reload once if needed
+qcPersonalAudit.begin('d7-isolation', { allowedPrefixes: allowTrading });
+// …one representative Trading action…
+qcPersonalAudit.end('d7-isolation');
+// PASS only if:
+//   - no exact bare players / trades/direct / trades/listings
+//   - no healthy canonical-fallback from Trading consumers
+//   - specific-ID canonical reads ARE allowed (trades/direct/{id}, trades/listings/{id})
+
+===== H) Group / lifecycle =====
+// INHERIT D5b + static: leave Trading releases directory + listingsByGroup;
+// auth PTI/players remain; no duplicate group listeners.
+
+===== Metrics =====
+qcDbMetrics.summary()
+// Healthy: *Source:index tags; zero unexpected *canonical-fallback during gates
+
+FINAL PASS when A–D and G hold; E static; F inherited; H inherited.
+Then mark S5c-D7c + S5c-D7 + S5c-D COMPLETE + VERIFIED.
+Do NOT begin S5d until that status is set.
 `);
 }
 
@@ -1227,6 +1386,7 @@ function _installWindowApi() {
     workflowS5cD6,
     workflowS5cD7a,
     workflowS5cD7b,
+    workflowS5cD7,
     enableAudit,
     disableAudit,
     enableIsolation,
