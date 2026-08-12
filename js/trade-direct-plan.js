@@ -232,7 +232,7 @@ export function evaluateDirectInventoryDiagInvariants({ planDiag, serverQtys }) 
     if (!p || !s) continue;
 
     const giveDeltaLoadedToPlanned = p.givePlannedAfter - p.giveBefore;
-    const recvDeltaLoadedToPlanned = p.receivePlannedAfter - p.receiveBefore;
+    const receiveDeltaLoadedToPlanned = p.receivePlannedAfter - p.receiveBefore;
     const serverGive = s.giveQty;
     const serverRecv = s.receiveQty;
     const involvedTotalServer = serverGive + serverRecv;
@@ -252,7 +252,7 @@ export function evaluateDirectInventoryDiagInvariants({ planDiag, serverQtys }) 
       giveDeltaLoadedToPlanned,
       receiveDeltaLoadedToPlanned,
       plannedGiveMatchesExpected: giveDeltaLoadedToPlanned === -1,
-      plannedReceiveMatchesExpected: recvDeltaLoadedToPlanned === 1,
+      plannedReceiveMatchesExpected: receiveDeltaLoadedToPlanned === 1,
       plannedTotalConserved: p.involvedTotalBefore === p.involvedTotalPlannedAfter,
       serverMatchesPlannedGive: serverGive === p.givePlannedAfter,
       serverMatchesPlannedReceive: serverRecv === p.receivePlannedAfter,
