@@ -69,11 +69,14 @@ export function updatePlayer(username, updates) {
 }
 
 /**
- * Get player inventory as array of { cardId, quantity }
+ * Get player inventory as array of { cardId, quantity }.
+ * Only positive numeric quantities are returned (zero / non-numeric leaves omitted).
  */
 export function getInventory(username) {
   const inv = db.get(`players/${username}/inventory`) || {};
-  return Object.entries(inv).map(([cardId, quantity]) => ({ cardId, quantity }));
+  return Object.entries(inv)
+    .filter(([, quantity]) => typeof quantity === 'number' && Number.isFinite(quantity) && quantity > 0)
+    .map(([cardId, quantity]) => ({ cardId, quantity }));
 }
 
 /**

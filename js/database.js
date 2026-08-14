@@ -21,6 +21,7 @@
  *   resetDB()         - reset to defaults
  *   setAcknowledged(path, value)       - await remote set, then patch cache
  *   updateAcknowledged(updates)        - await root multi-path update, then patch cache
+ *                                        (skips applyLocalOnly for Firebase .sv transforms)
  *   clearActiveSessionIfOwned(u, id)   - ownership-checked session clear
  *   generatePushKey(path)              - push key without write
  *   getAcknowledged(path)              - one-shot remote read + cache patch
@@ -1036,23 +1037,50 @@ export async function setAcknowledged(path, value) {
 }
 
 /**
+ * True for Firebase RTDB server-value placeholders (e.g. ServerValue.increment / TIMESTAMP).
+ * After JSON clone these are plain objects shaped like `{ ".sv": ... }`.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function _isServerValueTransform(value) {
+  return !!(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.prototype.hasOwnProperty.call(value, '.sv')
+  );
+}
+
+/**
  * Await a root multi-path Firebase update (atomic), then apply each key to local cache.
  * `updates` keys are absolute paths from DB root (e.g. players/u, accessCodes/X/used).
- * @returns {Promise<{ ok: boolean, mode: 'firebase'|'local', error?: string }>}
+ *
+ * Server-value transforms (`{ ".sv": ... }`, e.g. ServerValue.increment) are sent to Firebase
+ * but never written into `_db` as raw sentinels. Callers may refresh those paths after ack;
+ * this helper does not invent local cachedValue+delta arithmetic.
+ *
+ * @returns {Promise<{ ok: boolean, mode: 'firebase'|'local', error?: string, transformedPaths?: string[] }>}
  */
 export async function updateAcknowledged(updates) {
-  if (!_db) return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized' };
+  if (!_db) {
+    return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Database not initialized', transformedPaths: [] };
+  }
   if (!updates || typeof updates !== 'object') {
-    return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Invalid updates' };
+    return { ok: false, mode: _useFirebase ? 'firebase' : 'local', error: 'Invalid updates', transformedPaths: [] };
   }
 
   const cloned = JSON.parse(JSON.stringify(updates));
+  const transformedPaths = [];
+  for (const [path, value] of Object.entries(cloned)) {
+    if (_isServerValueTransform(value)) transformedPaths.push(path);
+  }
 
   if (!_useFirebase || !_fbDb) {
     for (const [path, value] of Object.entries(cloned)) {
+      if (_isServerValueTransform(value)) continue;
       applyLocalOnly(path, value);
     }
-    return { ok: true, mode: 'local' };
+    return { ok: true, mode: 'local', transformedPaths };
   }
 
   try {
@@ -1065,9 +1093,10 @@ export async function updateAcknowledged(updates) {
       extraPaths: Object.keys(cloned),
     });
     for (const [path, value] of Object.entries(cloned)) {
+      if (_isServerValueTransform(value)) continue;
       applyLocalOnly(path, value);
     }
-    return { ok: true, mode: 'firebase' };
+    return { ok: true, mode: 'firebase', transformedPaths };
   } catch (e) {
     metrics.recordFirebaseWrite({
       op: 'update-ack',
@@ -1077,7 +1106,12 @@ export async function updateAcknowledged(updates) {
       extraPaths: Object.keys(cloned),
     });
     console.warn('[DB] updateAcknowledged error:', e.message);
-    return { ok: false, mode: 'firebase', error: e.message || 'Write failed' };
+    return {
+      ok: false,
+      mode: 'firebase',
+      error: e.message || 'Write failed',
+      transformedPaths,
+    };
   }
 }
 
