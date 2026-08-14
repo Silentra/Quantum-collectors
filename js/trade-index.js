@@ -884,6 +884,27 @@ export function listingIndexRemovalsForListing(listing) {
 }
 
 /**
+ * After successful direct claim: both participant PTI leaves → status processing.
+ * Leaves stay in place (reservations preserved).
+ * @param {object} trade - canonical trade after claim (status processing)
+ * @returns {Record<string, object>}
+ */
+export function directClaimIndexTransitionPaths(trade) {
+  const processing = { ...trade, status: 'processing' };
+  return directIndexUpdatesForTrade(processing);
+}
+
+/**
+ * After release back to awaiting_offerer_confirmation: rewrite both PTI leaves.
+ * @param {object} trade - canonical trade after release
+ * @returns {Record<string, object>}
+ */
+export function directReleaseIndexRestorePaths(trade) {
+  const awaiting = { ...trade, status: 'awaiting_offerer_confirmation' };
+  return directIndexUpdatesForTrade(awaiting);
+}
+
+/**
  * After successful canonical claim: owner leaf → processing, group leaf removed.
  * @param {object} listing - canonical listing after claim (status processing)
  * @param {number} [now]
@@ -1162,6 +1183,8 @@ function _installWindowApi() {
     deriveDesiredTradeIndexes,
     directIndexUpdatesForTrade,
     directIndexRemovalsForTrade,
+    directClaimIndexTransitionPaths,
+    directReleaseIndexRestorePaths,
     listingIndexUpdatesForListing,
     listingIndexRemovalsForListing,
     listingClaimIndexTransitionPaths,

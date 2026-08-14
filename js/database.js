@@ -22,6 +22,8 @@
  *   setAcknowledged(path, value)       - await remote set, then patch cache
  *   updateAcknowledged(updates)        - await root multi-path update, then patch cache
  *                                        (skips applyLocalOnly for Firebase .sv transforms)
+ *   claimDirectTradeIfAwaiting / releaseDirectTradeClaimIfOwned
+ *   clearInventoryLeafIfNonPositive
  *   clearActiveSessionIfOwned(u, id)   - ownership-checked session clear
  *   generatePushKey(path)              - push key without write
  *   getAcknowledged(path)              - one-shot remote read + cache patch
@@ -1350,6 +1352,244 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
       listing: null,
       mode: 'firebase',
       error: e.message || 'Release transaction failed',
+    };
+  }
+}
+
+/**
+ * Claim a direct trade: awaiting_offerer_confirmation → processing (server-atomic).
+ * @param {string} tradeId
+ * @param {{ processingBy: string, claimId: string, now?: number }} claim
+ * @returns {Promise<{ ok: boolean, claimed: boolean, trade?: object|null, reason?: string, mode: string, error?: string }>}
+ */
+export async function claimDirectTradeIfAwaiting(tradeId, claim) {
+  if (!_db || !tradeId || !claim?.processingBy || !claim?.claimId) {
+    return {
+      ok: false,
+      claimed: false,
+      trade: null,
+      reason: 'INVALID_CLAIM',
+      mode: _useFirebase ? 'firebase' : 'local',
+    };
+  }
+
+  const path = `trades/direct/${tradeId}`;
+  const now = Number.isFinite(Number(claim.now)) ? Number(claim.now) : Date.now();
+
+  const tryClaim = (current) => {
+    if (!current || typeof current !== 'object') return;
+    if (current.status !== 'awaiting_offerer_confirmation') return;
+    return {
+      ...current,
+      id: current.id || tradeId,
+      status: 'processing',
+      processingBy: claim.processingBy,
+      processingAt: now,
+      claimId: claim.claimId,
+    };
+  };
+
+  if (!_useFirebase || !_fbDb) {
+    const current = get(path);
+    const next = tryClaim(current);
+    if (!next) {
+      return {
+        ok: true,
+        claimed: false,
+        trade: current,
+        reason: 'STALE_TRADE_STATE',
+        mode: 'local',
+      };
+    }
+    applyLocalOnly(path, next);
+    return { ok: true, claimed: true, trade: next, mode: 'local' };
+  }
+
+  try {
+    const result = await _fbDb.ref(path).transaction((current) => tryClaim(current));
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: true,
+      extraPaths: ['direct-claim'],
+    });
+    const nextVal = result.snapshot ? result.snapshot.val() : null;
+    applyLocalOnly(path, nextVal == null ? null : nextVal);
+    const claimed = result.committed === true;
+    if (!claimed) {
+      return {
+        ok: true,
+        claimed: false,
+        trade: nextVal,
+        reason: 'STALE_TRADE_STATE',
+        mode: 'firebase',
+      };
+    }
+    return { ok: true, claimed: true, trade: nextVal, mode: 'firebase' };
+  } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: false,
+      extraPaths: ['direct-claim'],
+    });
+    console.warn('[DB] claimDirectTradeIfAwaiting error:', e.message);
+    return {
+      ok: false,
+      claimed: false,
+      trade: null,
+      mode: 'firebase',
+      error: e.message || 'Claim transaction failed',
+    };
+  }
+}
+
+/**
+ * Revert processing → awaiting_offerer_confirmation only if this claimId still owns the trade.
+ * Never touches accepted / declined / cancelled / failed.
+ * @param {string} tradeId
+ * @param {string} claimId
+ * @returns {Promise<{ ok: boolean, released: boolean, trade?: object|null, mode: string, error?: string }>}
+ */
+export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
+  if (!_db || !tradeId || !claimId) {
+    return {
+      ok: false,
+      released: false,
+      trade: null,
+      mode: _useFirebase ? 'firebase' : 'local',
+      error: 'Invalid arguments',
+    };
+  }
+
+  const path = `trades/direct/${tradeId}`;
+
+  const tryRelease = (current) => {
+    if (!current || typeof current !== 'object') return;
+    if (current.status !== 'processing') return;
+    if (current.claimId !== claimId) return;
+    const next = { ...current, status: 'awaiting_offerer_confirmation' };
+    delete next.processingBy;
+    delete next.processingAt;
+    delete next.claimId;
+    return next;
+  };
+
+  if (!_useFirebase || !_fbDb) {
+    const current = get(path);
+    const next = tryRelease(current);
+    if (!next) {
+      return { ok: true, released: false, trade: current, mode: 'local' };
+    }
+    applyLocalOnly(path, next);
+    return { ok: true, released: true, trade: next, mode: 'local' };
+  }
+
+  try {
+    const result = await _fbDb.ref(path).transaction((current) => tryRelease(current));
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: true,
+      extraPaths: ['direct-release'],
+    });
+    const nextVal = result.snapshot ? result.snapshot.val() : null;
+    applyLocalOnly(path, nextVal == null ? null : nextVal);
+    return {
+      ok: true,
+      released: result.committed === true,
+      trade: nextVal,
+      mode: 'firebase',
+    };
+  } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: false,
+      extraPaths: ['direct-release'],
+    });
+    console.warn('[DB] releaseDirectTradeClaimIfOwned error:', e.message);
+    return {
+      ok: false,
+      released: false,
+      trade: null,
+      mode: 'firebase',
+      error: e.message || 'Release transaction failed',
+    };
+  }
+}
+
+/**
+ * Idempotent zero-leaf cleanup: delete inventory leaf only if authoritative value is numeric <= 0.
+ * Never decrements. Safe if another op reacquired the card (current > 0 → abort).
+ * @param {string} inventoryLeafPath e.g. players/u/inventory/cardId
+ * @returns {Promise<{ ok: boolean, removed: boolean, mode: string, error?: string }>}
+ */
+export async function clearInventoryLeafIfNonPositive(inventoryLeafPath) {
+  const path = String(inventoryLeafPath || '').split('/').filter(Boolean).join('/');
+  if (!_db || !path || !path.includes('/inventory/')) {
+    return {
+      ok: false,
+      removed: false,
+      mode: _useFirebase ? 'firebase' : 'local',
+      error: 'Invalid inventory leaf path',
+    };
+  }
+
+  const tryClear = (current) => {
+    if (current == null) return;
+    if (typeof current === 'number' && Number.isFinite(current) && current <= 0) {
+      return null;
+    }
+    return;
+  };
+
+  if (!_useFirebase || !_fbDb) {
+    const current = get(path);
+    const next = tryClear(current);
+    if (next === undefined) {
+      return { ok: true, removed: false, mode: 'local' };
+    }
+    applyLocalOnly(path, null);
+    return { ok: true, removed: true, mode: 'local' };
+  }
+
+  try {
+    const result = await _fbDb.ref(path).transaction((current) => tryClear(current));
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: true,
+      extraPaths: ['inventory-zero-cleanup'],
+    });
+    const nextVal = result.snapshot ? result.snapshot.val() : null;
+    if (result.committed) {
+      applyLocalOnly(path, nextVal == null ? null : nextVal);
+    }
+    return {
+      ok: true,
+      removed: result.committed === true && nextVal == null,
+      mode: 'firebase',
+    };
+  } catch (e) {
+    metrics.recordFirebaseWrite({
+      op: 'transaction',
+      path,
+      mode: 'acknowledged',
+      ok: false,
+      extraPaths: ['inventory-zero-cleanup'],
+    });
+    console.warn('[DB] clearInventoryLeafIfNonPositive error:', e.message);
+    return {
+      ok: false,
+      removed: false,
+      mode: 'firebase',
+      error: e.message || 'Zero-cleanup transaction failed',
     };
   }
 }

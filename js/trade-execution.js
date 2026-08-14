@@ -1,26 +1,36 @@
 /**
- * Trade Execution Module — Phase T-2
+ * Trade Execution Module — Phase T-2 / Hybrid C+ Gate B
  *
  * Isolated helper for atomic direct-trade card swaps.
  * All inventory mutation is contained here. UI handlers must NEVER
  * directly modify inventories for trades.
  *
- * Final acceptance commits via one updateAcknowledged multi-path write
- * (see trade-direct-plan.js). Listings use claim+fulfill via trade-listing-plan.js.
+ * Flow:
+ *   claim (awaiting_offerer_confirmation → processing)
+ *   → force-load + validate (excludeDirectTradeId)
+ *   → one updateAcknowledged with ServerValue.increment(±1) + accepted
+ *   → optional zero-leaf cleanup on give cards (never rolls back accept)
+ *
+ * Listings use claim+fulfill via trade-listing-plan.js (Gate C later).
  */
 
 import * as db from './database.js';
 import * as config from './config.js';
+import * as metrics from './db-metrics.js';
 import { validateDirectTrade, isDetailedLogging } from './trading.js';
 import {
   buildDirectTradeAcceptPlan,
   commitDirectTradeAcceptPlan,
   markDirectTradeFailedIfAwaiting,
+  markDirectTradeFailedIfProcessingOwned,
+  releaseDirectClaimAndRestoreIndex,
+  cleanupZeroGiveLeavesAfterAccept,
   isDirectInventoryDiagEnabled,
   createDirectInventoryDiagAttempt,
   buildLoadedSourceDiag,
   evaluateDirectInventoryDiagInvariants,
 } from './trade-direct-plan.js';
+import { directClaimIndexTransitionPaths } from './trade-index.js';
 import {
   loadTradingCounterpartyContext,
   buildCounterpartyAvailabilitySnapshot,
@@ -40,6 +50,13 @@ function _normalizePlayerForValidation(p) {
     ...p,
     groupId: p.groupId || p.group || null,
   };
+}
+
+function _newClaimId(username) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${username}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 /**
@@ -116,6 +133,7 @@ async function _diagPostAckVerify(diag, {
     },
     invariants,
     DIRECT_INVENTORY_TOTAL_DRIFT: invariants.flags.includes('DIRECT_INVENTORY_TOTAL_DRIFT'),
+    POST_ACK_DELTA_NE_EXPECTED: invariants.flags.includes('POST_ACK_DELTA_NE_EXPECTED'),
   });
 }
 
@@ -180,10 +198,10 @@ export function formatReadyAt(readyAtMs) {
 }
 
 /**
- * Attempt to mark trade failed only if still awaiting offerer confirmation.
+ * Pre-claim: mark failed only if still awaiting offerer confirmation.
  * @returns {Promise<{ success: false, reason: string, stale?: boolean, currentStatus?: string }>}
  */
-async function failTradeIfActionable(tradeId, reason, diag = null) {
+async function failTradeIfAwaiting(tradeId, reason, diag = null) {
   if (diag) {
     diag.mark('exitBeforeInventoryCommit', {
       reason,
@@ -202,17 +220,128 @@ async function failTradeIfActionable(tradeId, reason, diag = null) {
   return { success: false, reason };
 }
 
+/**
+ * Post-claim permanent failure: fail while still owning processing + remove indexes.
+ */
+async function failTradeIfProcessingOwned(tradeId, claimId, reason, diag = null) {
+  if (diag) {
+    diag.mark('permanentPostClaimFailure', {
+      reason,
+      claimId,
+      inventoryCommitAttempted: false,
+    });
+  }
+  const result = await markDirectTradeFailedIfProcessingOwned(tradeId, claimId, reason);
+  if (!result.marked) {
+    // Still try release so we do not leave processing stuck
+    await releaseDirectClaimAndRestoreIndex(tradeId, claimId, `FAIL_MARK_MISSED:${reason}`);
+    return {
+      success: false,
+      reason: result.reason === 'STALE_TRADE_STATE' ? 'STALE_TRADE_STATE' : reason,
+      stale: result.reason === 'STALE_TRADE_STATE',
+      currentStatus: result.currentStatus,
+    };
+  }
+  return { success: false, reason };
+}
+
+/**
+ * Transient post-claim: release back to awaiting_offerer_confirmation.
+ */
+async function releaseAfterTransient(tradeId, claimId, reason, diag = null) {
+  if (diag) {
+    diag.mark('transientPostClaimRelease', { reason, claimId });
+  }
+  const released = await releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason);
+  return {
+    success: false,
+    reason,
+    claimReleased: !!released.released,
+    error: released.error,
+  };
+}
+
+/**
+ * Revalidate after PERMISSION_DENIED: if a give copy is unavailable → INSUFFICIENT_AVAILABLE_COPIES.
+ * Otherwise null (generic recoverable rejection).
+ */
+async function classifyPermissionDeniedForDirect({
+  tradeId,
+  offeringPlayerId,
+  targetPlayerId,
+  offeredCardId,
+  requestedCardId,
+}) {
+  const offeringCtx = await loadTradingCounterpartyContext(offeringPlayerId, { force: true });
+  const targetCtx = await loadTradingCounterpartyContext(targetPlayerId, { force: true });
+  if (!offeringCtx.ok || !targetCtx.ok || !offeringCtx.player || !targetCtx.player) {
+    return null;
+  }
+
+  const players = {
+    [offeringPlayerId]: _normalizePlayerForValidation(offeringCtx.player),
+    [targetPlayerId]: _normalizePlayerForValidation(targetCtx.player),
+  };
+  const allCards = db.get('cards') || {};
+  const excludeIds = tradeId ? [tradeId] : [];
+
+  const offeringSnapshot = buildCounterpartyAvailabilitySnapshot(offeringPlayerId, offeringCtx, {
+    playerData: players[offeringPlayerId],
+    excludeDirectTradeIds: excludeIds,
+  });
+  const targetSnapshot = buildCounterpartyAvailabilitySnapshot(targetPlayerId, targetCtx, {
+    playerData: players[targetPlayerId],
+    excludeDirectTradeIds: excludeIds,
+  });
+
+  const validation = validateDirectTrade({
+    offeringPlayerId,
+    targetPlayerId,
+    offeredCardId,
+    requestedCardId,
+    players,
+    cards: allCards,
+    excludeDirectTradeId: tradeId,
+    offeringAvailabilitySnapshot: offeringSnapshot,
+    targetAvailabilitySnapshot: targetSnapshot,
+    skipHiddenTargetCheck: true,
+  });
+
+  if (!validation.valid) {
+    const r = validation.reason;
+    if (
+      r === 'INSUFFICIENT_AVAILABLE_COPIES'
+      || r === 'OFFERING_PLAYER_MISSING_OFFERED_CARD'
+      || r === 'TARGET_PLAYER_MISSING_REQUESTED_CARD'
+      || r === 'OFFERING_CARD_NOT_AVAILABLE'
+      || r === 'REQUESTED_CARD_NOT_AVAILABLE'
+    ) {
+      return 'INSUFFICIENT_AVAILABLE_COPIES';
+    }
+  }
+
+  // Soft qty on give cards
+  if ((offeringCtx.player.inventory?.[offeredCardId] || 0) < 1) {
+    return 'INSUFFICIENT_AVAILABLE_COPIES';
+  }
+  if ((targetCtx.player.inventory?.[requestedCardId] || 0) < 1) {
+    return 'INSUFFICIENT_AVAILABLE_COPIES';
+  }
+
+  return null;
+}
+
 // ─── Atomic Trade Execution ─────────────────────────────────────────────────
 
 /**
- * Execute a direct trade atomically (one acknowledged multi-path update).
+ * Execute a direct trade (claim + relative inventory terminal write).
  *
  * This is the ONLY function that mutates inventories for direct trades.
  *
- * Requires trade.status === awaiting_offerer_confirmation and a non-null requestedCardId.
+ * Requires trade.status === awaiting_offerer_confirmation (pre-claim) and a non-null requestedCardId.
  *
  * @param {object} trade - The trade object from /trades/direct/{id}
- * @returns {Promise<{ success: boolean, reason?: string, notifiedOfferer?: string[], stale?: boolean }>}
+ * @returns {Promise<{ success: boolean, reason?: string, notifiedOfferer?: string[], stale?: boolean, uncertain?: boolean }>}
  */
 export async function executeDirectTrade(trade) {
   const {
@@ -230,7 +359,7 @@ export async function executeDirectTrade(trade) {
     diag.mark('executeEntered', { inventoryCommitAttempted: false });
   }
 
-  // ── 0. Concurrency guard — reload trade & verify awaiting offerer confirm ─
+  // ── 0. Cache precheck — awaiting offerer confirm ───────────────────────────
   const freshTrade = db.get(`trades/direct/${tradeId}`);
   if (diag) {
     diag.mark('cacheStatusChecked', {
@@ -246,6 +375,7 @@ export async function executeDirectTrade(trade) {
         inventoryCommitAttempted: false,
         currentStatus: freshTrade?.status ?? null,
       });
+      diag.claimWon = false;
     }
     return {
       success: false,
@@ -257,7 +387,7 @@ export async function executeDirectTrade(trade) {
 
   const resolvedRequestedId = freshTrade.requestedCardId || requestedCardId;
   if (!resolvedRequestedId) {
-    return await failTradeIfActionable(tradeId, 'REQUESTED_CARD_NOT_FOUND', diag);
+    return await failTradeIfAwaiting(tradeId, 'REQUESTED_CARD_NOT_FOUND', diag);
   }
 
   const resolvedOfferedId = freshTrade.offeredCardId || offeredCardId;
@@ -265,10 +395,9 @@ export async function executeDirectTrade(trade) {
   const resolvedTarget = freshTrade.targetPlayerId || targetPlayerId;
 
   if (resolvedOfferedId === resolvedRequestedId) {
-    return await failTradeIfActionable(tradeId, 'SAME_CARD_BOTH_SIDES', diag);
+    return await failTradeIfAwaiting(tradeId, 'SAME_CARD_BOTH_SIDES', diag);
   }
 
-  // ── 1. S5c-D7a: force once-load both participants (player + PTI) ───────────
   let me = '';
   try {
     const session = getSession();
@@ -277,6 +406,89 @@ export async function executeDirectTrade(trade) {
     }
   } catch { /* ignore */ }
 
+  const processingBy = me || resolvedOffering;
+  const claimId = _newClaimId(processingBy);
+  if (diag) {
+    diag.claimId = claimId;
+  }
+
+  // ── 1. Server claim: awaiting_offerer_confirmation → processing ────────────
+  const claimNow = Date.now();
+  const claim = await db.claimDirectTradeIfAwaiting(tradeId, {
+    processingBy,
+    claimId,
+    now: claimNow,
+  });
+
+  if (!claim.ok) {
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimFailed', { error: claim.error || 'WRITE_FAILED' });
+    }
+    return {
+      success: false,
+      reason: 'WRITE_FAILED',
+      error: claim.error || 'Could not claim trade',
+    };
+  }
+  if (!claim.claimed) {
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimLost', {
+        reason: claim.reason || 'STALE_TRADE_STATE',
+        currentStatus: claim.trade?.status ?? null,
+      });
+    }
+    return {
+      success: false,
+      reason: 'STALE_TRADE_STATE',
+      stale: true,
+      currentStatus: claim.trade?.status ?? null,
+    };
+  }
+
+  if (diag) {
+    diag.claimWon = true;
+    diag.mark('claimWon', {
+      claimId,
+      processingBy,
+      sameTradeClaimWinnerProof: {
+        tradeId,
+        claimId,
+        processingBy,
+        status: 'processing',
+      },
+    });
+  }
+
+  const claimedTrade = claim.trade || db.get(`trades/direct/${tradeId}`);
+
+  // ── 1b. PTI leaves stay; update status → processing ────────────────────────
+  const transitionPaths = directClaimIndexTransitionPaths({
+    ...claimedTrade,
+    id: claimedTrade?.id || tradeId,
+    status: 'processing',
+  });
+  if (Object.keys(transitionPaths).length === 0) {
+    console.warn(`[TradeIndex] Empty claim index transition for direct ${tradeId}; releasing claim.`);
+    return await releaseAfterTransient(tradeId, claimId, 'WRITE_FAILED', diag);
+  }
+  const transitionAck = await db.updateAcknowledged(transitionPaths);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-claim-index-transition',
+    ops: 1,
+    ok: transitionAck.ok,
+    username: resolvedOffering,
+  });
+  if (!transitionAck.ok) {
+    console.warn(
+      `[TradeIndex] Post-claim index transition failed for direct ${tradeId}; releasing claim.`,
+      transitionAck.error,
+    );
+    return await releaseAfterTransient(tradeId, claimId, 'WRITE_FAILED', diag);
+  }
+
+  // ── 2. Force-load both participants (player + PTI) after claim ─────────────
   if (diag) {
     diag.mark('forcePlayerLoadsStarted', {
       offeringPlayerId: resolvedOffering,
@@ -286,23 +498,21 @@ export async function executeDirectTrade(trade) {
 
   const offeringCtx = await loadTradingCounterpartyContext(resolvedOffering, { force: true });
   if (!offeringCtx.ok) {
-    if (diag) {
-      diag.mark('exitBeforeInventoryCommit', {
-        reason: offeringCtx.reason || 'COUNTERPARTY_LOAD_FAILED',
-        inventoryCommitAttempted: false,
-      });
-    }
-    return { success: false, reason: offeringCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+    return await releaseAfterTransient(
+      tradeId,
+      claimId,
+      offeringCtx.reason || 'COUNTERPARTY_LOAD_FAILED',
+      diag,
+    );
   }
   const targetCtx = await loadTradingCounterpartyContext(resolvedTarget, { force: true });
   if (!targetCtx.ok) {
-    if (diag) {
-      diag.mark('exitBeforeInventoryCommit', {
-        reason: targetCtx.reason || 'COUNTERPARTY_LOAD_FAILED',
-        inventoryCommitAttempted: false,
-      });
-    }
-    return { success: false, reason: targetCtx.reason || 'COUNTERPARTY_LOAD_FAILED' };
+    return await releaseAfterTransient(
+      tradeId,
+      claimId,
+      targetCtx.reason || 'COUNTERPARTY_LOAD_FAILED',
+      diag,
+    );
   }
 
   const freshOffering = offeringCtx.player;
@@ -316,25 +526,12 @@ export async function executeDirectTrade(trade) {
   }
 
   if (!freshOffering) {
-    if (diag) {
-      diag.mark('exitBeforeInventoryCommit', {
-        reason: 'OFFERING_PLAYER_NOT_FOUND',
-        inventoryCommitAttempted: false,
-      });
-    }
-    return { success: false, reason: 'OFFERING_PLAYER_NOT_FOUND' };
+    return await releaseAfterTransient(tradeId, claimId, 'OFFERING_PLAYER_NOT_FOUND', diag);
   }
   if (!freshTarget) {
-    if (diag) {
-      diag.mark('exitBeforeInventoryCommit', {
-        reason: 'TARGET_PLAYER_NOT_FOUND',
-        inventoryCommitAttempted: false,
-      });
-    }
-    return { success: false, reason: 'TARGET_PLAYER_NOT_FOUND' };
+    return await releaseAfterTransient(tradeId, claimId, 'TARGET_PLAYER_NOT_FOUND', diag);
   }
 
-  // Exact quantities the planner will receive (force-load return objects).
   if (diag) {
     diag.mark('forceLoadedSourceQuantities', buildLoadedSourceDiag({
       tradeId,
@@ -347,13 +544,11 @@ export async function executeDirectTrade(trade) {
     }));
   }
 
-  // ── 2. Reload all card definitions ────────────────────────────────────────
+  // ── 3. Card defs + T-1 validation (exclude this trade from reservation math) ─
   const allCards = db.get('cards') || {};
-
-  // ── 3. Rerun T-1 validation with fresh scoped data ───────────────────────
   const players = {
     [resolvedOffering]: _normalizePlayerForValidation(freshOffering),
-    [resolvedTarget]:   _normalizePlayerForValidation(freshTarget),
+    [resolvedTarget]: _normalizePlayerForValidation(freshTarget),
   };
 
   const excludeIds = tradeId ? [tradeId] : [];
@@ -387,30 +582,31 @@ export async function executeDirectTrade(trade) {
     excludeDirectTradeId: tradeId,
     offeringAvailabilitySnapshot: offeringSnapshot,
     targetAvailabilitySnapshot: targetSnapshot,
+    skipHiddenTargetCheck: true,
   });
 
   if (!validation.valid) {
     if (isDetailedLogging()) {
-      console.log(`[Trading][DETAIL] Trade ${tradeId} failed validation: ${validation.reason} (${resolvedOffering} → ${resolvedTarget}, offered=${resolvedOfferedId}, requested=${resolvedRequestedId})`);
+      console.log(`[Trading][DETAIL] Trade ${tradeId} failed validation after claim: ${validation.reason} (${resolvedOffering} → ${resolvedTarget}, offered=${resolvedOfferedId}, requested=${resolvedRequestedId})`);
     }
-    return await failTradeIfActionable(tradeId, validation.reason, diag);
+    return await failTradeIfProcessingOwned(tradeId, claimId, validation.reason, diag);
   }
 
-  // ── 4. Check cooldowns for BOTH players ───────────────────────────────────
+  // ── 4. Cooldowns (permanent fail — same as pre-Gate-B behavior) ────────────
   const offeringCooldown = getDirectTradeCooldown(resolvedOffering);
   if (offeringCooldown.onCooldown) {
-    return await failTradeIfActionable(tradeId, 'OFFERING_PLAYER_ON_COOLDOWN', diag);
+    return await failTradeIfProcessingOwned(tradeId, claimId, 'OFFERING_PLAYER_ON_COOLDOWN', diag);
   }
   const targetCooldown = getDirectTradeCooldown(resolvedTarget);
   if (targetCooldown.onCooldown) {
-    return await failTradeIfActionable(tradeId, 'TARGET_PLAYER_ON_COOLDOWN', diag);
+    return await failTradeIfProcessingOwned(tradeId, claimId, 'TARGET_PLAYER_ON_COOLDOWN', diag);
   }
 
-  // ── 5. One shared timestamp for completedAt + both lastDirectTradeAt ─────
+  // ── 5. Relative plan (no absolute inventory quantities) ────────────────────
   const now = Date.now();
-
   const plan = buildDirectTradeAcceptPlan({
     tradeId,
+    claimId,
     offeringPlayerId: resolvedOffering,
     targetPlayerId: resolvedTarget,
     offeredCardId: resolvedOfferedId,
@@ -421,24 +617,37 @@ export async function executeDirectTrade(trade) {
   });
 
   if (!plan.ok) {
-    return await failTradeIfActionable(tradeId, plan.reason || 'INVALID_TRADE_PLAN', diag);
+    return await failTradeIfProcessingOwned(tradeId, claimId, plan.reason || 'INVALID_TRADE_PLAN', diag);
   }
 
   if (diag) {
     diag.mark('planBuilt', {
       inventoryDiag: plan.inventoryDiag || null,
-      note: 'No extra pre-commit server refresh — planner used force-load objects above',
+      giveLeafPaths: plan.giveLeafPaths || null,
+      note: 'Relative increments; no absolute planned-after inventory authority',
     });
   }
 
-  // ── 6. Lock + revalidate + acknowledged multi-path commit ─────────────────
-  const commit = await commitDirectTradeAcceptPlan(tradeId, plan, { diag });
+  // ── 6. Lock (UX) + terminal updateAcknowledged under owned claim ───────────
+  const commit = await commitDirectTradeAcceptPlan(tradeId, claimId, plan, {
+    diag,
+    classifyPermissionDenied: async () => classifyPermissionDeniedForDirect({
+      tradeId,
+      offeringPlayerId: resolvedOffering,
+      targetPlayerId: resolvedTarget,
+      offeredCardId: resolvedOfferedId,
+      requestedCardId: resolvedRequestedId,
+    }),
+  });
+
   if (!commit.success) {
     if (diag) {
       diag.mark('commitFailed', {
         reason: commit.reason || 'WRITE_FAILED',
         inventoryCommitAttempted: commit.inventoryCommitAttempted === true,
         currentStatus: commit.currentStatus ?? null,
+        uncertain: commit.uncertain === true,
+        released: commit.released === true,
       });
     }
     if (commit.reason === 'STALE_TRADE_STATE') {
@@ -449,6 +658,15 @@ export async function executeDirectTrade(trade) {
         currentStatus: commit.currentStatus,
       };
     }
+    if (commit.uncertain || commit.reason === 'WRITE_UNCERTAIN') {
+      return {
+        success: false,
+        reason: 'WRITE_UNCERTAIN',
+        uncertain: true,
+        error: commit.error,
+        currentStatus: commit.currentStatus,
+      };
+    }
     return {
       success: false,
       reason: commit.reason || 'WRITE_FAILED',
@@ -456,7 +674,24 @@ export async function executeDirectTrade(trade) {
     };
   }
 
-  // Observation-only: do not alter/retry based on this read.
+  // ── 7. Zero-leaf cleanup (give cards only; never undoes accept) ────────────
+  await cleanupZeroGiveLeavesAfterAccept(commit.giveLeafPaths || plan.giveLeafPaths || [], diag);
+
+  // Optional UI convergence: refresh transformed inventory paths without synthesizing deltas
+  if (Array.isArray(commit.transformedPaths) && commit.transformedPaths.length > 0
+    && typeof db.loadPathOnce === 'function') {
+    const playerRoots = new Set();
+    for (const p of commit.transformedPaths) {
+      const m = String(p).match(/^players\/([^/]+)\//);
+      if (m) playerRoots.add(`players/${m[1]}`);
+    }
+    for (const root of playerRoots) {
+      try {
+        await db.loadPathOnce(root, { force: true });
+      } catch { /* ignore — accept already committed */ }
+    }
+  }
+
   if (diag && plan.inventoryDiag) {
     await _diagPostAckVerify(diag, {
       offeringPlayerId: resolvedOffering,
@@ -477,12 +712,13 @@ export async function executeDirectTrade(trade) {
     diag.mark('executeCompleted', {
       success: true,
       inventoryCommitAttempted: true,
+      claimWon: true,
+      claimId,
     });
   }
 
   return {
     success: true,
-    // Only offerer's unlocks for the confirming client's toasts
     notifiedOfferer: commit.notifiedOfferer || [],
     writeCount: 1,
   };

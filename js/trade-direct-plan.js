@@ -1,18 +1,17 @@
 /**
  * trade-direct-plan.js
  *
- * One-write acknowledged commit for direct-trade final acceptance.
- * Transitions awaiting_offerer_confirmation → accepted with both players'
- * inventory/cooldowns/stats/achievements in a single updateAcknowledged.
+ * Hybrid C+ Gate B — direct-trade final acceptance under a processing claim:
+ *   1) claimDirectTradeIfAwaiting (awaiting_offerer_confirmation → processing)
+ *   2) updateAcknowledged terminal — inventory ServerValue.increment(±1) + accepted
  *
- * Processing is not written as a separate network step — atomic multi-path
- * replaces the old fragmented-write guard (see ARCHITECTURE.md).
+ * No absolute inventory card quantities in the terminal payload.
+ * navigator.locks is UX/local only; the RTDB claim is the correctness boundary.
  *
  * Trade stats parity: tradesCompleted +1 both; uniqueCardsOwned / maxCardAuraTier
- * recomputed, written only when changed; NO uniqueCardsDiscovered / cardsCollected
- * (notifyCardInventoryChanged semantics).
+ * from logical ±1 inventory image (not written as absolute card leaves).
  *
- * Listings use a separate two-write claim+fulfill path (trade-listing-plan.js).
+ * Listings remain on the separate absolute claim+fulfill path (Gate C later).
  */
 
 import * as db from './database.js';
@@ -24,12 +23,24 @@ import {
 } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
-import { directIndexRemovalsForTrade } from './trade-index.js';
+import {
+  directIndexRemovalsForTrade,
+  directReleaseIndexRestorePaths,
+} from './trade-index.js';
 
 /** Dev-only localStorage gate. Absent/false → identical production behavior. */
 export const DIRECT_INVENTORY_DIAG_LS_KEY = 'qc-direct-inventory-diag';
 
 let _diagAttemptSeq = 0;
+
+/**
+ * Firebase RTDB relative increment wire form (survives JSON clone).
+ * @param {number} delta
+ * @returns {{ '.sv': { increment: number } }}
+ */
+export function serverIncrement(delta) {
+  return { '.sv': { increment: Number(delta) } };
+}
 
 /**
  * @returns {boolean}
@@ -70,6 +81,10 @@ export function createDirectInventoryDiagAttempt(tradeId) {
       && navigator.locks
       && typeof navigator.locks.request === 'function'),
     inventoryCommitAttempted: false,
+    claimWon: null,
+    claimId: null,
+    recoveryOutcome: null,
+    rejectionClassification: null,
     log(phase, payload = {}) {
       const entry = {
         tag: '[DirectInventoryDiag]',
@@ -79,6 +94,10 @@ export function createDirectInventoryDiagAttempt(tradeId) {
         ts: Date.now(),
         locksAvailable: attempt.locksAvailable,
         inventoryCommitAttempted: attempt.inventoryCommitAttempted,
+        claimWon: attempt.claimWon,
+        claimId: attempt.claimId,
+        recoveryOutcome: attempt.recoveryOutcome,
+        rejectionClassification: attempt.rejectionClassification,
         ...payload,
       };
       marks.push({ phase, ts: entry.ts });
@@ -139,7 +158,7 @@ export function buildLoadedSourceDiag({
 }
 
 /**
- * Planner before/after + exact inventory leaf paths from the same inputs used to build the plan.
+ * Planner diag for relative increments — no authoritative “planned absolute after”.
  * @returns {object|null}
  */
 export function buildPlanInventoryDiag({
@@ -149,19 +168,12 @@ export function buildPlanInventoryDiag({
   requestedCardId,
   offeringPlayer,
   targetPlayer,
-  offeringInvAfter,
-  targetInvAfter,
   updates,
 }) {
   const offerBeforeGive = _invQty(offeringPlayer?.inventory, offeredCardId);
   const offerBeforeRecv = _invQty(offeringPlayer?.inventory, requestedCardId);
   const targetBeforeGive = _invQty(targetPlayer?.inventory, requestedCardId);
   const targetBeforeRecv = _invQty(targetPlayer?.inventory, offeredCardId);
-
-  const offerAfterGive = _invQty(offeringInvAfter, offeredCardId);
-  const offerAfterRecv = _invQty(offeringInvAfter, requestedCardId);
-  const targetAfterGive = _invQty(targetInvAfter, requestedCardId);
-  const targetAfterRecv = _invQty(targetInvAfter, offeredCardId);
 
   const offerGivePath = `players/${offeringPlayerId}/inventory/${offeredCardId}`;
   const offerRecvPath = `players/${offeringPlayerId}/inventory/${requestedCardId}`;
@@ -183,41 +195,45 @@ export function buildPlanInventoryDiag({
       : undefined,
   };
 
+  const incrementDeltas = {
+    [offerGivePath]: -1,
+    [offerRecvPath]: 1,
+    [targetGivePath]: -1,
+    [targetRecvPath]: 1,
+  };
+
   return {
     offeredCardId,
     requestedCardId,
+    model: 'relative-increment',
+    incrementDeltas,
     offerer: {
       username: offeringPlayerId,
       giveCardId: offeredCardId,
       receiveCardId: requestedCardId,
       giveBefore: offerBeforeGive,
-      givePlannedAfter: offerAfterGive,
       receiveBefore: offerBeforeRecv,
-      receivePlannedAfter: offerAfterRecv,
       expectedGiveDelta: -1,
       expectedReceiveDelta: 1,
       involvedTotalBefore: offerBeforeGive + offerBeforeRecv,
-      involvedTotalPlannedAfter: offerAfterGive + offerAfterRecv,
     },
     target: {
       username: targetPlayerId,
       giveCardId: requestedCardId,
       receiveCardId: offeredCardId,
       giveBefore: targetBeforeGive,
-      givePlannedAfter: targetAfterGive,
       receiveBefore: targetBeforeRecv,
-      receivePlannedAfter: targetAfterRecv,
       expectedGiveDelta: -1,
       expectedReceiveDelta: 1,
       involvedTotalBefore: targetBeforeGive + targetBeforeRecv,
-      involvedTotalPlannedAfter: targetAfterGive + targetAfterRecv,
     },
     inventoryPaths,
   };
 }
 
 /**
- * Compare force-loaded before, planned after, and post-ack server quantities (four cards only).
+ * Compare force-loaded before vs post-ack server quantities (four cards).
+ * Uses expected deltas — does not assume authoritative planned absolute after.
  * Diagnostic only — never throws / never mutates.
  */
 export function evaluateDirectInventoryDiagInvariants({ planDiag, serverQtys }) {
@@ -231,11 +247,11 @@ export function evaluateDirectInventoryDiagInvariants({ planDiag, serverQtys }) 
     const s = serverQtys[side];
     if (!p || !s) continue;
 
-    const giveDeltaLoadedToPlanned = p.givePlannedAfter - p.giveBefore;
-    const receiveDeltaLoadedToPlanned = p.receivePlannedAfter - p.receiveBefore;
     const serverGive = s.giveQty;
     const serverRecv = s.receiveQty;
     const involvedTotalServer = serverGive + serverRecv;
+    const observedGiveDelta = serverGive - p.giveBefore;
+    const observedReceiveDelta = serverRecv - p.receiveBefore;
 
     const participant = {
       side,
@@ -243,36 +259,41 @@ export function evaluateDirectInventoryDiagInvariants({ planDiag, serverQtys }) 
       giveCardId: p.giveCardId,
       receiveCardId: p.receiveCardId,
       loadedBefore: { give: p.giveBefore, receive: p.receiveBefore, total: p.involvedTotalBefore },
-      plannedAfter: {
-        give: p.givePlannedAfter,
-        receive: p.receivePlannedAfter,
-        total: p.involvedTotalPlannedAfter,
-      },
+      expectedDeltas: { give: p.expectedGiveDelta, receive: p.expectedReceiveDelta },
       serverAfterAck: { give: serverGive, receive: serverRecv, total: involvedTotalServer },
-      giveDeltaLoadedToPlanned,
-      receiveDeltaLoadedToPlanned,
-      plannedGiveMatchesExpected: giveDeltaLoadedToPlanned === -1,
-      plannedReceiveMatchesExpected: receiveDeltaLoadedToPlanned === 1,
-      plannedTotalConserved: p.involvedTotalBefore === p.involvedTotalPlannedAfter,
-      serverMatchesPlannedGive: serverGive === p.givePlannedAfter,
-      serverMatchesPlannedReceive: serverRecv === p.receivePlannedAfter,
+      observedGiveDelta,
+      observedReceiveDelta,
+      expectedGiveDeltaMatches: p.expectedGiveDelta === -1,
+      expectedReceiveDeltaMatches: p.expectedReceiveDelta === 1,
+      observedGiveDeltaMatchesExpected: observedGiveDelta === p.expectedGiveDelta,
+      observedReceiveDeltaMatchesExpected: observedReceiveDelta === p.expectedReceiveDelta,
       serverTotalConservedVsLoaded: involvedTotalServer === p.involvedTotalBefore,
     };
 
-    if (!participant.plannedGiveMatchesExpected || !participant.plannedReceiveMatchesExpected) {
+    if (!participant.expectedGiveDeltaMatches || !participant.expectedReceiveDeltaMatches) {
       flags.push('PLANNER_DELTA_UNEXPECTED');
     }
-    if (!participant.plannedTotalConserved) {
-      flags.push('PLANNER_INVOLVED_TOTAL_NOT_CONSERVED');
-    }
-    if (!participant.serverMatchesPlannedGive || !participant.serverMatchesPlannedReceive) {
-      flags.push('POST_ACK_SERVER_NE_PLANNED');
+    if (!participant.observedGiveDeltaMatchesExpected || !participant.observedReceiveDeltaMatchesExpected) {
+      flags.push('POST_ACK_DELTA_NE_EXPECTED');
     }
     if (!participant.serverTotalConservedVsLoaded) {
       flags.push('DIRECT_INVENTORY_TOTAL_DRIFT');
     }
 
     participants.push(participant);
+  }
+
+  // Same-rarity conservation across both participants' involved totals
+  if (participants.length === 2) {
+    const t0 = participants[0].loadedBefore.total;
+    const t1 = participants[1].loadedBefore.total;
+    const s0 = participants[0].serverAfterAck.total;
+    const s1 = participants[1].serverAfterAck.total;
+    if (t0 === t1 && s0 === s1 && s0 === t0) {
+      /* conserved */
+    } else if (t0 + t1 !== s0 + s1) {
+      flags.push('CROSS_PLAYER_INVOLVED_TOTAL_NOT_CONSERVED');
+    }
   }
 
   return { flags: [...new Set(flags)], participants };
@@ -294,21 +315,30 @@ export function assertNoOverlappingUpdatePaths(updates) {
 }
 
 /**
- * Append inventory leaf updates for one player after a one-for-one swap.
+ * Four relative inventory leaf updates (never absolute quantities).
  * @param {Object} updates
  * @param {string} username
- * @param {Object} nextInv
- * @param {string} giveCardId - card leaving inventory
- * @param {string} receiveCardId - card entering inventory
+ * @param {string} giveCardId
+ * @param {string} receiveCardId
  */
-function appendInventorySwapPaths(updates, username, nextInv, giveCardId, receiveCardId) {
-  const giveQty = nextInv[giveCardId];
-  updates[`players/${username}/inventory/${giveCardId}`] =
-    typeof giveQty === 'number' && giveQty > 0 ? giveQty : null;
+function appendInventoryIncrementSwapPaths(updates, username, giveCardId, receiveCardId) {
+  updates[`players/${username}/inventory/${giveCardId}`] = serverIncrement(-1);
+  updates[`players/${username}/inventory/${receiveCardId}`] = serverIncrement(1);
+}
 
-  const recvQty = nextInv[receiveCardId];
-  updates[`players/${username}/inventory/${receiveCardId}`] =
-    typeof recvQty === 'number' && recvQty > 0 ? recvQty : null;
+/**
+ * Logical ±1 inventory image for unique/aura stats only (not written as card leaves).
+ * @param {object} inventory
+ * @param {string} giveCardId
+ * @param {string} receiveCardId
+ * @returns {object}
+ */
+function logicalInventoryAfterSwap(inventory, giveCardId, receiveCardId) {
+  const next = { ...(inventory || {}) };
+  next[giveCardId] = (next[giveCardId] || 0) - 1;
+  if (next[giveCardId] <= 0) delete next[giveCardId];
+  next[receiveCardId] = (next[receiveCardId] || 0) + 1;
+  return next;
 }
 
 /**
@@ -331,7 +361,6 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
   if (nextUnique !== prevUnique) {
     updates[`players/${username}/stats/uniqueCardsOwned`] = nextUnique;
   }
-  // Overlay for achievement eval even when unchanged
   plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED] = nextUnique;
   achStatKeys.push(STAT_KEYS.UNIQUE_CARDS_OWNED);
 
@@ -364,22 +393,30 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
 }
 
 /**
- * Build absolute multi-path updates for a validated direct-trade accept.
- * Caller must have already validated trade eligibility and cooldowns.
+ * True if any inventory card path in updates holds an absolute number/null (not .sv).
+ * @param {Object} updates
+ * @returns {boolean}
+ */
+export function terminalPayloadHasAbsoluteInventoryQty(updates) {
+  for (const [path, value] of Object.entries(updates || {})) {
+    if (!/\/inventory\//.test(path)) continue;
+    if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '.sv')) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Build relative multi-path updates for a claimed direct-trade accept.
+ * Caller must have claimed (processing) and validated eligibility + cooldowns.
  *
- * @param {Object} args
- * @param {string} args.tradeId
- * @param {string} args.offeringPlayerId
- * @param {string} args.targetPlayerId
- * @param {string} args.offeredCardId
- * @param {string} args.requestedCardId
- * @param {object} args.offeringPlayer - raw player record
- * @param {object} args.targetPlayer
- * @param {number} args.now - single timestamp for completedAt + both lastDirectTradeAt
- * @returns {{ ok: boolean, reason?: string, updates?: Object, notifiedOfferer?: string[], notifiedTarget?: string[] }}
+ * @returns {{ ok: boolean, reason?: string, updates?: Object, giveLeafPaths?: string[], notifiedOfferer?: string[], notifiedTarget?: string[] }}
  */
 export function buildDirectTradeAcceptPlan({
   tradeId,
+  claimId,
   offeringPlayerId,
   targetPlayerId,
   offeredCardId,
@@ -388,7 +425,7 @@ export function buildDirectTradeAcceptPlan({
   targetPlayer,
   now,
 } = {}) {
-  if (!tradeId || !offeringPlayerId || !targetPlayerId || !offeredCardId || !requestedCardId) {
+  if (!tradeId || !claimId || !offeringPlayerId || !targetPlayerId || !offeredCardId || !requestedCardId) {
     return { ok: false, reason: 'INVALID_TRADE_PLAN' };
   }
   if (offeredCardId === requestedCardId) {
@@ -398,18 +435,7 @@ export function buildDirectTradeAcceptPlan({
     return { ok: false, reason: 'INVALID_TIMESTAMP' };
   }
 
-  const offeringInv = { ...(offeringPlayer?.inventory || {}) };
-  const targetInv = { ...(targetPlayer?.inventory || {}) };
-
-  offeringInv[offeredCardId] = (offeringInv[offeredCardId] || 0) - 1;
-  if (offeringInv[offeredCardId] <= 0) delete offeringInv[offeredCardId];
-  offeringInv[requestedCardId] = (offeringInv[requestedCardId] || 0) + 1;
-
-  targetInv[requestedCardId] = (targetInv[requestedCardId] || 0) - 1;
-  if (targetInv[requestedCardId] <= 0) delete targetInv[requestedCardId];
-  targetInv[offeredCardId] = (targetInv[offeredCardId] || 0) + 1;
-
-  // Guard against negative quantities from stale cache
+  // Soft precheck only — server inventory >=0 validate is the hard oversell guard.
   if ((offeringPlayer?.inventory?.[offeredCardId] || 0) < 1) {
     return { ok: false, reason: 'OFFERING_CARD_NOT_AVAILABLE' };
   }
@@ -417,9 +443,23 @@ export function buildDirectTradeAcceptPlan({
     return { ok: false, reason: 'REQUESTED_CARD_NOT_AVAILABLE' };
   }
 
+  const offeringLogical = logicalInventoryAfterSwap(
+    offeringPlayer?.inventory,
+    offeredCardId,
+    requestedCardId,
+  );
+  const targetLogical = logicalInventoryAfterSwap(
+    targetPlayer?.inventory,
+    requestedCardId,
+    offeredCardId,
+  );
+
   const updates = {
     [`trades/direct/${tradeId}/status`]: 'accepted',
     [`trades/direct/${tradeId}/completedAt`]: now,
+    [`trades/direct/${tradeId}/processingBy`]: null,
+    [`trades/direct/${tradeId}/processingAt`]: null,
+    [`trades/direct/${tradeId}/claimId`]: null,
     [`players/${offeringPlayerId}/lastDirectTradeAt`]: now,
     [`players/${targetPlayerId}/lastDirectTradeAt`]: now,
     [`players/${offeringPlayerId}/progression/firstTrade`]: true,
@@ -431,18 +471,28 @@ export function buildDirectTradeAcceptPlan({
     }),
   };
 
-  appendInventorySwapPaths(updates, offeringPlayerId, offeringInv, offeredCardId, requestedCardId);
-  appendInventorySwapPaths(updates, targetPlayerId, targetInv, requestedCardId, offeredCardId);
+  appendInventoryIncrementSwapPaths(updates, offeringPlayerId, offeredCardId, requestedCardId);
+  appendInventoryIncrementSwapPaths(updates, targetPlayerId, requestedCardId, offeredCardId);
 
-  const offererSide = planPlayerPostTradeSideEffects(offeringPlayerId, offeringInv, now);
-  const targetSide = planPlayerPostTradeSideEffects(targetPlayerId, targetInv, now);
+  const offererSide = planPlayerPostTradeSideEffects(offeringPlayerId, offeringLogical, now);
+  const targetSide = planPlayerPostTradeSideEffects(targetPlayerId, targetLogical, now);
   Object.assign(updates, offererSide.updates, targetSide.updates);
 
   assertNoOverlappingUpdatePaths(updates);
 
+  if (terminalPayloadHasAbsoluteInventoryQty(updates)) {
+    return { ok: false, reason: 'INVALID_TRADE_PLAN' };
+  }
+
+  const giveLeafPaths = [
+    `players/${offeringPlayerId}/inventory/${offeredCardId}`,
+    `players/${targetPlayerId}/inventory/${requestedCardId}`,
+  ];
+
   const result = {
     ok: true,
     updates,
+    giveLeafPaths,
     notifiedOfferer: offererSide.notified,
     notifiedTarget: targetSide.notified,
     unlockedOfferer: offererSide.unlocked,
@@ -450,7 +500,6 @@ export function buildDirectTradeAcceptPlan({
     writeCount: 1,
   };
 
-  // Dev-only attach — never affects commit payload
   if (isDirectInventoryDiagEnabled()) {
     result.inventoryDiag = buildPlanInventoryDiag({
       offeringPlayerId,
@@ -459,8 +508,6 @@ export function buildDirectTradeAcceptPlan({
       requestedCardId,
       offeringPlayer,
       targetPlayer,
-      offeringInvAfter: offeringInv,
-      targetInvAfter: targetInv,
       updates,
     });
   }
@@ -469,9 +516,7 @@ export function buildDirectTradeAcceptPlan({
 }
 
 /**
- * Mark trade failed only while still awaiting offerer confirmation.
- * Never clobber accepted / declined / cancelled / failed / processing.
- * Removes both participant index leaves in the same acknowledged write.
+ * Mark trade failed only while still awaiting offerer confirmation (pre-claim).
  * @returns {Promise<{ marked: boolean, reason?: string, currentStatus?: string, error?: string }>}
  */
 export async function markDirectTradeFailedIfAwaiting(tradeId, failureReason, now = Date.now()) {
@@ -511,6 +556,134 @@ export async function markDirectTradeFailedIfAwaiting(tradeId, failureReason, no
   return { marked: true, currentStatus: 'failed' };
 }
 
+/**
+ * Mark failed only while this claim still owns processing. Clears claim fields + removes indexes.
+ * @returns {Promise<{ marked: boolean, reason?: string, currentStatus?: string, error?: string }>}
+ */
+export async function markDirectTradeFailedIfProcessingOwned(
+  tradeId,
+  claimId,
+  failureReason,
+  now = Date.now(),
+) {
+  const trade = db.get(`trades/direct/${tradeId}`);
+  if (!trade) {
+    return { marked: false, reason: 'TRADE_NOT_FOUND', currentStatus: null };
+  }
+  if (trade.status !== 'processing' || trade.claimId !== claimId) {
+    return {
+      marked: false,
+      reason: 'STALE_TRADE_STATE',
+      currentStatus: trade.status,
+    };
+  }
+  const id = trade.id || tradeId;
+  const updates = {
+    [`trades/direct/${id}/status`]: 'failed',
+    [`trades/direct/${id}/completedAt`]: now,
+    [`trades/direct/${id}/failureReason`]: failureReason,
+    [`trades/direct/${id}/processingBy`]: null,
+    [`trades/direct/${id}/processingAt`]: null,
+    [`trades/direct/${id}/claimId`]: null,
+    ...directIndexRemovalsForTrade({ ...trade, id }),
+  };
+  const ack = await db.updateAcknowledged(updates);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-index-dual-write',
+    ops: 1,
+    ok: ack.ok,
+    username: trade.offeringPlayerId,
+  });
+  if (!ack.ok) {
+    return {
+      marked: false,
+      reason: 'WRITE_FAILED',
+      currentStatus: trade.status,
+      error: ack.error,
+    };
+  }
+  return { marked: true, currentStatus: 'failed' };
+}
+
+/**
+ * Release owned processing claim and restore both PTI leaves to awaiting_offerer_confirmation.
+ * @returns {Promise<{ ok: boolean, released?: boolean, indexRestored?: boolean, error?: string }>}
+ */
+export async function releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason) {
+  const release = await db.releaseDirectTradeClaimIfOwned(tradeId, claimId);
+  if (!release.ok) {
+    console.warn(`[Trading] Failed to release claim ${claimId} on ${tradeId}:`, release.error);
+    return { ok: false, released: false, indexRestored: false, error: release.error };
+  }
+  if (!release.released) {
+    return { ok: true, released: false, indexRestored: false };
+  }
+  const restored = release.trade || db.get(`trades/direct/${tradeId}`);
+  if (!restored) {
+    return { ok: true, released: true, indexRestored: false, error: 'Trade missing after release' };
+  }
+  const restorePaths = directReleaseIndexRestorePaths({
+    ...restored,
+    id: restored.id || tradeId,
+    status: 'awaiting_offerer_confirmation',
+  });
+  if (Object.keys(restorePaths).length === 0) {
+    return { ok: true, released: true, indexRestored: true };
+  }
+  const ack = await db.updateAcknowledged(restorePaths);
+  metrics.recordTradeIndexLifecycle({
+    tag: 'direct-release-index-restore',
+    ops: 1,
+    ok: ack.ok,
+    username: restored.offeringPlayerId,
+  });
+  if (!ack.ok) {
+    console.warn(
+      `[TradeIndex] Claim released but index restore failed for trade ${tradeId} (${reason}). ` +
+        'Rebuild Trade Indexes. Trade is awaiting_offerer_confirmation canonical.',
+      ack.error,
+    );
+    return { ok: false, released: true, indexRestored: false, error: ack.error };
+  }
+  return { ok: true, released: true, indexRestored: true };
+}
+
+/**
+ * Idempotent post-accept cleanup: remove give leaves only if authoritative qty <= 0.
+ * Never rolls back or replays the accepted trade.
+ * @param {string[]} giveLeafPaths
+ * @param {object|null} diag
+ */
+export async function cleanupZeroGiveLeavesAfterAccept(giveLeafPaths, diag = null) {
+  const paths = Array.isArray(giveLeafPaths) ? giveLeafPaths : [];
+  const results = [];
+  for (const leafPath of paths) {
+    try {
+      const r = await db.clearInventoryLeafIfNonPositive(leafPath);
+      results.push({ path: leafPath, ...r });
+      if (diag) {
+        diag.mark('zeroLeafCleanup', {
+          path: leafPath,
+          ok: r.ok === true,
+          removed: r.removed === true,
+          error: r.error || null,
+        });
+      }
+    } catch (e) {
+      results.push({ path: leafPath, ok: false, removed: false, error: e?.message || String(e) });
+      if (diag) {
+        diag.mark('zeroLeafCleanup', {
+          path: leafPath,
+          ok: false,
+          removed: false,
+          error: e?.message || String(e),
+        });
+      }
+    }
+  }
+  return results;
+}
+
 async function withDirectTradeLock(tradeId, fn) {
   const lockName = `qc-direct-trade:${tradeId}`;
   if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
@@ -519,14 +692,103 @@ async function withDirectTradeLock(tradeId, fn) {
   return fn();
 }
 
+function _isPermissionDenied(err) {
+  return /PERMISSION_DENIED/i.test(String(err || ''));
+}
+
 /**
- * Commit a pre-built accept plan via updateAcknowledged.
- * @param {string} tradeId
- * @param {Object} plan - from buildDirectTradeAcceptPlan
- * @param {{ diag?: object|null }} [options] - optional inventory diagnostics (no behavior change when absent)
+ * Apply only literal (non-.sv) paths from a plan after recovered accepted ack.
+ * Never writes raw increment sentinels into local cache.
+ * @param {Object} updates
  */
-export async function commitDirectTradeAcceptPlan(tradeId, plan, options = {}) {
+function applyLiteralPlanPathsLocally(updates) {
+  for (const [path, value] of Object.entries(updates || {})) {
+    if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '.sv')) {
+      continue;
+    }
+    db.applyLocalOnly(path, value);
+  }
+}
+
+/**
+ * Reread canonical trade after uncertain terminal ack. Never replays increments.
+ * @returns {Promise<{ outcome: 'success'|'released'|'uncertain'|'failed_classified', trade?: object|null, reason?: string, error?: string }>}
+ */
+export async function recoverDirectAcceptAfterAckError(tradeId, claimId, ackError, classifyFn) {
+  const remote = await db.getAcknowledged(`trades/direct/${tradeId}`);
+  if (!remote.ok) {
+    return {
+      outcome: 'uncertain',
+      trade: null,
+      error: remote.error || 'Could not re-read trade after write failure',
+    };
+  }
+
+  const trade = remote.value;
+  if (trade && trade.status === 'accepted') {
+    return { outcome: 'success', trade };
+  }
+
+  if (trade && trade.status === 'processing' && trade.claimId === claimId) {
+    let classifiedReason = null;
+    if (typeof classifyFn === 'function') {
+      try {
+        classifiedReason = await classifyFn(ackError, trade);
+      } catch { /* ignore */ }
+    }
+
+    if (classifiedReason === 'INSUFFICIENT_AVAILABLE_COPIES') {
+      const marked = await markDirectTradeFailedIfProcessingOwned(
+        tradeId,
+        claimId,
+        'INSUFFICIENT_AVAILABLE_COPIES',
+      );
+      if (marked.marked) {
+        return {
+          outcome: 'failed_classified',
+          trade: db.get(`trades/direct/${tradeId}`),
+          reason: 'INSUFFICIENT_AVAILABLE_COPIES',
+        };
+      }
+      // Fall through to release attempt if fail write itself failed
+    }
+
+    const release = await releaseDirectClaimAndRestoreIndex(
+      tradeId,
+      claimId,
+      classifiedReason || 'TERMINAL_WRITE_FAILED',
+    );
+    if (release.released) {
+      return {
+        outcome: 'released',
+        trade: db.get(`trades/direct/${tradeId}`),
+        reason: classifiedReason || 'WRITE_FAILED',
+        error: ackError,
+      };
+    }
+    return {
+      outcome: 'uncertain',
+      trade,
+      reason: 'WRITE_UNCERTAIN',
+      error: release.error || ackError || 'Could not release direct claim',
+    };
+  }
+
+  return { outcome: 'uncertain', trade, reason: 'WRITE_UNCERTAIN' };
+}
+
+/**
+ * Commit a pre-built accept plan while claim owns processing.
+ * On ack failure: never replay increments; reread → accepted / release / uncertain.
+ *
+ * @param {string} tradeId
+ * @param {string} claimId
+ * @param {Object} plan
+ * @param {{ diag?: object|null, classifyPermissionDenied?: Function }} [options]
+ */
+export async function commitDirectTradeAcceptPlan(tradeId, claimId, plan, options = {}) {
   const diag = options && options.diag ? options.diag : null;
+  const classifyPermissionDenied = options.classifyPermissionDenied || null;
   const locksAvailable = !!(typeof navigator !== 'undefined'
     && navigator.locks
     && typeof navigator.locks.request === 'function');
@@ -541,15 +803,19 @@ export async function commitDirectTradeAcceptPlan(tradeId, plan, options = {}) {
       diag.mark('navigatorLockAcquired', { locksAvailable });
     }
 
-    // Revalidate status after lock (cache, not server-fresh).
     const statusCheck = db.get(`trades/direct/${tradeId}`);
     if (diag) {
       diag.mark('preCommitStatusRecheck', {
         status: statusCheck?.status ?? null,
+        claimIdMatch: statusCheck?.claimId === claimId,
         cacheOnly: true,
       });
     }
-    if (!statusCheck || statusCheck.status !== 'awaiting_offerer_confirmation') {
+    if (
+      !statusCheck
+      || statusCheck.status !== 'processing'
+      || statusCheck.claimId !== claimId
+    ) {
       return {
         success: false,
         reason: 'STALE_TRADE_STATE',
@@ -570,6 +836,7 @@ export async function commitDirectTradeAcceptPlan(tradeId, plan, options = {}) {
       diag.inventoryCommitAttempted = true;
       diag.mark('updateAcknowledgedStarted', {
         inventoryCommitAttempted: true,
+        incrementDeltas: plan.inventoryDiag?.incrementDeltas || null,
         inventoryPaths: plan.inventoryDiag?.inventoryPaths || null,
       });
     }
@@ -580,31 +847,101 @@ export async function commitDirectTradeAcceptPlan(tradeId, plan, options = {}) {
       diag.mark('updateAcknowledgedCompleted', {
         ok: ack.ok === true,
         error: ack.ok ? null : (ack.error || 'WRITE_FAILED'),
+        transformedPaths: ack.transformedPaths || [],
         inventoryCommitAttempted: true,
       });
     }
 
-    if (!ack.ok) {
+    if (ack.ok) {
+      metrics.recordTradeIndexLifecycle({
+        tag: 'direct-index-dual-write',
+        ops: 1,
+        ok: true,
+      });
       return {
-        success: false,
-        reason: 'WRITE_FAILED',
-        error: ack.error || 'Could not save trade. Check your connection and try again.',
+        success: true,
+        notifiedOfferer: plan.notifiedOfferer || [],
+        notifiedTarget: plan.notifiedTarget || [],
+        writeCount: 1,
         inventoryCommitAttempted: true,
+        giveLeafPaths: plan.giveLeafPaths || [],
+        transformedPaths: ack.transformedPaths || [],
       };
     }
 
-    metrics.recordTradeIndexLifecycle({
-      tag: 'direct-index-dual-write',
-      ops: 1,
-      ok: true,
-    });
+    // Never replay increments. Classify / release / uncertain via reread.
+    const classifyFn = async (err) => {
+      if (!_isPermissionDenied(err)) return null;
+      if (typeof classifyPermissionDenied === 'function') {
+        return classifyPermissionDenied(err);
+      }
+      return null;
+    };
 
+    const recovery = await recoverDirectAcceptAfterAckError(
+      tradeId,
+      claimId,
+      ack.error,
+      classifyFn,
+    );
+
+    if (diag) {
+      diag.recoveryOutcome = recovery.outcome;
+      diag.rejectionClassification = recovery.reason || null;
+      diag.mark('terminalAckRecovery', {
+        outcome: recovery.outcome,
+        reason: recovery.reason || null,
+        permissionDenied: _isPermissionDenied(ack.error),
+        currentStatus: recovery.trade?.status ?? null,
+      });
+    }
+
+    if (recovery.outcome === 'success') {
+      applyLiteralPlanPathsLocally(plan.updates);
+      return {
+        success: true,
+        notifiedOfferer: plan.notifiedOfferer || [],
+        notifiedTarget: plan.notifiedTarget || [],
+        recovered: true,
+        writeCount: 1,
+        inventoryCommitAttempted: true,
+        giveLeafPaths: plan.giveLeafPaths || [],
+      };
+    }
+
+    if (recovery.outcome === 'failed_classified') {
+      return {
+        success: false,
+        reason: recovery.reason || 'INSUFFICIENT_AVAILABLE_COPIES',
+        inventoryCommitAttempted: true,
+        classified: true,
+      };
+    }
+
+    if (recovery.outcome === 'released') {
+      return {
+        success: false,
+        reason: recovery.reason || 'WRITE_FAILED',
+        error: recovery.error || ack.error || 'Could not save trade. Check your connection and try again.',
+        inventoryCommitAttempted: true,
+        released: true,
+      };
+    }
+
+    console.warn(
+      `[Trading] Direct accept ack uncertain for ${tradeId} claim=${claimId}; leaving processing. ` +
+        `status=${recovery.trade?.status ?? 'null'}`,
+    );
     return {
-      success: true,
-      notifiedOfferer: plan.notifiedOfferer || [],
-      notifiedTarget: plan.notifiedTarget || [],
-      writeCount: 1,
+      success: false,
+      reason: 'WRITE_UNCERTAIN',
+      error:
+        recovery.error
+        || ack.error
+        || 'Trade may still be processing. Please refresh before retrying.',
+      uncertain: true,
       inventoryCommitAttempted: true,
+      currentStatus: recovery.trade?.status ?? null,
     };
   });
 }

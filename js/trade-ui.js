@@ -1288,6 +1288,10 @@ function _wireDirectTradeActionButtons(username, root = document) {
           toast.success('Trade complete! Cards swapped.');
         } else if (result.stale || result.reason === 'STALE_TRADE_STATE') {
           toast.info('This trade is no longer available to accept.');
+        } else if (result.uncertain || result.reason === 'WRITE_UNCERTAIN') {
+          toast.error(_friendlyError('WRITE_UNCERTAIN'));
+        } else if (result.reason === 'INSUFFICIENT_AVAILABLE_COPIES') {
+          toast.error(_friendlyError('INSUFFICIENT_AVAILABLE_COPIES'));
         } else {
           toast.error(_friendlyError(result.reason));
         }
@@ -2379,7 +2383,9 @@ const ERROR_MESSAGES = {
   STALE_TRADE_STATE: 'This trade is no longer available to accept.',
   SAME_CARD_BOTH_SIDES: 'A trade cannot exchange the same card for itself.',
   WRITE_FAILED: 'Could not save the trade. Check your connection and try again.',
-  WRITE_UNCERTAIN: 'Listing may still be processing. Refresh before trying again.',
+  WRITE_UNCERTAIN: 'This trade may still be processing. Refresh before trying again.',
+  OFFERING_CARD_NOT_AVAILABLE: 'The offered card is no longer available.',
+  REQUESTED_CARD_NOT_AVAILABLE: 'That return card is no longer available.',
   TRADE_NOT_DECLINABLE: 'This trade cannot be declined right now.',
   TRADE_NOT_CANCELLABLE: 'This offer can no longer be cancelled.',
   NOT_TARGET_PLAYER: 'You cannot respond to this trade.',
