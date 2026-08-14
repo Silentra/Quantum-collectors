@@ -2385,6 +2385,7 @@ const ERROR_MESSAGES = {
   WRITE_FAILED: 'Could not save the trade. Check your connection and try again.',
   WRITE_UNCERTAIN: 'This trade may still be processing. Refresh before trying again.',
   OFFERING_CARD_NOT_AVAILABLE: 'The offered card is no longer available.',
+  OFFERING_CARD_NO_LONGER_AVAILABLE: 'The offered card is no longer available for this trade.',
   REQUESTED_CARD_NOT_AVAILABLE: 'That return card is no longer available.',
   TRADE_NOT_DECLINABLE: 'This trade cannot be declined right now.',
   TRADE_NOT_CANCELLABLE: 'This offer can no longer be cancelled.',

@@ -249,7 +249,19 @@ export function validateDirectTrade({
   });
   if (!canOfferCardInTrade(offeringSnapshot, offeredCardId)) {
     const reason = getAvailabilityFailureReason(offeringSnapshot, offeredCardId, 'offer');
-    return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
+    // Offerer-side unavailability must not surface viewer-oriented CARD_RESERVED_* /
+    // INSUFFICIENT copy to the target (respond) or as "your" reservation language.
+    // Checks are unchanged; only the reason code is role-appropriate.
+    if (
+      reason === 'CARD_RESERVED_BY_OUTGOING_TRADE'
+      || reason === 'CARD_RESERVED_BY_INCOMING_TRADE'
+      || reason === 'CARD_RESERVED_BY_LISTING'
+      || reason === 'INSUFFICIENT_AVAILABLE_COPIES'
+      || reason == null
+    ) {
+      return fail('OFFERING_CARD_NO_LONGER_AVAILABLE');
+    }
+    return fail(reason);
   }
 
   const targetSnapshot = targetAvailabilitySnapshot || _availabilityForTradeActor(targetPlayerId, {
@@ -261,6 +273,7 @@ export function validateDirectTrade({
     if (reason === 'locked_cards_present') {
       return fail('REQUESTED_CARD_LOCKED_BY_PROJECT');
     }
+    // Target-side: keep CARD_RESERVED_BY_OUTGOING_TRADE / INSUFFICIENT as-is ("Your…").
     return fail(reason ?? 'INSUFFICIENT_AVAILABLE_COPIES');
   }
 
