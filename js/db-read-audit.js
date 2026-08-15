@@ -1263,10 +1263,14 @@ export function workflowS5cD7() {
 === S5c-D7 / S5c-D Final Trading Isolation Umbrella ===
 
 Prereq: D7a + D7b COMPLETE + VERIFIED. Two same-group players (e.g. Bobby / Bobby2).
-NOTE: S5c-D7c remains BLOCKED until Hybrid C+ Gate B verification (relative inventory).
+NOTE: S5c-D7c remains BLOCKED until Hybrid C+ Gate C verification (listing relative inventory)
+and final isolation regression. Keep qc-direct-inventory-diag / qc-listing-inventory-diag
+available for inventory proofs.
 Critical inventory regression (do not skip): sequential same-card directs ~3s apart
 (prior “Black Hole” stale absolute write) must compose −2/+2 — enable:
   localStorage.setItem('qc-direct-inventory-diag','true');
+Listing fulfill relative proof (Gate C):
+  localStorage.setItem('qc-listing-inventory-diag','true');
 
 Enable audit (+ optional isolation):
   localStorage.setItem('qc-personal-scope-audit','true');

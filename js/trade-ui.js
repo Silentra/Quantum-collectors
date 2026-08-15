@@ -1385,6 +1385,8 @@ function _wireListingEvents(username) {
           toast.error(_friendlyError(result.reason));
         } else if (result.stale || result.reason === 'LISTING_NOT_ACTIVE') {
           toast.info('This listing is no longer available.');
+        } else if (result.reason === 'INSUFFICIENT_AVAILABLE_COPIES') {
+          toast.error(_friendlyError('INSUFFICIENT_AVAILABLE_COPIES'));
         } else {
           toast.error(_friendlyError(result.reason));
         }
@@ -2026,6 +2028,8 @@ export function refreshAvailableListingsSection(username) {
           toast.error(_friendlyError(result.reason));
         } else if (result.stale || result.reason === 'LISTING_NOT_ACTIVE') {
           toast.info('This listing is no longer available.');
+        } else if (result.reason === 'INSUFFICIENT_AVAILABLE_COPIES') {
+          toast.error(_friendlyError('INSUFFICIENT_AVAILABLE_COPIES'));
         } else {
           toast.error(_friendlyError(result.reason));
         }
