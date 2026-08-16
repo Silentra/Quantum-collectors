@@ -666,6 +666,7 @@ export async function cleanupZeroGiveLeavesAfterAccept(giveLeafPaths, diag = nul
           path: leafPath,
           ok: r.ok === true,
           removed: r.removed === true,
+          outcome: r.outcome || null,
           error: r.error || null,
         });
       }
@@ -676,6 +677,7 @@ export async function cleanupZeroGiveLeavesAfterAccept(giveLeafPaths, diag = nul
           path: leafPath,
           ok: false,
           removed: false,
+          outcome: 'failed',
           error: e?.message || String(e),
         });
       }
