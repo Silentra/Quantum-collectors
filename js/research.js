@@ -15,6 +15,12 @@
  */
 
 import * as db from './database.js';
+import {
+  STAT_TYPES,
+  buildLeaderboardSummaryPathsForChangedStats,
+  playerLikeWithStatOverlay,
+  syncLeaderboardSummariesForPlayer,
+} from './leaderboard-summaries.js';
 
 // ---------- Default RP fields ----------
 
@@ -158,11 +164,20 @@ export function buildResearchPointGrantUpdates(username, amount) {
   const newTotal = current + amount;
   const currentSpendable = db.get(`players/${username}/currencies/currentResearchPoints`);
   const spendableSafe = typeof currentSpendable === 'number' ? currentSpendable : 0;
+  const playerBefore = db.get(`players/${username}`) || {};
+  const playerLike = playerLikeWithStatOverlay(playerBefore, {
+    [STAT_TYPES.LIFETIME_RP]: newTotal,
+  });
 
   return {
     updates: {
       [`players/${username}/totalResearchPoints`]: newTotal,
       [`players/${username}/currencies/currentResearchPoints`]: spendableSafe + amount,
+      ...buildLeaderboardSummaryPathsForChangedStats(
+        username,
+        playerLike,
+        [STAT_TYPES.LIFETIME_RP],
+      ),
     },
     newTotal,
   };
@@ -199,9 +214,18 @@ export function buildSeasonalResearchPointGrantUpdates(username, amount) {
     return { updates: {}, newTotal: currentSafe };
   }
   const newTotal = currentSafe + amount;
+  const playerBefore = db.get(`players/${username}`) || {};
+  const playerLike = playerLikeWithStatOverlay(playerBefore, {
+    [STAT_TYPES.SEASONAL_RP]: newTotal,
+  });
   return {
     updates: {
       [`players/${username}/seasonalResearchPoints`]: newTotal,
+      ...buildLeaderboardSummaryPathsForChangedStats(
+        username,
+        playerLike,
+        [STAT_TYPES.SEASONAL_RP],
+      ),
     },
     newTotal,
   };
@@ -292,6 +316,9 @@ export function ensurePlayerUniqueCardsOwned(username) {
 
   const computed = computeUniqueCardsOwned(username);
   db.set(`players/${username}/stats/uniqueCardsOwned`, computed);
+  void syncLeaderboardSummariesForPlayer(username, {
+    statTypes: [STAT_TYPES.UNIQUE_CARDS_OWNED],
+  });
   return true;
 }
 
@@ -328,6 +355,9 @@ export function refreshUniqueCardsOwned(username) {
   if (!username) return;
   const count = computeUniqueCardsOwned(username);
   db.set(`players/${username}/stats/uniqueCardsOwned`, count);
+  void syncLeaderboardSummariesForPlayer(username, {
+    statTypes: [STAT_TYPES.UNIQUE_CARDS_OWNED],
+  });
 }
 
 /**
@@ -337,10 +367,30 @@ export function refreshUniqueCardsOwned(username) {
 export function resetSeasonalResearchPoints() {
   const players = db.getChildren('players');
   let count = 0;
+  const now = Date.now();
+  /** @type {Record<string, object|number>} */
+  const updates = {};
 
-  for (const { key: username } of players) {
-    db.set(`players/${username}/seasonalResearchPoints`, 0);
-    count++;
+  for (const { key: username, value: player } of players) {
+    if (username === '__admin__') continue;
+    updates[`players/${username}/seasonalResearchPoints`] = 0;
+    const playerLike = playerLikeWithStatOverlay(player || {}, {
+      [STAT_TYPES.SEASONAL_RP]: 0,
+    });
+    Object.assign(
+      updates,
+      buildLeaderboardSummaryPathsForChangedStats(
+        username,
+        playerLike,
+        [STAT_TYPES.SEASONAL_RP],
+        now,
+      ),
+    );
+    count += 1;
+  }
+
+  if (Object.keys(updates).length > 0) {
+    void db.updateAcknowledged(updates);
   }
 
   console.log(`[Research] Seasonal RP reset — ${count} player(s) cleared`);

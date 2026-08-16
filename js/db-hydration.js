@@ -2252,8 +2252,205 @@ export function getGroupListingsHydrationReport() {
   };
 }
 
+// ---------- Phase S5d: Leaderboard-tab-owned leaderboards root ----------
+
+export const SCOPE_LEADERBOARDS = 'leaderboards';
+
+/** @type {(() => void)|null} */
+let _leaderboardsUnsub = null;
+/** @type {string|null} */
+let _leaderboardsSubId = null;
+/** @type {number|null} */
+let _leaderboardsStartedAt = null;
+/** @type {Promise<object>|null} */
+let _leaderboardsPromise = null;
+/** @type {number} */
+let _leaderboardsGeneration = 0;
+/** @type {object|null} */
+let _leaderboardsLastResult = null;
+
+const LEADERBOARDS_PATH = 'leaderboards';
+
+export function isLeaderboardsScopeReady() {
+  return db.isPathReady(LEADERBOARDS_PATH);
+}
+
+export function releaseLeaderboardsScope() {
+  _leaderboardsGeneration += 1;
+  if (_leaderboardsUnsub) {
+    try { _leaderboardsUnsub(); } catch { /* ignore */ }
+  }
+  _leaderboardsUnsub = null;
+  _leaderboardsSubId = null;
+  _leaderboardsStartedAt = null;
+  _leaderboardsPromise = null;
+  return { released: true, path: LEADERBOARDS_PATH };
+}
+
 /**
- * Named-scope status snapshot (S2–S5c-D5b).
+ * Ensure one Leaderboard-tab-owned subscription to leaderboards/.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export function ensureLeaderboardsScope(options = {}) {
+  const force = options.force === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  if (!force && _leaderboardsUnsub && isLeaderboardsScopeReady()) {
+    const entry = _registryEntry(LEADERBOARDS_PATH);
+    const reused = {
+      ok: true,
+      scope: SCOPE_LEADERBOARDS,
+      path: LEADERBOARDS_PATH,
+      reused: true,
+      subscriptionActive: true,
+      subscriptionRefCount: entry?.refCount ?? 1,
+      subscriptionId: _leaderboardsSubId,
+      ready: true,
+    };
+    _leaderboardsLastResult = reused;
+    return Promise.resolve(reused);
+  }
+
+  if (_leaderboardsPromise && !force) {
+    return _leaderboardsPromise.then((r) => ({ ...r, reused: true }));
+  }
+
+  const myGen = _leaderboardsGeneration;
+
+  _leaderboardsPromise = (async () => {
+    if (force && _leaderboardsUnsub) {
+      try { _leaderboardsUnsub(); } catch { /* ignore */ }
+      _leaderboardsUnsub = null;
+      _leaderboardsSubId = null;
+      _leaderboardsStartedAt = null;
+    }
+
+    if (myGen !== _leaderboardsGeneration) {
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_LEADERBOARDS,
+        path: LEADERBOARDS_PATH,
+        error: 'Leaderboards ensure cancelled',
+        ready: false,
+      };
+      _leaderboardsLastResult = cancelled;
+      return cancelled;
+    }
+
+    const load = await db.loadPathOnce(LEADERBOARDS_PATH, { timeoutMs, force });
+    if (myGen !== _leaderboardsGeneration) {
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_LEADERBOARDS,
+        path: LEADERBOARDS_PATH,
+        error: 'Leaderboards ensure cancelled',
+        ready: false,
+      };
+      _leaderboardsLastResult = cancelled;
+      return cancelled;
+    }
+
+    if (!load.ok) {
+      console.warn('[Hydration] leaderboards once-load:', load.error || 'failed');
+    }
+
+    if (_leaderboardsUnsub) {
+      const entry = _registryEntry(LEADERBOARDS_PATH);
+      const reused = {
+        ok: true,
+        scope: SCOPE_LEADERBOARDS,
+        path: LEADERBOARDS_PATH,
+        reused: true,
+        subscriptionActive: true,
+        subscriptionRefCount: entry?.refCount ?? 1,
+        subscriptionId: _leaderboardsSubId,
+        ready: isLeaderboardsScopeReady(),
+      };
+      _leaderboardsLastResult = reused;
+      return reused;
+    }
+
+    const handle = db.subscribePath(LEADERBOARDS_PATH);
+    if (myGen !== _leaderboardsGeneration) {
+      try { handle.unsubscribe?.(); } catch { /* ignore */ }
+      const cancelled = {
+        ok: false,
+        cancelled: true,
+        scope: SCOPE_LEADERBOARDS,
+        path: LEADERBOARDS_PATH,
+        error: 'Leaderboards ensure cancelled',
+        ready: false,
+      };
+      _leaderboardsLastResult = cancelled;
+      return cancelled;
+    }
+
+    if (!handle?.unsubscribe) {
+      const failed = {
+        ok: false,
+        scope: SCOPE_LEADERBOARDS,
+        path: LEADERBOARDS_PATH,
+        error: 'Leaderboards subscribe failed',
+        ready: false,
+      };
+      _leaderboardsLastResult = failed;
+      return failed;
+    }
+
+    _leaderboardsUnsub = handle.unsubscribe;
+    _leaderboardsSubId = handle.id;
+    _leaderboardsStartedAt = Date.now();
+
+    await db.waitForPath(LEADERBOARDS_PATH, { timeoutMs }).catch(() => null);
+
+    const result = {
+      ok: true,
+      scope: SCOPE_LEADERBOARDS,
+      path: LEADERBOARDS_PATH,
+      reused: false,
+      subscriptionActive: _leaderboardsUnsub != null,
+      subscriptionId: _leaderboardsSubId,
+      ready: isLeaderboardsScopeReady() || db.get(LEADERBOARDS_PATH) != null,
+    };
+    _leaderboardsLastResult = result;
+    return result;
+  })();
+
+  const run = _leaderboardsPromise;
+  run.finally(() => {
+    if (_leaderboardsPromise === run) _leaderboardsPromise = null;
+  });
+  return run;
+}
+
+export function getLeaderboardsHydrationReport() {
+  const entry = _registryEntry(LEADERBOARDS_PATH);
+  return {
+    phase: 'S5d',
+    scope: SCOPE_LEADERBOARDS,
+    path: LEADERBOARDS_PATH,
+    ready: isLeaderboardsScopeReady(),
+    active: _leaderboardsUnsub != null,
+    subscriptionId: _leaderboardsSubId,
+    refCount: entry?.refCount ?? (_leaderboardsUnsub ? 1 : 0),
+    startedAt: _leaderboardsStartedAt,
+    inFlight: _leaderboardsPromise != null,
+    lastResult: _leaderboardsLastResult
+      ? {
+        ok: _leaderboardsLastResult.ok === true,
+        cancelled: _leaderboardsLastResult.cancelled === true,
+        error: _leaderboardsLastResult.error || null,
+        reused: _leaderboardsLastResult.reused === true,
+      }
+      : null,
+  };
+}
+
+/**
+ * Named-scope status snapshot (S2–S5d).
  * @returns {object}
  */
 export function getHydrationStatus() {
@@ -2289,9 +2486,9 @@ export function getHydrationStatus() {
       [SCOPE_ADMIN_SELECTED_PLAYER]: getAdminSelectedPlayerReport(),
       [SCOPE_TRADE_DIRECTORY]: getTradeDirectoryHydrationReport(),
       [SCOPE_GROUP_LISTINGS]: getGroupListingsHydrationReport(),
+      [SCOPE_LEADERBOARDS]: getLeaderboardsHydrationReport(),
     },
     deferredScopes: [
-      'leaderboard',
       'bootstrapPublicAccessCodes',
     ],
     shared: getSharedHydrationReport(),
@@ -2301,6 +2498,7 @@ export function getHydrationStatus() {
     adminSelectedPlayer: getAdminSelectedPlayerReport(),
     tradeDirectory: getTradeDirectoryHydrationReport(),
     groupListings: getGroupListingsHydrationReport(),
+    leaderboards: getLeaderboardsHydrationReport(),
   };
 }
 
@@ -2315,6 +2513,7 @@ function _installWindowApi() {
     SCOPE_ADMIN_SELECTED_PLAYER,
     SCOPE_TRADE_DIRECTORY,
     SCOPE_GROUP_LISTINGS,
+    SCOPE_LEADERBOARDS,
     hydrateSharedDefs,
     isSharedDefsReady,
     waitForSharedDefs,
@@ -2344,6 +2543,9 @@ function _installWindowApi() {
     isGroupListingsReady,
     waitForGroupListings,
     getGroupListingsHydrationReport,
+    ensureLeaderboardsScope,
+    isLeaderboardsScopeReady,
+    getLeaderboardsHydrationReport,
     // release* retained for auth/Admin/Trading UI only — not exposed here
     getScopedLoadingFlagState,
     isScopedLoadingDevFlagEnabled,
@@ -2361,7 +2563,8 @@ Player trade index: auth-owned playerTradeIndex/{me} (release not on mirror)
 Admin directory / selected-player: ui-owned ensure; release not on mirror
 Trading directory: trade-ui-owned playerDirectory while Trading tab open
 Trading group listings: trade-ui-owned listingsByGroup/{groupId} while Trading tab open
-API: getHydrationStatus | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getPlayerTradeIndexHydrationReport
+Leaderboards: leaderboard-tab-owned leaderboards/ while Leaderboard tab open
+API: getHydrationStatus | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getLeaderboardsHydrationReport | getPlayerTradeIndexHydrationReport
 Root remains the legacy safety net; no bandwidth claim yet.`);
     },
   };

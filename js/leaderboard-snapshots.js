@@ -26,6 +26,10 @@
  */
 
 import * as db from './database.js';
+import {
+  buildLeaderboardSummaryPathsForChangedStats,
+  playerLikeWithStatOverlay,
+} from './leaderboard-summaries.js';
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 
@@ -185,15 +189,26 @@ function _resetStatForAllPlayers(statType) {
   }
 
   const players = db.getChildren('players');
-  for (const { key: username } of players) {
-    db.set(`players/${username}/${resetPath}`, 0);
+  const now = Date.now();
+  /** @type {Record<string, object|number>} */
+  const updates = {};
+  for (const { key: username, value: player } of players) {
+    if (username === '__admin__') continue;
+    updates[`players/${username}/${resetPath}`] = 0;
+    // SNAPSHOT_STAT_TYPES values align with STAT_TYPES / summary keys
+    const playerLike = playerLikeWithStatOverlay(player || {}, { [statType]: 0 });
+    Object.assign(
+      updates,
+      buildLeaderboardSummaryPathsForChangedStats(username, playerLike, [statType], now),
+    );
   }
 
-  // Record the reset timestamp so history can show "reset on date X"
-  db.set(`${SNAP_ROOT}/categoryResets/${statType.replace(/\./g, '_')}`, {
-    resetAt:  Date.now(),
+  updates[`${SNAP_ROOT}/categoryResets/${statType.replace(/\./g, '_')}`] = {
+    resetAt: Date.now(),
     statType,
-  });
+  };
+
+  void db.updateAcknowledged(updates);
 
   console.log(`[LB-5] Reset "${statType}" to 0 for ${players.length} players`);
   return true;

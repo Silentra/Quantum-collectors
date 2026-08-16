@@ -14,6 +14,10 @@ import {
   listOwnedProcessingListingClaims,
   PLAYER_TRADE_INDEX_ROOT,
 } from './trade-index.js';
+import {
+  buildLeaderboardGroupProjectionPaths,
+  buildLeaderboardSummaryDeletePaths,
+} from './leaderboard-summaries.js';
 
 /**
  * Create a new player profile
@@ -167,6 +171,11 @@ export async function setPlayerGroup(username, groupId, subgroupId = null) {
       groupId: nextGroupId,
       subgroupId: nextSubgroupId,
     }),
+    ...buildLeaderboardGroupProjectionPaths(playerKey, {
+      ...playerData,
+      groupId: nextGroupId,
+      subgroupId: nextSubgroupId,
+    }),
   });
 }
 
@@ -212,6 +221,7 @@ export async function deletePlayer(username) {
     ...tradeCleanup,
     [`players/${playerKey}`]: null,
     [`playerDirectory/${playerKey}`]: null,
+    ...buildLeaderboardSummaryDeletePaths(playerKey),
   };
 
   // Safety: ensure trade index root for deleted user is cleared even if no actives

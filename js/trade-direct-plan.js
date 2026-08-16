@@ -27,6 +27,11 @@ import {
   directIndexRemovalsForTrade,
   directReleaseIndexRestorePaths,
 } from './trade-index.js';
+import {
+  STAT_TYPES,
+  buildLeaderboardSummaryPathsForChangedStats,
+  playerLikeWithStatOverlay,
+} from './leaderboard-summaries.js';
 
 /** Dev-only localStorage gate. Absent/false → identical production behavior. */
 export const DIRECT_INVENTORY_DIAG_LS_KEY = 'qc-direct-inventory-diag';
@@ -387,6 +392,7 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
 
   return {
     updates,
+    plannedStatValues,
     notified: achPlan.notified,
     unlocked: achPlan.unlocked,
   };
@@ -477,6 +483,30 @@ export function buildDirectTradeAcceptPlan({
   const offererSide = planPlayerPostTradeSideEffects(offeringPlayerId, offeringLogical, now);
   const targetSide = planPlayerPostTradeSideEffects(targetPlayerId, targetLogical, now);
   Object.assign(updates, offererSide.updates, targetSide.updates);
+
+  const offererLike = playerLikeWithStatOverlay(offeringPlayer, {
+    [STAT_TYPES.TRADES_COMPLETED]: offererSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
+    [STAT_TYPES.UNIQUE_CARDS_OWNED]: offererSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
+  });
+  const targetLike = playerLikeWithStatOverlay(targetPlayer, {
+    [STAT_TYPES.TRADES_COMPLETED]: targetSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
+    [STAT_TYPES.UNIQUE_CARDS_OWNED]: targetSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
+  });
+  Object.assign(
+    updates,
+    buildLeaderboardSummaryPathsForChangedStats(
+      offeringPlayerId,
+      offererLike,
+      [STAT_TYPES.TRADES_COMPLETED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+      now,
+    ),
+    buildLeaderboardSummaryPathsForChangedStats(
+      targetPlayerId,
+      targetLike,
+      [STAT_TYPES.TRADES_COMPLETED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+      now,
+    ),
+  );
 
   assertNoOverlappingUpdatePaths(updates);
 

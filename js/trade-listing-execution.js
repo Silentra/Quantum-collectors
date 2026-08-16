@@ -1,10 +1,12 @@
 /**
- * Trade Listing Execution Module — Phase T-4
+ * Trade Listing Execution Module — Phase T-4 / Hybrid C+ Gate C
  *
  * Isolated helper for listing-trade card swaps.
- * Fulfillment uses two acknowledged writes:
+ * Fulfillment uses:
  *   1) claimListingIfActive (active → processing)
- *   2) updateAcknowledged fulfill (inventories + fulfilled)
+ *   2) index transition (owner PTI processing; group leaf removed)
+ *   3) updateAcknowledged fulfill with ServerValue.increment(±1) + fulfilled
+ *   4) optional zero-leaf cleanup on give cards (never undoes fulfill)
  *
  * UI handlers must NEVER directly modify inventories.
  *
@@ -21,6 +23,9 @@ import { validateListingTrade, isDetailedLogging } from './trading.js';
 import {
   buildListingFulfillPlan,
   commitListingFulfillPlan,
+  cleanupZeroGiveLeavesAfterListingFulfill,
+  isListingInventoryDiagEnabled,
+  createListingInventoryDiagAttempt,
 } from './trade-listing-plan.js';
 import {
   listingClaimIndexTransitionPaths,
@@ -45,6 +50,11 @@ function _newClaimId(accepterId) {
     return crypto.randomUUID();
   }
   return `${accepterId}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function _diagCardQty(player, cardId) {
+  const n = player?.inventory?.[cardId];
+  return typeof n === 'number' && Number.isFinite(n) ? n : 0;
 }
 
 /**
@@ -129,10 +139,152 @@ async function _releaseOwnedClaimAndRestoreIndex(listingId, claimId, reason) {
   return { ok: true, released: true, indexRestored: true };
 }
 
+/**
+ * Observation-only post-ack force loads (four card qtys). Never alters fulfill result.
+ */
+async function _diagPostAckVerify(diag, {
+  ownerId,
+  accepterId,
+  offeredCardId,
+  chosenCardId,
+  planDiag,
+}) {
+  if (!diag || !planDiag) return;
+
+  diag.mark('postAckVerificationStarted', { observationOnly: true });
+
+  let ownerPlayer = null;
+  let accepterPlayer = null;
+  let ownerOk = false;
+  let accepterOk = false;
+
+  if (typeof db.loadPathOnce === 'function') {
+    const ownerLoad = await db.loadPathOnce(`players/${ownerId}`, { force: true });
+    ownerOk = !!(ownerLoad && ownerLoad.ok === true);
+    ownerPlayer = ownerOk ? ownerLoad.value : null;
+
+    const accepterLoad = await db.loadPathOnce(`players/${accepterId}`, { force: true });
+    accepterOk = !!(accepterLoad && accepterLoad.ok === true);
+    accepterPlayer = accepterOk ? accepterLoad.value : null;
+  }
+
+  const serverQtys = {
+    owner: {
+      giveQty: _diagCardQty(ownerPlayer, offeredCardId),
+      receiveQty: _diagCardQty(ownerPlayer, chosenCardId),
+    },
+    accepter: {
+      giveQty: _diagCardQty(accepterPlayer, chosenCardId),
+      receiveQty: _diagCardQty(accepterPlayer, offeredCardId),
+    },
+  };
+
+  const ownerGiveDelta = serverQtys.owner.giveQty - (planDiag.owner?.giveBefore ?? 0);
+  const ownerRecvDelta = serverQtys.owner.receiveQty - (planDiag.owner?.receiveBefore ?? 0);
+  const accepterGiveDelta = serverQtys.accepter.giveQty - (planDiag.accepter?.giveBefore ?? 0);
+  const accepterRecvDelta = serverQtys.accepter.receiveQty - (planDiag.accepter?.receiveBefore ?? 0);
+
+  diag.mark('postAckVerificationCompleted', {
+    observationOnly: true,
+    loadsOk: { owner: ownerOk, accepter: accepterOk },
+    serverQtys: {
+      owner: {
+        username: ownerId,
+        giveCardId: offeredCardId,
+        giveQty: serverQtys.owner.giveQty,
+        receiveCardId: chosenCardId,
+        receiveQty: serverQtys.owner.receiveQty,
+        observedGiveDelta: ownerGiveDelta,
+        observedReceiveDelta: ownerRecvDelta,
+      },
+      accepter: {
+        username: accepterId,
+        giveCardId: chosenCardId,
+        giveQty: serverQtys.accepter.giveQty,
+        receiveCardId: offeredCardId,
+        receiveQty: serverQtys.accepter.receiveQty,
+        observedGiveDelta: accepterGiveDelta,
+        observedReceiveDelta: accepterRecvDelta,
+      },
+    },
+  });
+}
+
+/**
+ * Revalidate after PERMISSION_DENIED: if a give copy is unavailable → INSUFFICIENT_AVAILABLE_COPIES.
+ * Otherwise null (generic recoverable rejection → release).
+ */
+async function classifyPermissionDeniedForListing({
+  listingId,
+  claimedListing,
+  ownerId,
+  accepterId,
+  offeredCardId,
+  chosenCardId,
+}) {
+  const ownerCtx = await loadTradingCounterpartyContext(ownerId, { force: true });
+  if (!ownerCtx.ok || !ownerCtx.player) return null;
+
+  let freshAccepter = db.get(`players/${accepterId}`);
+  if (typeof db.loadPathOnce === 'function') {
+    const accepterLoad = await db.loadPathOnce(`players/${accepterId}`, { force: true });
+    if (!accepterLoad || accepterLoad.ok !== true || !accepterLoad.value) return null;
+    freshAccepter = accepterLoad.value;
+  }
+  if (!freshAccepter) return null;
+
+  const players = {
+    [ownerId]: _normalizePlayer(ownerCtx.player),
+    [accepterId]: _normalizePlayer(freshAccepter),
+  };
+  const allCards = db.get('cards') || {};
+  const excludeIds = listingId ? [listingId] : [];
+
+  const ownerSnapshot = buildCounterpartyAvailabilitySnapshot(ownerId, ownerCtx, {
+    playerData: players[ownerId],
+    excludeListingIds: excludeIds,
+  });
+  const accepterSnapshot = buildTradingSelfAvailabilitySnapshot(accepterId, {
+    playerData: players[accepterId],
+    excludeListingIds: excludeIds,
+  });
+
+  const validation = validateListingTrade({
+    listing: { ...claimedListing, status: 'processing', id: listingId },
+    accepterId,
+    chosenCardId,
+    players,
+    cards: allCards,
+    excludeListingId: listingId,
+    ownerAvailabilitySnapshot: ownerSnapshot,
+    accepterAvailabilitySnapshot: accepterSnapshot,
+  });
+
+  if (!validation.valid) {
+    const r = validation.reason;
+    if (
+      r === 'INSUFFICIENT_AVAILABLE_COPIES'
+      || r === 'LISTING_OWNER_MISSING_OFFERED_CARD'
+      || r === 'ACCEPTER_MISSING_CHOSEN_CARD'
+    ) {
+      return 'INSUFFICIENT_AVAILABLE_COPIES';
+    }
+  }
+
+  if ((ownerCtx.player.inventory?.[offeredCardId] || 0) < 1) {
+    return 'INSUFFICIENT_AVAILABLE_COPIES';
+  }
+  if ((freshAccepter.inventory?.[chosenCardId] || 0) < 1) {
+    return 'INSUFFICIENT_AVAILABLE_COPIES';
+  }
+
+  return null;
+}
+
 // ─── Atomic Listing Execution ───────────────────────────────────────────────
 
 /**
- * Execute a listing trade (claim + fulfill).
+ * Execute a listing trade (claim + relative inventory fulfill).
  *
  * This is the ONLY function that mutates inventories for listing trades.
  *
@@ -147,15 +299,26 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   const now = Date.now();
   const claimId = _newClaimId(accepterId);
 
+  const diag = isListingInventoryDiagEnabled()
+    ? createListingInventoryDiagAttempt(listingId)
+    : null;
+  if (diag) {
+    diag.claimId = claimId;
+    diag.mark('executeEntered', { inventoryCommitAttempted: false });
+  }
+
   // ── 0. Cache pre-checks (no network) ──────────────────────────────────────
   const freshListing = db.get(`trades/listings/${listingId}`);
   if (!freshListing || freshListing.status !== 'active') {
     console.log(`[Listings] Listing ${listingId} skipped — status is '${freshListing?.status}', not 'active'`);
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimSkipped', { reason: 'LISTING_NOT_ACTIVE', status: freshListing?.status ?? null });
+    }
     return { success: false, reason: 'LISTING_NOT_ACTIVE', stale: true };
   }
 
   if (freshListing.expiresAt && now > freshListing.expiresAt) {
-    // Expire only while still active — never overwrite terminals
     const still = db.get(`trades/listings/${listingId}`);
     if (still && still.status === 'active') {
       const id = still.id || listingId;
@@ -165,12 +328,19 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
         ...listingIndexRemovalsForListing({ ...still, id }),
       });
     }
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimSkipped', { reason: 'LISTING_EXPIRED' });
+    }
     return { success: false, reason: 'LISTING_EXPIRED' };
   }
 
   const accepterCooldown = _getListingAcceptCooldown(accepterId);
   if (accepterCooldown.onCooldown) {
-    // Do not claim or destroy the listing for other students
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimSkipped', { reason: 'ACCEPTER_ON_COOLDOWN' });
+    }
     return { success: false, reason: 'ACCEPTER_ON_COOLDOWN' };
   }
 
@@ -183,6 +353,10 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   });
 
   if (!claim.ok) {
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimFailed', { error: claim.error || 'WRITE_FAILED' });
+    }
     return {
       success: false,
       reason: 'WRITE_FAILED',
@@ -190,12 +364,33 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     };
   }
   if (!claim.claimed) {
+    if (diag) {
+      diag.claimWon = false;
+      diag.mark('claimLost', {
+        reason: claim.reason || 'LISTING_NOT_ACTIVE',
+        currentStatus: claim.listing?.status ?? null,
+      });
+    }
     return {
       success: false,
       reason: claim.reason || 'LISTING_NOT_ACTIVE',
       stale: true,
       currentStatus: claim.listing?.status ?? null,
     };
+  }
+
+  if (diag) {
+    diag.claimWon = true;
+    diag.mark('claimWon', {
+      claimId,
+      processingBy: accepterId,
+      sameListingClaimWinnerProof: {
+        listingId,
+        claimId,
+        processingBy: accepterId,
+        status: 'processing',
+      },
+    });
   }
 
   const claimedListing = claim.listing || db.get(`trades/listings/${listingId}`);
@@ -248,6 +443,10 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   }
 
   // ── 2. S5c-D7a: force-load owner (+ PTI) after claim; refresh accepter ─────
+  if (diag) {
+    diag.mark('forcePlayerLoadsStarted', { ownerId, accepterId });
+  }
+
   const ownerCtx = await loadTradingCounterpartyContext(ownerId, { force: true });
   if (!ownerCtx.ok) {
     await _releaseOwnedClaimAndRestoreIndex(
@@ -279,6 +478,15 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     return { success: false, reason: 'ACCEPTER_NOT_FOUND' };
   }
 
+  if (diag) {
+    diag.mark('forcePlayerLoadsCompleted', {
+      ownerOk: !!freshOwner,
+      accepterOk: !!freshAccepter,
+      ownerGiveQty: _diagCardQty(freshOwner, claimedListing.offeredCardId),
+      accepterGiveQty: _diagCardQty(freshAccepter, chosenCardId),
+    });
+  }
+
   const allCards = db.get('cards') || {};
   const players = {
     [ownerId]: _normalizePlayer(freshOwner),
@@ -295,8 +503,6 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     excludeListingIds: excludeIds,
   });
 
-  // Validate against claimed listing; exclude self from reservation math.
-  // Status may be processing — allow when excludeListingId matches this listing.
   const validation = validateListingTrade({
     listing: claimedListing,
     accepterId,
@@ -315,11 +521,13 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
           `(owner=${ownerId}, accepter=${accepterId}, chosen=${chosenCardId})`,
       );
     }
+    if (diag) {
+      diag.mark('permanentPostClaimValidationFailure', { reason: validation.reason });
+    }
     await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, validation.reason);
     return { success: false, reason: validation.reason };
   }
 
-  // Re-check cooldown after claim (stale race)
   const cooldownAfterClaim = _getListingAcceptCooldown(accepterId);
   if (cooldownAfterClaim.onCooldown) {
     await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'ACCEPTER_ON_COOLDOWN');
@@ -328,7 +536,7 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
 
   const offeredCardId = claimedListing.offeredCardId;
 
-  // ── 3. Build fulfill plan ─────────────────────────────────────────────────
+  // ── 3. Build relative fulfill plan ────────────────────────────────────────
   const plan = buildListingFulfillPlan({
     listingId,
     claimId,
@@ -347,18 +555,41 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     return { success: false, reason: plan.reason || 'INVALID_LISTING_PLAN' };
   }
 
-  // ── 4. Commit fulfill (write 3); recover safely on ack error ──────────────
+  if (diag) {
+    diag.mark('planBuilt', {
+      inventoryDiag: plan.inventoryDiag || null,
+      giveLeafPaths: plan.giveLeafPaths || null,
+      note: 'Relative increments; no absolute planned-after inventory authority',
+    });
+  }
+
+  // ── 4. Commit fulfill; recover safely on ack error (never replay increments) ─
   const result = await commitListingFulfillPlan(listingId, claimId, plan, {
     accepterId,
     chosenCardId,
+    diag,
+    classifyPermissionDenied: async () => classifyPermissionDeniedForListing({
+      listingId,
+      claimedListing,
+      ownerId,
+      accepterId,
+      offeredCardId,
+      chosenCardId,
+    }),
   });
 
   if (!result.success) {
-    // Stale before write: claim may still be ours — release if still processing/ours
+    if (diag) {
+      diag.mark('commitFailed', {
+        reason: result.reason || 'WRITE_FAILED',
+        inventoryCommitAttempted: result.inventoryCommitAttempted === true,
+        uncertain: result.uncertain === true,
+        released: result.released === true,
+      });
+    }
     if (result.stale || result.reason === 'LISTING_NOT_ACTIVE') {
       await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'STALE_BEFORE_FULFILL');
     } else if (result.released) {
-      // Recovery already released claim — restore indexes
       const listingAfter = db.get(`trades/listings/${listingId}`);
       if (listingAfter && listingAfter.status === 'active') {
         const restorePaths = listingReleaseIndexRestorePaths({
@@ -380,6 +611,37 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     return result;
   }
 
+  // ── 5. Zero-leaf cleanup (give cards only; never undoes fulfill) ──────────
+  await cleanupZeroGiveLeavesAfterListingFulfill(
+    result.giveLeafPaths || plan.giveLeafPaths || [],
+    diag,
+  );
+
+  // Optional UI convergence: refresh transformed inventory paths without synthesizing deltas
+  if (Array.isArray(result.transformedPaths) && result.transformedPaths.length > 0
+    && typeof db.loadPathOnce === 'function') {
+    const playerRoots = new Set();
+    for (const p of result.transformedPaths) {
+      const m = String(p).match(/^players\/([^/]+)\//);
+      if (m) playerRoots.add(`players/${m[1]}`);
+    }
+    for (const root of playerRoots) {
+      try {
+        await db.loadPathOnce(root, { force: true });
+      } catch { /* ignore — fulfill already committed */ }
+    }
+  }
+
+  if (diag && plan.inventoryDiag) {
+    await _diagPostAckVerify(diag, {
+      ownerId,
+      accepterId,
+      offeredCardId,
+      chosenCardId,
+      planDiag: plan.inventoryDiag,
+    });
+  }
+
   if (isDetailedLogging()) {
     console.log(
       `[Listings][DETAIL] Listing ${listingId} fulfilled: ${ownerId} gave ${offeredCardId}, ` +
@@ -389,6 +651,15 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     console.log(
       `[Listings] Listing ${listingId} fulfilled: ${ownerId} gave ${offeredCardId}, ${accepterId} gave ${chosenCardId}`,
     );
+  }
+
+  if (diag) {
+    diag.mark('executeCompleted', {
+      success: true,
+      inventoryCommitAttempted: true,
+      claimWon: true,
+      claimId,
+    });
   }
 
   return {

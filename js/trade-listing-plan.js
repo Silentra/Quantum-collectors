@@ -26,6 +26,11 @@ import {
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
 import { listingIndexRemovalsForListing } from './trade-index.js';
+import {
+  STAT_TYPES,
+  buildLeaderboardSummaryPathsForChangedStats,
+  playerLikeWithStatOverlay,
+} from './leaderboard-summaries.js';
 
 /** Dev-only localStorage gate. Absent/false → identical production behavior. */
 export const LISTING_INVENTORY_DIAG_LS_KEY = 'qc-listing-inventory-diag';
@@ -197,6 +202,7 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
 
   return {
     updates,
+    plannedStatValues,
     notified: achPlan.notified,
     unlocked: achPlan.unlocked,
   };
@@ -358,6 +364,30 @@ export function buildListingFulfillPlan({
   const ownerSide = planPlayerPostTradeSideEffects(ownerId, ownerLogical, now);
   const accepterSide = planPlayerPostTradeSideEffects(accepterId, accepterLogical, now);
   Object.assign(updates, ownerSide.updates, accepterSide.updates);
+
+  const ownerLike = playerLikeWithStatOverlay(ownerPlayer, {
+    [STAT_TYPES.TRADES_COMPLETED]: ownerSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
+    [STAT_TYPES.UNIQUE_CARDS_OWNED]: ownerSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
+  });
+  const accepterLike = playerLikeWithStatOverlay(accepterPlayer, {
+    [STAT_TYPES.TRADES_COMPLETED]: accepterSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
+    [STAT_TYPES.UNIQUE_CARDS_OWNED]: accepterSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
+  });
+  Object.assign(
+    updates,
+    buildLeaderboardSummaryPathsForChangedStats(
+      ownerId,
+      ownerLike,
+      [STAT_TYPES.TRADES_COMPLETED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+      now,
+    ),
+    buildLeaderboardSummaryPathsForChangedStats(
+      accepterId,
+      accepterLike,
+      [STAT_TYPES.TRADES_COMPLETED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+      now,
+    ),
+  );
 
   assertNoOverlappingUpdatePaths(updates);
 

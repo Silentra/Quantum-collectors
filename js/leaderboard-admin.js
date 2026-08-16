@@ -31,6 +31,8 @@ import {
   deleteArchivedSeason,
   STAT_TYPES,
 } from './leaderboard-seasons.js';
+import { resetSeasonalResearchPoints } from './research.js';
+import { rebuildLeaderboardSummaries } from './leaderboard-summaries.js';
 import {
   ensureSnapshotsSchema,
   createSnapshot,
@@ -123,6 +125,22 @@ function _buildPanelHTML(activeSeason, archived) {
           🚀 Start New Season
         </button>
       </div>
+    </div>
+
+    <!-- S5d: Rebuild live summaries -->
+    <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
+      <h3 class="font-semibold mb-1">Rebuild Live Leaderboard Summaries</h3>
+      <p class="text-surface-400 text-xs mb-4">
+        Scans all players once and rewrites derived <code class="text-surface-300">leaderboards/</code> leaves
+        used by the student Leaderboard tab. Does not change player stats. Use for first backfill or repair.
+      </p>
+      <button
+        id="btn-rebuild-leaderboard-summaries"
+        type="button"
+        class="bg-surface-700 hover:bg-surface-600 text-white font-semibold px-5 py-2 rounded-lg text-sm transition"
+      >
+        Rebuild Leaderboard Summaries
+      </button>
     </div>
 
     <!-- Archived Leaderboards -->
@@ -278,6 +296,30 @@ function _wireEvents(panel) {
         return;
       }
       _confirmStartSeason(name);
+    });
+  }
+
+  const rebuildSummariesBtn = panel.querySelector('#btn-rebuild-leaderboard-summaries');
+  if (rebuildSummariesBtn && !rebuildSummariesBtn.dataset.wired) {
+    rebuildSummariesBtn.dataset.wired = '1';
+    rebuildSummariesBtn.addEventListener('click', async () => {
+      rebuildSummariesBtn.disabled = true;
+      try {
+        const result = await rebuildLeaderboardSummaries();
+        if (!result.ok) {
+          toast.error(result.error || 'Leaderboard summary rebuild failed');
+          return;
+        }
+        if (result.skipped) {
+          toast.info(`Leaderboard summaries already in sync (unchanged: ${result.unchanged})`);
+        } else {
+          toast.success(
+            `Summaries rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}`,
+          );
+        }
+      } finally {
+        rebuildSummariesBtn.disabled = false;
+      }
     });
   }
 
@@ -564,15 +606,12 @@ function _snapshotActiveSeasonRP() {
 }
 
 /**
- * Reset seasonalResearchPoints to 0 for every player.
+ * Reset seasonalResearchPoints to 0 for every player (+ live seasonal summaries).
  * Lifetime (totalResearchPoints) is untouched.
  */
 function _resetAllSeasonalRP() {
-  const players = db.getChildren('players');
-  for (const { key: username } of players) {
-    db.set(`players/${username}/seasonalResearchPoints`, 0);
-  }
-  console.log(`[LeaderboardAdmin] Reset seasonal RP for ${players.length} players`);
+  const count = resetSeasonalResearchPoints();
+  console.log(`[LeaderboardAdmin] Reset seasonal RP for ${count} players`);
 }
 
 // ─── LB-5: Snapshots HTML builder ─────────────────────────────────────────

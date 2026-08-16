@@ -1263,10 +1263,13 @@ export function workflowS5cD7() {
 === S5c-D7 / S5c-D Final Trading Isolation Umbrella ===
 
 Prereq: D7a + D7b COMPLETE + VERIFIED. Two same-group players (e.g. Bobby / Bobby2).
-NOTE: S5c-D7c remains BLOCKED until Hybrid C+ Gate C verification (listing relative inventory)
-and final isolation regression. Keep qc-direct-inventory-diag / qc-listing-inventory-diag
-available for inventory proofs.
-Critical inventory regression (do not skip): sequential same-card directs ~3s apart
+NOTE: S5c-D7c / S5c-D7 / S5c-D are COMPLETE + VERIFIED. Hybrid C+ Gates A/B/C COMPLETE + VERIFIED.
+Final isolation G PASSED (audit + cache isolation ON; representative Trading action;
+unexpectedTotal===0; hardViolations===0; no bare trees; no healthy canonical-fallback).
+B/C/D gameplay + shadowCompare credited from Gate B/C relative-inventory verification
+(not required to replay for D7c closure). Keep qc-direct-inventory-diag /
+qc-listing-inventory-diag available for inventory proofs if re-checking.
+Critical inventory regression (historical): sequential same-card directs ~3s apart
 (prior “Black Hole” stale absolute write) must compose −2/+2 — enable:
   localStorage.setItem('qc-direct-inventory-diag','true');
 Listing fulfill relative proof (Gate C):
@@ -1364,8 +1367,54 @@ qcDbMetrics.summary()
 // Healthy: *Source:index tags; zero unexpected *canonical-fallback during gates
 
 FINAL PASS when A–D and G hold; E static; F inherited; H inherited.
-Then mark S5c-D7c + S5c-D7 + S5c-D COMPLETE + VERIFIED.
-Do NOT begin S5d until that status is set.
+Historical close: S5c-D7c + S5c-D7 + S5c-D marked COMPLETE + VERIFIED after G PASS
+(with B/C/D gameplay credited from Gate B/C). Do NOT begin S6 until S5d is verified.
+`);
+}
+
+/**
+ * Pasteable S5d live leaderboard summaries verification (does not replay D7 / Gate B/C).
+ */
+export function workflowS5d() {
+  console.info(`
+=== S5d Live Leaderboard Summaries ===
+
+Prereq: S5c-D COMPLETE + VERIFIED. Admin account available.
+
+1) Rebuild (Admin → Leaderboards tab):
+   // or DevTools:
+   await qcLeaderboardSummaries.rebuildLeaderboardSummaries()
+   // PASS: ok===true; sample leaf exists e.g.
+   qcDbHydration.getCached('leaderboards/totalResearchPoints/bobby')
+
+2) Student: open Leaderboard tab
+   qcDbHydration.getSubscriptionRegistry()
+   // PASS: leaderboards ×1; no foreign players/{other} for LB
+   // PASS: ranks look correct for your group
+
+3) Leave Leaderboard tab
+   qcDbHydration.getLeaderboardsHydrationReport()
+   // PASS: active===false
+
+4) Change a live score (open pack / claim project / complete trade / admin RP)
+   // PASS: matching leaderboards/{statKey}/{you}.value updates
+
+5) Admin: change player group
+   // PASS: all 7 summary leaves for that user show new groupId
+
+6) Optional audit on Leaderboard tab:
+   localStorage.setItem('qc-personal-scope-audit','true'); location.reload();
+   const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+   qcPersonalAudit.begin('s5d-lb', { allowedPrefixes: [
+     'config','cards','packs','groups','tradeIndexMeta','playerDirectory',
+     'players/' + me, 'playerTradeIndex/' + me, 'leaderboards',
+     'leaderboardSeasons', 'leaderboardSnapshots'
+   ]});
+   // idle on Leaderboard ~5s
+   qcPersonalAudit.end('s5d-lb');
+   // PASS: unexpectedTotal===0; no bare players scan for live board
+
+Do NOT require full S5c-D7 or Gate B/C matrices.
 `);
 }
 
@@ -1395,6 +1444,7 @@ function _installWindowApi() {
     workflowS5cD7a,
     workflowS5cD7b,
     workflowS5cD7,
+    workflowS5d,
     enableAudit,
     disableAudit,
     enableIsolation,

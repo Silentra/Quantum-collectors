@@ -27,6 +27,7 @@ import {
   hydrateCurrentPlayer,
   releaseCurrentPlayerScope,
   releasePlayerTradeIndexScope,
+  releaseLeaderboardsScope,
   subscribeCurrentPlayer,
 } from './db-hydration.js';
 import {
@@ -38,6 +39,7 @@ import {
 import { emptyPlayerTradeIndexPaths } from './trade-index.js';
 import { syncProjects } from './project-sync.js';
 import { getProjectConfig } from './project-config.js';
+import { buildLeaderboardSummaryPathsForPlayer } from './leaderboard-summaries.js';
 import * as cards from './cards.js';
 import { getPhase2ADefaults, normalizePlayerSchema } from './player-schema.js';
 import { resetLoginAchievementEvaluation, runLoginAchievementEvaluation } from './achievements.js';
@@ -166,6 +168,7 @@ function stopSessionGuard() {
 function releaseAuthOwnedScopes() {
   releasePlayerTradeIndexScope();
   releaseCurrentPlayerScope();
+  releaseLeaderboardsScope();
 }
 
 /**
@@ -635,6 +638,7 @@ export async function register(username, password, accessCode) {
     [`accessCodes/${accessCode}/usedAt`]: issuedAt,
     ...directoryPathsForPlayer(username, buildDirectoryEntry(username, playerRecord)),
     ...emptyPlayerTradeIndexPaths(username),
+    ...buildLeaderboardSummaryPathsForPlayer(username, playerRecord, { now: issuedAt }),
   });
 
   if (!ack.ok) {

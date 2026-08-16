@@ -10,6 +10,7 @@ const { getAuraTier } = cards;
 import { getCosmeticDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES } from './shop-definitions.js';
 import { refreshUniqueCardsOwned } from './research.js';
+import { STAT_TYPES, syncLeaderboardSummariesForPlayer } from './leaderboard-summaries.js';
 
 /** Aura tier index when a card has reached maximum duplicate scaling. */
 const MAX_AURA_TIER = 3;
@@ -288,7 +289,37 @@ export function applyStatChange(username, statKey, delta = 1, options = {}) {
   }
 
   writePath(username, path, next);
+
+  const lbStatType = _leaderboardStatTypeForAchievementKey(statKey);
+  if (lbStatType) {
+    void syncLeaderboardSummariesForPlayer(username, { statTypes: [lbStatType] });
+  }
+
   return { changed: true, statKey, path, previous, value: next };
+}
+
+/**
+ * Map achievement STAT_KEYS to live leaderboard STAT_TYPES (or null if not a live LB field).
+ * @param {string} statKey
+ * @returns {string|null}
+ */
+function _leaderboardStatTypeForAchievementKey(statKey) {
+  switch (statKey) {
+    case STAT_KEYS.TOTAL_RESEARCH_POINTS:
+      return STAT_TYPES.LIFETIME_RP;
+    case STAT_KEYS.PROJECTS_COMPLETED:
+      return STAT_TYPES.PROJECTS_COMPLETED;
+    case STAT_KEYS.BREAKTHROUGHS_ACHIEVED:
+      return STAT_TYPES.BREAKTHROUGHS;
+    case STAT_KEYS.UNIQUE_CARDS_OWNED:
+      return STAT_TYPES.UNIQUE_CARDS_OWNED;
+    case STAT_KEYS.TRADES_COMPLETED:
+      return STAT_TYPES.TRADES_COMPLETED;
+    case STAT_KEYS.PACKS_OPENED:
+      return STAT_TYPES.PACKS_OPENED;
+    default:
+      return null;
+  }
 }
 
 /**

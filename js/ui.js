@@ -42,7 +42,7 @@ import {
 } from './db-hydration.js';
 import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
-import { initLeaderboardUI, renderLeaderboard } from './leaderboard-ui.js';
+import { initLeaderboardUI, renderLeaderboard, enterLeaderboardTab, cleanupLeaderboard } from './leaderboard-ui.js';
 import { renderAdminSeasons } from './leaderboard-admin.js';
 import { cleanupTrading, enterTradingTab } from './trade-ui.js';
 import { ITEM_TYPES } from './shop-definitions.js';
@@ -157,7 +157,8 @@ function setupTabs() {
       if (tab === 'shop') { renderShop(); }
       else { cleanupShop(); }
       if (tab === 'profile') renderProfile();
-      if (tab === 'leaderboard') renderLeaderboard();
+      if (tab === 'leaderboard') { void enterLeaderboardTab(); }
+      else { cleanupLeaderboard(); }
       // Leaving Trading already ran cleanupTrading above when tab !== trading
       if (tab === 'admin') { void enterAdminTab(); }
       else { cleanupAdmin(); }

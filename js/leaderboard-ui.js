@@ -29,6 +29,11 @@ import {
   getSnapshotMeta,
 } from './leaderboard-queries.js';
 import { getActiveSeason } from './leaderboard-seasons.js';
+import { areLeaderboardSummariesReady } from './leaderboard-summaries.js';
+import {
+  ensureLeaderboardsScope,
+  releaseLeaderboardsScope,
+} from './db-hydration.js';
 
 // ─── Category config ───────────────────────────────────────────────────────
 
@@ -106,6 +111,22 @@ export function renderLeaderboard() {
   _renderSeasonSelector(groupId);
   _renderSnapshotSelector(groupId);
   _renderTable(session.username, groupId);
+}
+
+/**
+ * Enter Leaderboard tab: ensure summary scope then render.
+ * @returns {Promise<void>}
+ */
+export async function enterLeaderboardTab() {
+  await ensureLeaderboardsScope();
+  renderLeaderboard();
+}
+
+/**
+ * Leave Leaderboard tab: release summary subscription (cache retained).
+ */
+export function cleanupLeaderboard() {
+  releaseLeaderboardsScope();
 }
 
 // ─── Category tabs ─────────────────────────────────────────────────────────
@@ -252,6 +273,15 @@ function _renderTable(currentUsername, groupId) {
       const s = summaries.find(x => x.id === _activeSeasonId);
       subtitleText = s ? s.name : _activeSeasonId;
     } else {
+      if (!areLeaderboardSummariesReady()) {
+        tableEl.innerHTML = '';
+        if (emptyEl) {
+          emptyEl.classList.remove('hidden');
+          emptyEl.textContent = 'Live leaderboard summaries are not ready. Ask an admin to Rebuild Leaderboard Summaries.';
+        }
+        if (titleEl) titleEl.textContent = cat.label;
+        return;
+      }
       rows = getLeaderboardByStat({ statType: STAT_TYPES.SEASONAL_RP, groupId, limit: 100 });
       const activeSeason = getActiveSeason();
       subtitleText = activeSeason ? activeSeason.name + ' (Current)' : 'Current Season';
@@ -262,7 +292,16 @@ function _renderTable(currentUsername, groupId) {
     const meta = getSnapshotMeta(_activeSnapshotId);
     subtitleText = meta ? meta.title : _activeSnapshotId;
   } else {
-    // ── Live non-seasonal data ──
+    // ── Live non-seasonal / live seasonal current data (summaries) ──
+    if (!areLeaderboardSummariesReady()) {
+      tableEl.innerHTML = '';
+      if (emptyEl) {
+        emptyEl.classList.remove('hidden');
+        emptyEl.textContent = 'Live leaderboard summaries are not ready. Ask an admin to Rebuild Leaderboard Summaries.';
+      }
+      if (titleEl) titleEl.textContent = cat.label;
+      return;
+    }
     rows = getLeaderboardByStat({ statType: cat.statType, groupId, limit: 100 });
   }
 

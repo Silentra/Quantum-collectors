@@ -38,6 +38,11 @@ import {
   computeCardsAtMaxAuraFromInventory,
 } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
+import {
+  STAT_TYPES,
+  buildLeaderboardSummaryPathsForChangedStats,
+  playerLikeWithStatOverlay,
+} from './leaderboard-summaries.js';
 
 /**
  * Pick one breakthrough reward card (pack-style rarity weights). No inventory writes.
@@ -297,6 +302,36 @@ export function buildProjectClaimPlan(username, projectId, options = {}) {
     now,
   });
   Object.assign(updates, achPlan.updates);
+
+  const playerBefore = db.get(`players/${username}`) || {};
+  /** @type {Record<string, number>} */
+  const lbOverlay = {};
+  /** @type {string[]} */
+  const lbChanged = [];
+  // Lifetime/seasonal summary paths already come from RP grant builders when assigned above.
+  if (Object.prototype.hasOwnProperty.call(plannedStatValues, STAT_KEYS.PROJECTS_COMPLETED)) {
+    lbOverlay[STAT_TYPES.PROJECTS_COMPLETED] = plannedStatValues[STAT_KEYS.PROJECTS_COMPLETED];
+    lbChanged.push(STAT_TYPES.PROJECTS_COMPLETED);
+  }
+  if (Object.prototype.hasOwnProperty.call(plannedStatValues, STAT_KEYS.BREAKTHROUGHS_ACHIEVED)) {
+    lbOverlay[STAT_TYPES.BREAKTHROUGHS] = plannedStatValues[STAT_KEYS.BREAKTHROUGHS_ACHIEVED];
+    lbChanged.push(STAT_TYPES.BREAKTHROUGHS);
+  }
+  if (Object.prototype.hasOwnProperty.call(plannedStatValues, STAT_KEYS.UNIQUE_CARDS_OWNED)) {
+    lbOverlay[STAT_TYPES.UNIQUE_CARDS_OWNED] = plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED];
+    lbChanged.push(STAT_TYPES.UNIQUE_CARDS_OWNED);
+  }
+  if (lbChanged.length > 0) {
+    Object.assign(
+      updates,
+      buildLeaderboardSummaryPathsForChangedStats(
+        username,
+        playerLikeWithStatOverlay(playerBefore, lbOverlay),
+        lbChanged,
+        now,
+      ),
+    );
+  }
 
   assertNoOverlappingUpdatePaths(updates);
 

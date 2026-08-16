@@ -31,6 +31,11 @@ import {
   getVisibleSnapshots  as _getVisibleSnapshots,
   getSnapshot          as _getSnapshot,
 } from './leaderboard-snapshots.js';
+import {
+  LEADERBOARDS_ROOT,
+  areLeaderboardSummariesReady,
+  resolveLeaderboardStatValue,
+} from './leaderboard-summaries.js';
 
 export { STAT_TYPES };
 
@@ -38,22 +43,13 @@ export { STAT_TYPES };
 
 /**
  * Resolve a dot/slash-separated stat path on a player object.
- * e.g., 'stats.packsOpened' → player.stats.packsOpened
- * e.g., 'totalResearchPoints' → player.totalResearchPoints
- *
+ * Shared canonical resolver with leaderboard-summaries.
  * @param {object} player
- * @param {string} statType - STAT_TYPES value or any dot-path
+ * @param {string} statType
  * @returns {number}
  */
 function _resolveStatValue(player, statType) {
-  if (!player || !statType) return 0;
-  const parts = statType.replace(/\./g, '/').split('/');
-  let cursor = player;
-  for (const part of parts) {
-    if (cursor == null || typeof cursor !== 'object') return 0;
-    cursor = cursor[part];
-  }
-  return typeof cursor === 'number' ? cursor : 0;
+  return resolveLeaderboardStatValue(player, statType);
 }
 
 /**
@@ -85,24 +81,28 @@ function _filterByGroup(entries, groupId, subgroupId) {
 }
 
 /**
- * Convert all players in DB to a normalized entry array.
- * @param {string} statType - A STAT_TYPES value
+ * Build live board entries from derived leaderboard summaries (S5d).
+ * Fail-closed: empty when summaries are not ready — never scans `players`.
+ * @param {string} statType
  * @returns {Array<{ username, value, groupId, subgroupId }>}
  */
-function _buildPlayerEntries(statType) {
-  const players = db.getChildren('players');
-  return players.map(({ key: username, value: player }) => ({
-    username,
-    value: _resolveStatValue(player, statType),
-    groupId: player?.groupId ?? null,
-    subgroupId: player?.subgroupId ?? null,
-  }));
+function _buildSummaryEntries(statType) {
+  if (!statType || !areLeaderboardSummariesReady()) return [];
+  const children = db.getChildren(`${LEADERBOARDS_ROOT}/${statType}`) || [];
+  return children
+    .filter(({ key }) => key && key !== '__admin__')
+    .map(({ key: username, value: entry }) => ({
+      username,
+      value: typeof entry?.value === 'number' && Number.isFinite(entry.value) ? entry.value : 0,
+      groupId: entry?.groupId ?? null,
+      subgroupId: entry?.subgroupId ?? null,
+    }));
 }
 
 // ---------- Public query API ----------
 
 /**
- * Get a leaderboard ranked by any lifetime player stat.
+ * Get a leaderboard ranked by any lifetime player stat (live summaries).
  *
  * @param {object} options
  * @param {string}      options.statType   - STAT_TYPES value (default: LIFETIME_RP)
@@ -117,7 +117,7 @@ export function getLeaderboardByStat({
   subgroupId = null,
   limit      = 50,
 } = {}) {
-  const entries = _buildPlayerEntries(statType);
+  const entries = _buildSummaryEntries(statType);
   const filtered = _filterByGroup(entries, groupId, subgroupId);
   const sorted   = _sortEntries(filtered).slice(0, limit);
   return sorted.map((e, i) => ({ rank: i + 1, ...e }));

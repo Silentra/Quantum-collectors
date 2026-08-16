@@ -27,6 +27,11 @@ import {
 } from './achievements.js';
 import { getPlayerStat, computeCardsAtMaxAuraFromInventory } from './achievement-stats.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
+import {
+  STAT_TYPES,
+  buildLeaderboardSummaryPathsForChangedStats,
+  playerLikeWithStatOverlay,
+} from './leaderboard-summaries.js';
 
 /**
  * Create a new pack type
@@ -213,6 +218,20 @@ function buildPackOpenPlan(username, packId, packType) {
 
   const achPlan = planAchievementUpdatesForStats(username, statKeys, { getStat });
   Object.assign(updates, achPlan.updates);
+
+  const playerBefore = db.get(`players/${username}`) || {};
+  const playerLike = playerLikeWithStatOverlay(playerBefore, {
+    [STAT_TYPES.PACKS_OPENED]: nextPacksOpened,
+    [STAT_TYPES.UNIQUE_CARDS_OWNED]: nextUniqueOwned,
+  });
+  Object.assign(
+    updates,
+    buildLeaderboardSummaryPathsForChangedStats(
+      username,
+      playerLike,
+      [STAT_TYPES.PACKS_OPENED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+    ),
+  );
 
   return {
     updates,
