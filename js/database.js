@@ -1525,11 +1525,15 @@ export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
 
 /**
  * Idempotent zero-leaf cleanup: delete inventory leaf only if authoritative value is numeric <= 0.
- * Never decrements. Safe if another op reacquired the card (current > 0 → abort).
+ * Never decrements. Safe if another op reacquired the card (current > 0 → no-op).
  *
- * Always performs an acknowledged read first so cleanup after ServerValue.increment is not
- * fooled by a stale local positive (Gate A skips applyLocalOnly for .sv transforms) or by
- * aborting an RTDB transaction on a speculative first-pass null.
+ * The RTDB transaction is the decision authority (applyLocally: false). A preceding once() /
+ * getAcknowledged() must not skip the transaction based on a stale synchronized positive —
+ * that race appears right after ServerValue.increment when app cache skipped .sv patches.
+ *
+ * Speculative first-pass null returns null (not undefined) so the SDK reconciles with the
+ * server instead of aborting. Numeric > 0 returns the same value to force a server hash check:
+ * stale local 1 with server 0 retries with 0 and deletes; genuine server 1 commits a no-op.
  *
  * @param {string} inventoryLeafPath e.g. players/u/inventory/cardId
  * @returns {Promise<{
@@ -1552,60 +1556,43 @@ export async function clearInventoryLeafIfNonPositive(inventoryLeafPath) {
     };
   }
 
-  const mode = _useFirebase && _fbDb ? 'firebase' : 'local';
-
-  // Authoritative leaf read (patches cache). Do not trust pre-increment local qty.
-  const remote = await getAcknowledged(path);
-  if (!remote.ok) {
-    return {
-      ok: false,
-      removed: false,
-      mode: remote.mode || mode,
-      outcome: 'failed',
-      error: remote.error || 'Could not read inventory leaf for zero cleanup',
-    };
-  }
-
-  const acknowledged = remote.value;
-  if (acknowledged == null) {
-    return { ok: true, removed: false, mode: remote.mode || mode, outcome: 'already_missing' };
-  }
-  if (typeof acknowledged !== 'number' || !Number.isFinite(acknowledged)) {
-    return {
-      ok: true,
-      removed: false,
-      mode: remote.mode || mode,
-      outcome: 'non_numeric',
-    };
-  }
-  if (acknowledged > 0) {
-    return { ok: true, removed: false, mode: remote.mode || mode, outcome: 'positive' };
-  }
-
-  // Acknowledged numeric <= 0 — delete only if still non-positive under the transaction.
-  const tryClear = (current) => {
-    if (current == null) return; // already gone — abort as clean no-op
-    if (typeof current === 'number' && Number.isFinite(current) && current <= 0) {
-      return null; // delete
-    }
-    return; // > 0 (reacquired) or unexpected — abort
-  };
-
   if (!_useFirebase || !_fbDb) {
     const current = get(path);
-    const next = tryClear(current);
-    if (next === undefined) {
-      const outcome = current == null
-        ? 'already_missing'
-        : (typeof current === 'number' && current > 0 ? 'positive' : 'non_numeric');
-      return { ok: true, removed: false, mode: 'local', outcome };
+    if (current == null) {
+      return { ok: true, removed: false, mode: 'local', outcome: 'already_missing' };
+    }
+    if (typeof current !== 'number' || !Number.isFinite(current)) {
+      return { ok: true, removed: false, mode: 'local', outcome: 'non_numeric' };
+    }
+    if (current > 0) {
+      return { ok: true, removed: false, mode: 'local', outcome: 'positive' };
     }
     applyLocalOnly(path, null);
     return { ok: true, removed: true, mode: 'local', outcome: 'removed' };
   }
 
+  /** @type {unknown} */
+  let lastSeen;
+  const tryClear = (current) => {
+    lastSeen = current;
+    // Speculative null: return null so the SDK contacts the server (do not abort).
+    if (current == null) {
+      return null;
+    }
+    if (typeof current === 'number' && Number.isFinite(current) && current <= 0) {
+      return null; // delete
+    }
+    if (typeof current === 'number' && Number.isFinite(current) && current > 0) {
+      // No-op write forces server hash check — fixes stale local positive after increment.
+      return current;
+    }
+    // Unexpected / non-numeric — abort, do not delete
+    return;
+  };
+
   try {
-    const result = await _fbDb.ref(path).transaction((current) => tryClear(current));
+    // applyLocally: false — suppress intermediate local events; update fn still reconciles w/ server
+    const result = await _fbDb.ref(path).transaction(tryClear, /* onComplete */ undefined, /* applyLocally */ false);
     metrics.recordFirebaseWrite({
       op: 'transaction',
       path,
@@ -1613,29 +1600,41 @@ export async function clearInventoryLeafIfNonPositive(inventoryLeafPath) {
       ok: true,
       extraPaths: ['inventory-zero-cleanup'],
     });
-    const nextVal = result.snapshot ? result.snapshot.val() : null;
-    const snapVal = nextVal;
+    const snapVal = result.snapshot ? result.snapshot.val() : null;
 
     if (result.committed === true && snapVal == null) {
       applyLocalOnly(path, null);
-      return { ok: true, removed: true, mode: 'firebase', outcome: 'removed' };
+      // Distinguish delete of a zero leaf vs commit on already-missing.
+      if (typeof lastSeen === 'number' && Number.isFinite(lastSeen) && lastSeen <= 0) {
+        return { ok: true, removed: true, mode: 'firebase', outcome: 'removed' };
+      }
+      return { ok: true, removed: false, mode: 'firebase', outcome: 'already_missing' };
     }
 
-    // Aborted: already missing, reacquired (>0), or unexpected — never an error for cleanup.
+    if (result.committed === true && typeof snapVal === 'number' && Number.isFinite(snapVal) && snapVal > 0) {
+      applyLocalOnly(path, snapVal);
+      return { ok: true, removed: false, mode: 'firebase', outcome: 'positive' };
+    }
+
+    if (!result.committed) {
+      if (snapVal == null) {
+        applyLocalOnly(path, null);
+        return { ok: true, removed: false, mode: 'firebase', outcome: 'already_missing' };
+      }
+      if (typeof snapVal === 'number' && Number.isFinite(snapVal) && snapVal > 0) {
+        applyLocalOnly(path, snapVal);
+        return { ok: true, removed: false, mode: 'firebase', outcome: 'positive' };
+      }
+      return { ok: true, removed: false, mode: 'firebase', outcome: 'non_numeric' };
+    }
+
+    // Committed unexpected shape
     if (snapVal == null) {
       applyLocalOnly(path, null);
       return { ok: true, removed: false, mode: 'firebase', outcome: 'already_missing' };
     }
-    if (typeof snapVal === 'number' && Number.isFinite(snapVal) && snapVal > 0) {
-      applyLocalOnly(path, snapVal);
-      return { ok: true, removed: false, mode: 'firebase', outcome: 'positive' };
-    }
-    return {
-      ok: true,
-      removed: false,
-      mode: 'firebase',
-      outcome: 'non_numeric',
-    };
+    applyLocalOnly(path, snapVal);
+    return { ok: true, removed: false, mode: 'firebase', outcome: 'non_numeric' };
   } catch (e) {
     metrics.recordFirebaseWrite({
       op: 'transaction',
