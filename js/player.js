@@ -70,7 +70,7 @@ export function updatePlayer(username, updates) {
 
 /**
  * Get player inventory as array of { cardId, quantity }.
- * Only positive numeric quantities are returned (zero / non-numeric leaves omitted).
+ * Canonical ownership: only Number(quantity) > 0 (missing leaf ≡ quantity 0 ≡ not owned).
  */
 export function getInventory(username) {
   const inv = db.get(`players/${username}/inventory`) || {};

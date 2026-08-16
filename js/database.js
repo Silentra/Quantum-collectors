@@ -1524,16 +1524,14 @@ export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
 }
 
 /**
- * Idempotent zero-leaf cleanup: delete inventory leaf only if authoritative value is numeric <= 0.
+ * Optional best-effort storage hygiene: delete inventory leaf only if authoritative value is
+ * numeric <= 0. Not a Gate B/C correctness requirement — ownership is Number(qty) > 0;
+ * missing and 0 are equivalent (not owned). Callers must never treat cleanup failure as
+ * trade failure.
+ *
  * Never decrements. Safe if another op reacquired the card (current > 0 → no-op).
- *
- * The RTDB transaction is the decision authority (applyLocally: false). A preceding once() /
- * getAcknowledged() must not skip the transaction based on a stale synchronized positive —
- * that race appears right after ServerValue.increment when app cache skipped .sv patches.
- *
- * Speculative first-pass null returns null (not undefined) so the SDK reconciles with the
- * server instead of aborting. Numeric > 0 returns the same value to force a server hash check:
- * stale local 1 with server 0 retries with 0 and deletes; genuine server 1 commits a no-op.
+ * RTDB transaction is decision authority (applyLocally: false). Speculative null returns
+ * null (reconcile, do not abort). Numeric > 0 returns the same value for server hash check.
  *
  * @param {string} inventoryLeafPath e.g. players/u/inventory/cardId
  * @returns {Promise<{

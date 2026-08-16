@@ -649,8 +649,8 @@ export async function releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason
 }
 
 /**
- * Idempotent post-accept cleanup: remove give leaves only if authoritative qty <= 0.
- * Never rolls back or replays the accepted trade.
+ * Optional best-effort give-leaf hygiene after accept (missing ≡ qty 0 for ownership).
+ * Never rolls back or replays the accepted trade; cleanup failure is non-fatal.
  * @param {string[]} giveLeafPaths
  * @param {object|null} diag
  */

@@ -583,9 +583,10 @@ export function compareResearchTradingSelfAvailability(username) {
   const research = buildResearchAvailabilitySnapshot(key);
   const trading = buildTradingSelfAvailabilitySnapshot(key);
 
+  // Ownership = Number(qty) > 0; ignore zero-only inventory keys in parity scans.
   const cards = new Set([
-    ...Object.keys(research.inventory || {}),
-    ...Object.keys(trading.inventory || {}),
+    ..._positiveInventoryCardIds(research.inventory),
+    ..._positiveInventoryCardIds(trading.inventory),
     ...(research.tradeCounts ? [...research.tradeCounts.keys()] : []),
     ...(trading.tradeCounts ? [...trading.tradeCounts.keys()] : []),
   ]);
@@ -938,13 +939,29 @@ export function validateCardsAssignableToProject(snapshot, cardIds) {
 }
 
 /**
+ * Positive-quantity inventory card IDs (canonical ownership: Number(qty) > 0).
+ * Missing and numeric 0 are both non-owned — never treat key presence alone as ownership.
+ * @param {Object} [inventory]
+ * @returns {string[]}
+ */
+function _positiveInventoryCardIds(inventory) {
+  const out = [];
+  for (const [cardId, qty] of Object.entries(inventory || {})) {
+    if (Number(qty) > 0) out.push(cardId);
+  }
+  return out;
+}
+
+/**
  * Card IDs with zero trade-available copies (for trade UI filtering).
+ * When `cardIds` is omitted, only positive-qty inventory entries are considered so a
+ * zero-valued leaf never appears as owned-but-unavailable/locked.
  * @param {AvailabilitySnapshot} snapshot
  * @param {string[]} [cardIds]
  * @returns {Set<string>}
  */
 export function getUnavailableCardIds(snapshot, cardIds = null) {
-  const ids = cardIds ?? Object.keys(snapshot.inventory);
+  const ids = cardIds ?? _positiveInventoryCardIds(snapshot?.inventory);
   const out = new Set();
   for (const cardId of ids) {
     if (getAvailableCopyCount(snapshot, cardId) < 1) out.add(cardId);

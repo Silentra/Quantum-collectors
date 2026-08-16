@@ -397,8 +397,8 @@ export function buildListingFulfillPlan({
 }
 
 /**
- * Idempotent post-fulfill cleanup: remove give leaves only if authoritative qty <= 0.
- * Never rolls back or questions a fulfilled listing.
+ * Optional best-effort give-leaf hygiene after fulfill (missing ≡ qty 0 for ownership).
+ * Never rolls back or questions a fulfilled listing; cleanup failure is non-fatal.
  * @param {string[]} giveLeafPaths
  * @param {object|null} diag
  */
