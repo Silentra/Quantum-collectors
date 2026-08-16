@@ -34,6 +34,7 @@ import {
 import {
   LEADERBOARDS_ROOT,
   areLeaderboardSummariesReady,
+  normalizeLeaderboardStatKey,
   resolveLeaderboardStatValue,
 } from './leaderboard-summaries.js';
 
@@ -83,12 +84,14 @@ function _filterByGroup(entries, groupId, subgroupId) {
 /**
  * Build live board entries from derived leaderboard summaries (S5d).
  * Fail-closed: empty when summaries are not ready — never scans `players`.
+ * Accepts Firebase-safe statKey or legacy STAT_TYPES / playerPath values.
  * @param {string} statType
  * @returns {Array<{ username, value, groupId, subgroupId }>}
  */
 function _buildSummaryEntries(statType) {
-  if (!statType || !areLeaderboardSummariesReady()) return [];
-  const children = db.getChildren(`${LEADERBOARDS_ROOT}/${statType}`) || [];
+  const statKey = normalizeLeaderboardStatKey(statType);
+  if (!statKey || !areLeaderboardSummariesReady()) return [];
+  const children = db.getChildren(`${LEADERBOARDS_ROOT}/${statKey}`) || [];
   return children
     .filter(({ key }) => key && key !== '__admin__')
     .map(({ key: username, value: entry }) => ({

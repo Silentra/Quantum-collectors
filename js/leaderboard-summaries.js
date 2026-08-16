@@ -7,6 +7,10 @@
  * Entry shape: { value, groupId, subgroupId, updatedAt }
  * Username is the leaf key. No displayName / eligibility flags.
  *
+ * Firebase path segment = Firebase-safe `statKey` (no ".").
+ * Player value source = separate `playerPath` (may use "." nesting).
+ * Callers may pass either form; all path construction goes through normalizeLeaderboardStatKey.
+ *
  * No mirror listeners — callers merge path builders into acknowledged updates
  * or call syncLeaderboardSummariesForPlayer / rebuildLeaderboardSummaries.
  */
@@ -16,29 +20,90 @@ import { STAT_TYPES } from './leaderboard-seasons.js';
 
 export const LEADERBOARDS_ROOT = 'leaderboards';
 
-/** Live STAT_TYPES values used by the Leaderboard tab (stable path segments). */
-export const LIVE_LEADERBOARD_STAT_TYPES = Object.freeze([
-  STAT_TYPES.LIFETIME_RP,
-  STAT_TYPES.SEASONAL_RP,
-  STAT_TYPES.PROJECTS_COMPLETED,
-  STAT_TYPES.PACKS_OPENED,
-  STAT_TYPES.TRADES_COMPLETED,
-  STAT_TYPES.UNIQUE_CARDS_OWNED,
-  STAT_TYPES.BREAKTHROUGHS,
-]);
+/**
+ * Canonical live summary matrix (single source of truth).
+ * statKey = RTDB path segment under leaderboards/
+ * playerPath = nested player field used only for value resolution
+ */
+export const LEADERBOARD_STAT_DEFS = Object.freeze({
+  totalResearchPoints: { playerPath: 'totalResearchPoints' },
+  seasonalResearchPoints: { playerPath: 'seasonalResearchPoints' },
+  projectsCompleted: { playerPath: 'projectsCompleted' },
+  packsOpened: { playerPath: 'stats.packsOpened' },
+  tradesCompleted: { playerPath: 'stats.tradesCompleted' },
+  uniqueCardsOwned: { playerPath: 'stats.uniqueCardsOwned' },
+  breakthroughs: { playerPath: 'researchStats.breakthroughs' },
+});
+
+/** Firebase-safe live summary keys (stable order). */
+export const LIVE_LEADERBOARD_STAT_KEYS = Object.freeze(Object.keys(LEADERBOARD_STAT_DEFS));
+
+/** @deprecated Prefer LIVE_LEADERBOARD_STAT_KEYS — kept as alias for early S5d call sites. */
+export const LIVE_LEADERBOARD_STAT_TYPES = LIVE_LEADERBOARD_STAT_KEYS;
+
+/** playerPath / legacy STAT_TYPES value → Firebase-safe statKey */
+const PLAYER_PATH_TO_STAT_KEY = Object.freeze(
+  Object.fromEntries(
+    Object.entries(LEADERBOARD_STAT_DEFS).map(([statKey, def]) => [def.playerPath, statKey]),
+  ),
+);
+
+/** Illegal RTDB key characters (Firebase rejects "." among others). */
+const ILLEGAL_RTDB_KEY_CHARS = /[.#$\[\]]/;
+
+/**
+ * @param {string} segment
+ * @returns {string}
+ */
+export function assertFirebaseSafeKey(segment) {
+  const key = String(segment ?? '');
+  if (!key || ILLEGAL_RTDB_KEY_CHARS.test(key)) {
+    throw new Error(
+      `[LeaderboardSummaries] Illegal RTDB key segment: ${JSON.stringify(segment)} `
+      + '(keys cannot contain ".", "#", "$", "[", or "]")',
+    );
+  }
+  return key;
+}
+
+/**
+ * Normalize any accepted live-stat identifier to the Firebase-safe statKey.
+ * Accepts: safe key, playerPath, or legacy STAT_TYPES value.
+ * @param {string} input
+ * @returns {string|null}
+ */
+export function normalizeLeaderboardStatKey(input) {
+  const raw = String(input || '').trim();
+  if (!raw) return null;
+  if (Object.prototype.hasOwnProperty.call(LEADERBOARD_STAT_DEFS, raw)) return raw;
+  if (Object.prototype.hasOwnProperty.call(PLAYER_PATH_TO_STAT_KEY, raw)) {
+    return PLAYER_PATH_TO_STAT_KEY[raw];
+  }
+  return null;
+}
+
+/**
+ * @param {string} input - safe key, playerPath, or STAT_TYPES value
+ * @returns {string|null}
+ */
+export function playerPathForLeaderboardStat(input) {
+  const statKey = normalizeLeaderboardStatKey(input);
+  if (!statKey) return null;
+  return LEADERBOARD_STAT_DEFS[statKey].playerPath;
+}
 
 export { STAT_TYPES };
 
 /**
- * Resolve a STAT_TYPES path on a player-like object (shared with live queries).
- * e.g. 'stats.packsOpened' → player.stats.packsOpened
+ * Resolve a live LB stat on a player-like object via canonical playerPath.
  * @param {object|null|undefined} player
- * @param {string} statType
+ * @param {string} statInput - Firebase-safe key or playerPath / STAT_TYPES
  * @returns {number}
  */
-export function resolveLeaderboardStatValue(player, statType) {
-  if (!player || !statType) return 0;
-  const parts = String(statType).replace(/\./g, '/').split('/').filter(Boolean);
+export function resolveLeaderboardStatValue(player, statInput) {
+  if (!player || !statInput) return 0;
+  const playerPath = playerPathForLeaderboardStat(statInput) || String(statInput);
+  const parts = String(playerPath).replace(/\./g, '/').split('/').filter(Boolean);
   let cursor = player;
   for (const part of parts) {
     if (cursor == null || typeof cursor !== 'object') return 0;
@@ -48,23 +113,32 @@ export function resolveLeaderboardStatValue(player, statType) {
 }
 
 /**
- * @param {string} statType
+ * @param {string} statInput - safe key or playerPath / STAT_TYPES
  * @param {string} username
  * @returns {string}
  */
-export function leaderboardSummaryPath(statType, username) {
-  return `${LEADERBOARDS_ROOT}/${statType}/${username}`;
+export function leaderboardSummaryPath(statInput, username) {
+  const statKey = normalizeLeaderboardStatKey(statInput);
+  if (!statKey) {
+    throw new Error(
+      `[LeaderboardSummaries] Unknown leaderboard stat: ${JSON.stringify(statInput)}`,
+    );
+  }
+  assertFirebaseSafeKey(statKey);
+  const user = assertFirebaseSafeKey(String(username || '').trim());
+  return `${LEADERBOARDS_ROOT}/${statKey}/${user}`;
 }
 
 /**
- * Set a STAT_TYPES value onto a mutable playerLike (shallow-clones nested objects as needed).
+ * Set a live LB stat onto a mutable playerLike using canonical playerPath.
  * @param {object} playerLike
- * @param {string} statType
+ * @param {string} statInput
  * @param {number} value
  */
-export function setStatValueOnPlayerLike(playerLike, statType, value) {
-  if (!playerLike || !statType) return;
-  const parts = String(statType).replace(/\./g, '/').split('/').filter(Boolean);
+export function setStatValueOnPlayerLike(playerLike, statInput, value) {
+  if (!playerLike || !statInput) return;
+  const playerPath = playerPathForLeaderboardStat(statInput) || String(statInput);
+  const parts = String(playerPath).replace(/\./g, '/').split('/').filter(Boolean);
   if (parts.length === 0) return;
   if (parts.length === 1) {
     playerLike[parts[0]] = value;
@@ -85,20 +159,21 @@ export function setStatValueOnPlayerLike(playerLike, statType, value) {
 }
 
 /**
- * Clone player and overlay STAT_TYPES → numeric values.
+ * Clone player and overlay live-stat identifiers → numeric values.
+ * Overlay keys may be safe keys or playerPaths / STAT_TYPES values.
  * @param {object|null|undefined} basePlayer
- * @param {Record<string, number>} overlayByStatType
+ * @param {Record<string, number>} overlayByStat
  * @returns {object}
  */
-export function playerLikeWithStatOverlay(basePlayer, overlayByStatType = {}) {
+export function playerLikeWithStatOverlay(basePlayer, overlayByStat = {}) {
   const p = {
     ...(basePlayer || {}),
     stats: { ...(basePlayer?.stats || {}) },
     researchStats: { ...(basePlayer?.researchStats || {}) },
   };
-  for (const [statType, value] of Object.entries(overlayByStatType || {})) {
+  for (const [statInput, value] of Object.entries(overlayByStat || {})) {
     if (typeof value === 'number' && Number.isFinite(value)) {
-      setStatValueOnPlayerLike(p, statType, value);
+      setStatValueOnPlayerLike(p, statInput, value);
     }
   }
   return p;
@@ -107,13 +182,13 @@ export function playerLikeWithStatOverlay(basePlayer, overlayByStatType = {}) {
 /**
  * @param {string} username
  * @param {object} playerLike
- * @param {string} statType
+ * @param {string} statInput
  * @param {number} [now]
  * @returns {{ value: number, groupId: string|null, subgroupId: string|null, updatedAt: number }}
  */
-export function buildLeaderboardSummaryEntry(username, playerLike, statType, now = Date.now()) {
+export function buildLeaderboardSummaryEntry(username, playerLike, statInput, now = Date.now()) {
   return {
-    value: resolveLeaderboardStatValue(playerLike, statType),
+    value: resolveLeaderboardStatValue(playerLike, statInput),
     groupId: playerLike?.groupId ?? null,
     subgroupId: playerLike?.subgroupId ?? null,
     updatedAt: now,
@@ -121,25 +196,44 @@ export function buildLeaderboardSummaryEntry(username, playerLike, statType, now
 }
 
 /**
+ * @param {string[]} inputs
+ * @returns {string[]}
+ */
+function _normalizeStatKeyList(inputs) {
+  const out = [];
+  const seen = new Set();
+  for (const input of inputs || []) {
+    const key = normalizeLeaderboardStatKey(input);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+/**
  * @param {string} username
  * @param {object} playerLike
- * @param {{ statTypes?: string[], now?: number }} [options]
+ * @param {{ statTypes?: string[], statKeys?: string[], now?: number }} [options]
  * @returns {Record<string, object>}
  */
 export function buildLeaderboardSummaryPathsForPlayer(username, playerLike, options = {}) {
   const key = String(username || '').trim();
   if (!key || key === '__admin__') return {};
-  const types = Array.isArray(options.statTypes) && options.statTypes.length > 0
-    ? options.statTypes
-    : LIVE_LEADERBOARD_STAT_TYPES;
+  const rawList = Array.isArray(options.statKeys) && options.statKeys.length > 0
+    ? options.statKeys
+    : (Array.isArray(options.statTypes) && options.statTypes.length > 0
+      ? options.statTypes
+      : LIVE_LEADERBOARD_STAT_KEYS);
+  const types = _normalizeStatKeyList(rawList);
   const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
   /** @type {Record<string, object>} */
   const updates = {};
-  for (const statType of types) {
-    updates[leaderboardSummaryPath(statType, key)] = buildLeaderboardSummaryEntry(
+  for (const statKey of types) {
+    updates[leaderboardSummaryPath(statKey, key)] = buildLeaderboardSummaryEntry(
       key,
       playerLike,
-      statType,
+      statKey,
       now,
     );
   }
@@ -149,20 +243,22 @@ export function buildLeaderboardSummaryPathsForPlayer(username, playerLike, opti
 /**
  * @param {string} username
  * @param {object} playerLike
- * @param {string[]} changedStatTypes
+ * @param {string[]} changedStats - Firebase-safe keys and/or playerPaths / STAT_TYPES
  * @param {number} [now]
  * @returns {Record<string, object>}
  */
 export function buildLeaderboardSummaryPathsForChangedStats(
   username,
   playerLike,
-  changedStatTypes,
+  changedStats,
   now = Date.now(),
 ) {
-  const types = (Array.isArray(changedStatTypes) ? changedStatTypes : [])
-    .filter((t) => typeof t === 'string' && t.length > 0);
+  const types = _normalizeStatKeyList(
+    (Array.isArray(changedStats) ? changedStats : [])
+      .filter((t) => typeof t === 'string' && t.length > 0),
+  );
   if (types.length === 0) return {};
-  return buildLeaderboardSummaryPathsForPlayer(username, playerLike, { statTypes: types, now });
+  return buildLeaderboardSummaryPathsForPlayer(username, playerLike, { statKeys: types, now });
 }
 
 /**
@@ -185,8 +281,8 @@ export function buildLeaderboardSummaryDeletePaths(username) {
   if (!key) return {};
   /** @type {Record<string, null>} */
   const updates = {};
-  for (const statType of LIVE_LEADERBOARD_STAT_TYPES) {
-    updates[leaderboardSummaryPath(statType, key)] = null;
+  for (const statKey of LIVE_LEADERBOARD_STAT_KEYS) {
+    updates[leaderboardSummaryPath(statKey, key)] = null;
   }
   return updates;
 }
@@ -203,7 +299,7 @@ function _entriesEqual(a, b) {
 /**
  * Local/ack sync for call sites that still use db.set for player stats.
  * @param {string} username
- * @param {{ statTypes?: string[], now?: number }} [options]
+ * @param {{ statTypes?: string[], statKeys?: string[], now?: number }} [options]
  * @returns {Promise<{ ok: boolean, skipped?: boolean, mode?: string, error?: string, written?: number }>}
  */
 export async function syncLeaderboardSummariesForPlayer(username, options = {}) {
@@ -276,12 +372,12 @@ export async function rebuildLeaderboardSummaries() {
     }
   }
 
-  // Orphan summary leaves (player gone)
+  // Orphan summary leaves (player gone) under Firebase-safe keys only
   let removed = 0;
-  for (const statType of LIVE_LEADERBOARD_STAT_TYPES) {
-    const children = db.getChildren(`${LEADERBOARDS_ROOT}/${statType}`) || [];
+  for (const statKey of LIVE_LEADERBOARD_STAT_KEYS) {
+    const children = db.getChildren(`${LEADERBOARDS_ROOT}/${statKey}`) || [];
     for (const { key: username } of children) {
-      const path = leaderboardSummaryPath(statType, username);
+      const path = leaderboardSummaryPath(statKey, username);
       if (desiredKeys.has(path)) continue;
       updates[path] = null;
       removed += 1;
@@ -328,16 +424,23 @@ function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcLeaderboardSummaries = {
     LEADERBOARDS_ROOT,
+    LEADERBOARD_STAT_DEFS,
+    LIVE_LEADERBOARD_STAT_KEYS,
     LIVE_LEADERBOARD_STAT_TYPES,
     STAT_TYPES,
+    normalizeLeaderboardStatKey,
+    playerPathForLeaderboardStat,
+    assertFirebaseSafeKey,
     rebuildLeaderboardSummaries,
     syncLeaderboardSummariesForPlayer,
     areLeaderboardSummariesReady,
     help() {
       console.info(`Leaderboard summaries (S5d)
 Root: ${LEADERBOARDS_ROOT}/{statKey}/{username} = { value, groupId, subgroupId, updatedAt }
+statKeys: ${LIVE_LEADERBOARD_STAT_KEYS.join(', ')}
 Rebuild: qcLeaderboardSummaries.rebuildLeaderboardSummaries()
-Sync one: qcLeaderboardSummaries.syncLeaderboardSummariesForPlayer(username)`);
+Sync one: qcLeaderboardSummaries.syncLeaderboardSummariesForPlayer(username)
+Inspect: qcDbHydration.getCached('leaderboards')`);
     },
   };
 }

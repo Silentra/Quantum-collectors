@@ -1379,10 +1379,19 @@ export function workflowS5d() {
   console.info(`
 === S5d Live Leaderboard Summaries ===
 
+Status: IMPLEMENTED — VERIFICATION BLOCKED until rebuild PASS.
 Prereq: S5c-D COMPLETE + VERIFIED. Admin account available.
+statKeys (Firebase-safe): totalResearchPoints, seasonalResearchPoints, projectsCompleted,
+  packsOpened, tradesCompleted, uniqueCardsOwned, breakthroughs
 
-1) Rebuild (Admin → Leaderboards tab):
-   // or DevTools:
+0) Gate — rebuild only (do not continue other S5d tests until this PASSes):
+   qcDbHydration.getCached('leaderboards')  // expect null/empty if prior rebuild failed atomically
+   await qcLeaderboardSummaries.rebuildLeaderboardSummaries()
+   // PASS: ok===true; sample leaf e.g.
+   qcDbHydration.getCached('leaderboards/packsOpened/bobby')
+   // FAIL if path still contains dots (stats.packsOpened)
+
+1) Rebuild (Admin → Leaderboards tab) — same as gate 0 if not already done:
    await qcLeaderboardSummaries.rebuildLeaderboardSummaries()
    // PASS: ok===true; sample leaf exists e.g.
    qcDbHydration.getCached('leaderboards/totalResearchPoints/bobby')
