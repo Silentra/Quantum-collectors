@@ -8,12 +8,14 @@ index.html           - Single-page app shell, all screens/modals, Firebase SDK C
 style.css            - Custom styles (cards, tabs, toasts, animations)
 main.js              - Entry point, async init (DB → sharedDefs hydrate → Auth → Config → Seed → UI)
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
+docs/
+  DATABASE_SCOPING_ROADMAP.md - Authoritative remaining S5–S8 scoped-loading roadmap (source of truth)
 js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
-  db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 currentPlayer; S5b Admin directory + selected-player)
-  db-read-audit.js   - S4/S5b dev-only cache-read audit + optional isolation read-gate (off by default)
+  db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 currentPlayer; S5b Admin directory + selected-player; S5c-C playerTradeIndex; S5c-D1 Trading tradeDirectory)
+  db-read-audit.js   - S4/S5b/S5c-C dev-only cache-read audit + optional isolation read-gate (off by default)
   player-directory.js - S5a derived playerDirectory projection, drift report, admin rebuild
-  trade-index.js     - S5c-A trade index schema, readiness meta, drift report, admin rebuild (no consumer cutover)
+  trade-index.js     - S5c-A/B trade index schema, dual-writes, drift/rebuild, shadowCompare (Trading readers still canonical through S5c-C)
   database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; root listener legacy safety net)
   config.js          - Centralized live config (reads from /config DB node)
   auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
@@ -254,12 +256,13 @@ Unknown packs and missing/failed images keep the existing emoji presentation (ti
   - `getPendingTrades(username)` — incoming = offers awaiting B; outgoing = A's active offers/proposals
   - **No cross-player inventory browsing** in the offer UI; execution still reloads both players for correctness
 - **Atomic Direct Execution** (`trade-execution.js` + `trade-direct-plan.js`):
-  - `executeDirectTrade(trade)` — the ONLY function that mutates inventories for direct trades (async; one `updateAcknowledged`)
-  - Requires status `awaiting_offerer_confirmation` and non-null `requestedCardId`; rejects `offeredCardId === requestedCardId`
-  - Flow: reload trade → verify awaiting confirmation → reload players/cards → validation → BOTH cooldowns → build plan → lock → single multi-path `accepted` + inventories/stats/achievements
-  - On validation/cooldown failure: `markDirectTradeFailedIfAwaiting` only (never clobber terminal/non-actionable status → `STALE_TRADE_STATE`)
+  - `executeDirectTrade(trade)` — the ONLY function that mutates inventories for direct trades (async; claim txn + one relative-increment `updateAcknowledged`)
+  - Requires status `awaiting_offerer_confirmation` pre-claim and non-null `requestedCardId`; rejects `offeredCardId === requestedCardId`
+  - Flow: cache precheck → claim → PTI processing → force-load → validation (`excludeDirectTradeId`) → cooldowns → relative plan → lock → terminal `accepted` + `increment(±1)` → optional best-effort give-leaf hygiene
+  - Claim lost → `STALE_TRADE_STATE`. Permanent post-claim validation → fail while owned. Transient → release. Terminal fail → never replay increments; reread `accepted` → success; still-owned processing → release or `WRITE_UNCERTAIN`
   - Cooldown (`lastDirectTradeAt`) applied to **both** players only on successful swap; same timestamp as `completedAt`
   - Unique/aura written only when changed; offerer client toasts only offerer achievement unlocks
+  - `navigator.locks` is UX/local only; RTDB claim is the correctness boundary
 - **Reservations** (`trade-availability.js` — `ACTIVE_DIRECT_TRADE_STATUSES`):
   - `awaiting_target_response`: reserve A's `offeredCardId`
   - `awaiting_offerer_confirmation` / `processing`: reserve offered + `requestedCardId` (null-safe)
@@ -270,7 +273,8 @@ Unknown packs and missing/failed images keep the existing emoji presentation (ti
   - `acceptListing(listingId, accepterId, chosenCardId)` — async; delegates to `executeListingTrade()`
   - `getVisibleListings(username)` — returns active listings in player's group, sorted newest-first
   - `getMyActiveListing(username)` — @deprecated, returns first active listing or null (wraps getMyActiveListings)
-  - `getMyActiveListings(username)` — returns ALL active listings owned by player, sorted newest-first
+  - `getMyActiveListings(username)` — S5c-D4: `{ listings, source, trusted }` from verified `playerTradeIndex/{me}/listings` when ready (status===active only); untrusted ≠ empty-zero
+  - `resolveTradingListingSource(username)` — listing discovery readiness (index | canonical-fallback | loading | unavailable)
   - `getMaxActiveListingsPerPlayer()` — exported config accessor for UI
   - `expireStaleListings()` — scans all active listings, expires any past their `expiresAt`, called on tab render
   - `getListingCooldown(username)` — separate **create** cooldown (`lastListingCreatedAt`, configurable `economy.listingCooldownMinutes`)
@@ -452,11 +456,13 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 ### Direct-trade acceptance write batching
 - **Target:** final Accept only (`confirmTrade` → `executeDirectTrade`). Offer/counteroffer unchanged.
-- **One** `updateAcknowledged` via [`trade-direct-plan.js`](js/trade-direct-plan.js): `awaiting_offerer_confirmation` → `accepted` plus both players’ inventory leaf paths, shared `completedAt`/`lastDirectTradeAt` timestamp, `progression/firstTrade`, `tradesCompleted`, unique/aura **only when changed**, achievement entries for both players.
-- **`processing`:** no longer a separate network write; atomic multi-path replaces the old fragmented-write guard. Status remains in reservation sets for legacy/in-flight.
+- **Hybrid C+ Gate B:** (1) `claimDirectTradeIfAwaiting` RTDB transaction — `awaiting_offerer_confirmation` → `processing` + `processingBy`/`processingAt`/`claimId`; PTI leaves stay and update to `processing`. (2) one `updateAcknowledged` via [`trade-direct-plan.js`](js/trade-direct-plan.js) — four inventory leaves as `ServerValue.increment(±1)` (no absolute card quantities), `accepted` + clear claim fields, index removals, shared `completedAt`/`lastDirectTradeAt`, `progression/firstTrade`, `tradesCompleted`, unique/aura **only when changed**, achievement entries for both players.
+- **Oversell:** classroom inventory `.validate` `>= 0` rejects the entire multi-path; never replay increments on failure.
+- **Ack failure recovery:** reread trade — `accepted` → success; still-owned `processing` → release to awaiting (or fail as `INSUFFICIENT_AVAILABLE_COPIES` when revalidation shows a give copy gone); uncertain → `WRITE_UNCERTAIN` (do not leave stuck when release is possible).
+- **Inventory ownership:** `Number(quantity) > 0`. Missing leaf and quantity `0` are equivalent (not owned). Zero-leaf deletion is optional storage hygiene — not Gate B correctness. After successful terminal ack, best-effort `clearInventoryLeafIfNonPositive` on the two **give** leaves may run; cleanup failure must not undo accept. Verify effective ownership / non-negativity; raw leaf `0` is acceptable.
 - **Toasts:** confirming offerer’s client only toasts **offerer** unlocks (`notifiedOfferer`), not the target’s.
-- **Failed marking:** validation/cooldown failures call `markDirectTradeFailedIfAwaiting` — never overwrite `accepted`/`declined`/`cancelled`/`failed`/`processing`; UI treats that as `STALE_TRADE_STATE` and rerenders.
-- **Option B:** cache revalidation + `navigator.locks` `qc-direct-trade:{tradeId}`; not server-fresh.
+- **Locks:** `navigator.locks` `qc-direct-trade:{tradeId}` is UX/local only; the RTDB claim is the correctness boundary.
+- **Listings:** relative inventory on fulfill (Gate C).
 
 ### Listing creation write batching
 - **Target:** Post Listing only (`_handleCreateListing` → `createListing`). Cancellation and fulfillment unchanged by this pass.
@@ -469,10 +475,11 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 ### Listing fulfillment write batching
 - **Target:** Accept/fulfill only (`acceptListing` → `executeListingTrade`). Cancellation unchanged.
-- **Two writes / ~2 root snapshots:** (1) `claimListingIfActive` RTDB transaction — `active`+unexpired → `processing` + `processingBy`/`processingAt`/`claimId`/`fulfilledCardId`; (2) one `updateAcknowledged` via [`trade-listing-plan.js`](js/trade-listing-plan.js) — inventories, accepter `lastListingAcceptAt`, both `progression/firstTrade`, `tradesCompleted`, unique/aura when changed, achievements both players, listing → `fulfilled` + clear claim fields.
+- **Hybrid C+ Gate C:** (1) `claimListingIfActive` RTDB transaction — `active`+unexpired → `processing` + `processingBy`/`processingAt`/`claimId`/`fulfilledCardId`; (2) owner PTI → processing + group leaf removed; (3) one `updateAcknowledged` via [`trade-listing-plan.js`](js/trade-listing-plan.js) — four inventory leaves as `ServerValue.increment(±1)` (no absolute card quantities), accepter `lastListingAcceptAt`, both `progression/firstTrade`, `tradesCompleted`, unique/aura when changed, achievements both players, listing → `fulfilled` + clear claim fields + index removals.
 - **Why not one write:** multiple different students can race the same listing; cache-only claim is unsafe.
 - **Reservations:** `active` and `processing` listings reserve the owner’s offered card; fulfill validation uses `excludeListingId`.
-- **Ack failure recovery:** `getAcknowledged` re-read first — fulfilled by this accepter/card → success; still processing + owned claim → `releaseListingClaimIfOwned`; uncertain → leave processing + `WRITE_UNCERTAIN`. Never overwrite terminal listing states.
+- **Ack failure recovery:** `getAcknowledged` re-read first — fulfilled by this accepter/card → success (literal-only local patch; never raw `.sv`); still processing + owned claim → `releaseListingClaimIfOwned` (+ index restore); uncertain → leave processing + `WRITE_UNCERTAIN`. Never replay increments.
+- **Inventory ownership:** `Number(quantity) > 0`. Missing leaf and quantity `0` are equivalent (not owned). Zero-leaf deletion is optional storage hygiene — not Gate C correctness. After successful fulfill ack, best-effort `clearInventoryLeafIfNonPositive` on owner offered + accepter chosen give leaves may run; cleanup failure must not undo fulfill. Verify effective ownership / non-negativity; raw leaf `0` is acceptable.
 - **Cooldowns (code truth):** accepter `lastListingAcceptAt` only; no owner fulfill cooldown; no `lastDirectTradeAt` on listing fulfill.
 - **Toasts:** accepter client only toasts `notifiedAccepter`.
 - **Option B:** `navigator.locks` `qc-listing-fulfill:{listingId}` around fulfill commit; claim is server-transactional.
@@ -485,6 +492,14 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 - **Parity:** does not bump `cosmeticsUnlocked` or collection-derived card stats on shop card grants.
 - **UI:** success + achievement unlock toasts only after ack; `actionInFlight` + `navigator.locks` `qc-shop-purchase:{username}` with cache revalidation under lock.
 - **Metrics target:** 1 write / ~1 root snapshot (was ~7 / ~7).
+
+### Scoped loading / database hydration (roadmap)
+
+**Source of truth for remaining work (S5c-D through S8):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
+
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, and **S5d** (live leaderboard summaries) are **COMPLETE + VERIFIED**. **S6a** (accessCodes scoped once-load) is **IMPLEMENTED — AWAITING VERIFICATION**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. **Next:** verify **S6a**, then **S6b–S6e**. Do not begin S7/S8 until S6 is complete. Historical phase notes below (S1–S5c-A) describe what landed; do not treat them as the plan for unfinished root removal or full S8 rules.
+
+**Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
 
 ### Phase S1 — Scoped Firebase path primitives (additive)
 Infrastructure only — **root `once('/')` + `on('value')` unchanged** and remain authoritative for startup/features.
@@ -503,13 +518,23 @@ Additive — **root `once('/')` + `on('value')` unchanged** as the **legacy safe
 
 [`js/db-hydration.js`](js/db-hydration.js) owns named scope **`sharedDefs`**:
 - Paths: `config`, `cards`, `packs`, `groups` via `loadPathOnce` (parallel; pending/ready reuse)
-- **`accessCodes` excluded** — not part of sharedDefs; not broadened
+- **`accessCodes` excluded** from sharedDefs — S6a register/bootstrap once-loads instead (not subscribed)
 - No permanent `subscribePath` for shared defs
 - Flag prep: `localStorage.qc_scoped_loading` + `config/firebase/scopedLoadingEnabled` — **does not** disable root
 
 [`main.js`](main.js) awaits `hydrateSharedDefs()` after `initDB()` and **before** card/pack seed/normalize. Seeds run only when that path’s scoped load completed (`isPathReady`).
 
 Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrationStatus()` / `help()`.
+
+### Phase S6a — accessCodes scoped once-load (register + bootstrap)
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Root listener remains ON.
+
+- Register: [`loadAccessCodeOnce(code)`](js/db-hydration.js) → `loadPathOnce('accessCodes/{code}')` with `force: true` before validate; fail-closed on load failure; no subscribe.
+- Bootstrap seed: [`bootstrapAccessCodesOnce()`](js/db-hydration.js) → once-load whole `accessCodes` then generate only if empty ([`main.js`](main.js)).
+- Login: no accessCodes reads.
+- Admin bulk access-code UI unchanged (may still use root coexistence).
+- Report: `qcDbHydration.getAccessCodesLoadReport()` — distinguishes `purpose: 'register'` vs `'bootstrap'`.
 
 ### Phase S3 — Current-player scoped hydration + session guard
 Additive — root listener **unchanged** (legacy safety net). Exactly **one** auth-owned Firebase `.on` at `players/{username}` (`refCount: 1`). UI / Profile / session-guard must **not** call `subscribePath` for the player.
@@ -607,6 +632,169 @@ Derived discovery indexes beside canonical `trades/direct` and `trades/listings`
 **Seeds:** registration writes empty ready `playerTradeIndex/{u}/_meta`; `createGroup` writes empty ready `listingsByGroup/{g}/_meta`; `deleteGroup` nulls `listingsByGroup/{g}`.
 
 Admin **Rebuild Trade Indexes** (Players tab). Dev: `qcTradeIndex.*`.
+
+### Phase S5c-D1 — Trading hydration ownership (`playerDirectory` only)
+
+Hydration / lifecycle only. Root listener unchanged. No `listingsByGroup` subscription. **Status: COMPLETE + VERIFIED.**
+
+[`js/db-hydration.js`](js/db-hydration.js) scope **`tradeDirectory`** (`SCOPE_TRADE_DIRECTORY`):
+- Path: `playerDirectory` (same node as Admin directory; **sole owner** while held — refuses `subscribePath` share / refCount > 1)
+- API: `ensureTradeDirectoryScope`, `releaseTradeDirectoryScope`, `isTradeDirectoryReady`, `waitForTradeDirectory`, `getTradeDirectoryHydrationReport`
+- Generation token: leave during in-flight ensure discards late handles (no leaked subscription)
+
+[`js/trade-ui.js`](js/trade-ui.js) / [`js/ui.js`](js/ui.js) lifecycle:
+- Main Trading tab enter → `cleanupAdmin()` (release Admin directory first) → `enterTradingTab()` → ensure → `renderTrading()`
+- `renderTrading()` is content/re-render only — **never** acquires scopes (sub-tabs, actions, cooldown timer reuse existing ownership)
+- Leave Trading → `cleanupTrading()` bumps tab generation, `releaseTradeDirectoryScope()`, clears cooldown timer
+- Logout calls `cleanupTrading()` before `auth.logout()`
+- Standalone `__admin__`: Trading message only; never ensures trade directory
+- Persistent player-admins: normal Trading + auth scopes
+
+**Expected registry:** before Trading = `players/{me}` ×1 + `playerTradeIndex/{me}` ×1; while open = + `playerDirectory` ×1; after leave = auth pair only.
+
+Dev: `qcDbHydration.getTradeDirectoryHydrationReport()` / `getSubscriptionRegistry()`.
+
+### Phase S5c-D2 — Direct trade player picker → `playerDirectory`
+
+Discovery/UX cutover only — **no** pending/listings/reservation consumer changes at D2. Canonical `createTradeOffer` validation unchanged. Root unchanged. No `listingsByGroup`. **Status: COMPLETE + VERIFIED.**
+
+[`js/trade-ui.js`](js/trade-ui.js) `_renderPlayerPicker`:
+- Trust rule: Trading directory report `active === true` **and** `ready === true` (not stale path-ready alone)
+- Reads `db.getChildren('playerDirectory')` when trusted; **never** falls back to `getAllPlayers()` / full `players`
+- Untrusted → distinct unavailable UI (not the legitimate-empty “No other players…” copy)
+- Same filters as before: exclude self / `__admin__` / restricted / hidden; same-group via `groupId`; do not exclude `isAdmin`; alpha sort by key
+- 5s reactive tick: eligibility hash → refresh picker options only; preserve card-pickers if target still eligible; clear target+offer card state if target becomes ineligible
+
+Dev: `qcPersonalAudit.workflowS5cD2()`.
+
+### Phase S5c-D3 — Pending directs + duplicate → `playerTradeIndex/{me}/direct`
+
+Read-side cutover only. Listing consumers / reservations / writers unchanged at D3. Root unchanged. **Status: COMPLETE + VERIFIED.**
+
+[`js/trading.js`](js/trading.js):
+- `resolveTradingDirectSource` via `getReservationIndexSource` (index | canonical-fallback | loading | unavailable)
+- `getPendingTrades` returns `{ incoming, outgoing, source, trusted }` — PTI direct when verified; never treats untrusted as empty-zero
+- `createTradeOffer` duplicate scan uses verified PTI (or measured fallback); fail-closed when untrusted
+
+[`js/trade-ui.js`](js/trade-ui.js): untrusted pending panels distinct from “No incoming/outgoing trades.”
+
+Dev: `qcPersonalAudit.workflowS5cD3()`.
+
+### Phase S5c-D4 — My Listings + max-active → `playerTradeIndex/{me}/listings`
+
+Read-side cutover only for owner discovery + create max-count. Available listings / expire / reservations unchanged at D4. Root unchanged. **Status: COMPLETE + VERIFIED.**
+
+[`js/trade-listings.js`](js/trade-listings.js):
+- `resolveTradingListingSource` via `getReservationIndexSource` (index | canonical-fallback | loading | unavailable)
+- `getMyActiveListings` returns `{ listings, source, trusted }` — PTI listings when verified; `status === 'active'` only (not processing); no wall-clock soft-expire filter (parity with pre-D4; expireStaleListings owns cleanup)
+- `_validateCreateListing` max-count uses same source; fail-closed when untrusted (`TRADE_INDEX_UNAVAILABLE`)
+- `getLastMaxActiveListingSource()` for audit proof of max-active source
+
+[`js/trade-ui.js`](js/trade-ui.js): untrusted My Listings panel distinct from “You have no active listings.”; create form gated on trusted under-max.
+
+Dev: `qcPersonalAudit.workflowS5cD4()`.
+
+### Phase S5c-D5a — acceptListing soft-expire index parity
+
+Parity repair only. No discovery cutover, no `listingsByGroup` hydration. Root unchanged. **Status: COMPLETE + VERIFIED.**
+
+[`js/trade-listings.js`](js/trade-listings.js) `acceptListing` expired-before-accept branch:
+- One `updateAcknowledged` multi-path: canonical `status`/`respondedAt` + `listingIndexRemovalsForListing` (owner PTI + group leaves)
+- Lifecycle metric `listing-index-dual-write` (same style as `expireStaleListings`)
+- Still returns `{ success: false, reason: 'LISTING_EXPIRED' }`
+
+Manual verification: `LISTING_EXPIRED` from accept path; both index leaves cleared; `shadowCompare(owner).match`; sweep did not win the race.
+
+### Phase S5c-D5b — Available Listings → `listingsByGroup/{groupId}`
+
+Trading-owned group index hydration + Available discovery cutover. `expireStaleListings` may still full-scan (D7). Root unchanged. **Status: COMPLETE + VERIFIED.**
+
+[`js/db-hydration.js`](js/db-hydration.js):
+- `SCOPE_GROUP_LISTINGS`, `ensureGroupListingsScope` / `releaseGroupListingsScope` / ready / wait / report
+- Generation + desired-group coalescing: at most one ensure/switch in flight; never two group listeners
+
+[`js/trade-listings.js`](js/trade-listings.js):
+- `resolveTradingGroupListingsSource` → `tradingGroupListingsSource:*`
+- `getVisibleListings` returns `{ listings, source, trusted }` from verified group index
+
+[`js/trade-ui.js`](js/trade-ui.js): enter ensures directory then group; cleanup releases both; group-switch resets forms + full `renderTrading`; Available untrusted UI distinct from empty.
+
+Dev: `qcPersonalAudit.workflowS5cD5b()`.
+
+### Phase S5c-D5 — umbrella
+
+**Status: COMPLETE + VERIFIED** (D5a + D5b).
+
+### Phase S5c-D6 — Trading self-reservations → `playerTradeIndex/{me}`
+
+**Status: COMPLETE + VERIFIED.**
+
+### Phase S5c-D7a — Counterparty once-loads + foreign PTI reservations
+
+**Status: COMPLETE + VERIFIED.**
+
+### Phase S5c-D7b — Expiry finalization
+
+**Status: COMPLETE + VERIFIED.**
+
+### Phase S5c-D7c — Isolation audit + multi-browser proofs
+
+**Status: COMPLETE + VERIFIED** (also closes **S5c-D7** and **S5c-D**).
+
+- Final isolation **G** PASS: `qc-personal-scope-audit` + `qc-personal-cache-isolation` ON; one representative Trading action under `d7-isolation`; `unexpectedTotal===0`; `hardViolations===0`; no bare-tree or healthy canonical-fallback regression.
+- Gates **B/C/D** gameplay + `shadowCompare` credited from final Gate B/C relative-inventory verification (not replayed for D7c closure).
+- `workflowS5cD7()` retained as historical pasteable umbrella.
+
+### Hybrid C+ Gate A — Inventory integrity infrastructure
+
+**Status: COMPLETE + VERIFIED.**
+
+Live Firebase proofs:
+
+1. `increment(-1)` `2 → 1` — PASS  
+2. `1 → 0` — PASS  
+3. `0 → -1` rejected (`PERMISSION_DENIED`); remained `0` — PASS  
+4. Multi-path reject: invalid increment + sibling literal — sibling not written — PASS  
+
+Classroom RTDB rules (Console SoT): open `.read`/`.write` plus `players/$username/inventory/$cardId` `.validate` numeric `>= 0` (data integrity; **not** S8 authorization).
+
+App changes in Gate A:
+
+- [`database.js`](js/database.js) `updateAcknowledged` skips `applyLocalOnly` for `{ ".sv": ... }` transforms; returns `transformedPaths`.
+- [`player.js`](js/player.js) `getInventory` omits non-positive quantities.
+- **Ownership invariant:** inventory ownership = `Number(quantity) > 0`. Missing leaf ≡ quantity `0` (not owned). Zero-leaf deletion is optional storage hygiene.
+
+### Hybrid C+ Gate B — Direct relative inventory + claim
+
+**Status: COMPLETE + VERIFIED.**
+
+- [`database.js`](js/database.js): `claimDirectTradeIfAwaiting`, `releaseDirectTradeClaimIfOwned`, optional best-effort `clearInventoryLeafIfNonPositive` (hygiene only; not a correctness gate).
+- [`trade-direct-plan.js`](js/trade-direct-plan.js) / [`trade-execution.js`](js/trade-execution.js): claim → validate → terminal `ServerValue.increment(±1)` + accepted; recovery; optional give-leaf hygiene after success (failure must not undo accept).
+- PTI leaves retained during `processing`; removals only on accept/fail.
+- Diagnostics: `qc-direct-inventory-diag` adapted for claim/deltas/recovery (no planned absolute after).
+- **Verify:** effective ownership (`Number(qty) > 0`) and non-negativity — raw leaf `0` is acceptable (need not be null).
+
+### Hybrid C+ Gate C — Listing relative inventory fulfill
+
+**Status: COMPLETE + VERIFIED.**
+
+- Existing listing claim/release + D5a soft-expire unchanged.
+- [`trade-listing-plan.js`](js/trade-listing-plan.js) / [`trade-listing-execution.js`](js/trade-listing-execution.js): terminal four inventory leaves as `ServerValue.increment(±1)` (no absolute card qtys); recovered-success patches literals only; optional give-leaf hygiene via `clearInventoryLeafIfNonPositive`; conservative `PERMISSION_DENIED` classify then release.
+- [`trade-availability.js`](js/trade-availability.js): `getUnavailableCardIds` / DevTools parity ignore zero-only inventory keys (ownership = `Number(qty) > 0`).
+- Diagnostics: `qc-listing-inventory-diag`.
+- Verification A–I passed (normal fulfill, last-copy, claim race, direct+listing composition, oversell/contention, reconnect, qty>0 ownership, D7c scoped-read smoke). Raw leaf `0` is acceptable (not a Gate C failure).
+
+### Phase S5d — Live leaderboard summaries
+
+**Status: COMPLETE + VERIFIED.**
+
+- Derived `leaderboards/{statKey}/{username}` = `{ value, groupId, subgroupId, updatedAt }` via [`leaderboard-summaries.js`](js/leaderboard-summaries.js).
+- **statKey** (RTDB segment, no `.`) ≠ **playerPath** (value source). Canonical map: `totalResearchPoints`, `seasonalResearchPoints`, `projectsCompleted`, `packsOpened`→`stats.packsOpened`, `tradesCompleted`→`stats.tradesCompleted`, `uniqueCardsOwned`→`stats.uniqueCardsOwned`, `breakthroughs`→`researchStats.breakthroughs`.
+- Student live boards: [`leaderboard-queries.js`](js/leaderboard-queries.js) reads summaries only (no `getChildren('players')` fallback).
+- Tab-owned whole-root `leaderboards` subscribe while Leaderboard mounted; **must release on leave/logout**. Auth/session `players/{me}` ×1 and `playerTradeIndex/{me}` ×1 are expected and are **not** Leaderboard lifecycle leaks.
+- Writers piggyback into claim/packs/trade plans, RP grant builders, group/delete/register; `rebuildLeaderboardSummaries()` admin repair.
+- Archived seasons/snapshots unchanged; admin rotate/snapshot may still bulk-scan players.
+- Verification passed: safe-key rebuild; seven values match sources; live ranking; mount/release lifecycle; incremental RP + nested packs writer; group projection across all seven; archived regression; no foreign player subs; no student live full `players` scan.
 
 ### Phase 2A — Player Persistence Schema Expansion (js/player-schema.js)
 - **Persistence-only module** — no gameplay logic, no UI, no Firebase mutation flows, no shop generation

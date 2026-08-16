@@ -17,6 +17,7 @@ import './js/trade-index.js'; // S5c-A trade index builders + qcTradeIndex DevTo
 import {
   hydrateSharedDefs,
   isSharedDefsReady,
+  bootstrapAccessCodesOnce,
 } from './js/db-hydration.js';
 import * as config from './js/config.js';
 import * as cards from './js/cards.js';
@@ -91,9 +92,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 4e. LB-1: Ensure leaderboardSeasons DB schema exists
     ensureLeaderboardSeasonsSchema();
 
-    // 5. Generate starter access codes if none exist (root cache; not part of sharedDefs)
-    const existingCodes = db.getChildren('accessCodes');
-    if (existingCodes.length === 0) {
+    // 5. Generate starter access codes if none exist (S6a: scoped once-load; not root-dependent)
+    const accessBootstrap = await bootstrapAccessCodesOnce();
+    if (!accessBootstrap.ok) {
+      console.warn(
+        '[SciCards] Skipping access-code seed — accessCodes once-load failed:',
+        accessBootstrap.error || 'unknown',
+      );
+    } else if (accessBootstrap.empty) {
       auth.generateAccessCodes(10);
       console.log('[SciCards] Generated 10 starter access codes');
     }
