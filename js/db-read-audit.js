@@ -1368,62 +1368,106 @@ qcDbMetrics.summary()
 
 FINAL PASS when A–D and G hold; E static; F inherited; H inherited.
 Historical close: S5c-D7c + S5c-D7 + S5c-D marked COMPLETE + VERIFIED after G PASS
-(with B/C/D gameplay credited from Gate B/C). Do NOT begin S6 until S5d is verified.
+(with B/C/D gameplay credited from Gate B/C). S5d also COMPLETE + VERIFIED.
+Next roadmap phase: S6 (investigate/plan before implement).
 `);
 }
 
 /**
- * Pasteable S5d live leaderboard summaries verification (does not replay D7 / Gate B/C).
+ * Pasteable S5d live leaderboard summaries verification record (historical; do not replay D7 / Gate B/C).
  */
 export function workflowS5d() {
   console.info(`
 === S5d Live Leaderboard Summaries ===
 
-Status: IMPLEMENTED — VERIFICATION BLOCKED until rebuild PASS.
-Prereq: S5c-D COMPLETE + VERIFIED. Admin account available.
+Status: COMPLETE + VERIFIED.
 statKeys (Firebase-safe): totalResearchPoints, seasonalResearchPoints, projectsCompleted,
   packsOpened, tradesCompleted, uniqueCardsOwned, breakthroughs
 
-0) Gate — rebuild only (do not continue other S5d tests until this PASSes):
-   qcDbHydration.getCached('leaderboards')  // expect null/empty if prior rebuild failed atomically
-   await qcLeaderboardSummaries.rebuildLeaderboardSummaries()
-   // PASS: ok===true; sample leaf e.g.
-   qcDbHydration.getCached('leaderboards/packsOpened/bobby')
-   // FAIL if path still contains dots (stats.packsOpened)
+Verification PASSED (do not re-run as a gate unless regressing):
+- Firebase-safe statKey rebuild (ok===true; no dotted path segments)
+- Seven summary values match player source fields
+- Live Leaderboard rendering/ranking
+- leaderboards ×1 while Leaderboard tab mounted
+- Leaderboard hydration releases on leave (getLeaderboardsHydrationReport().active===false)
+- Incremental RP summary updates
+- Nested-stat writer (packsOpened) updates without rebuild
+- Group/subgroup projection across all seven leaves
+- Archived season/snapshot still render
+- No foreign player subscriptions introduced
+- Live leaderboard no longer depends on full players scan
 
-1) Rebuild (Admin → Leaderboards tab) — same as gate 0 if not already done:
-   await qcLeaderboardSummaries.rebuildLeaderboardSummaries()
-   // PASS: ok===true; sample leaf exists e.g.
-   qcDbHydration.getCached('leaderboards/totalResearchPoints/bobby')
+Subscription expectations (not LB leaks):
+- players/{me} ×1 — auth/session (expected while logged in)
+- playerTradeIndex/{me} ×1 — auth/session (expected while logged in)
+- leaderboards — tab-owned; must release when leaving Leaderboard
 
-2) Student: open Leaderboard tab
+Replay helpers (optional regression only):
+   await qcLeaderboardSummaries.rebuildLeaderboardSummaries()
+   qcDbHydration.getCached('leaderboards/packsOpened/<you>')
    qcDbHydration.getSubscriptionRegistry()
-   // PASS: leaderboards ×1; no foreign players/{other} for LB
-   // PASS: ranks look correct for your group
-
-3) Leave Leaderboard tab
    qcDbHydration.getLeaderboardsHydrationReport()
-   // PASS: active===false
 
-4) Change a live score (open pack / claim project / complete trade / admin RP)
-   // PASS: matching leaderboards/{statKey}/{you}.value updates
+Next: verify S6a (qcPersonalAudit.workflowS6a()), then S6b–S6e. Do not begin S7/S8 yet.
+`);
+}
 
-5) Admin: change player group
-   // PASS: all 7 summary leaves for that user show new groupId
+/**
+ * Pasteable S6a accessCodes scoped once-load verification (register + bootstrap).
+ */
+export function workflowS6a() {
+  console.info(`
+=== S6a accessCodes scoped once-load ===
 
-6) Optional audit on Leaderboard tab:
+Status: IMPLEMENTED — AWAITING VERIFICATION. Root remains ON. Do not begin S6b yet.
+
+Prereq: unused access code from Admin → Access (or starter seed).
+
+1) Registry — no accessCodes subscription
+   qcDbHydration.getSubscriptionRegistry()
+   // PASS: no entry whose path is "accessCodes" or starts with "accessCodes/"
+
+2) Valid unused code → register succeeds
+   // On auth screen: new username + password + unused code → Register
+   // PASS: account created; enters game (or prompts to continue)
+   qcDbHydration.getAccessCodesLoadReport()
+   // PASS: lastLoad.purpose === "register"
+   // PASS: lastLoad.path === "accessCodes/<CODE>" (single leaf, not bare "accessCodes")
+   // PASS: lastLoad.ok === true
+
+3) Invalid code → rejected
+   // Register with nonsense code
+   // PASS: "Invalid access code." (or load-failure message if network failed)
+   // PASS: no new player created
+
+4) Already-used code → rejected
+   // Reuse the code from step 2 (or any used code)
+   // PASS: "This access code has already been used."
+
+5) Normal login — no accessCodes dependency
+   // Logout (or reload) → login with the new account
+   // PASS: login works
+   // PASS: getAccessCodesLoadReport().lastLoad is NOT updated by login
+   //       (or purpose stays from last register/bootstrap — login never calls loadAccessCodeOnce)
+
+6) Optional — distinguish bootstrap vs register
+   // After fresh page load (before any register):
+   qcDbHydration.getAccessCodesLoadReport()
+   // Bootstrap seed: lastLoad.purpose === "bootstrap", path === "accessCodes"
+   // After a register attempt: purpose === "register", path === "accessCodes/<CODE>"
+
+7) Optional audit of registration get (not a subscribe)
    localStorage.setItem('qc-personal-scope-audit','true'); location.reload();
-   const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
-   qcPersonalAudit.begin('s5d-lb', { allowedPrefixes: [
-     'config','cards','packs','groups','tradeIndexMeta','playerDirectory',
-     'players/' + me, 'playerTradeIndex/' + me, 'leaderboards',
-     'leaderboardSeasons', 'leaderboardSnapshots'
+   // Stay on auth screen; begin before clicking Register:
+   qcPersonalAudit.begin('s6a-register', { allowedPrefixes: [
+     'config','cards','packs','groups','tradeIndexMeta','accessCodes'
    ]});
-   // idle on Leaderboard ~5s
-   qcPersonalAudit.end('s5d-lb');
-   // PASS: unexpectedTotal===0; no bare players scan for live board
+   // Attempt register with a test code (valid or invalid)
+   const end = qcPersonalAudit.end('s6a-register');
+   // PASS: reads include get accessCodes/<CODE> (leaf), not a student subscribe
+   // PASS: no accessCodes entry in getSubscriptionRegistry()
 
-Do NOT require full S5c-D7 or Gate B/C matrices.
+Do NOT implement or test S6b–S6e in this gate.
 `);
 }
 
@@ -1454,6 +1498,7 @@ function _installWindowApi() {
     workflowS5cD7b,
     workflowS5cD7,
     workflowS5d,
+    workflowS6a,
     enableAudit,
     disableAudit,
     enableIsolation,
