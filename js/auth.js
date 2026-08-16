@@ -29,6 +29,7 @@ import {
   releasePlayerTradeIndexScope,
   releaseLeaderboardsScope,
   subscribeCurrentPlayer,
+  loadAccessCodeOnce,
 } from './db-hydration.js';
 import {
   buildDirectoryEntry,
@@ -571,6 +572,7 @@ export async function login(username, password) {
 
 /**
  * Register with username, password, and access code.
+ * S6a: once-loads accessCodes/{code} before validate (fail-closed; no subscribe).
  * Commits player (with activeSession) + access-code consumption in one acknowledged multi-path update.
  */
 export async function register(username, password, accessCode) {
@@ -606,8 +608,17 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'Username already taken.' };
   }
 
+  // S6a: scoped once-load of this code leaf only (not all accessCodes; no subscribe).
+  const codeLoad = await loadAccessCodeOnce(accessCode);
+  if (!codeLoad.ok) {
+    return {
+      success: false,
+      error: 'Could not verify access code. Please try again.',
+    };
+  }
+
   const codeData = db.get(`accessCodes/${accessCode}`);
-  if (!codeData) {
+  if (!codeData || typeof codeData !== 'object') {
     return { success: false, error: 'Invalid access code.' };
   }
   if (codeData.used) {

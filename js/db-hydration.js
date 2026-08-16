@@ -12,6 +12,8 @@
  * S5c-D5b: groupListings — Trading-owned listingsByGroup/{groupId} while Trading tab open.
  *
  * accessCodes is intentionally NOT part of sharedDefs (register-only; do not broaden).
+ * S6a: register uses once-load of accessCodes/{code}; bootstrap seed once-loads accessCodes/.
+ * No accessCodes subscription.
  *
  * Root once('/') + on('value') remain the legacy safety net (unchanged). Root and scoped
  * player events may arrive in either order during coexistence — do not depend on root
@@ -43,6 +45,13 @@ export const SCOPED_LOADING_CONFIG_PATH = 'config/firebase/scopedLoadingEnabled'
 export const SHARED_DEF_PATHS = Object.freeze(['config', 'cards', 'packs', 'groups']);
 
 export const SCOPE_SHARED_DEFS = 'sharedDefs';
+
+/** S6a — accessCodes once-load roots (no subscription ownership). */
+export const ACCESS_CODES_ROOT = 'accessCodes';
+export const SCOPE_ACCESS_CODES = 'accessCodes';
+
+/** @type {{ purpose: string, path: string, ok: boolean, mode?: string, reused?: boolean, error?: string|null, at: number }|null} */
+let _lastAccessCodesLoad = null;
 export const SCOPE_CURRENT_PLAYER = 'currentPlayer';
 export const SCOPE_PLAYER_TRADE_INDEX = 'playerTradeIndex';
 
@@ -260,6 +269,110 @@ export function getSharedHydrationReport() {
     flagState: getScopedLoadingFlagState(),
     rootListenerNote: 'Legacy root once + on(value) still active as safety net (S2/S3 coexistence).',
     bandwidthNote: 'Do not claim bandwidth reduction while root and scoped snapshots coexist.',
+  };
+}
+
+// ---------- Phase S6a: accessCodes once-load (no subscription) ----------
+
+/**
+ * Normalize access-code leaf key (uppercase trim).
+ * @param {string} code
+ * @returns {string}
+ */
+function _normalizeAccessCode(code) {
+  return String(code || '').trim().toUpperCase();
+}
+
+/**
+ * @param {string} purpose
+ * @param {string} path
+ * @param {{ ok?: boolean, mode?: string, reused?: boolean, error?: string|null }} result
+ */
+function _recordAccessCodesLoad(purpose, path, result) {
+  _lastAccessCodesLoad = {
+    purpose,
+    path,
+    ok: result?.ok === true,
+    mode: result?.mode,
+    reused: result?.reused === true,
+    error: result?.error || null,
+    at: Date.now(),
+  };
+}
+
+/**
+ * S6a register: scoped once-load of a single accessCodes/{code} leaf.
+ * Uses force:true so bootstrap ancestor-readiness cannot skip a fresh code fetch.
+ * No subscribePath.
+ * @param {string} code
+ * @param {{ timeoutMs?: number }} [options]
+ * @returns {Promise<{ ok: boolean, path: string, value: any, mode?: string, reused?: boolean, error?: string, purpose: 'register' }>}
+ */
+export async function loadAccessCodeOnce(code, options = {}) {
+  const normalized = _normalizeAccessCode(code);
+  if (!normalized) {
+    const fail = {
+      ok: false,
+      path: '',
+      value: null,
+      error: 'Missing access code',
+      purpose: 'register',
+    };
+    _recordAccessCodesLoad('register', '', fail);
+    return fail;
+  }
+  const path = `${ACCESS_CODES_ROOT}/${normalized}`;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const result = await db.loadPathOnce(path, { timeoutMs, force: true });
+  _recordAccessCodesLoad('register', path, result);
+  return {
+    ...result,
+    purpose: 'register',
+  };
+}
+
+/**
+ * S6a bootstrap/seed: once-load whole accessCodes collection to decide if empty.
+ * No subscribePath. Admin bulk UI is separate and unchanged.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<{ ok: boolean, path: string, value: any, mode?: string, reused?: boolean, error?: string, purpose: 'bootstrap', empty?: boolean, count?: number }>}
+ */
+export async function bootstrapAccessCodesOnce(options = {}) {
+  const path = ACCESS_CODES_ROOT;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const force = options.force === true;
+  const result = await db.loadPathOnce(path, { timeoutMs, force });
+  _recordAccessCodesLoad('bootstrap', path, result);
+  if (!result.ok) {
+    return { ...result, purpose: 'bootstrap', empty: true, count: 0 };
+  }
+  const children = db.getChildren(path) || [];
+  return {
+    ...result,
+    purpose: 'bootstrap',
+    empty: children.length === 0,
+    count: children.length,
+  };
+}
+
+/**
+ * Last accessCodes once-load (register vs bootstrap) for DevTools / audit distinction.
+ * @returns {object|null}
+ */
+export function getAccessCodesLoadReport() {
+  const last = _lastAccessCodesLoad;
+  return {
+    phase: 'S6a',
+    scope: SCOPE_ACCESS_CODES,
+    root: ACCESS_CODES_ROOT,
+    subscription: false,
+    note: 'Once-load only. Register uses accessCodes/{code}; bootstrap uses accessCodes/.',
+    lastLoad: last
+      ? { ...last }
+      : null,
+    pathReady: {
+      [ACCESS_CODES_ROOT]: db.isPathReady(ACCESS_CODES_ROOT),
+    },
   };
 }
 
@@ -2487,10 +2600,10 @@ export function getHydrationStatus() {
       [SCOPE_TRADE_DIRECTORY]: getTradeDirectoryHydrationReport(),
       [SCOPE_GROUP_LISTINGS]: getGroupListingsHydrationReport(),
       [SCOPE_LEADERBOARDS]: getLeaderboardsHydrationReport(),
+      [SCOPE_ACCESS_CODES]: getAccessCodesLoadReport(),
     },
-    deferredScopes: [
-      'bootstrapPublicAccessCodes',
-    ],
+    deferredScopes: [],
+    accessCodes: getAccessCodesLoadReport(),
     shared: getSharedHydrationReport(),
     currentPlayer: getCurrentPlayerHydrationReport(),
     playerTradeIndex: getPlayerTradeIndexHydrationReport(),
@@ -2507,6 +2620,8 @@ function _installWindowApi() {
   window.qcDbHydration = {
     SHARED_DEF_PATHS,
     SCOPE_SHARED_DEFS,
+    ACCESS_CODES_ROOT,
+    SCOPE_ACCESS_CODES,
     SCOPE_CURRENT_PLAYER,
     SCOPE_PLAYER_TRADE_INDEX,
     SCOPE_ADMIN_DIRECTORY,
@@ -2517,6 +2632,9 @@ function _installWindowApi() {
     hydrateSharedDefs,
     isSharedDefsReady,
     waitForSharedDefs,
+    loadAccessCodeOnce,
+    bootstrapAccessCodesOnce,
+    getAccessCodesLoadReport,
     getHydrationStatus,
     getSharedHydrationReport,
     getCurrentPlayerHydrationReport,
@@ -2564,6 +2682,7 @@ Admin directory / selected-player: ui-owned ensure; release not on mirror
 Trading directory: trade-ui-owned playerDirectory while Trading tab open
 Trading group listings: trade-ui-owned listingsByGroup/{groupId} while Trading tab open
 Leaderboards: leaderboard-tab-owned leaderboards/ while Leaderboard tab open
+Access codes (S6a): once-load only — loadAccessCodeOnce(code) | bootstrapAccessCodesOnce() | getAccessCodesLoadReport()
 API: getHydrationStatus | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getLeaderboardsHydrationReport | getPlayerTradeIndexHydrationReport
 Root remains the legacy safety net; no bandwidth claim yet.`);
     },
