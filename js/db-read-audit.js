@@ -1408,7 +1408,7 @@ Replay helpers (optional regression only):
    qcDbHydration.getSubscriptionRegistry()
    qcDbHydration.getLeaderboardsHydrationReport()
 
-Next: S6b logout foreign-cache clear (when explicitly approved), then S6c–S6e. Do not begin S7/S8 yet.
+Next: verify S6d (qcPersonalAudit.workflowS6d()), then S6e. Do not begin S7/S8 yet.
 `);
 }
 
@@ -1422,7 +1422,7 @@ export function workflowS6a() {
 Status: COMPLETE + VERIFIED.
 Verification PASSED: no accessCodes subscription; valid/invalid/used register; login unaffected;
 registration load report uses accessCodes/{code}; isolation audit unexpectedTotal===0, hardViolations===0.
-Root remains ON. Next: S6b (logout foreign cache clear) — do not start until explicitly approved.
+Root remains ON. Next: verify S6d (qcPersonalAudit.workflowS6d()), then S6e. Do not begin S7.
 
 Prereq: unused access code from Admin → Access (or starter seed).
 
@@ -1475,7 +1475,7 @@ Prereq: unused access code from Admin → Access (or starter seed).
    // PASS: players/{candidate} get is allowed (username-taken check)
    // PASS: no accessCodes entry in getSubscriptionRegistry()
 
-Historical close only — do not re-run as a gate unless regressing. Next: verify S6b (qcPersonalAudit.workflowS6b()).
+Historical close only — do not re-run as a gate unless regressing. Next: verify S6d, then S6e.
 `);
 }
 
@@ -1486,7 +1486,12 @@ export function workflowS6b() {
   console.info(`
 === S6b Logout / forced-exit personal cache clear ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. Root remains ON. Do not begin S6c–S6e yet.
+Status: COMPLETE + VERIFIED.
+Verification PASSED: foreign personal cache cleared at logout; shared scopes preserved;
+self scopes restore on login; no session-restore regression.
+Root remains ON. Next: verify S6d (qcPersonalAudit.workflowS6d()), then S6e. Do not begin S7.
+
+Historical regression checklist (do not re-run as a gate unless regressing):
 
 1) While logged in as a normal player, open Trading and load a foreign counterparty
    (create/offer/accept path that once-loads players/{OTHER}).
@@ -1519,8 +1524,50 @@ Status: IMPLEMENTED — AWAITING VERIFICATION. Root remains ON. Do not begin S6c
 
 Optional: forceLocalExit / cross-tab wipe should set reason forceLocalExit | crossTab
 (same clear + report).
+`);
+}
 
-Do NOT begin S6c–S6e / S7 / S8 in this gate.
+/**
+ * Pasteable S6d persist-allowlist preparation verification (read-only; enforcement OFF).
+ */
+export function workflowS6d() {
+  console.info(`
+=== S6d Persist allowlist preparation ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+S6c intentionally deferred. Enforcement belongs to S7. Do not begin S6e/S7 yet.
+
+1) Inspect policy
+   qcPersistAllowlist.help()
+   qcPersistAllowlist.getPersistAllowlistReport()
+   // PASS: enforcementEnabled === false
+   // PASS: alwaysRoots includes config,cards,packs,groups,tradeIndexMeta,
+   //       playerDirectory,listingsByGroup,leaderboards,leaderboardSeasons,leaderboardSnapshots
+   // PASS: personalRoots === ['players','playerTradeIndex']
+   // PASS: neverRoots includes accessCodes (and trades)
+
+2) Personal path tests (session user bobby)
+   qcPersistAllowlist.shouldPersistPath('players/bobby', 'bobby')          // true
+   qcPersistAllowlist.shouldPersistPath('players/bobby2', 'bobby')         // false
+   qcPersistAllowlist.shouldPersistPath('playerTradeIndex/bobby', 'bobby') // true
+   qcPersistAllowlist.shouldPersistPath('playerTradeIndex/bobby2', 'bobby')// false
+   qcPersistAllowlist.shouldPersistPath('players', 'bobby')                // false (no bare tree)
+
+3) Shared roots allowed
+   qcPersistAllowlist.shouldPersistPath('config', 'bobby')                 // true
+   qcPersistAllowlist.shouldPersistPath('leaderboards', 'bobby')           // true
+   qcPersistAllowlist.shouldPersistPath('playerDirectory', 'bobby')        // true
+
+4) accessCodes explicit never
+   qcPersistAllowlist.shouldPersistPath('accessCodes', 'bobby')            // false
+   qcPersistAllowlist.shouldPersistPath('accessCodes/ABC123', 'bobby')     // false
+
+5) Persistence behavior unchanged
+   // PASS: PERSIST_ENFORCEMENT_ENABLED === false
+   // PASS: scicards_db may still contain full _db while root is ON
+   // PASS: no localStorage migration/clear performed by S6d
+
+Do NOT begin S6e or S7 in this gate.
 `);
 }
 
@@ -1553,6 +1600,7 @@ function _installWindowApi() {
     workflowS5d,
     workflowS6a,
     workflowS6b,
+    workflowS6d,
     enableAudit,
     disableAudit,
     enableIsolation,
