@@ -1408,7 +1408,7 @@ Replay helpers (optional regression only):
    qcDbHydration.getSubscriptionRegistry()
    qcDbHydration.getLeaderboardsHydrationReport()
 
-Next: verify S6a (qcPersonalAudit.workflowS6a()), then S6b–S6e. Do not begin S7/S8 yet.
+Next: S6b logout foreign-cache clear (when explicitly approved), then S6c–S6e. Do not begin S7/S8 yet.
 `);
 }
 
@@ -1419,7 +1419,10 @@ export function workflowS6a() {
   console.info(`
 === S6a accessCodes scoped once-load ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. Root remains ON. Do not begin S6b yet.
+Status: COMPLETE + VERIFIED.
+Verification PASSED: no accessCodes subscription; valid/invalid/used register; login unaffected;
+registration load report uses accessCodes/{code}; isolation audit unexpectedTotal===0, hardViolations===0.
+Root remains ON. Next: S6b (logout foreign cache clear) — do not start until explicitly approved.
 
 Prereq: unused access code from Admin → Access (or starter seed).
 
@@ -1458,16 +1461,66 @@ Prereq: unused access code from Admin → Access (or starter seed).
 
 7) Optional audit of registration get (not a subscribe)
    localStorage.setItem('qc-personal-scope-audit','true'); location.reload();
-   // Stay on auth screen; begin before clicking Register:
+   // Stay on auth screen; begin before clicking Register.
+   // Include the candidate username path — register legitimately checks players/{candidate} exists.
+   const candidate = 'PASTE_CANDIDATE_USERNAME'; // lowercase trimmed username you will type
    qcPersonalAudit.begin('s6a-register', { allowedPrefixes: [
-     'config','cards','packs','groups','tradeIndexMeta','accessCodes'
+     'config','cards','packs','groups','tradeIndexMeta','accessCodes',
+     'players/' + candidate
    ]});
-   // Attempt register with a test code (valid or invalid)
+   // Attempt register with that username + a test code (valid or invalid)
    const end = qcPersonalAudit.end('s6a-register');
+   // PASS: unexpectedTotal===0, hardViolations===0
    // PASS: reads include get accessCodes/<CODE> (leaf), not a student subscribe
+   // PASS: players/{candidate} get is allowed (username-taken check)
    // PASS: no accessCodes entry in getSubscriptionRegistry()
 
-Do NOT implement or test S6b–S6e in this gate.
+Historical close only — do not re-run as a gate unless regressing. Next: verify S6b (qcPersonalAudit.workflowS6b()).
+`);
+}
+
+/**
+ * Pasteable S6b logout personal-cache clear verification.
+ */
+export function workflowS6b() {
+  console.info(`
+=== S6b Logout / forced-exit personal cache clear ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. Root remains ON. Do not begin S6c–S6e yet.
+
+1) While logged in as a normal player, open Trading and load a foreign counterparty
+   (create/offer/accept path that once-loads players/{OTHER}).
+   const OTHER = 'PASTE_COUNTERPARTY';
+   qcDbHydration.getCached('players/' + OTHER)
+   // PASS: foreign player object present (and often playerTradeIndex/{OTHER} after reservations load)
+
+2) Note shared indexes still present (will be rechecked after logout):
+   ['config','cards','packs','groups','playerDirectory','tradeIndexMeta','leaderboards']
+     .map(p => [p, qcDbHydration.getCached(p) != null])
+
+3) Logout (UI button). Console should log: [Auth S6b] Personal cache cleared
+   After reload (auth screen), BEFORE logging back in:
+   const r = qcAuthS6b.getLastPersonalCacheClearReport()
+   // PASS: r.reason === 'logout'
+   // PASS: r.playersCleared === true
+   // PASS: r.playerTradeIndexCleared === true
+   // PASS: r.sharedScopesPreserved === true
+   // PASS: r.before.playerKeyCount >= 1 (included self and/or OTHER)
+   // Note: after reload, root may refill players — the REPORT is the boundary proof.
+
+4) Shared indexes were not targeted by clear (report.after.sharedPresent)
+   // PASS: paths that were present before remain present in the report
+
+5) Log back in as the same player
+   // PASS: players/{me} + playerTradeIndex/{me} scopes restore (auth pair ×1)
+   qcDbHydration.getSubscriptionRegistry()
+   qcDbHydration.getCurrentPlayerHydrationReport()
+   // PASS: no session-restore regression
+
+Optional: forceLocalExit / cross-tab wipe should set reason forceLocalExit | crossTab
+(same clear + report).
+
+Do NOT begin S6c–S6e / S7 / S8 in this gate.
 `);
 }
 
@@ -1499,6 +1552,7 @@ function _installWindowApi() {
     workflowS5cD7,
     workflowS5d,
     workflowS6a,
+    workflowS6b,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -11,6 +11,7 @@
  *   register(username, password, accessCode)
  *   adminLogin(password)
  *   logout()
+ *   getLastPersonalCacheClearReport()  — S6b post-logout personal cache clear proof
  *   isAdmin()
  *   getCurrentUsername()
  *   generateAccessCodes(count, group)
@@ -59,6 +60,23 @@ const MSG_SIGNED_IN_ELSEWHERE =
 
 /** In-tab snapshot for cross-tab storage comparison (storage events update localStorage before the handler runs). */
 let _localSessionSnapshot = null;
+
+/** S6b: last personal-cache clear report (also mirrored to sessionStorage for post-reload proof). */
+const S6B_CLEAR_REPORT_KEY = 'qc_s6b_personal_cache_clear';
+const S6B_SHARED_PRESERVE_PATHS = Object.freeze([
+  'config',
+  'cards',
+  'packs',
+  'groups',
+  'playerDirectory',
+  'listingsByGroup',
+  'tradeIndexMeta',
+  'leaderboards',
+  'leaderboardSeasons',
+  'leaderboardSnapshots',
+]);
+/** @type {object|null} */
+let _lastPersonalCacheClearReport = null;
 let _unsubSessionGuard = null;
 let _crossTabWatchInstalled = false;
 let _exitingLocally = false;
@@ -173,6 +191,100 @@ function releaseAuthOwnedScopes() {
 }
 
 /**
+ * S6b: after scope release, clear personal cache roots (not shared indexes).
+ * Captures a compact report at the clear boundary for verification before root refill/reload.
+ * @param {'logout'|'forceLocalExit'|'crossTab'} reason
+ * @returns {object}
+ */
+function clearPersonalCacheAfterScopeRelease(reason) {
+  const beforePlayers = db.get('players');
+  const beforePti = db.get('playerTradeIndex');
+  const playerKeysBefore = beforePlayers && typeof beforePlayers === 'object'
+    ? Object.keys(beforePlayers).filter((k) => k && k !== '__admin__')
+    : [];
+  const ptiKeysBefore = beforePti && typeof beforePti === 'object'
+    ? Object.keys(beforePti).filter((k) => k && k !== '__admin__')
+    : [];
+
+  /** @type {Record<string, boolean>} */
+  const sharedBefore = {};
+  for (const path of S6B_SHARED_PRESERVE_PATHS) {
+    sharedBefore[path] = db.get(path) != null;
+  }
+
+  const playersClear = db.clearCachedPath('players');
+  const ptiClear = db.clearCachedPath('playerTradeIndex');
+
+  const afterPlayers = db.get('players');
+  const afterPti = db.get('playerTradeIndex');
+  /** @type {Record<string, boolean>} */
+  const sharedAfter = {};
+  for (const path of S6B_SHARED_PRESERVE_PATHS) {
+    sharedAfter[path] = db.get(path) != null;
+  }
+
+  const sharedScopesPreserved = S6B_SHARED_PRESERVE_PATHS.every(
+    (path) => !sharedBefore[path] || sharedAfter[path] === true,
+  );
+
+  const report = {
+    phase: 'S6b',
+    reason: reason || 'unknown',
+    timestamp: Date.now(),
+    playersCleared: playersClear?.ok === true && afterPlayers == null,
+    playerTradeIndexCleared: ptiClear?.ok === true && afterPti == null,
+    sharedScopesPreserved,
+    before: {
+      playerKeyCount: playerKeysBefore.length,
+      playerKeysSample: playerKeysBefore.slice(0, 8),
+      ptiKeyCount: ptiKeysBefore.length,
+      ptiKeysSample: ptiKeysBefore.slice(0, 8),
+      sharedPresent: sharedBefore,
+    },
+    after: {
+      playersNull: afterPlayers == null,
+      playerTradeIndexNull: afterPti == null,
+      sharedPresent: sharedAfter,
+    },
+    clearResults: {
+      players: playersClear,
+      playerTradeIndex: ptiClear,
+    },
+  };
+
+  _lastPersonalCacheClearReport = report;
+  try {
+    sessionStorage.setItem(S6B_CLEAR_REPORT_KEY, JSON.stringify(report));
+  } catch { /* ignore quota / private mode */ }
+
+  console.info('[Auth S6b] Personal cache cleared', {
+    reason: report.reason,
+    playersCleared: report.playersCleared,
+    playerTradeIndexCleared: report.playerTradeIndexCleared,
+    sharedScopesPreserved: report.sharedScopesPreserved,
+    playerKeyCountBefore: report.before.playerKeyCount,
+    ptiKeyCountBefore: report.before.ptiKeyCount,
+  });
+
+  return report;
+}
+
+/**
+ * Last S6b personal-cache clear report (in-memory, else sessionStorage for post-reload).
+ * @returns {object|null}
+ */
+export function getLastPersonalCacheClearReport() {
+  if (_lastPersonalCacheClearReport) return { ..._lastPersonalCacheClearReport };
+  try {
+    const raw = sessionStorage.getItem(S6B_CLEAR_REPORT_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * After current-player scope is live: ensure playerTradeIndex/{me}.
  * Failure does not revoke login — Research fail-closes until retry/rebuild.
  * @param {string} username
@@ -204,6 +316,7 @@ function forceLocalExit(message) {
   _exitingLocally = true;
   stopSessionGuard();
   releaseAuthOwnedScopes();
+  clearPersonalCacheAfterScopeRelease('forceLocalExit');
   clearLocalSessionOnly();
   if (message) setPendingAuthMessage(message);
   location.reload();
@@ -270,6 +383,7 @@ function setupCrossTabSessionWatch() {
       if (_localSessionSnapshot) {
         stopSessionGuard();
         releaseAuthOwnedScopes();
+        clearPersonalCacheAfterScopeRelease('crossTab');
         rememberSessionSnapshot(null);
         resetLoginAchievementEvaluation();
         location.reload();
@@ -303,7 +417,7 @@ function setupCrossTabSessionWatch() {
 /**
  * Explicit logout: stop in-process guard, ownership-checked clear of activeSession
  * (Firebase transaction — does not depend on the scoped player subscription), then
- * release current-player scope and clear local session.
+ * release current-player scope, S6b clear personal cache roots, and clear local session.
  * Forced remote logout must never call this clear path (see forceLocalExit).
  */
 export async function logout() {
@@ -313,6 +427,7 @@ export async function logout() {
     await db.clearActiveSessionIfOwned(session.username, session.sessionId);
   }
   releaseAuthOwnedScopes();
+  clearPersonalCacheAfterScopeRelease('logout');
   clearLocalSessionOnly();
 }
 
@@ -929,3 +1044,22 @@ function generateCode() {
   }
   return code;
 }
+
+function _installAuthWindowApi() {
+  if (typeof window === 'undefined') return;
+  window.qcAuthS6b = {
+    getLastPersonalCacheClearReport,
+    help() {
+      console.info(`Auth S6b personal cache clear
+After logout / forceLocalExit / crossTab session wipe:
+  clearCachedPath('players') + clearCachedPath('playerTradeIndex')
+Shared indexes are preserved.
+Report (survives reload via sessionStorage):
+  qcAuthS6b.getLastPersonalCacheClearReport()
+  // PASS: playersCleared && playerTradeIndexCleared && sharedScopesPreserved
+  // reason: logout | forceLocalExit | crossTab`);
+    },
+  };
+}
+
+_installAuthWindowApi();
