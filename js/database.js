@@ -43,6 +43,8 @@
 import { initFirebase, isConfigured } from './firebase-config.js';
 import * as metrics from './db-metrics.js';
 import * as readAudit from './db-read-audit.js';
+// S6d: canonical persist policy (enforcement OFF until S7). Side-effect installs qcPersistAllowlist.
+import { PERSIST_ENFORCEMENT_ENABLED } from './persist-allowlist.js';
 
 const DB_KEY = 'scicards_db';
 
@@ -173,8 +175,16 @@ function _fbRemove(path) {
 
 // ---------- localStorage fallback ----------
 
+/**
+ * Persist in-memory `_db` to localStorage (`scicards_db`).
+ * S6d: always writes the full `_db` snapshot (`PERSIST_ENFORCEMENT_ENABLED` is false).
+ * S7: will filter via `persist-allowlist.js` when enforcement is enabled.
+ * Do not clear/migrate existing localStorage in S6d.
+ */
 function _persistLocal() {
   try {
+    // Full mirror while S6d enforcement is OFF (root coexistence). Flag reserved for S7.
+    void PERSIST_ENFORCEMENT_ENABLED;
     localStorage.setItem(DB_KEY, JSON.stringify(_db));
     if (metrics.isEnabled()) {
       metrics.captureCacheRoot(_db);
