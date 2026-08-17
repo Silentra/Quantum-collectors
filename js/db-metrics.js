@@ -214,6 +214,29 @@ export function resetAll() {
   console.info('[DB Metrics] All metrics cleared.');
 }
 
+/** @type {object|null} */
+let _bootModeReport = null;
+
+/**
+ * S7b: record boot-mode latch / root-attach state (always stored; independent of metrics enable).
+ * @param {object} report
+ */
+export function recordBootMode(report) {
+  _bootModeReport = report ? { ...report } : null;
+  if (_enabled && report) {
+    console.info(
+      `[DB Metrics] Boot mode=${report.mode} rootListenerAttached=${report.rootListenerAttached} firebaseActive=${report.firebaseActive}`,
+    );
+  }
+}
+
+/**
+ * @returns {object|null}
+ */
+export function getBootModeReport() {
+  return _bootModeReport ? { ..._bootModeReport } : null;
+}
+
 /**
  * @param {string} name
  * @param {number} [ts]
@@ -637,11 +660,13 @@ export function summary() {
   const report = {
     disclaimer: 'Estimated JSON bytes — not Firebase billed transfer. Local write↔snapshot links are correlation only (other clients omitted).',
     enabled: _enabled,
+    bootMode: _bootModeReport,
     cacheUpdateSources: {
-      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S3: root is legacy safety net; scoped player is eventual owner — do not claim bandwidth reduction or root-wins semantics',
+      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S7b: scoped boot skips root; root-on remains default',
     },
     rootSnapshots: {
       total: snapCount,
+      rootListenerAttached: _bootModeReport ? _bootModeReport.rootListenerAttached === true : null,
       initialOnceBytes: _state.totals.initialOnceBytes,
       subsequentEstimatedBytes: _state.totals.subsequentBytes,
       cumulativeEstimatedBytes: _state.totals.cumulativeEstimatedBytes,
@@ -708,7 +733,8 @@ export function summary() {
 
   console.info('[DB Metrics] Summary', report);
   console.info(
-    `[DB Metrics] Quick: rootSnaps=${snapCount} pathSnaps=${_state.totals.pathSnapshotCount} ` +
+    `[DB Metrics] Quick: mode=${_bootModeReport?.mode || '?'} rootAttached=${_bootModeReport?.rootListenerAttached} ` +
+      `rootSnaps=${snapCount} pathSnaps=${_state.totals.pathSnapshotCount} ` +
       `cum=${_formatBytes(_state.totals.cumulativeEstimatedBytes)} writes=${_state.totals.writeCount} ` +
       `scopedSubs=${_state.activeScopedSubscriptions.length}`,
   );
@@ -728,17 +754,16 @@ function _installWindowApi() {
     recordTradeIndexLifecycle,
     recordTradeIndexFallback,
     recordTradeIndexFailClosed,
+    getBootModeReport,
     help() {
-      console.info(`DB Metrics (Phase 1A)
+      console.info(`DB Metrics
 Enable:  localStorage.setItem('qc-db-metrics-enabled','true'); location.reload()
 Verbose: localStorage.setItem('qc-db-metrics-verbose','true')
 Disable: qcDbMetrics.disable() or set flag false + reload
-API: summary() | reset() | resetAll() | measureMajorNodes()
-Cache update sources: initial-root | root-listener | scoped-once | scoped-subscription
-(S3: root = legacy safety net; scoped player = eventual owner — no bandwidth claim)
-Bytes are Estimated JSON — not Firebase billed transfer.
-Hydration: qcDbHydration.getSharedHydrationReport() | getCurrentPlayerHydrationReport() | getPlayerTradeIndexHydrationReport() | help()
-Personal audit (S4/S5c-C): qcPersonalAudit.help() | workflow() | workflowS5cC()`);
+API: summary() | getBootModeReport() | reset() | resetAll() | measureMajorNodes()
+S7b: summary().bootMode / rootSnapshots.total (expect 0 when mode=scoped)
+Boot: qcDbHydration.getBootModeReport()
+Bytes are Estimated JSON — not Firebase billed transfer.`);
     },
   };
 }

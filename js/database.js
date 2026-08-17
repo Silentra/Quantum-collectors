@@ -32,12 +32,14 @@
  *   isPathReady(path) / waitForPath    - S1 hierarchical readiness
  *   clearCachedPath(path)              - explicit subtree eviction (not on unsub)
  *   persistLocalNow(opts)              - S7a flush localStorage (optional null-user override)
+ *   resolveBootModeLatch / isScopedOnlyMode / isRootListenerAttached / getBootModeReport — S7b
  *   getSubscriptionRegistry()          - active scoped Firebase subscriptions
  *   isFirebaseConnected()
  *
  * Phase S1–S3: root once + root on('value') remain the legacy safety net.
  * Scoped APIs are additive; S3 current-player scope is auth-owned beside root.
- * S7a: opt-in filtered localStorage persist + sanitize-on-load (root listener unchanged).
+ * S7a: opt-in filtered localStorage persist + sanitize-on-load.
+ * S7b: reload-latched dual-mode — scoped skips root once+on; Firebase stays active.
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
@@ -53,9 +55,13 @@ import {
   filterDbForPersistWithStats,
   recordSanitizeReport,
   recordPersistFilterReport,
+  PERSIST_SCOPED_LOADING_LS_KEY,
 } from './persist-allowlist.js';
 
 const DB_KEY = 'scicards_db';
+
+/** Same key as db-hydration SCOPED_LOADING_LS_KEY — S7b boot authority. */
+export const BOOT_SCOPED_LOADING_LS_KEY = PERSIST_SCOPED_LOADING_LS_KEY;
 
 let _db = null;              // in-memory cache (synchronous reads)
 let _fbDb = null;            // Firebase RTDB instance
@@ -71,6 +77,21 @@ let _persistReason = 'unknown';
  * @type {string|null|undefined}
  */
 let _persistUsernameOverride = undefined;
+
+/**
+ * S7b: true only after root `on('value')` attaches this page load.
+ * Scoped mode never sets this; localStorage-only fallback also leaves it false.
+ */
+let _rootListenerAttached = false;
+
+/** @type {((snap: any) => void)|null} */
+let _rootValueHandler = null;
+
+/**
+ * @typedef {{ mode: 'root'|'scoped', reason: string, latchedAt: number }} BootModeLatch
+ * @type {BootModeLatch|null}
+ */
+let _bootModeLatch = null;
 
 /** Paths explicitly marked ready by scoped load/subscribe (not by root listener). */
 const _readyPaths = new Set();
@@ -521,16 +542,95 @@ function _releasePathSubscription(path) {
 // ---------- Public API ----------
 
 /**
+ * S7b: resolve boot mode once per page load (flag change requires reload).
+ * Authority: localStorage.qc_scoped_loading === 'true' → scoped (skip root attach).
+ * Default → root-on (verified classroom path). Config path is not consulted at boot
+ * (would require cache/RTDB before latch); remains prep for later slices.
+ * @returns {BootModeLatch}
+ */
+export function resolveBootModeLatch() {
+  if (_bootModeLatch) return _bootModeLatch;
+  let scopedFlag = false;
+  try {
+    scopedFlag = localStorage.getItem(BOOT_SCOPED_LOADING_LS_KEY) === 'true';
+  } catch { /* private mode */ }
+  _bootModeLatch = {
+    mode: scopedFlag ? 'scoped' : 'root',
+    reason: scopedFlag ? BOOT_SCOPED_LOADING_LS_KEY : 'default-root-on',
+    latchedAt: Date.now(),
+  };
+  return _bootModeLatch;
+}
+
+/** @returns {boolean} True when this page load skipped root once+on (scoped boot). */
+export function isScopedOnlyMode() {
+  return resolveBootModeLatch().mode === 'scoped';
+}
+
+/** @returns {boolean} True after root on('value') attached this page load. */
+export function isRootListenerAttached() {
+  return _rootListenerAttached === true;
+}
+
+/**
+ * S7b boot / root-listener diagnostics (always available; does not require metrics flag).
+ * @returns {object}
+ */
+export function getBootModeReport() {
+  const latch = resolveBootModeLatch();
+  const persistLatch = resolvePersistEnforcementLatch();
+  return {
+    phase: 'S7b',
+    mode: latch.mode,
+    reason: latch.reason,
+    latchedAt: latch.latchedAt,
+    rootListenerAttached: _rootListenerAttached === true,
+    firebaseActive: _useFirebase === true,
+    persistEnforcementEnabled: persistLatch.enabled === true,
+    persistEnforcementReason: persistLatch.reason,
+    note: latch.mode === 'scoped'
+      ? 'Scoped boot: Firebase active for path once/subscribe; root once+on never attached this page load.'
+      : 'Root-on boot (default): root once+on attach when Firebase OK. Flag OFF + reload restores this path.',
+  };
+}
+
+function _publishBootModeMetrics() {
+  const report = getBootModeReport();
+  metrics.recordBootMode(report);
+  return report;
+}
+
+/**
+ * Seed `_db` from S7a-sanitized local cache or defaults (no Firebase root read).
+ * Used by scoped Firebase boot and by offline localStorage fallback.
+ */
+function _seedDbFromLocalOrDefaults() {
+  const stored = _loadLocal();
+  if (stored) {
+    _db = stored;
+    _mergeDefaults(_db);
+  } else {
+    _db = getDefaultDB();
+  }
+}
+
+/**
  * Initialize database (async).
- * Tries Firebase RTDB first; falls back to localStorage.
+ * Root-on (default): Firebase root once+on, or localStorage fallback.
+ * Scoped (S7b, qc_scoped_loading): Firebase active, skip root once+on; seed from sanitized local/defaults.
  */
 export async function initDB() {
   metrics.mark('initDB-start');
-  // S7a: latch persist enforcement once per page load (flag change requires reload).
-  const latch = resolvePersistEnforcementLatch();
-  if (latch.enabled) {
-    console.info('[DB S7a] Persist enforcement ON (reason:', latch.reason + ') — root listener unchanged');
+  // S7a + S7b: latch once per page load (flag change requires reload).
+  const persistLatch = resolvePersistEnforcementLatch();
+  const bootLatch = resolveBootModeLatch();
+  if (persistLatch.enabled) {
+    console.info('[DB S7a] Persist enforcement ON (reason:', persistLatch.reason + ')');
   }
+  if (bootLatch.mode === 'scoped') {
+    console.info('[DB S7b] Boot mode scoped (reason:', bootLatch.reason + ') — root once+on will be skipped');
+  }
+
   // --- Try Firebase ---
   if (isConfigured()) {
     try {
@@ -544,6 +644,25 @@ export async function initDB() {
         console.log(`[DB] Firebase .info/connected = ${connected}`);
       });
 
+      // --- S7b scoped: Firebase writes/scoped loads OK; never attach root once+on ---
+      if (bootLatch.mode === 'scoped') {
+        _useFirebase = true;
+        _rootListenerAttached = false;
+        _rootValueHandler = null;
+        _seedDbFromLocalOrDefaults();
+        _persistReason = 'startup-scoped';
+        _persistLocal();
+        if (metrics.isEnabled()) {
+          metrics.captureCacheRoot(_db);
+          metrics.recordMajorNodeSizes(_db);
+        }
+        _publishBootModeMetrics();
+        console.log('[DB S7b] Scoped mode ready (Firebase active, root listener not attached)');
+        metrics.mark('initDB-complete');
+        return;
+      }
+
+      // --- Root-on (default, verified classroom path) ---
       // Pull full snapshot with a timeout so we don't hang forever
       console.log('[DB] Fetching initial snapshot (12s timeout)...');
       const snapshot = await Promise.race([
@@ -578,8 +697,8 @@ export async function initDB() {
         metrics.recordMajorNodeSizes(_db);
       }
 
-      // Live sync: Firebase → cache
-      _fbDb.ref('/').on('value', (snap) => {
+      // Live sync: Firebase → cache (handle retained for metrics / future detach)
+      _rootValueHandler = (snap) => {
         const fresh = snap.val();
         if (fresh && typeof fresh === 'object') {
           _db = fresh;
@@ -605,7 +724,10 @@ export async function initDB() {
             }
           }
         }
-      });
+      };
+      _fbDb.ref('/').on('value', _rootValueHandler);
+      _rootListenerAttached = true;
+      _publishBootModeMetrics();
 
       console.log('[DB] Firebase Realtime Database connected (WebSocket)');
       metrics.mark('initDB-complete');
@@ -616,21 +738,18 @@ export async function initDB() {
     }
   }
 
-  // --- Fallback: localStorage ---
+  // --- Fallback: localStorage (Firebase unavailable) ---
   _useFirebase = false;
-  const stored = _loadLocal();
-  if (stored) {
-    _db = stored;
-    _mergeDefaults(_db);
-  } else {
-    _db = getDefaultDB();
-  }
+  _rootListenerAttached = false;
+  _rootValueHandler = null;
+  _seedDbFromLocalOrDefaults();
   _persistReason = 'startup';
   _persistLocal();
   if (metrics.isEnabled()) {
     metrics.captureCacheRoot(_db);
     metrics.recordMajorNodeSizes(_db);
   }
+  _publishBootModeMetrics();
   console.log('[DB] Using localStorage fallback');
   metrics.mark('initDB-complete');
 }

@@ -91,17 +91,25 @@ export function isScopedLoadingDevFlagEnabled() {
 }
 
 /**
- * Flag prep only — root listener stays on regardless of these values in S3.
+ * Flag prep + S7b boot latch surface.
+ * Root attaches only in root-on boot; scoped boot skips root once+on.
  * @returns {object}
  */
 export function getScopedLoadingFlagState() {
   const configEnabled = db.get(SCOPED_LOADING_CONFIG_PATH) === true;
+  const boot = typeof db.getBootModeReport === 'function' ? db.getBootModeReport() : null;
+  const scopedBoot = boot && boot.mode === 'scoped';
   return {
     localStorageEnabled: isScopedLoadingDevFlagEnabled(),
     configPath: SCOPED_LOADING_CONFIG_PATH,
     configEnabled,
-    rootListenerLegacySafetyNet: true,
-    note: 'Flag prep only. Root once + on(value) remain the legacy safety net; flag does not cut over or disable root.',
+    bootMode: boot ? boot.mode : null,
+    bootReason: boot ? boot.reason : null,
+    rootListenerAttached: boot ? boot.rootListenerAttached === true : null,
+    rootListenerLegacySafetyNet: !scopedBoot,
+    note: scopedBoot
+      ? 'S7b scoped boot: root once+on skipped this page load. Reload required to change. Config path not used for boot latch.'
+      : 'Default root-on: root once+on when Firebase OK. Set localStorage.qc_scoped_loading=true and reload for scoped boot (S7b).',
   };
 }
 
@@ -2667,6 +2675,9 @@ function _installWindowApi() {
     // release* retained for auth/Admin/Trading UI only — not exposed here
     getScopedLoadingFlagState,
     isScopedLoadingDevFlagEnabled,
+    getBootModeReport: () => db.getBootModeReport(),
+    isScopedOnlyMode: () => db.isScopedOnlyMode(),
+    isRootListenerAttached: () => db.isRootListenerAttached(),
     isPathReady: (path) => db.isPathReady(path),
     waitForPath: (path, options) => db.waitForPath(path, options),
     loadPathOnce: (path, options) => db.loadPathOnce(path, options),
@@ -2684,7 +2695,8 @@ Trading group listings: trade-ui-owned listingsByGroup/{groupId} while Trading t
 Leaderboards: leaderboard-tab-owned leaderboards/ while Leaderboard tab open
 Access codes (S6a): once-load only — loadAccessCodeOnce(code) | bootstrapAccessCodesOnce() | getAccessCodesLoadReport()
 API: getHydrationStatus | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getLeaderboardsHydrationReport | getPlayerTradeIndexHydrationReport
-Root remains the legacy safety net; no bandwidth claim yet.`);
+Root: default ON; S7b scoped boot via localStorage.qc_scoped_loading=true + reload
+API: getHydrationStatus | getBootModeReport | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getLeaderboardsHydrationReport | getPlayerTradeIndexHydrationReport`);
     },
   };
 }

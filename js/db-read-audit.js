@@ -1581,91 +1581,70 @@ export function workflowS7a() {
   console.info(`
 === S7a Persist enforcement + sanitize-on-load ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. S7 incomplete. Root stays ON. Do not begin S7b.
+Status: COMPLETE + VERIFIED.
+All checks passed: synthetic filtering; logged-out projection; enforced localStorage filtering;
+logout flush; session/reload restoration; rollback to default-off/root-on.
+Root stayed ON throughout S7a. Persist policy unchanged.
+Next: S7b dual-mode root skip (do not begin S7c/S7d/S8 until S7b verified).
 
 Authority (reload-latched):
   localStorage.qc_persist_enforce === 'true'  OR  qc_scoped_loading === 'true'
   Default neither → enforcement OFF (classroom full persist).
 
---- A) Default / root-on regression (enforcement OFF) ---
-1. Ensure flags OFF:
-   localStorage.removeItem('qc_persist_enforce');
-   // leave qc_scoped_loading unset unless you already use it for other prep
-   location.reload();
-2. DevTools:
+Historical regression (do not re-run as a gate unless regressing):
+  qcPersistAllowlist.getPersistEnforcementReport()
+  qcPersistAllowlist.previewPersistFilter(synthetic, 'bobby')
+`);
+}
+
+/**
+ * Pasteable S7b dual-mode boot / root-skip verification (non-programmer).
+ */
+export function workflowS7b() {
+  console.info(`
+=== S7b Dual-mode boot (reload-required root skip) ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. S7 incomplete. Do not begin S7c/S7d/S8.
+
+Authority (reload-latched at initDB):
+  localStorage.qc_scoped_loading === 'true' → mode=scoped (skip root once+on; Firebase stays active)
+  Default / flag OFF → mode=root (verified classroom root-on path)
+  Flag change requires reload. config/firebase/scopedLoadingEnabled is NOT the boot latch in S7b.
+
+--- A) Default root-on regression ---
+1. localStorage.removeItem('qc_scoped_loading'); location.reload();
+2. qcDbHydration.getBootModeReport()
+   // PASS: mode==='root', reason==='default-root-on', rootListenerAttached===true (with Firebase)
+3. Console: "[DB] Fetching initial snapshot" / Firebase connected
+4. Log in; open a tab briefly — site works as before S7b
+
+--- B) Scoped boot (root skipped) ---
+1. localStorage.setItem('qc_scoped_loading','true'); location.reload();
+2. qcDbHydration.getBootModeReport()
+   // PASS: mode==='scoped', rootListenerAttached===false, firebaseActive===true
+3. Console: "[DB S7b] Scoped mode" — NO "Fetching initial snapshot"
+4. Optional metrics:
+   localStorage.setItem('qc-db-metrics-enabled','true'); location.reload();
+   // after reload with scoped still on:
+   qcDbMetrics.summary()
+   // PASS: bootMode.mode==='scoped', rootSnapshots.total===0
+
+--- C) Persist still enforced under scoped flag ---
+1. With qc_scoped_loading=true (S7a also latches persist ON via same flag):
    qcPersistAllowlist.getPersistEnforcementReport()
-   // PASS: enforcementEnabled === false, enforcementReason === 'default-off'
-3. Log in as a normal student; open packs / profile / trading briefly.
-   // PASS: site works; console shows Firebase root connected (root listener ON)
-4. Optional: Object.keys(JSON.parse(localStorage.scicards_db||'{}'))
-   // PASS: may still include many roots (full mirror) while enforcement OFF
+   // PASS: enforcementEnabled===true
+2. Object.keys(JSON.parse(localStorage.scicards_db||'{}')) after a persist
+   // PASS: allowlist-shaped (no accessCodes/trades wholesale)
 
---- B) Synthetic pre-S7 cache filter (no Firebase mutation) ---
-1. Paste:
-   const synthetic = {
-     config: { ok: 1 }, cards: { c1: {} }, packs: {}, groups: {},
-     playerDirectory: { bobby: { username: 'bobby' } },
-     listingsByGroup: {}, tradeIndexMeta: {}, leaderboards: {},
-     leaderboardSeasons: {}, leaderboardSnapshots: {},
-     players: { bobby: { u: 1 }, bobby2: { u: 2 }, bobby3: { u: 3 } },
-     playerTradeIndex: { bobby: { t: 1 }, bobby2: { t: 2 }, bobby3: { t: 3 } },
-     accessCodes: { X: 1 }, trades: { direct: { y: 1 } },
-     unknownJunk: { z: 1 }
-   };
-   const r = qcPersistAllowlist.previewPersistFilter(synthetic, 'bobby');
-   console.table({
-     session: r.sessionUsernameUsed,
-     droppedRoots: r.droppedTopLevelRoots.join(','),
-     droppedPlayers: r.droppedForeignPlayerCount,
-     droppedPTI: r.droppedForeignPTICount,
-     keptPersonal: r.keptPersonalRoots.join(','),
-     outKeys: Object.keys(r.filtered).join(',')
-   });
-2. PASS:
-   - players keys only bobby; no bobby2/bobby3
-   - playerTradeIndex keys only bobby
-   - accessCodes / trades / unknownJunk absent
-   - shared allowed roots retained (config, cards, …)
-3. Logged-out projection:
-   qcPersistAllowlist.previewPersistFilter(synthetic, null)
-   // PASS: no players / playerTradeIndex in filtered
+--- D) Rollback ---
+1. localStorage.removeItem('qc_scoped_loading'); location.reload();
+2. getBootModeReport() → mode root, rootListenerAttached true again
+   // PASS: verified root-on path restored
 
---- C) Persisted localStorage under enforcement ---
-1. Enable + reload:
-   localStorage.setItem('qc_persist_enforce','true'); location.reload();
-2. Log in as bobby (or your test student). Play briefly so something persists.
-3. Report:
-   qcPersistAllowlist.getPersistEnforcementReport()
-   // PASS: enforcementEnabled true, enforcementReason 'qc_persist_enforce'
-   // PASS: lastPersistFiltered.filtered === true
-   // PASS: droppedTopLevelRoots / foreign counts present when applicable
-4. Inspect keys only (do not decode huge blobs by hand):
-   const db = JSON.parse(localStorage.scicards_db);
-   Object.keys(db)
-   Object.keys(db.players||{})
-   Object.keys(db.playerTradeIndex||{})
-   // PASS: only allowlist roots; players/PTI only current user
-   // PASS: no accessCodes, no trades
-
---- D) Logged-out projection ---
-1. With enforcement still ON, log out.
-2. Immediately:
-   const db = JSON.parse(localStorage.scicards_db||'{}');
-   console.log({ keys: Object.keys(db), players: db.players, pti: db.playerTradeIndex });
-   // PASS: no players / playerTradeIndex personal roots (or absent)
-3. Report lastPersistFiltered.sessionUsernameUsed should be null after logout flush.
-
---- E) Reload restore ---
-1. Stay enforcement ON. Log in as bobby again. Reload the page.
-2. Confirm you are still bobby / profile loads (session restore OK).
-3. If testing localStorage-only fallback (Firebase disabled/unavailable):
-   // sanitize-on-load assigns filtered cache — report.localCacheSanitized.localCacheSanitized === true
-   qcPersistAllowlist.getPersistEnforcementReport()
-4. Turn flag OFF when done:
-   localStorage.removeItem('qc_persist_enforce'); location.reload();
-   // PASS: back to default-off classroom behavior
-
-Do not require S5/S6 gameplay matrices. Do not begin S7b.
+Known S7b limits (OK; deferred to S7c):
+- Trading canonical trades/* fallback still coexistence-oriented until S7c fail-closed
+- Admin accessCodes list / LB seasons-snapshots may still assume root cache until S7c hydrates
+Do not expand into S7c during this verification.
 `);
 }
 
@@ -1798,6 +1777,7 @@ function _installWindowApi() {
     workflowS6e,
     workflowS6,
     workflowS7a,
+    workflowS7b,
     enableAudit,
     disableAudit,
     enableIsolation,
