@@ -497,7 +497,7 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 **Source of truth for remaining work (S5c-D through S8):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
 
-Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, and **S5d** (live leaderboard summaries) are **COMPLETE + VERIFIED**. **S6a** (accessCodes scoped once-load) is **IMPLEMENTED — AWAITING VERIFICATION**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. **Next:** verify **S6a**, then **S6b–S6e**. Do not begin S7/S8 until S6 is complete. Historical phase notes below (S1–S5c-A) describe what landed; do not treat them as the plan for unfinished root removal or full S8 rules.
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, and **S6** (S6a–S6e; S6c intentionally deferred) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist prepared (not enforced); final isolation matrix PASS (`s6e-personal` / trading-idle / trading-action / leaderboard). Root listener remains ON as safety net by default. **S7a** COMPLETE + VERIFIED. **S7b** (dual-mode root skip) is **IMPLEMENTED — AWAITING VERIFICATION**. **S7** incomplete — do not begin **S7c**/S7d or **S8**. Historical phase notes below (S1–S5c-A) describe what landed; do not treat them as the plan for unfinished root removal or full S8 rules.
 
 **Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
 
@@ -528,13 +528,77 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase S6a — accessCodes scoped once-load (register + bootstrap)
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Root listener remains ON.
+**Status: COMPLETE + VERIFIED.** Root listener remains ON.
 
 - Register: [`loadAccessCodeOnce(code)`](js/db-hydration.js) → `loadPathOnce('accessCodes/{code}')` with `force: true` before validate; fail-closed on load failure; no subscribe.
 - Bootstrap seed: [`bootstrapAccessCodesOnce()`](js/db-hydration.js) → once-load whole `accessCodes` then generate only if empty ([`main.js`](main.js)).
 - Login: no accessCodes reads.
 - Admin bulk access-code UI unchanged (may still use root coexistence).
 - Report: `qcDbHydration.getAccessCodesLoadReport()` — distinguishes `purpose: 'register'` vs `'bootstrap'`.
+- Verification passed: no accessCodes subscription; valid/invalid/used register; login unaffected; load report leaf path; isolation audit `unexpectedTotal===0`, `hardViolations===0`.
+
+### Phase S6b — Logout / forced-exit personal cache clear
+
+**Status: COMPLETE + VERIFIED.** Root listener remains ON.
+
+- After scope release on `logout`, `forceLocalExit`, and cross-tab session wipe: `clearCachedPath('players')` + `clearCachedPath('playerTradeIndex')`.
+- Does **not** clear shared defs, `playerDirectory`, `listingsByGroup`, `tradeIndexMeta`, `leaderboards`, seasons/snapshots.
+- Proof: `qcAuthS6b.getLastPersonalCacheClearReport()` (sessionStorage-backed across reload) — `playersCleared`, `playerTradeIndexCleared`, `sharedScopesPreserved`, `reason`, `timestamp`.
+- Verification passed: foreign personal residue cleared at logout boundary; shared scopes preserved; login restores self scopes; no session-restore regression.
+
+### Phase S6d — Persist allowlist preparation
+
+**Status: COMPLETE + VERIFIED.** Root listener remains ON. **S6c intentionally deferred.**
+
+- Canonical policy: [`js/persist-allowlist.js`](js/persist-allowlist.js) — `PERSIST_ALWAYS_ROOTS`, `PERSIST_PERSONAL_ROOTS`, `PERSIST_NEVER_ROOTS`, `shouldPersistPath`, `filterDbForPersist`.
+- Always: `config|cards|packs|groups|tradeIndexMeta|playerDirectory|listingsByGroup|leaderboards|leaderboardSeasons|leaderboardSnapshots`.
+- Personal: only `players/{user}` and `playerTradeIndex/{user}`.
+- Never: `accessCodes` (register/bootstrap once-load only), `trades`, and other non-session roots.
+- S6d left `PERSIST_ENFORCEMENT_ENABLED === false` (not globally forced). **S7a** adds reload-latched enforcement via `qc_persist_enforce` / `qc_scoped_loading`.
+- DevTools: `qcPersistAllowlist.getPersistAllowlistReport()` / `workflowS6d()`.
+- Verification passed: policy allow/deny correct; enforcement OFF by default; full persist until S7a opt-in.
+
+### Phase S7a — Persist enforcement + sanitize-on-load
+
+**Status: COMPLETE + VERIFIED.** Root listener remained **ON** by default throughout S7a. **S7 incomplete** until later slices.
+
+**Authority (reload-latched once per page load):**
+- `localStorage.qc_persist_enforce === 'true'` **OR**
+- `localStorage.qc_scoped_loading === 'true'`
+- Default neither → enforcement **OFF** → full `scicards_db` mirror (classroom/root-on unchanged).
+
+**When enforcement ON:**
+- **Sanitize-on-load** (localStorage fallback → `_db`): `filterDbForPersist(restored, sessionUsername)` before assign. No Firebase mutation.
+- **Filtered writes:** `_persistLocal` → filter projection → `scicards_db` (runtime `_db` unchanged by the filter).
+- Session user: only `players/{user}` + `playerTradeIndex/{user}`; `__admin__` / no session → no personal roots.
+- Logout / forceLocalExit / crossTab: after S6b clear + session teardown → `persistLocalNow({ sessionUsername: null })`.
+
+**Diagnostics:** `qcPersistAllowlist.getPersistEnforcementReport()` — `enforcementEnabled`, `enforcementReason`, `sessionUsernameUsed`, `localCacheSanitized`, `lastPersistFiltered`, drop counts.
+
+**Verification passed:** synthetic filtering; logged-out projection; enforced localStorage; logout flush; session/reload restore; rollback to default-off/root-on.
+
+### Phase S7b — Dual-mode boot (reload-required root skip)
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Default remains **root-on**. Do not begin S7c/S7d/S8.
+
+**Authority (reload-latched at `initDB`):**
+- `localStorage.qc_scoped_loading === 'true'` → **scoped**: Firebase active; **skip** root `once('/')` and root `on('value')`; seed `_db` from S7a-sanitized local cache or defaults.
+- Default / flag OFF → **root**: existing verified once+on path unchanged.
+- Flag change requires reload. `config/firebase/scopedLoadingEnabled` is **not** the S7b boot latch (would need cache before latch).
+
+**Metrics / report:** `qcDbHydration.getBootModeReport()` / `qcDbMetrics.summary().bootMode` — `mode`, `reason`, `rootListenerAttached`, `firebaseActive`, `persistEnforcementEnabled`. Scoped PASS: `rootListenerAttached===false` and (with metrics) `rootSnapshots.total===0`.
+
+**Not in S7b:** fail-closed trading fallbacks, Admin accessCodes once-load, LB seasons/snapshots hydrate (S7c); default flip (S7d).
+
+### Phase S6e — Final isolation audits
+
+**Status: COMPLETE + VERIFIED.** Root listener remains ON. **S6 overall COMPLETE + VERIFIED** (S6c deferred, not a blocker).
+
+- Pasteable matrix: `qcPersonalAudit.workflowS6e()` (alias `workflowS6()`).
+- Fresh short labels PASSED: personal tabs, Trading idle, Trading one-action smoke, Leaderboard mount/use/leave.
+- Credited: S6a register isolation; Gate B/C; D7 races; S5d rebuild/writers; D7 G shape.
+- PASS: `unexpectedTotal===0`, `hardViolations===0`; no bare personal/trade trees; no healthy canonical-fallback; tab-owned scopes release; `knownScopedBlockers: []`.
+- Note: `summary()` may still report `phase: 'S4+'` / PARTIAL explanatory text — audit-helper metadata only.
 
 ### Phase S3 — Current-player scoped hydration + session guard
 Additive — root listener **unchanged** (legacy safety net). Exactly **one** auth-owned Firebase `.on` at `players/{username}` (`refCount: 1`). UI / Profile / session-guard must **not** call `subscribePath` for the player.
@@ -550,11 +614,11 @@ Additive — root listener **unchanged** (legacy safety net). Exactly **one** au
 - **Restore:** hydrate → exact `activeSession.id` match (no grace) → subscribe → guard → maintenance
 - **Login:** ack claim → local session → grace → ensure → guard → maintenance
 - **Register:** ack full player + code → local session → grace → ensure(`ackCacheFallback`) → guard (never re-register on once-load failure)
-- **Logout:** stop guard → `clearActiveSessionIfOwned` (independent of scoped sub) → release scope → clear local
-- **Forced exit:** stop guard → release scope → clear local → reload (**never** clear server session)
+- **Logout:** stop guard → `clearActiveSessionIfOwned` → release scopes → **S6b** `clearCachedPath('players')` + `clearCachedPath('playerTradeIndex')` → clear local → **S7a** `persistLocalNow({ sessionUsername: null })` when enforcement latched
+- **Forced exit / cross-tab wipe:** release scopes → **S6b** personal cache clear → clear local → **S7a** null-user persist → reload (**never** clear server session on forced exit)
 - **`__admin__`:** no player scope / no activeSession guard
 
-Session guard remains in-process `db.onValue('players/{u}/activeSession')`, fed by parent scoped snaps (descendant notify) and root coexistence. Prior-player cache retained on account switch (privacy cleanup later).
+Session guard remains in-process `db.onValue('players/{u}/activeSession')`, fed by parent scoped snaps (descendant notify) and root coexistence. **S6b** clears `players` + `playerTradeIndex` cache on logout / forced exit / cross-tab wipe (see Phase S6b).
 
 Dev: `qcDbHydration.getCurrentPlayerHydrationReport()` — no password / sessionId / inventory.
 
