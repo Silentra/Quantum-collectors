@@ -562,6 +562,7 @@ API:
   qcPersonalAudit.workflowS5cD7a() // Counterparty once-loads
   qcPersonalAudit.workflowS5cD7b() // Scoped listing expiry
   qcPersonalAudit.workflowS5cD7()  // Final S5c-D Trading isolation umbrella
+  qcPersonalAudit.workflowS6e()    // S6e final isolation matrix (alias: workflowS6)
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged.
 Does not claim all Trading is scoped-clean until later S5c-D phases.`);
@@ -1408,7 +1409,7 @@ Replay helpers (optional regression only):
    qcDbHydration.getSubscriptionRegistry()
    qcDbHydration.getLeaderboardsHydrationReport()
 
-Next: verify S6d (qcPersonalAudit.workflowS6d()), then S6e. Do not begin S7/S8 yet.
+Next: run S6e (qcPersonalAudit.workflowS6e()), then mark S6 COMPLETE after PASS. Do not begin S7/S8 yet.
 `);
 }
 
@@ -1422,7 +1423,7 @@ export function workflowS6a() {
 Status: COMPLETE + VERIFIED.
 Verification PASSED: no accessCodes subscription; valid/invalid/used register; login unaffected;
 registration load report uses accessCodes/{code}; isolation audit unexpectedTotal===0, hardViolations===0.
-Root remains ON. Next: verify S6d (qcPersonalAudit.workflowS6d()), then S6e. Do not begin S7.
+Root remains ON. Next: run S6e (qcPersonalAudit.workflowS6e()). Do not begin S7.
 
 Prereq: unused access code from Admin → Access (or starter seed).
 
@@ -1475,7 +1476,7 @@ Prereq: unused access code from Admin → Access (or starter seed).
    // PASS: players/{candidate} get is allowed (username-taken check)
    // PASS: no accessCodes entry in getSubscriptionRegistry()
 
-Historical close only — do not re-run as a gate unless regressing. Next: verify S6d, then S6e.
+Historical close only — do not re-run as a gate unless regressing. Next: S6e (workflowS6e).
 `);
 }
 
@@ -1489,7 +1490,7 @@ export function workflowS6b() {
 Status: COMPLETE + VERIFIED.
 Verification PASSED: foreign personal cache cleared at logout; shared scopes preserved;
 self scopes restore on login; no session-restore regression.
-Root remains ON. Next: verify S6d (qcPersonalAudit.workflowS6d()), then S6e. Do not begin S7.
+Root remains ON. Next: run S6e (qcPersonalAudit.workflowS6e()). Do not begin S7.
 
 Historical regression checklist (do not re-run as a gate unless regressing):
 
@@ -1534,8 +1535,12 @@ export function workflowS6d() {
   console.info(`
 === S6d Persist allowlist preparation ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION.
-S6c intentionally deferred. Enforcement belongs to S7. Do not begin S6e/S7 yet.
+Status: COMPLETE + VERIFIED.
+Policy checks PASSED: enforcement OFF; personal paths allow/deny correct; shared roots allowed;
+accessCodes/trades never; filterDbForPersist S7-ready; _persistLocal unchanged.
+S6c intentionally deferred. Next: S6e isolation audits (qcPersonalAudit.workflowS6e()). Do not begin S7.
+
+Historical regression checklist (do not re-run as a gate unless regressing):
 
 1) Inspect policy
    qcPersistAllowlist.help()
@@ -1566,9 +1571,113 @@ S6c intentionally deferred. Enforcement belongs to S7. Do not begin S6e/S7 yet.
    // PASS: PERSIST_ENFORCEMENT_ENABLED === false
    // PASS: scicards_db may still contain full _db while root is ON
    // PASS: no localStorage migration/clear performed by S6d
-
-Do NOT begin S6e or S7 in this gate.
 `);
+}
+
+/**
+ * Pasteable S6e final isolation audit matrix (short labeled sessions; root stays ON).
+ * Alias: workflowS6()
+ */
+export function workflowS6e() {
+  console.info(`
+=== S6e Final Isolation Audits ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+S6 overall remains INCOMPLETE until this matrix PASSes.
+Root listener remains ON. Do not begin S7.
+
+CREDITED (do not replay):
+- S6a registration isolation
+- Gate B/C trade correctness
+- D7 listing races / contention
+- S5d rebuild/writer matrix
+- D7 Gate G shape for Trading isolation (still run a short action smoke below)
+
+PASS every label: unexpectedTotal===0 AND hardViolations===0
+Also: no bare players | playerTradeIndex | trades/direct | trades/listings
+No healthy *canonical-fallback when indexed/scoped source is expected.
+
+Expected always-on (not leaks): players/{me} ×1, playerTradeIndex/{me} ×1
+Tab-owned: Trading → playerDirectory + listingsByGroup/{g}; Leaderboard → leaderboards
+(release on leave)
+
+----- Prereq -----
+localStorage.setItem('qc-personal-scope-audit','true');
+localStorage.setItem('qc-personal-cache-isolation','true');
+location.reload();
+// Login as a normal student (not __admin__)
+qcPersonalAudit.reset();
+
+const me = qcDbHydration.getCurrentPlayerHydrationReport().username;
+const g = (qcDbHydration.getCached('players/' + me) || {}).groupId;
+const OTHER = 'PASTE_COUNTERPARTY'; // only for trading-action label
+
+const allowPersonal = [
+  'config','cards','packs','groups','tradeIndexMeta',
+  'players/' + me, 'playerTradeIndex/' + me
+];
+const allowTradingIdle = [
+  ...allowPersonal, 'playerDirectory', 'listingsByGroup/' + g,
+  'trades/direct/*', 'trades/listings/*'
+];
+const allowTradingAction = [
+  ...allowTradingIdle, 'players/' + OTHER, 'playerTradeIndex/' + OTHER
+];
+const allowLb = [
+  ...allowPersonal, 'leaderboards', 'leaderboardSeasons', 'leaderboardSnapshots'
+];
+
+Spot-check anytime:
+  qcDbHydration.getSubscriptionRegistry()
+  // auth pair ×1 while logged in
+
+----- A) Personal (one practical session covering major tabs) -----
+qcPersonalAudit.begin('s6e-personal', { allowedPrefixes: allowPersonal });
+// Visit shell + Collection, Packs, Projects, Shop, Profile, Achievements
+// (brief browse each; no Trading / Leaderboard in this session)
+const a = qcPersonalAudit.end('s6e-personal');
+// PASS: a.unexpectedTotal===0 && a.hardViolations===0
+// PASS: no bare players / playerTradeIndex
+// PASS: registry still auth pair only (no directory / listingsByGroup / leaderboards)
+
+----- B) Trading idle -----
+qcPersonalAudit.begin('s6e-trading-idle', { allowedPrefixes: allowTradingIdle });
+// Open Trading; idle ~5–12s (expiry tick OK); do not complete a trade yet
+const b = qcPersonalAudit.end('s6e-trading-idle');
+// PASS: b.unexpectedTotal===0 && b.hardViolations===0
+// PASS: no bare players / playerTradeIndex / trades/direct / trades/listings
+// PASS: registry has playerDirectory ×1 and listingsByGroup/{g} ×1 (if group set)
+// Leave Trading → directory + listingsByGroup released; auth pair remains
+
+----- C) Trading action smoke (one action only) -----
+qcPersonalAudit.begin('s6e-trading-action', { allowedPrefixes: allowTradingAction });
+// ONE representative action: create direct OR accept listing (not Gate B/C suite)
+const c = qcPersonalAudit.end('s6e-trading-action');
+// PASS: c.unexpectedTotal===0 && c.hardViolations===0
+// PASS: no bare trees; no healthy *canonical-fallback
+// Leave Trading when done → tab-owned scopes release
+
+----- D) Leaderboard -----
+qcPersonalAudit.begin('s6e-leaderboard', { allowedPrefixes: allowLb });
+// Open Leaderboard; switch 2–3 categories; optional season/snapshot view
+const d = qcPersonalAudit.end('s6e-leaderboard');
+// PASS: d.unexpectedTotal===0 && d.hardViolations===0
+// PASS: no bare players; no foreign players/{other} for live board
+// PASS: while mounted, leaderboards ×1 in registry
+// Leave Leaderboard → leaderboards released; auth pair remains
+
+----- Final -----
+qcPersonalAudit.summary()
+// PASS: all s6e-* labels PASS
+// Root still ON (intentional for S6)
+
+After manual PASS: mark S6e + S6 COMPLETE + VERIFIED (docs). Until then S6 stays incomplete.
+`);
+}
+
+/** Alias for workflowS6e — umbrella print for S6 final isolation matrix. */
+export function workflowS6() {
+  return workflowS6e();
 }
 
 function _installWindowApi() {
@@ -1601,6 +1710,8 @@ function _installWindowApi() {
     workflowS6a,
     workflowS6b,
     workflowS6d,
+    workflowS6e,
+    workflowS6,
     enableAudit,
     disableAudit,
     enableIsolation,
