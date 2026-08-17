@@ -31,11 +31,13 @@
  *   subscribePath(path)                - S1 scoped Firebase .on → merge subtree
  *   isPathReady(path) / waitForPath    - S1 hierarchical readiness
  *   clearCachedPath(path)              - explicit subtree eviction (not on unsub)
+ *   persistLocalNow(opts)              - S7a flush localStorage (optional null-user override)
  *   getSubscriptionRegistry()          - active scoped Firebase subscriptions
  *   isFirebaseConnected()
  *
  * Phase S1–S3: root once + root on('value') remain the legacy safety net.
  * Scoped APIs are additive; S3 current-player scope is auth-owned beside root.
+ * S7a: opt-in filtered localStorage persist + sanitize-on-load (root listener unchanged).
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
@@ -43,8 +45,15 @@
 import { initFirebase, isConfigured } from './firebase-config.js';
 import * as metrics from './db-metrics.js';
 import * as readAudit from './db-read-audit.js';
-// S6d: canonical persist policy (enforcement OFF until S7). Side-effect installs qcPersistAllowlist.
-import { PERSIST_ENFORCEMENT_ENABLED } from './persist-allowlist.js';
+// S7a: canonical persist policy + reload-latched enforcement (default OFF for root-on classroom).
+import {
+  resolvePersistEnforcementLatch,
+  isPersistEnforcementEnabled,
+  getPersistSessionUsername,
+  filterDbForPersistWithStats,
+  recordSanitizeReport,
+  recordPersistFilterReport,
+} from './persist-allowlist.js';
 
 const DB_KEY = 'scicards_db';
 
@@ -55,6 +64,13 @@ const _listeners = new Map();
 
 /** Optional reason for metrics-only; does not change persistence behavior. */
 let _persistReason = 'unknown';
+
+/**
+ * One-shot override for filtered persist username (undefined = read scicards_session).
+ * Used after logout so personal projection is null even if session clear races.
+ * @type {string|null|undefined}
+ */
+let _persistUsernameOverride = undefined;
 
 /** Paths explicitly marked ready by scoped load/subscribe (not by root listener). */
 const _readyPaths = new Set();
@@ -177,28 +193,112 @@ function _fbRemove(path) {
 
 /**
  * Persist in-memory `_db` to localStorage (`scicards_db`).
- * S6d: always writes the full `_db` snapshot (`PERSIST_ENFORCEMENT_ENABLED` is false).
- * S7: will filter via `persist-allowlist.js` when enforcement is enabled.
- * Do not clear/migrate existing localStorage in S6d.
+ * Default (enforcement OFF): full `_db` mirror — classroom/root-on baseline unchanged.
+ * S7a enforcement ON (latched): writes filterDbForPersist projection only; does not mutate `_db`.
  */
 function _persistLocal() {
   try {
-    // Full mirror while S6d enforcement is OFF (root coexistence). Flag reserved for S7.
-    void PERSIST_ENFORCEMENT_ENABLED;
-    localStorage.setItem(DB_KEY, JSON.stringify(_db));
+    const enforce = isPersistEnforcementEnabled();
+    let payload = _db;
+    if (enforce) {
+      const username = getPersistSessionUsername(_persistUsernameOverride);
+      const stats = filterDbForPersistWithStats(_db, username);
+      payload = stats.filtered;
+      recordPersistFilterReport({
+        filtered: true,
+        reason: _persistReason,
+        sessionUsernameUsed: stats.sessionUsernameUsed,
+        droppedTopLevelRoots: stats.droppedTopLevelRoots,
+        droppedForeignPlayerCount: stats.droppedForeignPlayerCount,
+        droppedForeignPTICount: stats.droppedForeignPTICount,
+        keptAlwaysRoots: stats.keptAlwaysRoots,
+        keptPersonalRoots: stats.keptPersonalRoots,
+        outputTopLevelKeys: Object.keys(payload),
+      });
+    } else {
+      recordPersistFilterReport({
+        filtered: false,
+        reason: _persistReason,
+        sessionUsernameUsed: getPersistSessionUsername(_persistUsernameOverride),
+        note: 'enforcement OFF — full _db mirror',
+      });
+    }
+    localStorage.setItem(DB_KEY, JSON.stringify(payload));
     if (metrics.isEnabled()) {
       metrics.captureCacheRoot(_db);
-      metrics.recordCachePersist(_db, _persistReason);
+      metrics.recordCachePersist(payload, _persistReason);
     }
   }
   catch (e) { console.error('[DB] localStorage persist error:', e); }
 }
 
+/**
+ * Load `scicards_db`. When S7a enforcement is latched ON, sanitize via filterDbForPersist
+ * before the result is assigned to `_db` (localStorage fallback path). Does not touch Firebase.
+ * @returns {object|null}
+ */
 function _loadLocal() {
   try {
     const raw = localStorage.getItem(DB_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
+    if (!raw) {
+      recordSanitizeReport({
+        localCacheFound: false,
+        localCacheSanitized: false,
+        enforcementEnabled: isPersistEnforcementEnabled(),
+      });
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!isPersistEnforcementEnabled()) {
+      recordSanitizeReport({
+        localCacheFound: true,
+        localCacheSanitized: false,
+        enforcementEnabled: false,
+        inputTopLevelKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
+      });
+      return parsed;
+    }
+    const username = getPersistSessionUsername(_persistUsernameOverride);
+    const stats = filterDbForPersistWithStats(parsed, username);
+    recordSanitizeReport({
+      localCacheFound: true,
+      localCacheSanitized: true,
+      enforcementEnabled: true,
+      sessionUsernameUsed: stats.sessionUsernameUsed,
+      droppedTopLevelRoots: stats.droppedTopLevelRoots,
+      droppedForeignPlayerCount: stats.droppedForeignPlayerCount,
+      droppedForeignPTICount: stats.droppedForeignPTICount,
+      keptAlwaysRoots: stats.keptAlwaysRoots,
+      keptPersonalRoots: stats.keptPersonalRoots,
+      inputTopLevelKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
+      outputTopLevelKeys: Object.keys(stats.filtered),
+    });
+    return stats.filtered;
+  } catch (e) {
+    recordSanitizeReport({
+      localCacheFound: false,
+      localCacheSanitized: false,
+      error: String(e && e.message ? e.message : e),
+    });
+    return null;
+  }
+}
+
+/**
+ * Flush localStorage persist now. Optional sessionUsername override (pass null after logout).
+ * @param {{ sessionUsername?: string|null, reason?: string }} [options]
+ */
+export function persistLocalNow(options = {}) {
+  const prevOverride = _persistUsernameOverride;
+  if (Object.prototype.hasOwnProperty.call(options, 'sessionUsername')) {
+    _persistUsernameOverride = options.sessionUsername;
+  }
+  if (options.reason) _persistReason = options.reason;
+  try {
+    _persistLocal();
+  } finally {
+    _persistUsernameOverride = prevOverride;
+  }
 }
 
 // ---------- Listener notification ----------
@@ -426,6 +526,11 @@ function _releasePathSubscription(path) {
  */
 export async function initDB() {
   metrics.mark('initDB-start');
+  // S7a: latch persist enforcement once per page load (flag change requires reload).
+  const latch = resolvePersistEnforcementLatch();
+  if (latch.enabled) {
+    console.info('[DB S7a] Persist enforcement ON (reason:', latch.reason + ') — root listener unchanged');
+  }
   // --- Try Firebase ---
   if (isConfigured()) {
     try {

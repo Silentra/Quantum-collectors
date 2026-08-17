@@ -520,9 +520,9 @@ export function summary() {
   const anyFail = rows.some((r) => r.result === 'FAIL');
 
   const out = {
-    phase: 'S4',
+    phase: 'S4+',
     overall: allPass ? 'PASS' : allAcceptable && !anyFail ? 'PARTIAL' : rows.length ? 'FAIL' : 'EMPTY',
-    note: 'PARTIAL = only known scoped blockers (e.g. projects→trades); gameplay/trade reservations unchanged.',
+    note: 'phase S4+ = audit helper origin (not current roadmap phase). PARTIAL only if knownScopedBlockers match; with empty blockers, expect PASS or FAIL only.',
     knownScopedBlockers: KNOWN_SCOPED_BLOCKERS,
     rows,
     rootListenerNote: 'Legacy root listener unchanged; audit does not disable it.',
@@ -1409,7 +1409,7 @@ Replay helpers (optional regression only):
    qcDbHydration.getSubscriptionRegistry()
    qcDbHydration.getLeaderboardsHydrationReport()
 
-Next: run S6e (qcPersonalAudit.workflowS6e()), then mark S6 COMPLETE after PASS. Do not begin S7/S8 yet.
+Next: S7 root-off investigate/plan (do not implement until approved). Do not begin S8 yet.
 `);
 }
 
@@ -1423,7 +1423,7 @@ export function workflowS6a() {
 Status: COMPLETE + VERIFIED.
 Verification PASSED: no accessCodes subscription; valid/invalid/used register; login unaffected;
 registration load report uses accessCodes/{code}; isolation audit unexpectedTotal===0, hardViolations===0.
-Root remains ON. Next: run S6e (qcPersonalAudit.workflowS6e()). Do not begin S7.
+Root remains ON. Next: S7 investigate/plan. Do not begin S7 implementation until approved.
 
 Prereq: unused access code from Admin → Access (or starter seed).
 
@@ -1476,7 +1476,7 @@ Prereq: unused access code from Admin → Access (or starter seed).
    // PASS: players/{candidate} get is allowed (username-taken check)
    // PASS: no accessCodes entry in getSubscriptionRegistry()
 
-Historical close only — do not re-run as a gate unless regressing. Next: S6e (workflowS6e).
+Historical close only — do not re-run as a gate unless regressing. Next: S7 investigate/plan.
 `);
 }
 
@@ -1490,7 +1490,7 @@ export function workflowS6b() {
 Status: COMPLETE + VERIFIED.
 Verification PASSED: foreign personal cache cleared at logout; shared scopes preserved;
 self scopes restore on login; no session-restore regression.
-Root remains ON. Next: run S6e (qcPersonalAudit.workflowS6e()). Do not begin S7.
+Root remains ON. Next: S7 investigate/plan. Do not begin S7 implementation until approved.
 
 Historical regression checklist (do not re-run as a gate unless regressing):
 
@@ -1538,7 +1538,7 @@ export function workflowS6d() {
 Status: COMPLETE + VERIFIED.
 Policy checks PASSED: enforcement OFF; personal paths allow/deny correct; shared roots allowed;
 accessCodes/trades never; filterDbForPersist S7-ready; _persistLocal unchanged.
-S6c intentionally deferred. Next: S6e isolation audits (qcPersonalAudit.workflowS6e()). Do not begin S7.
+S6c intentionally deferred. Next: S7 investigate/plan (S6 COMPLETE). Do not begin S7 implementation until approved.
 
 Historical regression checklist (do not re-run as a gate unless regressing):
 
@@ -1575,6 +1575,101 @@ Historical regression checklist (do not re-run as a gate unless regressing):
 }
 
 /**
+ * Pasteable S7a persist-enforcement + sanitize-on-load verification (non-programmer).
+ */
+export function workflowS7a() {
+  console.info(`
+=== S7a Persist enforcement + sanitize-on-load ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. S7 incomplete. Root stays ON. Do not begin S7b.
+
+Authority (reload-latched):
+  localStorage.qc_persist_enforce === 'true'  OR  qc_scoped_loading === 'true'
+  Default neither → enforcement OFF (classroom full persist).
+
+--- A) Default / root-on regression (enforcement OFF) ---
+1. Ensure flags OFF:
+   localStorage.removeItem('qc_persist_enforce');
+   // leave qc_scoped_loading unset unless you already use it for other prep
+   location.reload();
+2. DevTools:
+   qcPersistAllowlist.getPersistEnforcementReport()
+   // PASS: enforcementEnabled === false, enforcementReason === 'default-off'
+3. Log in as a normal student; open packs / profile / trading briefly.
+   // PASS: site works; console shows Firebase root connected (root listener ON)
+4. Optional: Object.keys(JSON.parse(localStorage.scicards_db||'{}'))
+   // PASS: may still include many roots (full mirror) while enforcement OFF
+
+--- B) Synthetic pre-S7 cache filter (no Firebase mutation) ---
+1. Paste:
+   const synthetic = {
+     config: { ok: 1 }, cards: { c1: {} }, packs: {}, groups: {},
+     playerDirectory: { bobby: { username: 'bobby' } },
+     listingsByGroup: {}, tradeIndexMeta: {}, leaderboards: {},
+     leaderboardSeasons: {}, leaderboardSnapshots: {},
+     players: { bobby: { u: 1 }, bobby2: { u: 2 }, bobby3: { u: 3 } },
+     playerTradeIndex: { bobby: { t: 1 }, bobby2: { t: 2 }, bobby3: { t: 3 } },
+     accessCodes: { X: 1 }, trades: { direct: { y: 1 } },
+     unknownJunk: { z: 1 }
+   };
+   const r = qcPersistAllowlist.previewPersistFilter(synthetic, 'bobby');
+   console.table({
+     session: r.sessionUsernameUsed,
+     droppedRoots: r.droppedTopLevelRoots.join(','),
+     droppedPlayers: r.droppedForeignPlayerCount,
+     droppedPTI: r.droppedForeignPTICount,
+     keptPersonal: r.keptPersonalRoots.join(','),
+     outKeys: Object.keys(r.filtered).join(',')
+   });
+2. PASS:
+   - players keys only bobby; no bobby2/bobby3
+   - playerTradeIndex keys only bobby
+   - accessCodes / trades / unknownJunk absent
+   - shared allowed roots retained (config, cards, …)
+3. Logged-out projection:
+   qcPersistAllowlist.previewPersistFilter(synthetic, null)
+   // PASS: no players / playerTradeIndex in filtered
+
+--- C) Persisted localStorage under enforcement ---
+1. Enable + reload:
+   localStorage.setItem('qc_persist_enforce','true'); location.reload();
+2. Log in as bobby (or your test student). Play briefly so something persists.
+3. Report:
+   qcPersistAllowlist.getPersistEnforcementReport()
+   // PASS: enforcementEnabled true, enforcementReason 'qc_persist_enforce'
+   // PASS: lastPersistFiltered.filtered === true
+   // PASS: droppedTopLevelRoots / foreign counts present when applicable
+4. Inspect keys only (do not decode huge blobs by hand):
+   const db = JSON.parse(localStorage.scicards_db);
+   Object.keys(db)
+   Object.keys(db.players||{})
+   Object.keys(db.playerTradeIndex||{})
+   // PASS: only allowlist roots; players/PTI only current user
+   // PASS: no accessCodes, no trades
+
+--- D) Logged-out projection ---
+1. With enforcement still ON, log out.
+2. Immediately:
+   const db = JSON.parse(localStorage.scicards_db||'{}');
+   console.log({ keys: Object.keys(db), players: db.players, pti: db.playerTradeIndex });
+   // PASS: no players / playerTradeIndex personal roots (or absent)
+3. Report lastPersistFiltered.sessionUsernameUsed should be null after logout flush.
+
+--- E) Reload restore ---
+1. Stay enforcement ON. Log in as bobby again. Reload the page.
+2. Confirm you are still bobby / profile loads (session restore OK).
+3. If testing localStorage-only fallback (Firebase disabled/unavailable):
+   // sanitize-on-load assigns filtered cache — report.localCacheSanitized.localCacheSanitized === true
+   qcPersistAllowlist.getPersistEnforcementReport()
+4. Turn flag OFF when done:
+   localStorage.removeItem('qc_persist_enforce'); location.reload();
+   // PASS: back to default-off classroom behavior
+
+Do not require S5/S6 gameplay matrices. Do not begin S7b.
+`);
+}
+
+/**
  * Pasteable S6e final isolation audit matrix (short labeled sessions; root stays ON).
  * Alias: workflowS6()
  */
@@ -1582,16 +1677,21 @@ export function workflowS6e() {
   console.info(`
 === S6e Final Isolation Audits ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION.
-S6 overall remains INCOMPLETE until this matrix PASSes.
-Root listener remains ON. Do not begin S7.
+Status: COMPLETE + VERIFIED.
+Final qcPersonalAudit.summary(): overall PASS; s6e-personal / trading-idle / trading-action /
+leaderboard all PASS; unexpected===0 every label; knownScopedBlockers: []; no unexplained reads.
+(summary() may still say phase:'S4' and mention PARTIAL — audit-helper metadata only; no S6e PARTIAL.)
+S6 — COMPLETE + VERIFIED (S6c intentionally deferred, not a blocker).
+Root remains ON. Next: investigate/plan S7 root-off. Do not begin S7 implementation until approved.
 
 CREDITED (do not replay):
 - S6a registration isolation
 - Gate B/C trade correctness
 - D7 listing races / contention
 - S5d rebuild/writer matrix
-- D7 Gate G shape for Trading isolation (still run a short action smoke below)
+- D7 Gate G shape for Trading isolation (still ran short action smoke in S6e)
+
+Historical regression matrix (do not re-run as a gate unless regressing):
 
 PASS every label: unexpectedTotal===0 AND hardViolations===0
 Also: no bare players | playerTradeIndex | trades/direct | trades/listings
@@ -1637,41 +1737,26 @@ qcPersonalAudit.begin('s6e-personal', { allowedPrefixes: allowPersonal });
 // (brief browse each; no Trading / Leaderboard in this session)
 const a = qcPersonalAudit.end('s6e-personal');
 // PASS: a.unexpectedTotal===0 && a.hardViolations===0
-// PASS: no bare players / playerTradeIndex
-// PASS: registry still auth pair only (no directory / listingsByGroup / leaderboards)
 
 ----- B) Trading idle -----
 qcPersonalAudit.begin('s6e-trading-idle', { allowedPrefixes: allowTradingIdle });
 // Open Trading; idle ~5–12s (expiry tick OK); do not complete a trade yet
 const b = qcPersonalAudit.end('s6e-trading-idle');
-// PASS: b.unexpectedTotal===0 && b.hardViolations===0
-// PASS: no bare players / playerTradeIndex / trades/direct / trades/listings
-// PASS: registry has playerDirectory ×1 and listingsByGroup/{g} ×1 (if group set)
 // Leave Trading → directory + listingsByGroup released; auth pair remains
 
 ----- C) Trading action smoke (one action only) -----
 qcPersonalAudit.begin('s6e-trading-action', { allowedPrefixes: allowTradingAction });
 // ONE representative action: create direct OR accept listing (not Gate B/C suite)
 const c = qcPersonalAudit.end('s6e-trading-action');
-// PASS: c.unexpectedTotal===0 && c.hardViolations===0
-// PASS: no bare trees; no healthy *canonical-fallback
-// Leave Trading when done → tab-owned scopes release
 
 ----- D) Leaderboard -----
 qcPersonalAudit.begin('s6e-leaderboard', { allowedPrefixes: allowLb });
-// Open Leaderboard; switch 2–3 categories; optional season/snapshot view
+// Open Leaderboard; switch 2–3 categories; optional season/snapshot view; leave
 const d = qcPersonalAudit.end('s6e-leaderboard');
-// PASS: d.unexpectedTotal===0 && d.hardViolations===0
-// PASS: no bare players; no foreign players/{other} for live board
-// PASS: while mounted, leaderboards ×1 in registry
-// Leave Leaderboard → leaderboards released; auth pair remains
 
 ----- Final -----
 qcPersonalAudit.summary()
-// PASS: all s6e-* labels PASS
-// Root still ON (intentional for S6)
-
-After manual PASS: mark S6e + S6 COMPLETE + VERIFIED (docs). Until then S6 stays incomplete.
+// PASS: all s6e-* labels PASS; overall PASS
 `);
 }
 
@@ -1712,6 +1797,7 @@ function _installWindowApi() {
     workflowS6d,
     workflowS6e,
     workflowS6,
+    workflowS7a,
     enableAudit,
     disableAudit,
     enableIsolation,

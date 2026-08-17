@@ -318,6 +318,8 @@ function forceLocalExit(message) {
   releaseAuthOwnedScopes();
   clearPersonalCacheAfterScopeRelease('forceLocalExit');
   clearLocalSessionOnly();
+  // S7a: after session teardown, enforced persist uses null personal projection.
+  db.persistLocalNow({ sessionUsername: null, reason: 'forceLocalExit-null-user' });
   if (message) setPendingAuthMessage(message);
   location.reload();
 }
@@ -386,6 +388,8 @@ function setupCrossTabSessionWatch() {
         clearPersonalCacheAfterScopeRelease('crossTab');
         rememberSessionSnapshot(null);
         resetLoginAchievementEvaluation();
+        // S7a: session already cleared in other tab; persist null personal projection.
+        db.persistLocalNow({ sessionUsername: null, reason: 'crossTab-null-user' });
         location.reload();
       }
       return;
@@ -429,6 +433,8 @@ export async function logout() {
   releaseAuthOwnedScopes();
   clearPersonalCacheAfterScopeRelease('logout');
   clearLocalSessionOnly();
+  // S7a: after personal clear + session teardown, enforced persist uses null personal projection.
+  db.persistLocalNow({ sessionUsername: null, reason: 'logout-null-user' });
 }
 
 /** Check if current session is admin */
@@ -1057,7 +1063,9 @@ Shared indexes are preserved.
 Report (survives reload via sessionStorage):
   qcAuthS6b.getLastPersonalCacheClearReport()
   // PASS: playersCleared && playerTradeIndexCleared && sharedScopesPreserved
-  // reason: logout | forceLocalExit | crossTab`);
+  // reason: logout | forceLocalExit | crossTab
+S7a (when qc_persist_enforce or qc_scoped_loading latched ON):
+  after session clear → persistLocalNow({ sessionUsername: null })`);
     },
   };
 }
