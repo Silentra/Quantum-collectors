@@ -497,7 +497,7 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 **Source of truth for remaining work (S5c-D through S8):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
 
-Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, and **S6** (S6a–S6e; S6c intentionally deferred) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist prepared (not enforced); final isolation matrix PASS (`s6e-personal` / trading-idle / trading-action / leaderboard). Root listener remains ON as safety net by default. **S7a** COMPLETE + VERIFIED. **S7b** (dual-mode root skip) is **IMPLEMENTED — AWAITING VERIFICATION**. **S7** incomplete — do not begin **S7c**/S7d or **S8**. Historical phase notes below (S1–S5c-A) describe what landed; do not treat them as the plan for unfinished root removal or full S8 rules.
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, and **S6** (S6a–S6e; S6c intentionally deferred) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist prepared (not enforced); final isolation matrix PASS (`s6e-personal` / trading-idle / trading-action / leaderboard). Root listener remains ON as safety net by default. **S7a** + **S7b** COMPLETE + VERIFIED. **S7c** (fail-closed + Admin access + LB archives) is **IMPLEMENTED — AWAITING VERIFICATION**. **S7** incomplete — do not begin **S7d** or **S8**. Historical phase notes below (S1–S5c-A) describe what landed; do not treat them as the plan for unfinished root removal or full S8 rules.
 
 **Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
 
@@ -579,16 +579,25 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase S7b — Dual-mode boot (reload-required root skip)
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Default remains **root-on**. Do not begin S7c/S7d/S8.
+**Status: COMPLETE + VERIFIED.** Default remains **root-on**. Full tab matrix intentionally deferred.
 
 **Authority (reload-latched at `initDB`):**
 - `localStorage.qc_scoped_loading === 'true'` → **scoped**: Firebase active; **skip** root `once('/')` and root `on('value')`; seed `_db` from S7a-sanitized local cache or defaults.
 - Default / flag OFF → **root**: existing verified once+on path unchanged.
-- Flag change requires reload. `config/firebase/scopedLoadingEnabled` is **not** the S7b boot latch (would need cache before latch).
+- Flag change requires reload. `config/firebase/scopedLoadingEnabled` is **not** the S7b boot latch.
 
-**Metrics / report:** `qcDbHydration.getBootModeReport()` / `qcDbMetrics.summary().bootMode` — `mode`, `reason`, `rootListenerAttached`, `firebaseActive`, `persistEnforcementEnabled`. Scoped PASS: `rootListenerAttached===false` and (with metrics) `rootSnapshots.total===0`.
+**Metrics / report:** `qcDbHydration.getBootModeReport()` / `qcDbMetrics.summary().bootMode`.
 
-**Not in S7b:** fail-closed trading fallbacks, Admin accessCodes once-load, LB seasons/snapshots hydrate (S7c); default flip (S7d).
+**Verification passed:** root-on regression; scoped boot (`mode==='scoped'`, `rootListenerAttached===false`, `firebaseActive===true`, `rootSnapshots.total===0`); persist auto-on under `qc_scoped_loading`; allowlist-shaped cache; scoped self-hydration; flag-off rollback.
+
+### Phase S7c — Fail-closed fallbacks + Admin access + LB archives
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Dual-mode unchanged. Do not begin S7d/S8.
+
+- **Trading/Research:** `canAllowCanonicalTradeTreeFallback()` denies bare `trades/*` when scoped boot OR cache-isolation; root-on coexistence unchanged. `_migrateTradesStructure` skips empty writes under scoped.
+- **Admin Access:** `loadAdminAccessCodesOnce` on Access sub-tab enter; failure → unavailable (not false empty); no subscribe.
+- **LB archives:** `hydrateLeaderboardArchivesOnce` before student LB render and Admin Seasons; schema ensure only after successful load; live `leaderboards/` subscribe unchanged.
+- DevTools: `workflowS7c()`, `getAccessCodesLoadReport()`, `getLeaderboardArchivesHydrationReport()`, `qcTradeIndex.canAllowCanonicalTradeTreeFallback()`.
 
 ### Phase S6e — Final isolation audits
 

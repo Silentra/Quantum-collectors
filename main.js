@@ -89,8 +89,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Per-player schema/RP/weekly backfill runs on login via applyPostLoginPlayerMaintenance
     // (normalizePlayerSchema + related). Exported migrateAll* helpers remain for admin/manual use.
 
-    // 4e. LB-1: Ensure leaderboardSeasons DB schema exists
-    ensureLeaderboardSeasonsSchema();
+    // 4e. LB-1: Ensure leaderboardSeasons DB schema exists (root-on only).
+    // S7c scoped: unready ≠ empty — schema ensure runs after archive once-load on LB/Admin enter.
+    if (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode()) {
+      console.info('[SciCards S7c] Skipping seasons schema ensure under scoped boot');
+    } else {
+      ensureLeaderboardSeasonsSchema();
+    }
 
     // 5. Generate starter access codes if none exist (S6a: scoped once-load; not root-dependent)
     const accessBootstrap = await bootstrapAccessCodesOnce();
