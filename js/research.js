@@ -6,6 +6,7 @@
  * Provides:
  *   - ensurePlayerRPFields(username)  - per-player RP backfill (login)
  *   - migrateAllPlayersRP()           - bulk helper (admin/manual; not student startup)
+ *   - repairUniqueCardsOwnedStats()   - one-time uniqueCardsOwned repair (admin/manual; not startup)
  *   - getResearchPoints(username)
  *   - addResearchPoints(username, amount)
  *   - addSeasonalResearchPoints(username, amount)
@@ -15,6 +16,7 @@
  */
 
 import * as db from './database.js';
+import * as cards from './cards.js';
 import {
   STAT_TYPES,
   buildLeaderboardSummaryPathsForChangedStats,
@@ -281,8 +283,9 @@ export function getTopSeasonalResearchPlayers(limit = 10) {
 // ---------- Admin helpers ----------
 
 /**
- * Compute the number of unique card types a player currently owns (quantity > 0).
- * Reads directly from the player's inventory object.
+ * Compute the number of unique card types a player currently owns.
+ * Matches Collection/Profile: Number(qty) > 0 AND card exists in catalog AND enabled !== false.
+ * Orphan / disabled inventory leaves are ignored (not deleted).
  * @param {string} username
  * @returns {number}
  */
@@ -293,12 +296,20 @@ export function computeUniqueCardsOwned(username) {
 }
 
 /**
- * Pure: unique card count from an inventory map (no DB writes).
+ * Unique card count from an inventory map (no DB writes).
+ * Aligns with Collection/Profile progress — uses `cards.getCard` (same catalog cache).
  * @param {Object} inventory
  * @returns {number}
  */
 export function computeUniqueCardsOwnedFromInventory(inventory = {}) {
-  return Object.values(inventory || {}).filter(qty => typeof qty === 'number' && qty > 0).length;
+  let count = 0;
+  for (const [cardId, qty] of Object.entries(inventory || {})) {
+    if (!(Number(qty) > 0)) continue;
+    const card = cards.getCard(cardId);
+    if (!card || card.enabled === false) continue;
+    count += 1;
+  }
+  return count;
 }
 
 /**
@@ -359,6 +370,120 @@ export function refreshUniqueCardsOwned(username) {
     statTypes: [STAT_TYPES.UNIQUE_CARDS_OWNED],
   });
 }
+
+/**
+ * One-time Admin/dev repair: recompute stats.uniqueCardsOwned for all players
+ * (enabled catalog only) and sync leaderboards/uniqueCardsOwned/{u} when the
+ * value differs. Does not delete inventory leaves. Not invoked on startup.
+ *
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   scanned: number,
+ *   changed: number,
+ *   unchanged: number,
+ *   failed: number,
+ *   written: number,
+ *   mode?: string,
+ *   error?: string
+ * }>}
+ */
+export async function repairUniqueCardsOwnedStats() {
+  const players = db.getChildren('players') || [];
+  const now = Date.now();
+  /** @type {Record<string, object|number>} */
+  const updates = {};
+  let scanned = 0;
+  let changed = 0;
+  let unchanged = 0;
+
+  for (const { key: username, value: player } of players) {
+    if (!username || username === '__admin__') continue;
+    scanned += 1;
+    const inventory = (player && player.inventory) || {};
+    const next = computeUniqueCardsOwnedFromInventory(inventory);
+    const prev = player?.stats?.uniqueCardsOwned;
+    if (typeof prev === 'number' && prev === next) {
+      unchanged += 1;
+      continue;
+    }
+
+    updates[`players/${username}/stats/uniqueCardsOwned`] = next;
+    const playerLike = playerLikeWithStatOverlay(player || {}, {
+      [STAT_TYPES.UNIQUE_CARDS_OWNED]: next,
+    });
+    Object.assign(
+      updates,
+      buildLeaderboardSummaryPathsForChangedStats(
+        username,
+        playerLike,
+        [STAT_TYPES.UNIQUE_CARDS_OWNED],
+        now,
+      ),
+    );
+    changed += 1;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    console.log(
+      `[Research] Unique Cards repair — scanned: ${scanned}, changed: 0, unchanged: ${unchanged}, failed: 0`,
+    );
+    return {
+      ok: true,
+      scanned,
+      changed: 0,
+      unchanged,
+      failed: 0,
+      written: 0,
+    };
+  }
+
+  const ack = await db.updateAcknowledged(updates);
+  if (!ack.ok) {
+    console.warn('[Research] Unique Cards repair failed:', ack.error);
+    return {
+      ok: false,
+      scanned,
+      changed,
+      unchanged,
+      failed: changed,
+      written: 0,
+      mode: ack.mode,
+      error: ack.error || 'Write failed',
+    };
+  }
+
+  console.log(
+    `[Research] Unique Cards repair — scanned: ${scanned}, changed: ${changed}, unchanged: ${unchanged}, failed: 0, written: ${Object.keys(updates).length}`,
+  );
+  return {
+    ok: true,
+    scanned,
+    changed,
+    unchanged,
+    failed: 0,
+    written: Object.keys(updates).length,
+    mode: ack.mode,
+  };
+}
+
+function _installWindowApi() {
+  if (typeof window === 'undefined') return;
+  window.qcResearch = {
+    computeUniqueCardsOwned,
+    computeUniqueCardsOwnedFromInventory,
+    refreshUniqueCardsOwned,
+    ensurePlayerUniqueCardsOwned,
+    repairUniqueCardsOwnedStats,
+    help() {
+      console.info(`Research / Unique Cards
+Compute (enabled catalog only): qcResearch.computeUniqueCardsOwned('bobby')
+Repair all players (manual, once): await qcResearch.repairUniqueCardsOwnedStats()
+Does not delete orphan inventory leaves. Not run on startup.`);
+    },
+  };
+}
+
+_installWindowApi();
 
 /**
  * Reset seasonal research points for ALL players.

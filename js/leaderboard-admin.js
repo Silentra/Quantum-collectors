@@ -31,7 +31,7 @@ import {
   deleteArchivedSeason,
   STAT_TYPES,
 } from './leaderboard-seasons.js';
-import { resetSeasonalResearchPoints } from './research.js';
+import { resetSeasonalResearchPoints, repairUniqueCardsOwnedStats } from './research.js';
 import { rebuildLeaderboardSummaries } from './leaderboard-summaries.js';
 import { hydrateLeaderboardArchivesOnce } from './db-hydration.js';
 import {
@@ -156,6 +156,25 @@ function _buildPanelHTML(activeSeason, archived) {
         class="bg-surface-700 hover:bg-surface-600 text-white font-semibold px-5 py-2 rounded-lg text-sm transition"
       >
         Rebuild Leaderboard Summaries
+      </button>
+    </div>
+
+    <!-- Unique Cards correctness repair (manual, once) -->
+    <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
+      <h3 class="font-semibold mb-1">Repair Unique Cards Owned Stats</h3>
+      <p class="text-surface-400 text-xs mb-4">
+        Recomputes <code class="text-surface-300">stats.uniqueCardsOwned</code> from inventory using
+        enabled catalog cards only (matches Collection/Profile), and syncs
+        <code class="text-surface-300">leaderboards/uniqueCardsOwned/</code> for players whose value changes.
+        Does not delete orphan inventory leaves. Run once after deploying the Unique Cards correctness fix —
+        do not use Rebuild Summaries alone for this.
+      </p>
+      <button
+        id="btn-repair-unique-cards-owned"
+        type="button"
+        class="bg-surface-700 hover:bg-surface-600 text-white font-semibold px-5 py-2 rounded-lg text-sm transition"
+      >
+        Repair Unique Cards Owned
       </button>
     </div>
 
@@ -335,6 +354,26 @@ function _wireEvents(panel) {
         }
       } finally {
         rebuildSummariesBtn.disabled = false;
+      }
+    });
+  }
+
+  const repairUniqueBtn = panel.querySelector('#btn-repair-unique-cards-owned');
+  if (repairUniqueBtn && !repairUniqueBtn.dataset.wired) {
+    repairUniqueBtn.dataset.wired = '1';
+    repairUniqueBtn.addEventListener('click', async () => {
+      repairUniqueBtn.disabled = true;
+      try {
+        const result = await repairUniqueCardsOwnedStats();
+        if (!result.ok) {
+          toast.error(result.error || 'Unique Cards repair failed');
+          return;
+        }
+        toast.success(
+          `Unique Cards repaired — scanned: ${result.scanned}, changed: ${result.changed}, unchanged: ${result.unchanged}, failed: ${result.failed}`,
+        );
+      } finally {
+        repairUniqueBtn.disabled = false;
       }
     });
   }
