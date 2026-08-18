@@ -39,6 +39,7 @@ import {
   isAdminDirectoryReady,
   ensureAdminSelectedPlayerScope,
   releaseAdminSelectedPlayerScope,
+  loadAdminAccessCodesOnce,
 } from './db-hydration.js';
 import { toastAchievementUnlocks } from './achievements.js';
 import { getProjectConfig, saveProjectConfig, seedProjectConfigDefaults } from './project-config.js';
@@ -174,7 +175,7 @@ function setupTabs() {
       document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
       const el = document.getElementById(`admin-${tab}`);
       if (el) el.classList.add('active');
-      renderAdminSubTab(tab);
+      void renderAdminSubTab(tab);
     });
   });
 }
@@ -639,24 +640,24 @@ function renderAdmin() {
   // Prefer currently active admin sub-tab if any; default overview
   const activeBtn = document.querySelector('.admin-tab-btn.active');
   const tab = activeBtn?.dataset?.adminTab || 'overview';
-  renderAdminSubTab(tab);
+  void renderAdminSubTab(tab);
 }
 
-function renderAdminSubTab(tab) {
+async function renderAdminSubTab(tab) {
   switch (tab) {
     case 'overview': renderAdminOverview(); break;
     case 'players': _setupPlayerFilters(); renderAdminPlayers(); break;
     case 'cards': renderAdminCards(); break;
     case 'packs-admin': renderAdminPacks(); break;
     case 'groups': renderAdminGroups(); break;
-    case 'access': renderAdminAccess(); break;
+    case 'access': await renderAdminAccess(); break;
     case 'config': renderAdminConfig(); break;
     case 'balance': renderAdminBalance(); break;
     case 'shop-admin': renderShopAdminPanel(); break;
     case 'achievements-admin': renderAchievementsAdminPanel(); break;
     case 'cosmetics-admin': renderCosmeticsAdminPanel(); break;
     case 'trading-controls': renderAdminTradingControls(); break;
-    case 'seasons': renderAdminSeasons(); break;
+    case 'seasons': await renderAdminSeasons(); break;
   }
 }
 
@@ -2124,14 +2125,31 @@ function renderGroupEditSubgroups(groupId) {
 
 // ===================== ADMIN ACCESS =====================
 
-function renderAdminAccess() {
-  const codesData = db.getChildren('accessCodes');
+/**
+ * S7c: once-load accessCodes before listing. Failure ≠ empty.
+ * @param {{ skipHydrate?: boolean }} [options]
+ */
+async function renderAdminAccess(options = {}) {
   const list = document.getElementById('admin-access-list');
+  if (!list) return;
 
   refreshAccessCodeGroupDropdown();
 
+  if (options.skipHydrate !== true) {
+    list.innerHTML = '<div class="p-4 text-surface-400 text-center">Loading access codes…</div>';
+    const load = await loadAdminAccessCodesOnce({ force: true });
+    if (!load.ok) {
+      list.innerHTML = `<div class="p-4 text-amber-400 text-center">Access codes unavailable. ${load.error ? String(load.error) : 'Once-load failed.'} Leave and re-open Access to retry.</div>`;
+      _wireAdminAccessButtons([]);
+      return;
+    }
+  }
+
+  const codesData = db.getChildren('accessCodes') || [];
+
   if (codesData.length === 0) {
     list.innerHTML = '<div class="p-4 text-surface-500 text-center">No access codes generated yet.</div>';
+    _wireAdminAccessButtons([]);
     return;
   }
 
@@ -2147,23 +2165,32 @@ function renderAdminAccess() {
     </div>
   `).join('');
 
-  // Generate codes
-  document.getElementById('btn-gen-codes').onclick = () => {
-    const count = parseInt(document.getElementById('access-code-count').value) || 10;
-    const group = document.getElementById('access-code-group').value || null;
-    auth.generateAccessCodes(count, group);
-    toast.success(`${count} access codes generated`);
-    renderAdminAccess();
-  };
+  _wireAdminAccessButtons(codesData);
+}
 
-  // Copy unused codes
-  document.getElementById('btn-copy-codes').onclick = () => {
-    const unused = codesData.filter(c => !c.value.used).map(c => c.key);
-    if (unused.length === 0) { toast.info('No unused codes'); return; }
-    navigator.clipboard.writeText(unused.join('\n')).then(() => {
-      toast.success(`${unused.length} codes copied!`);
-    }).catch(() => toast.error('Copy failed'));
-  };
+function _wireAdminAccessButtons(codesData) {
+  const genBtn = document.getElementById('btn-gen-codes');
+  if (genBtn) {
+    genBtn.onclick = () => {
+      const count = parseInt(document.getElementById('access-code-count').value) || 10;
+      const group = document.getElementById('access-code-group').value || null;
+      auth.generateAccessCodes(count, group);
+      toast.success(`${count} access codes generated`);
+      // Local writes already updated cache — skip network re-hydrate
+      void renderAdminAccess({ skipHydrate: true });
+    };
+  }
+
+  const copyBtn = document.getElementById('btn-copy-codes');
+  if (copyBtn) {
+    copyBtn.onclick = () => {
+      const unused = (codesData || []).filter(c => !c.value.used).map(c => c.key);
+      if (unused.length === 0) { toast.info('No unused codes'); return; }
+      navigator.clipboard.writeText(unused.join('\n')).then(() => {
+        toast.success(`${unused.length} codes copied!`);
+      }).catch(() => toast.error('Copy failed'));
+    };
+  }
 }
 
 function refreshAccessCodeGroupDropdown() {

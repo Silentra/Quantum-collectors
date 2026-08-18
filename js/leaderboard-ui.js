@@ -33,6 +33,7 @@ import { areLeaderboardSummariesReady } from './leaderboard-summaries.js';
 import {
   ensureLeaderboardsScope,
   releaseLeaderboardsScope,
+  hydrateLeaderboardArchivesOnce,
 } from './db-hydration.js';
 
 // ─── Category config ───────────────────────────────────────────────────────
@@ -52,6 +53,8 @@ const CATEGORIES = [
 let _activeCategory = 'overall-rp';
 let _activeSeasonId   = null; // null = live/current season for seasonal-rp
 let _activeSnapshotId = null; // null = live/current data for non-seasonal cats
+/** S7c: last archives once-load succeeded (null = not yet attempted this enter). */
+let _archivesHydrationOk = null;
 
 // ─── Public init ──────────────────────────────────────────────────────────
 
@@ -95,9 +98,12 @@ export function initLeaderboardUI() {
 
 /**
  * Render the full leaderboard tab.
- * Called by ui.js whenever the Leaderboard tab becomes active.
+ * @param {{ archivesOk?: boolean }} [options]
  */
-export function renderLeaderboard() {
+export function renderLeaderboard(options = {}) {
+  if (typeof options.archivesOk === 'boolean') {
+    _archivesHydrationOk = options.archivesOk;
+  }
   const session = auth.getSession();
   if (!session || session.username === '__admin__') {
     _renderMessage('Sign in as a player to view leaderboards.');
@@ -114,12 +120,20 @@ export function renderLeaderboard() {
 }
 
 /**
- * Enter Leaderboard tab: ensure summary scope then render.
+ * Enter Leaderboard tab: ensure live summaries + once-load seasons/snapshots, then render.
+ * S7c: archive once-load before render; do not treat load failure as empty archives.
  * @returns {Promise<void>}
  */
 export async function enterLeaderboardTab() {
   await ensureLeaderboardsScope();
-  renderLeaderboard();
+  const archives = await hydrateLeaderboardArchivesOnce({ force: true });
+  if (!archives.ok) {
+    console.warn(
+      '[Leaderboard S7c] Archive once-load failed — seasons/snapshots may be incomplete:',
+      archives.seasons?.error || archives.snapshots?.error || 'unknown',
+    );
+  }
+  renderLeaderboard({ archivesOk: archives.ok === true });
 }
 
 /**
@@ -161,6 +175,13 @@ function _renderSeasonSelector(groupId) {
   wrapper.classList.toggle('hidden', !isSeasonalCat);
 
   if (!isSeasonalCat) return;
+
+  if (_archivesHydrationOk === false) {
+    select.innerHTML = '<option value="">Season archives unavailable</option>';
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
 
   const activeSeason = getActiveSeason();
 
@@ -214,11 +235,19 @@ function _renderSnapshotSelector(groupId) {
     return;
   }
 
+  if (_archivesHydrationOk === false) {
+    wrapper.classList.remove('hidden');
+    select.innerHTML = '<option value="">Snapshot archives unavailable</option>';
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+
   // Get snapshots for this stat type visible to this player
   const visibleSnaps = getVisibleSnapshots(groupId, cat.statType);
 
   if (visibleSnaps.length === 0) {
-    // No history available — hide the selector
+    // No history available — hide the selector (genuine empty after successful load)
     wrapper.classList.add('hidden');
     return;
   }

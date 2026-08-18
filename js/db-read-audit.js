@@ -1585,7 +1585,7 @@ Status: COMPLETE + VERIFIED.
 All checks passed: synthetic filtering; logged-out projection; enforced localStorage filtering;
 logout flush; session/reload restoration; rollback to default-off/root-on.
 Root stayed ON throughout S7a. Persist policy unchanged.
-Next: S7b dual-mode root skip (do not begin S7c/S7d/S8 until S7b verified).
+Next: S7c dual-mode fail-closed + Admin access + LB archives (do not begin S7d until S7c verified).
 
 Authority (reload-latched):
   localStorage.qc_persist_enforce === 'true'  OR  qc_scoped_loading === 'true'
@@ -1604,47 +1604,69 @@ export function workflowS7b() {
   console.info(`
 === S7b Dual-mode boot (reload-required root skip) ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. S7 incomplete. Do not begin S7c/S7d/S8.
+Status: COMPLETE + VERIFIED.
+All prescribed checks passed: default/root-on regression; scoped boot (mode===scoped,
+rootListenerAttached===false, firebaseActive===true, rootSnapshots.total===0);
+persist auto-on under qc_scoped_loading; allowlist-shaped cache; scoped self-hydration;
+flag OFF + reload restored root-on. Full tab matrix intentionally deferred to later S7.
+S7c is IMPLEMENTED — AWAITING VERIFICATION. Do not begin S7d/S8 until S7c verified.
 
 Authority (reload-latched at initDB):
-  localStorage.qc_scoped_loading === 'true' → mode=scoped (skip root once+on; Firebase stays active)
-  Default / flag OFF → mode=root (verified classroom root-on path)
-  Flag change requires reload. config/firebase/scopedLoadingEnabled is NOT the boot latch in S7b.
+  localStorage.qc_scoped_loading === 'true' → mode=scoped
+  Default / flag OFF → mode=root
 
---- A) Default root-on regression ---
+Historical regression: qcDbHydration.getBootModeReport() / qcDbMetrics.summary().bootMode
+`);
+}
+
+/**
+ * Pasteable S7c fail-closed + Admin access + LB archives verification.
+ */
+export function workflowS7c() {
+  console.info(`
+=== S7c Fail-closed fallbacks + Admin access + LB archives ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. S7 incomplete. Do not begin S7d/S8.
+
+Dual-mode preserved: root-on default; scoped = qc_scoped_loading=true + reload; flag OFF + reload = rollback.
+
+--- A) Root-on regression ---
 1. localStorage.removeItem('qc_scoped_loading'); location.reload();
-2. qcDbHydration.getBootModeReport()
-   // PASS: mode==='root', reason==='default-root-on', rootListenerAttached===true (with Firebase)
-3. Console: "[DB] Fetching initial snapshot" / Firebase connected
-4. Log in; open a tab briefly — site works as before S7b
+2. getBootModeReport() → mode root, rootListenerAttached true
+3. Trading may still use canonical-fallback when indexes unready (coexistence)
+4. Admin Access / Seasons / student LB work as before
 
---- B) Scoped boot (root skipped) ---
+--- B) Scoped Trading fail-closed ---
 1. localStorage.setItem('qc_scoped_loading','true'); location.reload();
-2. qcDbHydration.getBootModeReport()
-   // PASS: mode==='scoped', rootListenerAttached===false, firebaseActive===true
-3. Console: "[DB S7b] Scoped mode" — NO "Fetching initial snapshot"
-4. Optional metrics:
-   localStorage.setItem('qc-db-metrics-enabled','true'); location.reload();
-   // after reload with scoped still on:
-   qcDbMetrics.summary()
-   // PASS: bootMode.mode==='scoped', rootSnapshots.total===0
+2. qcTradeIndex.canAllowCanonicalTradeTreeFallback() → false
+3. Open Trading with indexes ready → source index OK
+4. Force unready index (or before PTI ready): sources loading/unavailable — NOT canonical-fallback
+5. Metrics: no healthy *Source:canonical-fallback under scoped
 
---- C) Persist still enforced under scoped flag ---
-1. With qc_scoped_loading=true (S7a also latches persist ON via same flag):
-   qcPersistAllowlist.getPersistEnforcementReport()
-   // PASS: enforcementEnabled===true
-2. Object.keys(JSON.parse(localStorage.scicards_db||'{}')) after a persist
-   // PASS: allowlist-shaped (no accessCodes/trades wholesale)
+--- C) Scoped migration no empty write ---
+1. Scoped cold boot; watch console for "[Trading S7c] Skipping trades structure migration"
+2. PASS: initTrading does not db.set empty trades/direct|listings under scoped
 
---- D) Rollback ---
-1. localStorage.removeItem('qc_scoped_loading'); location.reload();
-2. getBootModeReport() → mode root, rootListenerAttached true again
-   // PASS: verified root-on path restored
+--- D) Admin Access once-load ---
+1. Scoped; Admin → Access
+2. qcDbHydration.getAccessCodesLoadReport() lastLoad.purpose === 'admin-access', ok true
+3. List matches remote; on forced failure → unavailable message (not false empty)
 
-Known S7b limits (OK; deferred to S7c):
-- Trading canonical trades/* fallback still coexistence-oriented until S7c fail-closed
-- Admin accessCodes list / LB seasons-snapshots may still assume root cache until S7c hydrates
-Do not expand into S7c during this verification.
+--- E) Student LB archives ---
+1. Scoped; enter Leaderboard
+2. qcDbHydration.getLeaderboardArchivesHydrationReport() ok true
+3. Seasonal / snapshot selectors populate; live boards still via leaderboards scope
+4. On load failure → "archives unavailable" (not treated as empty)
+
+--- F) Admin Seasons ---
+1. Scoped; Admin → Seasons
+2. Archives hydrate then schema ensure; panel shows remote data
+3. On load failure → unavailable; schema ensure NOT run
+
+--- G) Rollback ---
+1. removeItem qc_scoped_loading; reload → root-on restored
+
+Do not replay Gate B/C or S6e matrix.
 `);
 }
 
@@ -1778,6 +1800,7 @@ function _installWindowApi() {
     workflowS6,
     workflowS7a,
     workflowS7b,
+    workflowS7c,
     enableAudit,
     disableAudit,
     enableIsolation,

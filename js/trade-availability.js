@@ -21,6 +21,7 @@ import {
   getReservationIndexSource,
   isGlobalTradeIndexMetaCurrent,
   isPlayerTradeIndexReady,
+  canAllowCanonicalTradeTreeFallback,
 } from './trade-index.js';
 import * as metrics from './db-metrics.js';
 
@@ -32,18 +33,11 @@ const _tradingFallbackWarningsShown = new Set();
 
 /**
  * Whether legacy root coexistence can supply canonical trade trees for fallback.
- * Personal isolation without a verified index → no silent zero; fail closed.
+ * S7c: denied under cache-isolation or scoped boot (see canAllowCanonicalTradeTreeFallback).
  * @returns {boolean}
  */
 function _canUseCanonicalFallback() {
-  try {
-    if (typeof localStorage !== 'undefined'
-      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
-      return false;
-    }
-  } catch { /* ignore */ }
-  // S1–S5: root once + on(value) remain the safety net (including local-only cache).
-  return true;
+  return canAllowCanonicalTradeTreeFallback();
 }
 
 function _isTradeIndexHydrating(username) {

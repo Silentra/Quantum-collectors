@@ -35,6 +35,7 @@ import {
   PLAYER_TRADE_INDEX_ROOT,
   isPlayerTradeIndexReady,
   isGlobalTradeIndexMetaCurrent,
+  canAllowCanonicalTradeTreeFallback,
 } from './trade-index.js';
 
 /**
@@ -476,8 +477,14 @@ export function initTrading() {
 /**
  * One-time migration: flat /trades/{tradeId} → /trades/direct/{tradeId}
  * Only runs if legacy flat trades exist (records with `offeringPlayerId` at top level).
+ * S7c: under scoped boot, never invent empty trades/direct|listings (unready ≠ empty).
  */
 function _migrateTradesStructure() {
+  if (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode()) {
+    console.info('[Trading S7c] Skipping trades structure migration under scoped boot');
+    return;
+  }
+
   const tradesRoot = db.get('trades') || {};
 
   // Check if already migrated (has 'direct' or 'listings' sub-node)
@@ -937,17 +944,11 @@ const _tradingDirectFallbackWarnings = new Set();
 
 /**
  * Whether legacy root coexistence can supply canonical trades/direct for fallback.
- * Personal isolation without a verified index → fail closed.
+ * S7c: denied under cache-isolation or scoped boot.
  * @returns {boolean}
  */
 function _canUseCanonicalDirectFallback() {
-  try {
-    if (typeof localStorage !== 'undefined'
-      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
-      return false;
-    }
-  } catch { /* ignore */ }
-  return true;
+  return canAllowCanonicalTradeTreeFallback();
 }
 
 function _isPlayerTradeIndexHydrating(username) {

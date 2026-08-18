@@ -370,11 +370,11 @@ export async function bootstrapAccessCodesOnce(options = {}) {
 export function getAccessCodesLoadReport() {
   const last = _lastAccessCodesLoad;
   return {
-    phase: 'S6a',
+    phase: 'S6a/S7c',
     scope: SCOPE_ACCESS_CODES,
     root: ACCESS_CODES_ROOT,
     subscription: false,
-    note: 'Once-load only. Register uses accessCodes/{code}; bootstrap uses accessCodes/.',
+    note: 'Once-load only. Register uses accessCodes/{code}; bootstrap/admin use accessCodes/.',
     lastLoad: last
       ? { ...last }
       : null,
@@ -382,6 +382,133 @@ export function getAccessCodesLoadReport() {
       [ACCESS_CODES_ROOT]: db.isPathReady(ACCESS_CODES_ROOT),
     },
   };
+}
+
+/**
+ * S7c Admin Access sub-tab: once-load whole accessCodes collection (no subscribe).
+ * Distinguishes load failure from genuine empty (ok + empty).
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<{
+ *   ok: boolean, path: string, value: any, mode?: string, reused?: boolean,
+ *   error?: string, purpose: 'admin-access', empty?: boolean, count?: number
+ * }>}
+ */
+export async function loadAdminAccessCodesOnce(options = {}) {
+  const path = ACCESS_CODES_ROOT;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const force = options.force !== false;
+  const result = await db.loadPathOnce(path, { timeoutMs, force });
+  _recordAccessCodesLoad('admin-access', path, result);
+  if (!result.ok) {
+    return {
+      ...result,
+      purpose: 'admin-access',
+      empty: false,
+      count: 0,
+      error: result.error || 'accessCodes once-load failed',
+    };
+  }
+  const children = db.getChildren(path) || [];
+  return {
+    ...result,
+    purpose: 'admin-access',
+    empty: children.length === 0,
+    count: children.length,
+  };
+}
+
+/** S7c — leaderboard archive once-load roots (no subscription). */
+export const LEADERBOARD_SEASONS_ROOT = 'leaderboardSeasons';
+export const LEADERBOARD_SNAPSHOTS_ROOT = 'leaderboardSnapshots';
+export const SCOPE_LEADERBOARD_ARCHIVES = 'leaderboardArchives';
+
+/** @type {object|null} */
+let _lastLeaderboardArchivesLoad = null;
+
+/**
+ * S7c: once-load leaderboardSeasons + leaderboardSnapshots (no subscribe).
+ * ok===true only when both loads succeed. empty is meaningful only when ok.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export async function hydrateLeaderboardArchivesOnce(options = {}) {
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const force = options.force !== false;
+  const startedAt = Date.now();
+
+  const [seasonsResult, snapshotsResult] = await Promise.all([
+    db.loadPathOnce(LEADERBOARD_SEASONS_ROOT, { timeoutMs, force }),
+    db.loadPathOnce(LEADERBOARD_SNAPSHOTS_ROOT, { timeoutMs, force }),
+  ]);
+
+  const seasonsOk = seasonsResult?.ok === true;
+  const snapshotsOk = snapshotsResult?.ok === true;
+  const ok = seasonsOk && snapshotsOk;
+
+  const seasonsVal = seasonsOk ? db.get(LEADERBOARD_SEASONS_ROOT) : null;
+  const snapshotsVal = snapshotsOk ? db.get(LEADERBOARD_SNAPSHOTS_ROOT) : null;
+  const seasonsEmpty = seasonsOk && (
+    seasonsVal == null
+    || (typeof seasonsVal === 'object'
+      && !seasonsVal.activeSeasonId
+      && (!seasonsVal.seasons || Object.keys(seasonsVal.seasons).length === 0))
+  );
+  const snapshotsEmpty = snapshotsOk && (
+    snapshotsVal == null
+    || (typeof snapshotsVal === 'object'
+      && (!snapshotsVal.snapshots || Object.keys(snapshotsVal.snapshots).length === 0))
+  );
+
+  const report = {
+    phase: 'S7c',
+    scope: SCOPE_LEADERBOARD_ARCHIVES,
+    ok,
+    subscription: false,
+    durationMs: Date.now() - startedAt,
+    at: Date.now(),
+    seasons: {
+      path: LEADERBOARD_SEASONS_ROOT,
+      ok: seasonsOk,
+      mode: seasonsResult?.mode,
+      reused: seasonsResult?.reused === true,
+      error: seasonsResult?.error || null,
+      pathReady: db.isPathReady(LEADERBOARD_SEASONS_ROOT),
+      empty: seasonsOk ? seasonsEmpty : false,
+    },
+    snapshots: {
+      path: LEADERBOARD_SNAPSHOTS_ROOT,
+      ok: snapshotsOk,
+      mode: snapshotsResult?.mode,
+      reused: snapshotsResult?.reused === true,
+      error: snapshotsResult?.error || null,
+      pathReady: db.isPathReady(LEADERBOARD_SNAPSHOTS_ROOT),
+      empty: snapshotsOk ? snapshotsEmpty : false,
+    },
+    note: ok
+      ? 'Archives once-loaded; schema ensure may run. empty≠failed.'
+      : 'Load failed/unready — do not run schema ensure (unready ≠ empty).',
+  };
+  _lastLeaderboardArchivesLoad = report;
+  return report;
+}
+
+/**
+ * @returns {object|null}
+ */
+export function getLeaderboardArchivesHydrationReport() {
+  return _lastLeaderboardArchivesLoad
+    ? { ..._lastLeaderboardArchivesLoad }
+    : {
+      phase: 'S7c',
+      scope: SCOPE_LEADERBOARD_ARCHIVES,
+      ok: false,
+      lastLoad: null,
+      note: 'No archive once-load yet this page load.',
+      pathReady: {
+        [LEADERBOARD_SEASONS_ROOT]: db.isPathReady(LEADERBOARD_SEASONS_ROOT),
+        [LEADERBOARD_SNAPSHOTS_ROOT]: db.isPathReady(LEADERBOARD_SNAPSHOTS_ROOT),
+      },
+    };
 }
 
 // ---------- Phase S3: current player ----------
@@ -2609,6 +2736,7 @@ export function getHydrationStatus() {
       [SCOPE_GROUP_LISTINGS]: getGroupListingsHydrationReport(),
       [SCOPE_LEADERBOARDS]: getLeaderboardsHydrationReport(),
       [SCOPE_ACCESS_CODES]: getAccessCodesLoadReport(),
+      [SCOPE_LEADERBOARD_ARCHIVES]: getLeaderboardArchivesHydrationReport(),
     },
     deferredScopes: [],
     accessCodes: getAccessCodesLoadReport(),
@@ -2620,6 +2748,7 @@ export function getHydrationStatus() {
     tradeDirectory: getTradeDirectoryHydrationReport(),
     groupListings: getGroupListingsHydrationReport(),
     leaderboards: getLeaderboardsHydrationReport(),
+    leaderboardArchives: getLeaderboardArchivesHydrationReport(),
   };
 }
 
@@ -2642,7 +2771,13 @@ function _installWindowApi() {
     waitForSharedDefs,
     loadAccessCodeOnce,
     bootstrapAccessCodesOnce,
+    loadAdminAccessCodesOnce,
     getAccessCodesLoadReport,
+    hydrateLeaderboardArchivesOnce,
+    getLeaderboardArchivesHydrationReport,
+    LEADERBOARD_SEASONS_ROOT,
+    LEADERBOARD_SNAPSHOTS_ROOT,
+    SCOPE_LEADERBOARD_ARCHIVES,
     getHydrationStatus,
     getSharedHydrationReport,
     getCurrentPlayerHydrationReport,
@@ -2685,18 +2820,12 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (Phase S2–S5c-D5b)
+      console.info(`DB Hydration (S2–S7c)
 Shared: ${SHARED_DEF_PATHS.join(', ')}
-Current player: auth-owned (release not on mirror)
-Player trade index: auth-owned playerTradeIndex/{me} (release not on mirror)
-Admin directory / selected-player: ui-owned ensure; release not on mirror
-Trading directory: trade-ui-owned playerDirectory while Trading tab open
-Trading group listings: trade-ui-owned listingsByGroup/{groupId} while Trading tab open
-Leaderboards: leaderboard-tab-owned leaderboards/ while Leaderboard tab open
-Access codes (S6a): once-load only — loadAccessCodeOnce(code) | bootstrapAccessCodesOnce() | getAccessCodesLoadReport()
-API: getHydrationStatus | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getLeaderboardsHydrationReport | getPlayerTradeIndexHydrationReport
-Root: default ON; S7b scoped boot via localStorage.qc_scoped_loading=true + reload
-API: getHydrationStatus | getBootModeReport | getTradeDirectoryHydrationReport | getGroupListingsHydrationReport | getLeaderboardsHydrationReport | getPlayerTradeIndexHydrationReport`);
+Access codes: loadAccessCodeOnce | bootstrapAccessCodesOnce | loadAdminAccessCodesOnce
+Archives: hydrateLeaderboardArchivesOnce | getLeaderboardArchivesHydrationReport
+Boot: getBootModeReport | isScopedOnlyMode
+Root: default ON; scoped via qc_scoped_loading=true + reload`);
     },
   };
 }

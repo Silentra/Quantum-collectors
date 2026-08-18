@@ -33,6 +33,7 @@ import {
 } from './leaderboard-seasons.js';
 import { resetSeasonalResearchPoints } from './research.js';
 import { rebuildLeaderboardSummaries } from './leaderboard-summaries.js';
+import { hydrateLeaderboardArchivesOnce } from './db-hydration.js';
 import {
   ensureSnapshotsSchema,
   createSnapshot,
@@ -49,15 +50,30 @@ import {
 
 /**
  * Render the full Seasons admin panel into #admin-seasons.
+ * S7c: once-load archives first; schema ensure only after successful/trusted load.
  * Called by renderAdminSubTab('seasons') in ui.js.
  */
-export function renderAdminSeasons() {
+export async function renderAdminSeasons() {
   if (!auth.isAdmin()) return;
-  ensureLeaderboardSeasonsSchema();
-  ensureSnapshotsSchema();
 
   const panel = document.getElementById('admin-seasons');
   if (!panel) return;
+
+  panel.innerHTML = '<div class="p-4 text-surface-400 text-center text-sm">Loading seasons &amp; snapshots…</div>';
+
+  const archives = await hydrateLeaderboardArchivesOnce({ force: true });
+  if (!archives.ok) {
+    const err = archives.seasons?.error || archives.snapshots?.error || 'once-load failed';
+    panel.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
+      Season / snapshot archives unavailable (${_esc(String(err))}). Leave and re-open Seasons to retry.
+      Schema ensure was not run (unready ≠ empty).
+    </div>`;
+    return;
+  }
+
+  // Trusted load succeeded — safe to patch missing local schema fields if needed
+  ensureLeaderboardSeasonsSchema();
+  ensureSnapshotsSchema();
 
   const activeSeason = getActiveSeason();
   const allSeasons   = getAllSeasons();

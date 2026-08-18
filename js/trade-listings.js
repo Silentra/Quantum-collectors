@@ -34,6 +34,7 @@ import {
   isPlayerTradeIndexReady,
   isGlobalTradeIndexMetaCurrent,
   isGroupListingsIndexReady,
+  canAllowCanonicalTradeTreeFallback,
 } from './trade-index.js';
 
 /** @type {Set<string>} */
@@ -538,17 +539,11 @@ export async function acceptListing(listingId, accepterId, chosenCardId) {
 
 /**
  * Whether legacy root coexistence can supply canonical trades/listings for Available discovery.
- * Personal isolation without a verified index → fail closed.
+ * S7c: denied under cache-isolation or scoped boot.
  * @returns {boolean}
  */
 function _canUseCanonicalGroupListingsFallback() {
-  try {
-    if (typeof localStorage !== 'undefined'
-      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
-      return false;
-    }
-  } catch { /* ignore */ }
-  return true;
+  return canAllowCanonicalTradeTreeFallback();
 }
 
 function _isGroupListingsHydrating(groupId) {
@@ -711,17 +706,11 @@ export function getVisibleListings(username) {
 
 /**
  * Whether legacy root coexistence can supply canonical trades/listings for fallback.
- * Personal isolation without a verified index → fail closed.
+ * S7c: denied under cache-isolation or scoped boot.
  * @returns {boolean}
  */
 function _canUseCanonicalListingFallback() {
-  try {
-    if (typeof localStorage !== 'undefined'
-      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
-      return false;
-    }
-  } catch { /* ignore */ }
-  return true;
+  return canAllowCanonicalTradeTreeFallback();
 }
 
 function _isPlayerTradeIndexHydrating(username) {

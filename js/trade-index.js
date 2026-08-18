@@ -108,6 +108,27 @@ export function isGroupListingsIndexReady(groupId) {
  */
 
 /**
+ * Whether bare trades/direct|listings may be used as a coexistence fallback.
+ * Denied under personal cache-isolation OR S7b scoped boot (no root refill).
+ * Root-on coexistence unchanged when both are off.
+ * @returns {boolean}
+ */
+export function canAllowCanonicalTradeTreeFallback() {
+  try {
+    if (typeof localStorage !== 'undefined'
+      && localStorage.getItem('qc-personal-cache-isolation') === 'true') {
+      return false;
+    }
+  } catch { /* ignore */ }
+  try {
+    if (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode()) {
+      return false;
+    }
+  } catch { /* ignore */ }
+  return true;
+}
+
+/**
  * Resolve reservation data source for a player.
  * Unready / wrong-version index must never be treated as zero reservations.
  *
@@ -1178,6 +1199,7 @@ function _installWindowApi() {
     isPlayerTradeIndexReady,
     isGroupListingsIndexReady,
     getReservationIndexSource,
+    canAllowCanonicalTradeTreeFallback,
     getTradeIndexDriftReport,
     rebuildTradeIndexes,
     deriveDesiredTradeIndexes,
