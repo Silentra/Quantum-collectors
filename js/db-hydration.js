@@ -275,8 +275,12 @@ export function getSharedHydrationReport() {
       || e.path === 'leaderboardSeasons'
       || e.path.startsWith('leaderboardSeasons/')),
     flagState: getScopedLoadingFlagState(),
-    rootListenerNote: 'Legacy root once + on(value) still active as safety net (S2/S3 coexistence).',
-    bandwidthNote: 'Do not claim bandwidth reduction while root and scoped snapshots coexist.',
+    rootListenerNote: (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode())
+      ? 'Scoped boot: root once+on skipped this page load.'
+      : (typeof db.isRootListenerAttached === 'function' && db.isRootListenerAttached())
+        ? 'Root-on: legacy root once+on active as safety net (S2/S3 coexistence).'
+        : 'Local/fallback boot: do not assume root refill.',
+    bandwidthNote: 'Do not claim bandwidth reduction from scoped APIs alone; root coexistence may still apply in root-on mode.',
   };
 }
 
@@ -945,8 +949,12 @@ export function getCurrentPlayerHydrationReport() {
       || e.path.startsWith('leaderboards/')
       || e.path === 'leaderboardSeasons'
       || e.path.startsWith('leaderboardSeasons/')),
-    rootListenerNote: 'Legacy root once + on(value) active as safety net; scoped player is intended eventual owner — do not depend on root winning.',
-    bandwidthNote: 'Do not claim bandwidth reduction while root and scoped snapshots coexist.',
+    rootListenerNote: (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode())
+      ? 'Scoped boot: root once+on skipped this page load; auth-owned players/{me} once/subscribe is authority when established.'
+      : (typeof db.isRootListenerAttached === 'function' && db.isRootListenerAttached())
+        ? 'Root-on: legacy root once+on active as safety net; scoped player is intended eventual owner — do not depend on root winning.'
+        : 'Local/fallback boot: do not assume root refill; scoped once/subscribe is authority when established.',
+    bandwidthNote: 'Do not claim bandwidth reduction from scoped APIs alone; root coexistence may still apply in root-on mode.',
   };
 }
 

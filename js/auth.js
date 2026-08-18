@@ -626,6 +626,10 @@ export async function initAuth() {
 /**
  * Login with username + password
  * Returns { success, error?, session? }
+ *
+ * Scoped boot: once-load players/{username} before existence/password checks
+ * (cache alone is not authoritative without root refill). No subscribe until
+ * after successful password + session claim.
  */
 export async function login(username, password) {
   if (!username || !username.trim()) {
@@ -639,6 +643,13 @@ export async function login(username, password) {
 
   if (!config.isGameOpen()) {
     return { success: false, error: 'The game is currently closed.' };
+  }
+
+  // ID-specific once-load only — do not use hydrateCurrentPlayer here (that sets
+  // auth owner tracking before authentication). force:true avoids stale readiness skips.
+  const preLoad = await db.loadPathOnce(`players/${username}`, { force: true });
+  if (!preLoad.ok) {
+    return { success: false, error: 'Could not verify account. Please try again.' };
   }
 
   const player = db.get(`players/${username}`);
@@ -694,6 +705,7 @@ export async function login(username, password) {
 /**
  * Register with username, password, and access code.
  * S6a: once-loads accessCodes/{code} before validate (fail-closed; no subscribe).
+ * Scoped: once-loads players/{username} before username-taken check (cache miss ≠ free).
  * Commits player (with activeSession) + access-code consumption in one acknowledged multi-path update.
  */
 export async function register(username, password, accessCode) {
@@ -725,6 +737,11 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'Username must be 3-20 characters, letters/numbers/underscore only.' };
   }
 
+  // ID-specific once-load before taken check (scoped: missing cache ≠ free username).
+  const takenLoad = await db.loadPathOnce(`players/${username}`, { force: true });
+  if (!takenLoad.ok) {
+    return { success: false, error: 'Could not verify username availability. Please try again.' };
+  }
   if (db.get(`players/${username}`)) {
     return { success: false, error: 'Username already taken.' };
   }
