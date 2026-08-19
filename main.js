@@ -42,7 +42,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     // 1. Initialize database (async — connects to Firebase or falls back)
-    // Default root-on: once('/') + on('value'). S7b scoped (qc_scoped_loading) skips root attach.
+    // Production default: scoped (skip root). Emergency: qc_force_root_loading → root once+on.
     await db.initDB();
     console.log('[SciCards] Database initialized');
 

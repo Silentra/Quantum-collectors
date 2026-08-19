@@ -497,9 +497,11 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 **Source of truth for remaining work (S5c-D through S8):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
 
-Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, and **S6** (S6a–S6e; S6c intentionally deferred) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist prepared (not enforced); final isolation matrix PASS (`s6e-personal` / trading-idle / trading-action / leaderboard). Root listener remains ON as safety net by default. **S7a** + **S7b** COMPLETE + VERIFIED. **S7c** (fail-closed + Admin access + LB archives) is **IMPLEMENTED — AWAITING VERIFICATION**. **S7** incomplete — do not begin **S7d** or **S8**. Historical phase notes below (S1–S5c-A) describe what landed; do not treat them as the plan for unfinished root removal or full S8 rules.
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped classroom default flip — IMPLEMENTED — AWAITING VERIFICATION:** production default = scoped (`reason: production-default`); emergency root via `qc_force_root_loading=true` + reload; persist follows boot latch; `config/firebase/scopedLoadingEnabled` diagnostic only; deprecated `qc_scoped_loading` ignored for boot. **S8** not started. Historical phase notes below (S1–S7) describe what landed; do not treat unfinished S8 as next automatic work.
 
 **Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
+
+**Unique Cards owned (LB / `stats.uniqueCardsOwned`):** count inventory IDs with `Number(qty) > 0` that exist in the current `cards/` catalog with `enabled !== false` (matches Collection/Profile). Orphan/disabled leaves are ignored, not deleted. **Unique Cards correctness repair — COMPLETE + VERIFIED** — enabled-catalog compute + manual `repairUniqueCardsOwnedStats` (12 accounts changed; Bobby 142→123 with 19 orphans retained; Bobby30 unchanged at 56; Collection/Profile/LB agree). Orphan cleanup and pack hygiene deferred.
 
 ### Phase S1 — Scoped Firebase path primitives (additive)
 Infrastructure only — **root `once('/')` + `on('value')` unchanged** and remain authoritative for startup/features.
@@ -560,7 +562,7 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase S7a — Persist enforcement + sanitize-on-load
 
-**Status: COMPLETE + VERIFIED.** Root listener remained **ON** by default throughout S7a. **S7 incomplete** until later slices.
+**Status: COMPLETE + VERIFIED.** Root listener remained **ON** by default throughout S7a.
 
 **Authority (reload-latched once per page load):**
 - `localStorage.qc_persist_enforce === 'true'` **OR**
@@ -592,12 +594,53 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase S7c — Fail-closed fallbacks + Admin access + LB archives
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Dual-mode unchanged. Do not begin S7d/S8.
+**Status: COMPLETE + VERIFIED.** Dual-mode unchanged (default root-on).
 
 - **Trading/Research:** `canAllowCanonicalTradeTreeFallback()` denies bare `trades/*` when scoped boot OR cache-isolation; root-on coexistence unchanged. `_migrateTradesStructure` skips empty writes under scoped.
 - **Admin Access:** `loadAdminAccessCodesOnce` on Access sub-tab enter; failure → unavailable (not false empty); no subscribe.
 - **LB archives:** `hydrateLeaderboardArchivesOnce` before student LB render and Admin Seasons; schema ensure only after successful load; live `leaderboards/` subscribe unchanged.
 - DevTools: `workflowS7c()`, `getAccessCodesLoadReport()`, `getLeaderboardArchivesHydrationReport()`, `qcTradeIndex.canAllowCanonicalTradeTreeFallback()`.
+
+**Verification passed:** root-on regression; scoped Trading fail-closed; no empty trades migrate writes; Admin Access `purpose:'admin-access'`; student LB + Admin Seasons archive hydrate; rollback to root-on.
+
+### Phase S7d — Final evidence matrix (closure)
+
+**Status: COMPLETE + VERIFIED.** **S7 overall COMPLETE + VERIFIED.** Classroom default flip is a separate slice (below). Do not begin S8 until separately approved.
+
+**Scope:** docs + pasteable evidence workflow (`workflowS7d()` / `workflowS7()`). Auth scoped-hydration fix (login/register once-load before cache existence checks) verified as part of D3/D4.
+
+**Credited:** S7a persist/sanitize; S7b dual-mode root-zero; S7c fail-closed + Admin Access + archives; Gate B/C; S6e under root-on.
+
+**Fresh matrix D1–D11:** **PASSED** (scoped cold boot root-zero; persist; login/restore; register; personal tabs; Trading; Leaderboard; Admin/archive; logout/user-switch; D10 scoped init without root `once('/')`; rollback).
+
+**Dual-mode at S7 closure (historical):** default was still **root-on**; scoped opt-in via `qc_scoped_loading` — superseded by classroom default flip.
+
+**Non-blocking follow-ups (not S7 blockers):**
+- Recurring low-severity card-art HTTP **503** (isolated; reload + emoji fallback OK) — hosting/asset delivery observation.
+- **Unique Cards correctness repair — COMPLETE + VERIFIED** (enabled-catalog compute; manual repair ran; orphans retained; orphan cleanup / pack hygiene deferred).
+
+**Known limitations:** Admin bulk repair `getChildren('players')` under scoped may be incomplete without dedicated hydrates; S6c deferred.
+
+### Phase — Scoped classroom default flip
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Do not begin S8.
+
+**Boot authority (reload-latched):**
+1. `localStorage.qc_force_root_loading === 'true'` → `mode: root`, `reason: emergency-override`
+2. otherwise → `mode: scoped`, `reason: production-default`
+
+**Persist:** ON when `qc_persist_enforce` OR boot mode scoped (`reason: production-default` or `qc_persist_enforce`). Emergency root without persist flag → OFF. Sanitize-on-load + filtered persist preserved.
+
+**Non-authoritative:** `config/firebase/scopedLoadingEnabled` (diagnostic). Deprecated `qc_scoped_loading` ignored for boot (harmless if still set).
+
+**Rollback:**
+```js
+localStorage.setItem('qc_force_root_loading', 'true'); location.reload();
+// restore:
+localStorage.removeItem('qc_force_root_loading'); location.reload();
+```
+
+**Diagnostics:** `qcDbHydration.getBootModeReport()` / `qcPersonalAudit.workflowClassroomDefaultFlip()`. S7c fail-closed still via `isScopedOnlyMode()`.
 
 ### Phase S6e — Final isolation audits
 
