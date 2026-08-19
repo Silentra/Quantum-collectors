@@ -2,11 +2,11 @@
  * persist-allowlist.js — S6d policy + S7a enforcement latch
  *
  * Canonical allowlist for what may be written to / restored from `scicards_db`.
- * Default classroom/root-on: enforcement OFF (full `_db` persist) unless opt-in.
  *
- * S7a authority (reload-latched at first resolve):
- *   localStorage.qc_persist_enforce === 'true'  OR
- *   localStorage.qc_scoped_loading === 'true'
+ * Classroom default flip authority (reload-latched; follows boot mode):
+ *   localStorage.qc_persist_enforce === 'true'  OR  boot mode === scoped
+ *   → enforcement ON (reason: qc_persist_enforce | production-default)
+ *   Emergency root (qc_force_root_loading) with no persist flag → OFF
  * Mid-session flag changes require reload — latch does not re-read.
  *
  * accessCodes: NEVER persist — register once-loads accessCodes/{code}.
@@ -48,11 +48,17 @@ export const PERSIST_NEVER_ROOTS = Object.freeze([
   'seasonal',
 ]);
 
-/** Dedicated S7a test flag — enables filter without requiring full root-off (S7b). */
+/** Dedicated flag — enables filter under emergency root without scoped boot. */
 export const PERSIST_ENFORCE_LS_KEY = 'qc_persist_enforce';
 
-/** Same key as db-hydration SCOPED_LOADING_LS_KEY — enables filter when opting into future scoped mode. */
+/**
+ * @deprecated Not used for boot or persist authority after classroom default flip.
+ * Harmless if still set to 'true' in older browsers.
+ */
 export const PERSIST_SCOPED_LOADING_LS_KEY = 'qc_scoped_loading';
+
+/** Positive emergency override — force root-on boot (see database resolveBootModeLatch). */
+export const BOOT_FORCE_ROOT_LS_KEY = 'qc_force_root_loading';
 
 export const PERSIST_LOCAL_STORAGE_KEY = 'scicards_db';
 export const PERSIST_SESSION_KEY = 'scicards_session';
@@ -72,25 +78,34 @@ let _lastPersistReport = null;
 
 /**
  * Resolve enforcement once per page load (reload required to change).
+ * Prefer `{ bootMode }` from initDB after resolveBootModeLatch (follows boot latch).
+ * Fallback mirrors boot precedence via qc_force_root_loading (no database import).
+ *
+ * @param {{ bootMode?: 'root'|'scoped' }} [options]
  * @returns {PersistEnforcementLatch}
  */
-export function resolvePersistEnforcementLatch() {
+export function resolvePersistEnforcementLatch(options = {}) {
   if (_enforcementLatch) return _enforcementLatch;
   let persistFlag = false;
-  let scopedFlag = false;
+  let forceRoot = false;
   try {
     persistFlag = localStorage.getItem(PERSIST_ENFORCE_LS_KEY) === 'true';
-    scopedFlag = localStorage.getItem(PERSIST_SCOPED_LOADING_LS_KEY) === 'true';
+    forceRoot = localStorage.getItem(BOOT_FORCE_ROOT_LS_KEY) === 'true';
   } catch { /* private mode */ }
+
+  let bootMode = options.bootMode;
+  if (bootMode !== 'scoped' && bootMode !== 'root') {
+    bootMode = forceRoot ? 'root' : 'scoped';
+  }
 
   let reason = 'default-off';
   let enabled = false;
   if (persistFlag) {
     enabled = true;
     reason = PERSIST_ENFORCE_LS_KEY;
-  } else if (scopedFlag) {
+  } else if (bootMode === 'scoped') {
     enabled = true;
-    reason = PERSIST_SCOPED_LOADING_LS_KEY;
+    reason = 'production-default';
   }
 
   _enforcementLatch = {
@@ -313,8 +328,8 @@ export function getPersistEnforcementReport() {
     localCacheSanitized: _lastSanitizeReport,
     lastPersistFiltered: _lastPersistReport,
     note: latch.enabled
-      ? 'S7a: sanitize-on-load + filtered _persistLocal active this page load. Root listener unchanged by S7a.'
-      : 'Default: full scicards_db mirror (root-on baseline). Enable via localStorage qc_persist_enforce=true (or qc_scoped_loading=true) then reload.',
+      ? 'S7a: sanitize-on-load + filtered _persistLocal active this page load.'
+      : 'Persist OFF this page load (emergency root, or unexpected). Enable via production scoped default or localStorage qc_persist_enforce=true + reload.',
   };
 }
 
@@ -334,8 +349,8 @@ export function getPersistAllowlistReport() {
     neverRoots: [...PERSIST_NEVER_ROOTS],
     accessCodesPolicy: 'never — register once-loads accessCodes/{code}; bootstrap may once-load accessCodes/; not session state',
     note: latch.enabled
-      ? 'Enforcement ON this page load (reload-latched).'
-      : 'Enforcement OFF — full _db persist (classroom default).',
+      ? 'Enforcement ON this page load (reload-latched; follows boot scoped or qc_persist_enforce).'
+      : 'Enforcement OFF — full _db persist (emergency root without qc_persist_enforce).',
     examples: {
       'players/bobby@bobby': shouldPersistPath('players/bobby', 'bobby'),
       'players/bobby2@bobby': shouldPersistPath('players/bobby2', 'bobby'),
@@ -367,6 +382,7 @@ function _installWindowApi() {
     PERSIST_NEVER_ROOTS,
     PERSIST_ENFORCE_LS_KEY,
     PERSIST_SCOPED_LOADING_LS_KEY,
+    BOOT_FORCE_ROOT_LS_KEY,
     PERSIST_ENFORCEMENT_ENABLED,
     resolvePersistEnforcementLatch,
     isPersistEnforcementEnabled,
@@ -379,15 +395,15 @@ function _installWindowApi() {
     getPersistEnforcementReport,
     help() {
       const latch = resolvePersistEnforcementLatch();
-      console.info(`Persist allowlist (S7a)
+      console.info(`Persist allowlist (S7a + classroom default)
 Enforcement: ${latch.enabled ? 'ON' : 'OFF'} (reason: ${latch.reason})
-Enable test: localStorage.setItem('${PERSIST_ENFORCE_LS_KEY}','true'); location.reload()
-Also ON when: localStorage.${PERSIST_SCOPED_LOADING_LS_KEY}==='true' (reload)
+ON when: boot mode scoped (production-default) OR localStorage.${PERSIST_ENFORCE_LS_KEY}==='true'
+OFF when: emergency root (${BOOT_FORCE_ROOT_LS_KEY}) without persist flag
+Deprecated (ignored for authority): ${PERSIST_SCOPED_LOADING_LS_KEY}
 Always: ${PERSIST_ALWAYS_ROOTS.join(', ')}
 Personal: ${PERSIST_PERSONAL_ROOTS.map((r) => `${r}/{user}`).join(', ')}
 Never: ${PERSIST_NEVER_ROOTS.join(', ')}
-Report: qcPersistAllowlist.getPersistEnforcementReport()
-Preview: qcPersistAllowlist.previewPersistFilter(obj, 'bobby')`);
+Report: qcPersistAllowlist.getPersistEnforcementReport()`);
     },
   };
 }

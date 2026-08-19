@@ -1081,7 +1081,7 @@ Report (survives reload via sessionStorage):
   qcAuthS6b.getLastPersonalCacheClearReport()
   // PASS: playersCleared && playerTradeIndexCleared && sharedScopesPreserved
   // reason: logout | forceLocalExit | crossTab
-S7a (when qc_persist_enforce or qc_scoped_loading latched ON):
+S7a (when persist enforcement latched ON — production scoped or qc_persist_enforce):
   after session clear → persistLocalNow({ sessionUsername: null })`);
     },
   };

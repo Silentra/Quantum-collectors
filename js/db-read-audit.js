@@ -1585,11 +1585,13 @@ Status: COMPLETE + VERIFIED.
 All checks passed: synthetic filtering; logged-out projection; enforced localStorage filtering;
 logout flush; session/reload restoration; rollback to default-off/root-on.
 Root stayed ON throughout S7a. Persist policy unchanged.
-Next: S7d evidence matrix (do not begin S8 until S7 COMPLETE).
+Next: S7 COMPLETE — optional default-flip plan or S8 (separate approvals).
 
 Authority (reload-latched):
-  localStorage.qc_persist_enforce === 'true'  OR  qc_scoped_loading === 'true'
-  Default neither → enforcement OFF (classroom full persist).
+  localStorage.qc_persist_enforce === 'true'  OR  boot mode === scoped
+  → enforcement ON
+  Emergency root without persist flag → OFF
+  (Historical S7a also accepted qc_scoped_loading; that key is deprecated for authority.)
 
 Historical regression (do not re-run as a gate unless regressing):
   qcPersistAllowlist.getPersistEnforcementReport()
@@ -1609,11 +1611,11 @@ All prescribed checks passed: default/root-on regression; scoped boot (mode===sc
 rootListenerAttached===false, firebaseActive===true, rootSnapshots.total===0);
 persist auto-on under qc_scoped_loading; allowlist-shaped cache; scoped self-hydration;
 flag OFF + reload restored root-on. Full tab matrix intentionally deferred to later S7.
-S7c is COMPLETE + VERIFIED. S7d is IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8 until S7 COMPLETE.
+S7c is COMPLETE + VERIFIED. S7d + S7 overall COMPLETE + VERIFIED.
+Scoped classroom default flip — IMPLEMENTED — AWAITING VERIFICATION. S8 not started.
 
-Authority (reload-latched at initDB):
-  localStorage.qc_scoped_loading === 'true' → mode=scoped
-  Default / flag OFF → mode=root
+Historical authority was qc_scoped_loading opt-in; production default is now scoped.
+Emergency: qc_force_root_loading=true + reload.
 
 Historical regression: qcDbHydration.getBootModeReport() / qcDbMetrics.summary().bootMode
 `);
@@ -1630,7 +1632,8 @@ Status: COMPLETE + VERIFIED.
 All checks passed: root-on regression; scoped Trading canonical fallback denied;
 no unsafe empty trades/* migration writes; Admin Access purpose admin-access;
 student LB + Admin Seasons archive hydration; rollback to root-on.
-No remaining S7c blocker. Next: S7d evidence matrix (workflowS7d). Do not begin S8 until S7 COMPLETE.
+No remaining S7c blocker. S7d + S7 COMPLETE + VERIFIED.
+Scoped classroom default flip — IMPLEMENTED — AWAITING VERIFICATION. S8 not started.
 
 Historical regression (do not re-run as a gate unless regressing):
   qcTradeIndex.canAllowCanonicalTradeTreeFallback() under scoped → false
@@ -1640,96 +1643,61 @@ Historical regression (do not re-run as a gate unless regressing):
 
 /**
  * Pasteable S7d final evidence matrix (non-programmer). Alias: workflowS7().
- * Credited S7a–S7c; fresh D1–D11. No Gate B/C or S6e replay. No default flip. No S8.
+ * Historical closure — COMPLETE + VERIFIED. Classroom default flip is separate.
  */
 export function workflowS7d() {
   console.info(`
 === S7d Final Evidence Matrix ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. S7 incomplete until this matrix PASS.
-No gameplay changes. No classroom default flip. Do not begin S8 until S7 COMPLETE + VERIFIED.
+Status: COMPLETE + VERIFIED. S7 overall COMPLETE + VERIFIED.
+D1–D11 PASSED (incl. auth scoped once-load before login/register cache checks).
+Classroom default flip is separate (see workflowClassroomDefaultFlip). Do not begin S8.
 
-Dual-mode: root-on default; scoped = localStorage.qc_scoped_loading='true' + reload;
-flag OFF + reload = rollback.
+CREDITED: S7a persist; S7b dual-mode; S7c fail-closed/Admin/archives; Gate B/C; S6e.
+Unique Cards correctness repair — COMPLETE + VERIFIED.
 
-CREDITED (do not re-gate):
-- S7a persist enforce + sanitize-on-load + logout null flush
-- S7b dual-mode root skip (rootListenerAttached false, rootSnapshots.total 0)
-- S7c Trading fail-closed + Admin Access + LB archives
-- Gate B/C race/gameplay; S6e isolation under root-on
-
---- D1 / D10) Scoped cold boot — root-zero + init without root once('/') ---
-REQUIRED for §7.10: scoped boot seeds _db from sanitized local/defaults WITHOUT root once('/').
-Firebase may stay active; then use scoped loaders. This is NOT an offline-mode project.
-Do NOT invent mocks, service workers, or new offline architecture.
-
-1. localStorage.setItem('qc_scoped_loading','true');
-   localStorage.setItem('qc-db-metrics-enabled','true');
-   location.reload();
-2. qcDbHydration.getBootModeReport()
-   // PASS: mode==='scoped', rootListenerAttached===false, firebaseActive===true
-3. Console: "[DB S7b] Scoped mode" — NO "Fetching initial snapshot"
-4. qcDbMetrics.summary()
-   // PASS: bootMode.mode==='scoped', rootSnapshots.total===0
-5. D10 PASS = D1 PASS + credit S7a sanitize + S7b _seedDbFromLocalOrDefaults
-   Optional only if already easy: existing Firebase-fail→localStorage path (do not build new offline).
-
---- D2) Persist under scoped ---
-1. qcPersistAllowlist.getPersistEnforcementReport()
-   // PASS: enforcementEnabled===true
-2. Object.keys(JSON.parse(localStorage.scicards_db||'{}'))
-   // PASS: allowlist-shaped (no wholesale accessCodes/trades)
-
---- D3) Login / session restore ---
-1. Log in as a normal student (not __admin__)
-2. Reload — still logged in; profile/self loads
-   // PASS: players/{me} + playerTradeIndex/{me} via scoped hydrate (no root)
-
---- D4) Register smoke ---
-1. Log out; register with a valid unused access code
-   // PASS: register works; getAccessCodesLoadReport leaf purpose register;
-   // PASS: no accessCodes in getSubscriptionRegistry()
-
---- D5) Personal tabs smoke ---
-1. While scoped + logged in: open Packs, Inventory/Collection, Profile, Research briefly
-   // PASS: no root-dependent blank/errors for normal student use
-
---- D6) Trading smoke ---
-1. Open Trading (indexes ready)
-2. qcTradeIndex.canAllowCanonicalTradeTreeFallback() → false
-   // PASS: discovery/reservations via index; no bare trades/* fallback
-
---- D7) Leaderboard smoke ---
-1. Enter Leaderboard
-   // PASS: live boards work; season/snapshot selectors OK (archives once-load)
-
---- D8) Admin / archive smoke ---
-1. Admin → Access: list loads (purpose admin-access)
-2. Admin → Seasons: seasons/snapshots show
-   // PASS (quick reopen; detailed S7c credited)
-
---- D9) Logout / user-switch ---
-1. Log out
-2. Inspect scicards_db keys — no prior-user players/PTI personal roots
-3. Log in as a different student; persist — only that user's personal roots
-
---- D11) Rollback ---
-1. localStorage.removeItem('qc_scoped_loading'); location.reload();
-2. getBootModeReport() → mode==='root', rootListenerAttached===true
-3. Log in; open one tab — site works
-   // PASS: verified root-on restored
-
-KNOWN LIMITS (OK; do not fail S7):
-- Admin bulk rebuild/repair getChildren('players') under scoped may need root-on or future hydrates
-- S6c dead-code deferred; product default stays root-on until separate flip approval
-
-S7 COMPLETE when D1–D11 PASS. Then optional separate default-flip approval. Then S8.
+Historical regression (do not re-run as a gate unless regressing):
+  Former opt-in: qc_scoped_loading=true → scoped; removeItem → root-on
 `);
 }
 
 /** Alias for workflowS7d — umbrella print for S7 final evidence matrix. */
 export function workflowS7() {
   return workflowS7d();
+}
+
+/**
+ * Pasteable classroom scoped-default flip verification (non-programmer).
+ * Do not replay Gate B/C or full S7d unless execution paths change unexpectedly.
+ */
+export function workflowClassroomDefaultFlip() {
+  console.info(`
+=== Scoped classroom default flip ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8.
+
+Authority:
+  default (no flags) → mode=scoped, reason=production-default, persist ON
+  localStorage.qc_force_root_loading==='true' → mode=root, reason=emergency-override
+  config/firebase/scopedLoadingEnabled → diagnostic only (not boot)
+  qc_scoped_loading → deprecated / redundant for boot
+
+Emergency rollback:
+  localStorage.setItem('qc_force_root_loading','true'); location.reload();
+Restore production default:
+  localStorage.removeItem('qc_force_root_loading'); location.reload();
+
+Smoke (no flags unless testing rollback):
+  1) getBootModeReport() → scoped / production-default / rootListenerAttached false / persist true
+  2) root snapshots total 0 (qcDbMetrics if enabled)
+  3) login or session restore
+  4) one personal surface
+  5) Leaderboard smoke
+  6) Trading idle — canAllowCanonicalTradeTreeFallback() === false
+  7) logout / user-switch smoke
+  8) set force-root + reload → root / emergency-override / rootListenerAttached true
+  9) removeItem force-root + reload → scoped restored
+`);
 }
 
 /**
@@ -1865,6 +1833,7 @@ function _installWindowApi() {
     workflowS7c,
     workflowS7d,
     workflowS7,
+    workflowClassroomDefaultFlip,
     enableAudit,
     disableAudit,
     enableIsolation,

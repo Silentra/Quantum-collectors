@@ -15,9 +15,9 @@
  * S6a: register uses once-load of accessCodes/{code}; bootstrap seed once-loads accessCodes/.
  * No accessCodes subscription.
  *
- * Root once('/') + on('value') remain the legacy safety net (unchanged). Root and scoped
- * player events may arrive in either order during coexistence — do not depend on root
- * events “winning.” No bandwidth claim while they coexist.
+ * Production default: scoped boot (root once+on skipped). Emergency root via
+ * localStorage.qc_force_root_loading=true + reload. Config/firebase/scopedLoadingEnabled
+ * is diagnostic only — not boot authority.
  */
 
 import * as db from './database.js';
@@ -34,8 +34,9 @@ import {
   isPlayerTradeIndexReady as isPlayerTradeIndexMetaReady,
 } from './trade-index.js';
 
-/** Dev flag prep (S7 cutover later). Does not disable the root listener. */
+/** @deprecated Ignored for boot/persist authority after classroom default flip (harmless if still set). */
 export const SCOPED_LOADING_LS_KEY = 'qc_scoped_loading';
+/** Diagnostic only — not boot authority (avoids config/bootstrap circularity). */
 export const SCOPED_LOADING_CONFIG_PATH = 'config/firebase/scopedLoadingEnabled';
 
 /**
@@ -91,8 +92,8 @@ export function isScopedLoadingDevFlagEnabled() {
 }
 
 /**
- * Flag prep + S7b boot latch surface.
- * Root attaches only in root-on boot; scoped boot skips root once+on.
+ * Flag prep + boot latch surface.
+ * Production default: scoped (root skipped). Config path is diagnostic only (not boot authority).
  * @returns {object}
  */
 export function getScopedLoadingFlagState() {
@@ -108,8 +109,8 @@ export function getScopedLoadingFlagState() {
     rootListenerAttached: boot ? boot.rootListenerAttached === true : null,
     rootListenerLegacySafetyNet: !scopedBoot,
     note: scopedBoot
-      ? 'S7b scoped boot: root once+on skipped this page load. Reload required to change. Config path not used for boot latch.'
-      : 'Default root-on: root once+on when Firebase OK. Set localStorage.qc_scoped_loading=true and reload for scoped boot (S7b).',
+      ? 'Production-default scoped: root once+on skipped. Config path not used for boot. Emergency: localStorage.setItem("qc_force_root_loading","true"); location.reload()'
+      : 'Emergency root override active. Restore scoped: localStorage.removeItem("qc_force_root_loading"); location.reload(). Config path not used for boot.',
   };
 }
 
@@ -2828,12 +2829,16 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (S2–S7c)
+      console.info(`DB Hydration (S2–S7c + classroom default)
 Shared: ${SHARED_DEF_PATHS.join(', ')}
 Access codes: loadAccessCodeOnce | bootstrapAccessCodesOnce | loadAdminAccessCodesOnce
 Archives: hydrateLeaderboardArchivesOnce | getLeaderboardArchivesHydrationReport
 Boot: getBootModeReport | isScopedOnlyMode
-Root: default ON; scoped via qc_scoped_loading=true + reload`);
+Default: scoped (production-default). Emergency root:
+  localStorage.setItem('qc_force_root_loading','true'); location.reload()
+Restore scoped:
+  localStorage.removeItem('qc_force_root_loading'); location.reload()
+Config/firebase/scopedLoadingEnabled: diagnostic only`);
     },
   };
 }

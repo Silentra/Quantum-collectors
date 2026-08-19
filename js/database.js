@@ -38,8 +38,9 @@
  *
  * Phase S1–S3: root once + root on('value') remain the legacy safety net.
  * Scoped APIs are additive; S3 current-player scope is auth-owned beside root.
- * S7a: opt-in filtered localStorage persist + sanitize-on-load.
- * S7b: reload-latched dual-mode — scoped skips root once+on; Firebase stays active.
+ * S7a: filtered localStorage persist + sanitize-on-load (follows boot: ON under production scoped).
+ * S7b: dual-mode — scoped skips root once+on; Firebase stays active.
+ * Classroom default flip: production default scoped; qc_force_root_loading → emergency root.
  *
  * Data nodes: /config /players /cards /packs /groups /accessCodes /admin
  */
@@ -47,7 +48,7 @@
 import { initFirebase, isConfigured } from './firebase-config.js';
 import * as metrics from './db-metrics.js';
 import * as readAudit from './db-read-audit.js';
-// S7a: canonical persist policy + reload-latched enforcement (default OFF for root-on classroom).
+// S7a: canonical persist policy + reload-latched enforcement (follows boot mode after default flip).
 import {
   resolvePersistEnforcementLatch,
   isPersistEnforcementEnabled,
@@ -56,12 +57,16 @@ import {
   recordSanitizeReport,
   recordPersistFilterReport,
   PERSIST_SCOPED_LOADING_LS_KEY,
+  BOOT_FORCE_ROOT_LS_KEY,
 } from './persist-allowlist.js';
 
 const DB_KEY = 'scicards_db';
 
-/** Same key as db-hydration SCOPED_LOADING_LS_KEY — S7b boot authority. */
+/** @deprecated Redundant after classroom default flip — not used for boot authority. */
 export const BOOT_SCOPED_LOADING_LS_KEY = PERSIST_SCOPED_LOADING_LS_KEY;
+
+/** Positive emergency override: force root-on boot + reload. */
+export { BOOT_FORCE_ROOT_LS_KEY };
 
 let _db = null;              // in-memory cache (synchronous reads)
 let _fbDb = null;            // Firebase RTDB instance
@@ -542,23 +547,32 @@ function _releasePathSubscription(path) {
 // ---------- Public API ----------
 
 /**
- * S7b: resolve boot mode once per page load (flag change requires reload).
- * Authority: localStorage.qc_scoped_loading === 'true' → scoped (skip root attach).
- * Default → root-on (verified classroom path). Config path is not consulted at boot
- * (would require cache/RTDB before latch); remains prep for later slices.
+ * Resolve boot mode once per page load (flag change requires reload).
+ * Authority (classroom default flip):
+ *   1. localStorage.qc_force_root_loading === 'true' → root / emergency-override
+ *   2. otherwise → scoped / production-default
+ * Config path and deprecated qc_scoped_loading are not consulted (no bootstrap circularity).
  * @returns {BootModeLatch}
  */
 export function resolveBootModeLatch() {
   if (_bootModeLatch) return _bootModeLatch;
-  let scopedFlag = false;
+  let forceRoot = false;
   try {
-    scopedFlag = localStorage.getItem(BOOT_SCOPED_LOADING_LS_KEY) === 'true';
+    forceRoot = localStorage.getItem(BOOT_FORCE_ROOT_LS_KEY) === 'true';
   } catch { /* private mode */ }
-  _bootModeLatch = {
-    mode: scopedFlag ? 'scoped' : 'root',
-    reason: scopedFlag ? BOOT_SCOPED_LOADING_LS_KEY : 'default-root-on',
-    latchedAt: Date.now(),
-  };
+  if (forceRoot) {
+    _bootModeLatch = {
+      mode: 'root',
+      reason: 'emergency-override',
+      latchedAt: Date.now(),
+    };
+  } else {
+    _bootModeLatch = {
+      mode: 'scoped',
+      reason: 'production-default',
+      latchedAt: Date.now(),
+    };
+  }
   return _bootModeLatch;
 }
 
@@ -573,14 +587,14 @@ export function isRootListenerAttached() {
 }
 
 /**
- * S7b boot / root-listener diagnostics (always available; does not require metrics flag).
+ * Boot / root-listener diagnostics (always available; does not require metrics flag).
  * @returns {object}
  */
 export function getBootModeReport() {
   const latch = resolveBootModeLatch();
   const persistLatch = resolvePersistEnforcementLatch();
   return {
-    phase: 'S7b',
+    phase: 'classroom-default-flip',
     mode: latch.mode,
     reason: latch.reason,
     latchedAt: latch.latchedAt,
@@ -589,8 +603,8 @@ export function getBootModeReport() {
     persistEnforcementEnabled: persistLatch.enabled === true,
     persistEnforcementReason: persistLatch.reason,
     note: latch.mode === 'scoped'
-      ? 'Scoped boot: Firebase active for path once/subscribe; root once+on never attached this page load.'
-      : 'Root-on boot (default): root once+on attach when Firebase OK. Flag OFF + reload restores this path.',
+      ? 'Production-default scoped: Firebase active for path once/subscribe; root once+on never attached. Emergency: localStorage.setItem("qc_force_root_loading","true"); location.reload()'
+      : 'Emergency root override: root once+on when Firebase OK. Restore scoped: localStorage.removeItem("qc_force_root_loading"); location.reload()',
   };
 }
 
@@ -616,19 +630,21 @@ function _seedDbFromLocalOrDefaults() {
 
 /**
  * Initialize database (async).
- * Root-on (default): Firebase root once+on, or localStorage fallback.
- * Scoped (S7b, qc_scoped_loading): Firebase active, skip root once+on; seed from sanitized local/defaults.
+ * Production default: scoped — Firebase active, skip root once+on; seed from sanitized local/defaults.
+ * Emergency: qc_force_root_loading → root once+on (verified rollback path).
  */
 export async function initDB() {
   metrics.mark('initDB-start');
-  // S7a + S7b: latch once per page load (flag change requires reload).
-  const persistLatch = resolvePersistEnforcementLatch();
+  // Boot latch first; persist follows resolved boot mode (never scoped + persist OFF).
   const bootLatch = resolveBootModeLatch();
+  const persistLatch = resolvePersistEnforcementLatch({ bootMode: bootLatch.mode });
   if (persistLatch.enabled) {
     console.info('[DB S7a] Persist enforcement ON (reason:', persistLatch.reason + ')');
   }
   if (bootLatch.mode === 'scoped') {
-    console.info('[DB S7b] Boot mode scoped (reason:', bootLatch.reason + ') — root once+on will be skipped');
+    console.info('[DB] Boot mode scoped (reason:', bootLatch.reason + ') — root once+on will be skipped');
+  } else {
+    console.info('[DB] Boot mode root (reason:', bootLatch.reason + ') — root once+on will attach when Firebase OK');
   }
 
   // --- Try Firebase ---
