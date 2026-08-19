@@ -1674,7 +1674,7 @@ export function workflowClassroomDefaultFlip() {
   console.info(`
 === Scoped classroom default flip ===
 
-Status: IMPLEMENTED — VERIFICATION PAUSED (pending trade/listing canonical hydration verify).
+Status: IMPLEMENTED — VERIFICATION PAUSED (pending claim null-safety + hydration completion).
 Do not begin S8.
 
 Authority:
@@ -1688,7 +1688,9 @@ Emergency rollback:
 Restore production default:
   localStorage.removeItem('qc_force_root_loading'); location.reload();
 
-Before resuming this smoke: pass qcPersonalAudit.workflowTradeCanonicalHydration()
+Before resuming this smoke:
+  pass qcPersonalAudit.workflowClaimNullSafety()
+  and finish qcPersonalAudit.workflowTradeCanonicalHydration()
 
 Smoke (no flags unless testing rollback):
   1) getBootModeReport() → scoped / production-default / rootListenerAttached false / persist true
@@ -1711,9 +1713,10 @@ export function workflowTradeCanonicalHydration() {
   console.info(`
 === Scoped trade/listing canonical-by-ID hydration ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION.
-Classroom default flip remains VERIFICATION PAUSED until this passes. Do not begin S8.
-Do not replay Gate B/C unless claim/increment code changed.
+Status: IMPLEMENTED — verification partially complete
+  (Listing Accept entry reached claim; claimLost was a separate null-abort defect).
+Classroom default flip remains VERIFICATION PAUSED. Do not begin S8.
+Also run: qcPersonalAudit.workflowClaimNullSafety()
 
 Helpers: qcTradeAvailability.loadDirectTradeByIdOnce(id)
          qcTradeAvailability.loadListingByIdOnce(id)
@@ -1727,14 +1730,41 @@ Cold cache: after reload, PTI/index shows item but
 Smoke:
   1) Direct Respond from cold canonical cache → success (not TRADE_NOT_FOUND)
   2) Direct Cancel from cold canonical cache → success
-  3) Listing Accept from cold canonical cache → success
+  3) Listing Accept from cold canonical cache → reaches claim (not LISTING_NOT_FOUND)
   4) Listing Cancel from cold canonical cache → success
   5) Fake ID → still TRADE_NOT_FOUND / LISTING_NOT_FOUND after once-load null
   6) Audit/metrics: only trades/direct/{id} or trades/listings/{id} once-loads
-     — never bare trades/direct or trades/listings
   7) canAllowCanonicalTradeTreeFallback() === false under scoped
-  8) Emergency root-on regression: same actions still work
-  9) Resume workflowClassroomDefaultFlip with one Trading action
+`);
+}
+
+/**
+ * Pasteable scoped RTDB claim null-safety verification (listing + direct).
+ */
+export function workflowClaimNullSafety() {
+  console.info(`
+=== Scoped RTDB claim null-safety ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+Classroom default flip remains VERIFICATION PAUSED. Do not begin S8.
+Do not replay full Gate B/C — focused claim regression only.
+
+Fix: claimListingIfActive / claimDirectTradeIfAwaiting
+  speculative null → return null (retry), not undefined (abort)
+  win only if committed && status==='processing' && claimId matches
+Console: [DB] listing-claim|direct-claim lost|committed { sawSpeculativeNull, ... }
+
+Smoke (production-default scoped):
+  1) Listing Accept, cold canonical cache
+     - index active; db.get(trades/listings/id) null before action
+     - hydrates by ID; claim wins; fulfillment succeeds
+     - expect [DB] listing-claim committed (sawSpeculativeNull may be true)
+  2) Direct Confirm, cold canonical cache → claim succeeds
+  3) Same-listing race: two accepters → exactly one claim winner
+  4) Genuine missing ID → not claimed / LISTING_NOT_ACTIVE or STALE (no synthetic processing)
+  5) Inactive/expired listing → still rejected
+  6) Emergency root-on regression: normal claim still works
+  7) Resume workflowClassroomDefaultFlip with one Trading action
 `);
 }
 
@@ -1873,6 +1903,7 @@ function _installWindowApi() {
     workflowS7,
     workflowClassroomDefaultFlip,
     workflowTradeCanonicalHydration,
+    workflowClaimNullSafety,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -1443,6 +1443,8 @@ export async function getAcknowledged(path) {
 
 /**
  * Claim an active, unexpired listing via RTDB transaction (multi-accepter guard).
+ * Speculative Firebase null must not abort (return null → server reconcile/retry).
+ * Claim win requires committed + status processing + matching claimId.
  * @param {string} listingId
  * @param {{ accepterId: string, chosenCardId: string, claimId: string, now?: number }} claim
  * @returns {Promise<{ ok: boolean, claimed: boolean, listing?: object|null, reason?: string, mode: string, error?: string }>}
@@ -1460,8 +1462,15 @@ export async function claimListingIfActive(listingId, claim) {
 
   const path = `trades/listings/${listingId}`;
   const now = Number.isFinite(Number(claim.now)) ? Number(claim.now) : Date.now();
+  let sawSpeculativeNull = false;
 
   const tryClaim = (current) => {
+    // Speculative empty local cache: return null (not undefined) so RTDB retries with server data.
+    // Do not synthesize a processing record for a missing leaf.
+    if (current === null) {
+      sawSpeculativeNull = true;
+      return null;
+    }
     if (!current || typeof current !== 'object') return;
     if (current.status !== 'active') return;
     if (current.expiresAt && now > current.expiresAt) return;
@@ -1483,7 +1492,7 @@ export async function claimListingIfActive(listingId, claim) {
       const reason = current?.expiresAt && now > current.expiresAt
         ? 'LISTING_EXPIRED'
         : 'LISTING_NOT_ACTIVE';
-      return { ok: true, claimed: false, listing: current, reason, mode: 'local' };
+      return { ok: true, claimed: false, listing: current ?? null, reason, mode: 'local' };
     }
     applyLocalOnly(path, next);
     return { ok: true, claimed: true, listing: next, mode: 'local' };
@@ -1500,13 +1509,29 @@ export async function claimListingIfActive(listingId, claim) {
     });
     const nextVal = result.snapshot ? result.snapshot.val() : null;
     applyLocalOnly(path, nextVal == null ? null : nextVal);
-    const claimed = result.committed === true;
+    const claimed = result.committed === true
+      && nextVal
+      && typeof nextVal === 'object'
+      && nextVal.status === 'processing'
+      && nextVal.claimId === claim.claimId;
     if (!claimed) {
       const reason = nextVal?.expiresAt && now > nextVal.expiresAt
         ? 'LISTING_EXPIRED'
         : 'LISTING_NOT_ACTIVE';
+      console.info('[DB] listing-claim lost', {
+        listingId,
+        reason,
+        sawSpeculativeNull,
+        committed: result.committed === true,
+        status: nextVal?.status ?? null,
+      });
       return { ok: true, claimed: false, listing: nextVal, reason, mode: 'firebase' };
     }
+    console.info('[DB] listing-claim committed', {
+      listingId,
+      claimId: claim.claimId,
+      sawSpeculativeNull,
+    });
     return { ok: true, claimed: true, listing: nextVal, mode: 'firebase' };
   } catch (e) {
     metrics.recordFirebaseWrite({
@@ -1608,6 +1633,8 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
 
 /**
  * Claim a direct trade: awaiting_offerer_confirmation → processing (server-atomic).
+ * Speculative Firebase null must not abort (return null → server reconcile/retry).
+ * Claim win requires committed + status processing + matching claimId.
  * @param {string} tradeId
  * @param {{ processingBy: string, claimId: string, now?: number }} claim
  * @returns {Promise<{ ok: boolean, claimed: boolean, trade?: object|null, reason?: string, mode: string, error?: string }>}
@@ -1625,8 +1652,13 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
 
   const path = `trades/direct/${tradeId}`;
   const now = Number.isFinite(Number(claim.now)) ? Number(claim.now) : Date.now();
+  let sawSpeculativeNull = false;
 
   const tryClaim = (current) => {
+    if (current === null) {
+      sawSpeculativeNull = true;
+      return null;
+    }
     if (!current || typeof current !== 'object') return;
     if (current.status !== 'awaiting_offerer_confirmation') return;
     return {
@@ -1646,7 +1678,7 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
       return {
         ok: true,
         claimed: false,
-        trade: current,
+        trade: current ?? null,
         reason: 'STALE_TRADE_STATE',
         mode: 'local',
       };
@@ -1666,8 +1698,19 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
     });
     const nextVal = result.snapshot ? result.snapshot.val() : null;
     applyLocalOnly(path, nextVal == null ? null : nextVal);
-    const claimed = result.committed === true;
+    const claimed = result.committed === true
+      && nextVal
+      && typeof nextVal === 'object'
+      && nextVal.status === 'processing'
+      && nextVal.claimId === claim.claimId;
     if (!claimed) {
+      console.info('[DB] direct-claim lost', {
+        tradeId,
+        reason: 'STALE_TRADE_STATE',
+        sawSpeculativeNull,
+        committed: result.committed === true,
+        status: nextVal?.status ?? null,
+      });
       return {
         ok: true,
         claimed: false,
@@ -1676,6 +1719,11 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
         mode: 'firebase',
       };
     }
+    console.info('[DB] direct-claim committed', {
+      tradeId,
+      claimId: claim.claimId,
+      sawSpeculativeNull,
+    });
     return { ok: true, claimed: true, trade: nextVal, mode: 'firebase' };
   } catch (e) {
     metrics.recordFirebaseWrite({
