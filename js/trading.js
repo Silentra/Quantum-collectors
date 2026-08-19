@@ -25,6 +25,7 @@ import {
   buildTradingSelfAvailabilitySnapshot,
   buildCounterpartyAvailabilitySnapshot,
   loadTradingCounterpartyContext,
+  loadDirectTradeByIdOnce,
   canOfferCardInTrade,
   getAvailabilityFailureReason,
 } from './trade-availability.js';
@@ -640,8 +641,9 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
-  const trade = db.get(`trades/direct/${tradeId}`);
-  if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
+  const loaded = await loadDirectTradeByIdOnce(tradeId);
+  if (!loaded.ok) return { success: false, reason: loaded.reason || 'TRADE_NOT_FOUND' };
+  const trade = loaded.trade;
   if (trade.status !== 'awaiting_target_response') {
     return { success: false, reason: 'TRADE_NOT_AWAITING_TARGET' };
   }
@@ -801,8 +803,9 @@ export async function confirmTrade(tradeId, offeringPlayerId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isDirectTradesEnabled()) return { success: false, reason: 'DIRECT_TRADES_DISABLED' };
 
-  const trade = db.get(`trades/direct/${tradeId}`);
-  if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
+  const loaded = await loadDirectTradeByIdOnce(tradeId);
+  if (!loaded.ok) return { success: false, reason: loaded.reason || 'TRADE_NOT_FOUND' };
+  const trade = loaded.trade;
   if (trade.status !== 'awaiting_offerer_confirmation') {
     return {
       success: false,
@@ -831,8 +834,9 @@ export async function confirmTrade(tradeId, offeringPlayerId) {
  * @returns {Promise<{ success: boolean, reason?: string, error?: string, writeCount?: number }>}
  */
 export async function declineTrade(tradeId, decliningPlayerId) {
-  const trade = db.get(`trades/direct/${tradeId}`);
-  if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
+  const loaded = await loadDirectTradeByIdOnce(tradeId);
+  if (!loaded.ok) return { success: false, reason: loaded.reason || 'TRADE_NOT_FOUND' };
+  const trade = loaded.trade;
 
   const now = Date.now();
   const id = trade.id || tradeId;
@@ -893,8 +897,9 @@ export async function declineTrade(tradeId, decliningPlayerId) {
  * @returns {Promise<{ success: boolean, reason?: string, error?: string, writeCount?: number }>}
  */
 export async function cancelTrade(tradeId, cancellingPlayerId) {
-  const trade = db.get(`trades/direct/${tradeId}`);
-  if (!trade) return { success: false, reason: 'TRADE_NOT_FOUND' };
+  const loaded = await loadDirectTradeByIdOnce(tradeId);
+  if (!loaded.ok) return { success: false, reason: loaded.reason || 'TRADE_NOT_FOUND' };
+  const trade = loaded.trade;
   if (trade.status !== 'awaiting_target_response') {
     return { success: false, reason: 'TRADE_NOT_CANCELLABLE' };
   }

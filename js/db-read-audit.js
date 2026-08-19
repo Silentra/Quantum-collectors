@@ -1674,7 +1674,8 @@ export function workflowClassroomDefaultFlip() {
   console.info(`
 === Scoped classroom default flip ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8.
+Status: IMPLEMENTED — VERIFICATION PAUSED (pending trade/listing canonical hydration verify).
+Do not begin S8.
 
 Authority:
   default (no flags) → mode=scoped, reason=production-default, persist ON
@@ -1687,6 +1688,8 @@ Emergency rollback:
 Restore production default:
   localStorage.removeItem('qc_force_root_loading'); location.reload();
 
+Before resuming this smoke: pass qcPersonalAudit.workflowTradeCanonicalHydration()
+
 Smoke (no flags unless testing rollback):
   1) getBootModeReport() → scoped / production-default / rootListenerAttached false / persist true
   2) root snapshots total 0 (qcDbMetrics if enabled)
@@ -1694,9 +1697,44 @@ Smoke (no flags unless testing rollback):
   4) one personal surface
   5) Leaderboard smoke
   6) Trading idle — canAllowCanonicalTradeTreeFallback() === false
-  7) logout / user-switch smoke
-  8) set force-root + reload → root / emergency-override / rootListenerAttached true
-  9) removeItem force-root + reload → scoped restored
+  7) one Trading action (Respond or Accept) after hydration fix
+  8) logout / user-switch smoke
+  9) set force-root + reload → root / emergency-override / rootListenerAttached true
+  10) removeItem force-root + reload → scoped restored
+`);
+}
+
+/**
+ * Pasteable scoped trade/listing canonical-by-ID hydration verification.
+ */
+export function workflowTradeCanonicalHydration() {
+  console.info(`
+=== Scoped trade/listing canonical-by-ID hydration ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+Classroom default flip remains VERIFICATION PAUSED until this passes. Do not begin S8.
+Do not replay Gate B/C unless claim/increment code changed.
+
+Helpers: qcTradeAvailability.loadDirectTradeByIdOnce(id)
+         qcTradeAvailability.loadListingByIdOnce(id)
+Wired: respondToTrade, confirmTrade, declineTrade, cancelTrade,
+       acceptListing, cancelListing
+
+Prereq: production-default scoped (no qc_force_root_loading).
+Cold cache: after reload, PTI/index shows item but
+  db.get('trades/direct/'+id) or trades/listings/{id} is null until action.
+
+Smoke:
+  1) Direct Respond from cold canonical cache → success (not TRADE_NOT_FOUND)
+  2) Direct Cancel from cold canonical cache → success
+  3) Listing Accept from cold canonical cache → success
+  4) Listing Cancel from cold canonical cache → success
+  5) Fake ID → still TRADE_NOT_FOUND / LISTING_NOT_FOUND after once-load null
+  6) Audit/metrics: only trades/direct/{id} or trades/listings/{id} once-loads
+     — never bare trades/direct or trades/listings
+  7) canAllowCanonicalTradeTreeFallback() === false under scoped
+  8) Emergency root-on regression: same actions still work
+  9) Resume workflowClassroomDefaultFlip with one Trading action
 `);
 }
 
@@ -1834,6 +1872,7 @@ function _installWindowApi() {
     workflowS7d,
     workflowS7,
     workflowClassroomDefaultFlip,
+    workflowTradeCanonicalHydration,
     enableAudit,
     disableAudit,
     enableIsolation,

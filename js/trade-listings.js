@@ -23,6 +23,7 @@ import {
   buildTradingSelfAvailabilitySnapshot,
   canOfferCardInTrade,
   getAvailabilityFailureReason,
+  loadListingByIdOnce,
 } from './trade-availability.js';
 import {
   listingIndexUpdatesForListing,
@@ -457,8 +458,9 @@ export async function createListing(ownerId, offeredCardId, requestedCardIds) {
  */
 export async function cancelListing(listingId, cancellingPlayerId) {
   // Phase T-8: Global toggle check (allow cancellation even if listings disabled — player should be able to clean up)
-  const listing = db.get(`trades/listings/${listingId}`);
-  if (!listing) return { success: false, reason: 'LISTING_NOT_FOUND' };
+  const loaded = await loadListingByIdOnce(listingId);
+  if (!loaded.ok) return { success: false, reason: loaded.reason || 'LISTING_NOT_FOUND' };
+  const listing = loaded.listing;
   if (listing.status !== 'active') return { success: false, reason: 'LISTING_NOT_ACTIVE' };
   if (listing.ownerId !== cancellingPlayerId) return { success: false, reason: 'NOT_LISTING_OWNER' };
 
@@ -506,8 +508,9 @@ export async function acceptListing(listingId, accepterId, chosenCardId) {
   if (!isTradingEnabled()) return { success: false, reason: 'TRADING_DISABLED' };
   if (!isListingsEnabled()) return { success: false, reason: 'LISTINGS_DISABLED' };
 
-  const listing = db.get(`trades/listings/${listingId}`);
-  if (!listing) return { success: false, reason: 'LISTING_NOT_FOUND' };
+  const loaded = await loadListingByIdOnce(listingId);
+  if (!loaded.ok) return { success: false, reason: loaded.reason || 'LISTING_NOT_FOUND' };
+  const listing = loaded.listing;
   if (listing.status !== 'active') return { success: false, reason: 'LISTING_NOT_ACTIVE' };
 
   // Check expiry — only mark expired while still active (never overwrite terminals).

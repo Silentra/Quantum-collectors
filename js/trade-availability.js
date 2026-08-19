@@ -9,6 +9,8 @@
  * S5c-D6: Trading self-availability uses the same PTI maps via buildTradingSelfAvailabilitySnapshot
  * (current-player only).
  * S5c-D7a: Action-scoped loadTradingCounterpartyContext for players/{other} + PTI/{other}.
+ * Canonical-by-ID: loadDirectTradeByIdOnce / loadListingByIdOnce before public action gates
+ * (scoped cold cache must not treat miss as NOT_FOUND).
  *
  * No inventory subtraction at reservation time — all math is derived.
  */
@@ -506,6 +508,81 @@ export async function loadTradingCounterpartyContext(username, options = {}) {
 }
 
 /**
+ * Shared ID-specific canonical leaf once-load (no bare trees, no subscribe).
+ * Distinguishes load failure vs successful null (genuine NOT_FOUND) vs object.
+ *
+ * @param {'direct'|'listings'} kind
+ * @param {string} id
+ * @param {string} notFoundReason
+ * @returns {Promise<{ ok: boolean, value: object|null, reason: string|null, mode?: string }>}
+ */
+async function _loadCanonicalTradeLeafByIdOnce(kind, id, notFoundReason) {
+  const key = String(id || '').trim();
+  if (!key) {
+    return { ok: false, value: null, reason: notFoundReason };
+  }
+  if (typeof db.loadPathOnce !== 'function') {
+    return { ok: false, value: null, reason: 'TRADE_INDEX_UNAVAILABLE' };
+  }
+  const path = kind === 'listings'
+    ? `trades/listings/${key}`
+    : `trades/direct/${key}`;
+  const load = await db.loadPathOnce(path, { force: true });
+  if (!load || load.ok !== true) {
+    return {
+      ok: false,
+      value: null,
+      reason: 'TRADE_INDEX_UNAVAILABLE',
+      mode: load?.mode,
+    };
+  }
+  if (load.value == null || typeof load.value !== 'object') {
+    return {
+      ok: false,
+      value: null,
+      reason: notFoundReason,
+      mode: load.mode,
+    };
+  }
+  return {
+    ok: true,
+    value: load.value,
+    reason: null,
+    mode: load.mode,
+  };
+}
+
+/**
+ * Force once-load `trades/direct/{tradeId}` for public direct-trade actions.
+ * @param {string} tradeId
+ * @returns {Promise<{ ok: boolean, trade: object|null, reason: string|null, mode?: string }>}
+ */
+export async function loadDirectTradeByIdOnce(tradeId) {
+  const result = await _loadCanonicalTradeLeafByIdOnce('direct', tradeId, 'TRADE_NOT_FOUND');
+  return {
+    ok: result.ok,
+    trade: result.ok ? result.value : null,
+    reason: result.reason,
+    mode: result.mode,
+  };
+}
+
+/**
+ * Force once-load `trades/listings/{listingId}` for public listing actions.
+ * @param {string} listingId
+ * @returns {Promise<{ ok: boolean, listing: object|null, reason: string|null, mode?: string }>}
+ */
+export async function loadListingByIdOnce(listingId) {
+  const result = await _loadCanonicalTradeLeafByIdOnce('listings', listingId, 'LISTING_NOT_FOUND');
+  return {
+    ok: result.ok,
+    listing: result.ok ? result.value : null,
+    reason: result.reason,
+    mode: result.mode,
+  };
+}
+
+/**
  * Build availability snapshot from a successful counterparty context (D7a).
  * Reuses buildAvailabilitySnapshot / buildTradeReservationCounts — no second algorithm.
  *
@@ -983,6 +1060,8 @@ function _installWindowApi() {
     buildTradingSelfAvailabilitySnapshot,
     buildCounterpartyAvailabilitySnapshot,
     loadTradingCounterpartyContext,
+    loadDirectTradeByIdOnce,
+    loadListingByIdOnce,
     resolveResearchReservationSource,
     resolveTradingReservationSource,
     loadPlayerTradeIndexReservationMaps,
