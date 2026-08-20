@@ -1612,7 +1612,7 @@ rootListenerAttached===false, firebaseActive===true, rootSnapshots.total===0);
 persist auto-on under qc_scoped_loading; allowlist-shaped cache; scoped self-hydration;
 flag OFF + reload restored root-on. Full tab matrix intentionally deferred to later S7.
 S7c is COMPLETE + VERIFIED. S7d + S7 overall COMPLETE + VERIFIED.
-Scoped classroom default flip — IMPLEMENTED — AWAITING VERIFICATION. S8 not started.
+Scoped classroom default flip — IMPLEMENTED — VERIFICATION PAUSED (final gameplay smoke). S8 not started.
 
 Historical authority was qc_scoped_loading opt-in; production default is now scoped.
 Emergency: qc_force_root_loading=true + reload.
@@ -1633,7 +1633,7 @@ All checks passed: root-on regression; scoped Trading canonical fallback denied;
 no unsafe empty trades/* migration writes; Admin Access purpose admin-access;
 student LB + Admin Seasons archive hydration; rollback to root-on.
 No remaining S7c blocker. S7d + S7 COMPLETE + VERIFIED.
-Scoped classroom default flip — IMPLEMENTED — AWAITING VERIFICATION. S8 not started.
+Scoped classroom default flip — IMPLEMENTED — VERIFICATION PAUSED (final gameplay smoke). S8 not started.
 
 Historical regression (do not re-run as a gate unless regressing):
   qcTradeIndex.canAllowCanonicalTradeTreeFallback() under scoped → false
@@ -1674,8 +1674,9 @@ export function workflowClassroomDefaultFlip() {
   console.info(`
 === Scoped classroom default flip ===
 
-Status: IMPLEMENTED — VERIFICATION PAUSED (pending claim null-safety + hydration completion).
-Do not begin S8.
+Status: IMPLEMENTED — VERIFICATION PAUSED
+  Remaining: short production-default scoped gameplay smoke only
+  (not another architecture matrix). Do not begin S8.
 
 Authority:
   default (no flags) → mode=scoped, reason=production-default, persist ON
@@ -1688,9 +1689,7 @@ Emergency rollback:
 Restore production default:
   localStorage.removeItem('qc_force_root_loading'); location.reload();
 
-Before resuming this smoke:
-  pass qcPersonalAudit.workflowClaimNullSafety()
-  and finish qcPersonalAudit.workflowTradeCanonicalHydration()
+Prereq: trade canonical hydration + claim null-safety are COMPLETE + VERIFIED.
 
 Smoke (no flags unless testing rollback):
   1) getBootModeReport() → scoped / production-default / rootListenerAttached false / persist true
@@ -1713,11 +1712,11 @@ export function workflowTradeCanonicalHydration() {
   console.info(`
 === Scoped trade/listing canonical-by-ID hydration ===
 
-Status: IMPLEMENTED — verification partially complete
-  (Listing Accept entry reached claim; claimLost was a separate null-abort defect).
-Classroom default flip remains VERIFICATION PAUSED. Do not begin S8.
-Also run: qcPersonalAudit.workflowClaimNullSafety()
+Status: COMPLETE + VERIFIED.
+Classroom default flip remains VERIFICATION PAUSED for final gameplay smoke only. Do not begin S8.
 
+Evidence: cold Accept/Cancel (listing); cold Respond/Cancel/Confirm (direct);
+missing IDs still NOT_FOUND; no bare trade-tree fallback.
 Helpers: qcTradeAvailability.loadDirectTradeByIdOnce(id)
          qcTradeAvailability.loadListingByIdOnce(id)
 Wired: respondToTrade, confirmTrade, declineTrade, cancelTrade,
@@ -1745,10 +1744,11 @@ export function workflowClaimNullSafety() {
   console.info(`
 === Scoped RTDB claim null-safety ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION.
-Classroom default flip remains VERIFICATION PAUSED. Do not begin S8.
-Do not replay full Gate B/C — focused claim regression only.
+Status: COMPLETE + VERIFIED.
+Classroom default flip remains VERIFICATION PAUSED for final gameplay smoke only. Do not begin S8.
 
+Evidence: cold Listing Accept (sawSpeculativeNull → committed → fulfill);
+cold Direct Confirm; same-listing one winner; missing IDs; emergency root-on claim OK.
 Fix: claimListingIfActive / claimDirectTradeIfAwaiting
   speculative null → return null (retry), not undefined (abort)
   win only if committed && status==='processing' && claimId matches
@@ -1765,6 +1765,32 @@ Smoke (production-default scoped):
   5) Inactive/expired listing → still rejected
   6) Emergency root-on regression: normal claim still works
   7) Resume workflowClassroomDefaultFlip with one Trading action
+`);
+}
+
+/**
+ * Pasteable card-art bounded retry verification (non-programmer).
+ */
+export function workflowCardArtRetry() {
+  console.info(`
+=== Card-art transient retry hardening ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8.
+
+Behavior: first img error → emoji immediately → one same-URL retry after ~500ms
+  (no cache-bust). Success restores art; failure keeps emoji. Max one retry.
+Surfaces: any data-card-art-fallback=1 (Collection, modal, pack face, Research mini).
+Dev diag: localStorage.setItem('qc_card_art_diag','true'); then reload
+  → console [CardArtDiag] initial_failure | retry_attempted | retry_recovered | retry_failed
+
+Smoke:
+  1) Normal load → one network request; artwork shows (unchanged)
+  2) Force persistent fail (DevTools block URL or Offline after first paint fail)
+     → emoji; at most two GETs; emoji remains; no loop
+  3) Simulated transient fail then allow → emoji briefly, then art restores without reload
+  4) Collection + Research mini-card both inherit central handler
+  5) Modal/detail also works
+  6) After retry_failed, no further retries for that node
 `);
 }
 
@@ -1904,6 +1930,7 @@ function _installWindowApi() {
     workflowClassroomDefaultFlip,
     workflowTradeCanonicalHydration,
     workflowClaimNullSafety,
+    workflowCardArtRetry,
     enableAudit,
     disableAudit,
     enableIsolation,
