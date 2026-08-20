@@ -1775,22 +1775,23 @@ export function workflowCardArtRetry() {
   console.info(`
 === Card-art transient retry hardening ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8.
+Status: IMPLEMENTED — AWAITING FINAL RECOVERY VERIFICATION. Do not begin S8.
 
 Behavior: first img error → emoji immediately → one same-URL retry after ~500ms
   (no cache-bust). Success restores art; failure keeps emoji. Max one retry.
 Surfaces: any data-card-art-fallback=1 (Collection, modal, pack face, Research mini).
-Dev diag: localStorage.setItem('qc_card_art_diag','true'); then reload
-  → console [CardArtDiag] initial_failure | retry_attempted | retry_recovered | retry_failed
 
-Smoke:
-  1) Normal load → one network request; artwork shows (unchanged)
-  2) Force persistent fail (DevTools block URL or Offline after first paint fail)
-     → emoji; at most two GETs; emoji remains; no loop
-  3) Simulated transient fail then allow → emoji briefly, then art restores without reload
-  4) Collection + Research mini-card both inherit central handler
-  5) Modal/detail also works
-  6) After retry_failed, no further retries for that node
+Recovery proof (deterministic; no DevTools URL race):
+  localStorage.setItem('qc_card_art_diag','true'); location.reload();
+  // open Collection with art visible, then:
+  await qcCardArtDiag.simulateTransientFailure()
+Expect [CardArtDiag]: initial_failure → retry_attempted → retry_recovered
+  and artwork restored without page reload.
+
+Other smoke:
+  1) Normal load → one network request; artwork shows
+  2) Force persistent fail → emoji; at most two GETs; no loop
+  3) Collection + Research mini + modal inherit central handler
 `);
 }
 

@@ -20,6 +20,18 @@ const CARD_ART_RETRY_DELAY_MS = 500;
 /** Dev-only: localStorage.qc_card_art_diag === 'true' */
 const CARD_ART_DIAG_LS_KEY = 'qc_card_art_diag';
 
+/** 1×1 transparent GIF — diag probe only; restore still uses the real artwork URL. */
+const CARD_ART_DIAG_PROBE_DATA_URI =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+/** Guaranteed-missing path to force a first-load error under simulateTransientFailure. */
+const CARD_ART_DIAG_MISSING_SRC = 'assets/scientists/__card_art_diag_missing__.webp';
+
+/**
+ * One-shot diag simulation arm (cleared after one retry schedule).
+ * @type {{ probeSucceed: boolean, zeroDelay: boolean }|null}
+ */
+let _cardArtDiagSimArm = null;
 /**
  * Deterministic filename stem from display name.
  * @param {string|null|undefined} name
@@ -122,6 +134,24 @@ function _isCardArtDiagEnabled() {
 }
 
 /**
+ * @returns {number}
+ */
+function _cardArtRetryDelayMs() {
+  if (_isCardArtDiagEnabled() && _cardArtDiagSimArm?.zeroDelay) return 0;
+  return CARD_ART_RETRY_DELAY_MS;
+}
+
+/**
+ * Consume one-shot probe override after schedule starts.
+ * @returns {boolean}
+ */
+function _consumeDiagProbeSucceed() {
+  if (!_isCardArtDiagEnabled() || !_cardArtDiagSimArm?.probeSucceed) return false;
+  _cardArtDiagSimArm = null;
+  return true;
+}
+
+/**
  * @param {object} entry
  */
 function _cardArtDiag(entry) {
@@ -181,6 +211,9 @@ function _createRestoredCardArtImg(meta) {
  * @param {string} token
  */
 function _scheduleCardArtRetry(placeholder, token) {
+  const delayMs = _cardArtRetryDelayMs();
+  const diagProbeSucceed = _consumeDiagProbeSucceed();
+
   window.setTimeout(() => {
     if (!placeholder.isConnected) return;
     if (placeholder.dataset.cardArtRetryToken !== token) return;
@@ -205,6 +238,7 @@ function _scheduleCardArtRetry(placeholder, token) {
       url: src,
       surface,
       card: cardName || null,
+      diagProbe: diagProbeSucceed || undefined,
     });
 
     const probe = new Image();
@@ -240,9 +274,10 @@ function _scheduleCardArtRetry(placeholder, token) {
         card: cardName || null,
       });
     };
-    // Same URL — no cache-bust query.
-    probe.src = src;
-  }, CARD_ART_RETRY_DELAY_MS);
+    // Production: same URL — no cache-bust. Diag sim: tiny data URI so probe succeeds;
+    // restored img still uses real `src` from placeholder metadata.
+    probe.src = diagProbeSucceed ? CARD_ART_DIAG_PROBE_DATA_URI : src;
+  }, delayMs);
 }
 
 /**
@@ -262,7 +297,14 @@ export function applyCardArtEmojiFallback(img) {
   if (isMini && !miniCard) return;
   if (!isMini && !artHost) return;
 
-  const src = (img.getAttribute('src') || img.currentSrc || '').trim();
+  // Diag sim may force a missing src while preserving the real retry URL on the dataset.
+  let src = '';
+  if (_isCardArtDiagEnabled() && img.dataset.cardArtDiagSimRealSrc) {
+    src = String(img.dataset.cardArtDiagSimRealSrc).trim();
+    delete img.dataset.cardArtDiagSimRealSrc;
+  } else {
+    src = (img.getAttribute('src') || img.currentSrc || '').trim();
+  }
   const alt = img.getAttribute('alt') || '';
   const cardName = img.dataset.cardArtName || '';
   const alreadyRetried = img.dataset.cardArtRetryAttempted === '1';
@@ -296,6 +338,90 @@ export function applyCardArtEmojiFallback(img) {
   _scheduleCardArtRetry(placeholder, token);
 }
 
+/**
+ * Resolve a live card-art img for diag simulation.
+ * @param {string|HTMLImageElement|null|undefined} selectorOrImg
+ * @returns {HTMLImageElement|null}
+ */
+function _resolveCardArtDiagTarget(selectorOrImg) {
+  if (selectorOrImg instanceof HTMLImageElement) {
+    return selectorOrImg.dataset.cardArtFallback === '1' ? selectorOrImg : null;
+  }
+  if (typeof selectorOrImg === 'string' && selectorOrImg.trim()) {
+    const el = document.querySelector(selectorOrImg.trim());
+    if (el instanceof HTMLImageElement && el.dataset.cardArtFallback === '1') return el;
+    return null;
+  }
+  const imgs = document.querySelectorAll('img[data-card-art-fallback="1"]');
+  for (const el of imgs) {
+    if (!(el instanceof HTMLImageElement)) continue;
+    if (el.dataset.cardArtFallbackApplied === '1') continue;
+    if (el.offsetParent === null && el.getClientRects().length === 0) continue;
+    return el;
+  }
+  return imgs[0] instanceof HTMLImageElement ? imgs[0] : null;
+}
+
+/**
+ * Dev-only: first load fails, retry probe succeeds — exercises real recovery path.
+ * Requires localStorage.qc_card_art_diag === 'true'.
+ * @param {string|HTMLImageElement} [selectorOrImg]
+ * @returns {Promise<{ ok: boolean, reason?: string, url?: string, surface?: string }>}
+ */
+export async function simulateCardArtTransientFailure(selectorOrImg) {
+  if (!_isCardArtDiagEnabled()) {
+    console.warn('[CardArtDiag] Enable first: localStorage.setItem("qc_card_art_diag","true"); location.reload()');
+    return { ok: false, reason: 'diag-off' };
+  }
+
+  const img = _resolveCardArtDiagTarget(selectorOrImg);
+  if (!img) {
+    return { ok: false, reason: 'no-target' };
+  }
+
+  const realSrc = (img.getAttribute('src') || img.currentSrc || '').trim();
+  if (!realSrc || realSrc.includes('__card_art_diag_missing__')) {
+    return { ok: false, reason: 'no-real-src' };
+  }
+
+  _cardArtDiagSimArm = { probeSucceed: true, zeroDelay: true };
+  img.dataset.cardArtDiagSimRealSrc = realSrc;
+  // Reset applied flag if somehow set; force a fresh error cycle.
+  delete img.dataset.cardArtFallbackApplied;
+  delete img.dataset.cardArtRetryAttempted;
+
+  _cardArtDiag({
+    event: 'simulate_armed',
+    url: realSrc,
+    surface: img.classList.contains('rp-mini-img') ? 'mini' : 'detail',
+    card: img.dataset.cardArtName || null,
+  });
+
+  img.src = CARD_ART_DIAG_MISSING_SRC;
+
+  return {
+    ok: true,
+    url: realSrc,
+    surface: img.classList.contains('rp-mini-img') ? 'mini' : 'detail',
+  };
+}
+
+function _installCardArtDiagApi() {
+  if (typeof window === 'undefined') return;
+  window.qcCardArtDiag = {
+    isEnabled: () => _isCardArtDiagEnabled(),
+    simulateTransientFailure: simulateCardArtTransientFailure,
+    help() {
+      console.info(`Card-art diag (DevTools)
+Enable: localStorage.setItem('qc_card_art_diag','true'); location.reload()
+Recovery proof (Collection art visible):
+  await qcCardArtDiag.simulateTransientFailure()
+Expect [CardArtDiag]: initial_failure → retry_attempted → retry_recovered
+Optional: await qcCardArtDiag.simulateTransientFailure('.collection-grid img[data-card-art-fallback="1"]')`);
+    },
+  };
+}
+
 let cardArtFallbackBound = false;
 
 /** One-time delegated error handler for card artwork images. */
@@ -313,6 +439,8 @@ export function initCardArtFallback() {
     },
     true
   );
+
+  _installCardArtDiagApi();
 }
 
 /**
