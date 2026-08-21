@@ -1,4 +1,15 @@
 {
+  "database": {
+    "rules": "database.rules.json"
+  },
+  "emulators": {
+    "database": {
+      "port": 9000
+    },
+    "ui": {
+      "enabled": false
+    }
+  },
   "functions": [
     {
       "source": "functions",

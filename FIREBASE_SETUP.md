@@ -70,27 +70,35 @@ Callable Cloud Functions scaffolding + `pingTeacherOps` diagnostic only. **No** 
 Full setup + verification: [`docs/S8b-PLUS-TEACHER-OPS.md`](docs/S8b-PLUS-TEACHER-OPS.md)  
 Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
 
-### S8c-0 (client prep) — IMPLEMENTED — AWAITING VERIFICATION
+### S8c-0 (client prep) — COMPLETE + VERIFIED
 
 - Trade counterparties: trade-visible child loads only (not full `players/{other}`)
-- Admin registry path `admins/{authUid}` + Promote/Demote writes (rules still open — **not secure yet**)
+- Admin registry path `admins/{authUid}` + Promote/Demote writes
 - Register taken-check via directory / authUid leaves
 - Pasteable: `qcPersonalAudit.workflowS8c0()`
 - Distribution debt: [`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)
 
-**S8c-1** (tradeGrants + locked rules) — NOT STARTED.
+### S8c-1 (tradeGrants + locked rules) — IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION
 
-### Future (S8c-1+ — not implemented)
+- Client: `claimerAuthUid` on claims; `tradeGrants/{target}/{claimerUid}` CREATE/CLEAR lifecycle ([`js/trade-grants.js`](js/trade-grants.js))
+- In-repo locked rules: [`database.rules.json`](database.rules.json) — **not auto-deployed**; Console paste required
+- Rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json)
+- Local emulator proof: `scripts/s8c1-rules-simulator.mjs` (exact ±1 with `increment`, fake grant deny, honest settle)
+- Pasteable: `qcPersonalAudit.workflowS8c1()`
+- Deferred to S8c-2: foreign stats/LB/PTI tightening
+- Auth production-default flip: **after** S8c-1 live verification
 
-Firebase Auth is layered under the same username/password UX when `qc_firebase_auth` is enabled. Enable Email/Password in Console before Auth-on testing. S8a docs unchanged; S8b is the Auth wiring slice.
+### Future (post S8c-1 verify)
+
+Firebase Auth production default (legacy only via emergency flag). Option C password-reset path deferred ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
 Authoritative S8 plan: [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md) §8.
 
 ## 5. Security Rules
 
-**Console is the source of truth for what is deployed.** In-repo snapshot: [`database.rules.json`](database.rules.json) (live classroom rules only).
+**Console is the source of truth for what is deployed.** In-repo locked rules: [`database.rules.json`](database.rules.json). Open rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json).
 
-### Classroom / development rules (currently live) — S8a snapshot
+### Classroom open rules (rollback / pre-deploy) — S8a snapshot
 
 Open read/write for the classroom custom-auth model, plus a **data-integrity** invariant on inventory quantity leaves (not authorization):
 
@@ -112,6 +120,7 @@ Open read/write for the classroom custom-auth model, plus a **data-integrity** i
 }
 ```
 
+**After S8c-1 Console deploy:** locked Auth + `admins/{uid}` + tradeGrants exact foreign inventory rules apply. Until you paste, live classroom remains open.
 - **Integrity (now):** inventory card leaves must be numeric and `>= 0`. Deletes/`null` skip `.validate` and remain legal. Supports Hybrid C+ Gate A (`ServerValue.increment` cannot drive a leaf below 0 without rejecting the whole multi-path write).
 - **Authorization:** **not** enforced. Anyone with the public web config can read/write the database (except writing negative inventory numbers).
 - **S8a:** docs + this snapshot only. No authz tighten.

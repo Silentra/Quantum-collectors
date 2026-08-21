@@ -1,15 +1,185 @@
 {
   "rules": {
-    ".read": true,
-    ".write": true,
+    ".read": false,
+    ".write": false,
+
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins').child(auth.uid).val() === true)",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+        ".validate": "newData.isBoolean() && newData.val() === true"
+      }
+    },
+
     "players": {
       "$username": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.child('authUid').val() === auth.uid && newData.child('isAdmin').val() !== true))",
+
+        "authUid": {
+          ".read": "auth != null",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.val() === auth.uid))",
+          ".validate": "newData.isString() && newData.val().length > 0 && (!data.exists() || newData.val() === data.val() || root.child('admins').child(auth.uid).val() === true)"
+        },
+
+        "password": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+        },
+
+        "activeSession": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)"
+        },
+
         "inventory": {
+          ".read": "auth != null",
           "$cardId": {
-            ".validate": "newData.isNumber() && newData.val() >= 0"
+            ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || (root.child('tradeGrants').child($username).child(auth.uid).exists() && root.child('tradeGrants').child($username).child(auth.uid).child('expiresAt').val() > now && (root.child('tradeGrants').child($username).child(auth.uid).child('giveCardId').val() === $cardId || root.child('tradeGrants').child($username).child(auth.uid).child('recvCardId').val() === $cardId) && ((root.child('tradeGrants').child($username).child(auth.uid).child('tradeKind').val() === 'direct' && root.child('trades').child('direct').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('status').val() === 'processing' && root.child('trades').child('direct').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('claimId').val() === root.child('tradeGrants').child($username).child(auth.uid).child('claimId').val() && root.child('trades').child('direct').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('claimerAuthUid').val() === auth.uid && root.child('trades').child('direct').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('targetPlayerId').val() === $username) || (root.child('tradeGrants').child($username).child(auth.uid).child('tradeKind').val() === 'listing' && root.child('trades').child('listings').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('status').val() === 'processing' && root.child('trades').child('listings').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('claimId').val() === root.child('tradeGrants').child($username).child(auth.uid).child('claimId').val() && root.child('trades').child('listings').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('claimerAuthUid').val() === auth.uid && root.child('trades').child('listings').child(root.child('tradeGrants').child($username).child(auth.uid).child('tradeId').val()).child('ownerId').val() === $username))))",
+            ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || ((root.child('tradeGrants').child($username).child(auth.uid).child('giveCardId').val() === $cardId && newData.val() === (data.val() == null ? 0 : data.val()) - 1) || (root.child('tradeGrants').child($username).child(auth.uid).child('recvCardId').val() === $cardId && newData.val() === (data.val() == null ? 0 : data.val()) + 1))))"
           }
+        },
+
+        "groupId": { ".read": "auth != null", ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)" },
+        "group": { ".read": "auth != null", ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)" },
+        "subgroupId": { ".read": "auth != null", ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)" },
+        "isTradeRestricted": { ".read": "auth != null", ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)" },
+        "isTradeProfileHidden": { ".read": "auth != null", ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)" },
+
+        "stats": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || auth != null)"
+        },
+        "achievements": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null"
+        },
+        "progression": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null"
+        },
+        "lastDirectTradeAt": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null"
+        },
+        "lastListingAcceptAt": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null"
+        },
+        "lastListingCreatedAt": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)"
+        },
+
+        "$other": {
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)"
         }
       }
+    },
+
+    "tradeGrants": {
+      "$targetUsername": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($targetUsername).child('authUid').val() === auth.uid || auth != null)",
+        ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+        "$claimerUid": {
+          ".read": "auth != null && (auth.uid === $claimerUid || root.child('admins').child(auth.uid).val() === true || root.child('players').child($targetUsername).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (auth.uid === $claimerUid && (!newData.exists() || (newData.hasChildren(['tradeKind','tradeId','claimId','claimerUsername','targetUsername','giveCardId','recvCardId','expiresAt']) && newData.child('targetUsername').val() === $targetUsername && newData.child('claimerUsername').isString() && root.child('players').child(newData.child('claimerUsername').val()).child('authUid').val() === auth.uid && newData.child('expiresAt').isNumber() && newData.child('expiresAt').val() > now && newData.child('expiresAt').val() < now + 120000 && newData.child('giveCardId').isString() && newData.child('recvCardId').isString() && newData.child('giveCardId').val() !== newData.child('recvCardId').val() && ((newData.child('tradeKind').val() === 'direct' && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('status').val() === 'processing' && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('claimId').val() === newData.child('claimId').val() && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('claimerAuthUid').val() === auth.uid && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('processingBy').val() === newData.child('claimerUsername').val() && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('targetPlayerId').val() === $targetUsername && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('requestedCardId').val() === newData.child('giveCardId').val() && root.child('trades').child('direct').child(newData.child('tradeId').val()).child('offeredCardId').val() === newData.child('recvCardId').val()) || (newData.child('tradeKind').val() === 'listing' && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('status').val() === 'processing' && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('claimId').val() === newData.child('claimId').val() && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('claimerAuthUid').val() === auth.uid && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('processingBy').val() === newData.child('claimerUsername').val() && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('ownerId').val() === $targetUsername && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('offeredCardId').val() === newData.child('giveCardId').val() && root.child('trades').child('listings').child(newData.child('tradeId').val()).child('fulfilledCardId').val() === newData.child('recvCardId').val()))))))"
+        }
+      }
+    },
+
+    "trades": {
+      "direct": {
+        "$tradeId": {
+          ".read": "auth != null",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.child('offeringPlayerId').isString() && root.child('players').child(newData.child('offeringPlayerId').val()).child('authUid').val() === auth.uid) || (data.exists() && (root.child('players').child(data.child('offeringPlayerId').val()).child('authUid').val() === auth.uid || root.child('players').child(data.child('targetPlayerId').val()).child('authUid').val() === auth.uid || (newData.child('claimerAuthUid').val() === auth.uid && newData.child('status').val() === 'processing') || (data.child('claimerAuthUid').val() === auth.uid))))"
+        }
+      },
+      "listings": {
+        "$listingId": {
+          ".read": "auth != null",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (!data.exists() && newData.child('ownerId').isString() && root.child('players').child(newData.child('ownerId').val()).child('authUid').val() === auth.uid) || (data.exists() && (root.child('players').child(data.child('ownerId').val()).child('authUid').val() === auth.uid || (newData.child('claimerAuthUid').val() === auth.uid && newData.child('status').val() === 'processing') || (data.child('claimerAuthUid').val() === auth.uid) || (newData.child('fulfilledBy').isString() && root.child('players').child(newData.child('fulfilledBy').val()).child('authUid').val() === auth.uid))))"
+        }
+      }
+    },
+
+    "playerDirectory": {
+      "$username": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || !data.exists())"
+      }
+    },
+
+    "playerTradeIndex": {
+      "$username": {
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || auth != null)",
+        ".write": "auth != null"
+      }
+    },
+
+    "listingsByGroup": {
+      "$groupId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
+    "tradeIndexMeta": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "leaderboards": {
+      "$statKey": {
+        "$username": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+
+    "leaderboardSeasons": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "leaderboardSnapshots": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "config": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "cards": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "packs": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "groups": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
+    },
+
+    "accessCodes": {
+      ".read": false,
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (data.exists() && data.child('used').val() !== true && newData.child('used').val() === true && newData.child('usedBy').isString()))",
+        ".validate": "root.child('admins').child(auth.uid).val() === true || (data.exists() && newData.child('used').val() === true && newData.child('usedBy').isString())"
+      }
+    },
+
+    "admin": {
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
     }
   }
 }

@@ -665,13 +665,23 @@ Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings
 
 ### Phase — S8c-0 client prep (Spark)
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Rules still **open**. Pasteable: `qcPersonalAudit.workflowS8c0()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS8c0()`.
 
 - Foreign trading loads use trade-visible children only ([`loadTradeVisiblePlayerOnce`](js/trade-availability.js)) — not full `players/{other}` (RTDB parent read would expose password/session; child deny cannot hide).
-- Admin authority path: `admins/{authUid}` ([`js/admin-registry.js`](js/admin-registry.js)); Promote/Demote write registry + `players.isAdmin` mirror. **Not secure until S8c-1 rules.**
-- `isAdmin()` prefers registry; legacy `session.isAdmin` / `players.isAdmin` remain transitional fallbacks until rules lock.
+- Admin authority path: `admins/{authUid}` ([`js/admin-registry.js`](js/admin-registry.js)); Promote/Demote write registry + `players.isAdmin` mirror.
+- `isAdmin()` prefers registry; legacy `session.isAdmin` / `players.isAdmin` remain transitional UI fallbacks (write power after Console deploy = registry only).
 - Distribution blockers only: [`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md).
-- **S8c-1** (tradeGrants + locked rules) — NOT STARTED.
+
+### Phase — S8c-1 tradeGrants + locked rules (Spark)
+
+**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8c1()`.
+
+- Claim stamp: `claimerAuthUid` on direct/listing claim transactions ([`js/database.js`](js/database.js)).
+- Grant lifecycle: [`js/trade-grants.js`](js/trade-grants.js) — CREATE immediately before terminal settle; CLEAR on success / release / fail / player-delete.
+- Foreign inventory: grant present + exact give −1 / recv +1 + nonnegative (resolved `ServerValue.increment`).
+- In-repo rules: [`database.rules.json`](database.rules.json). Rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json). **Console paste is not automatic.**
+- Local emulator proof: [`scripts/s8c1-rules-simulator.mjs`](scripts/s8c1-rules-simulator.mjs).
+- Deferred **S8c-2**: foreign stats / leaderboard / PTI tightening. Auth production-default flip: after live S8c-1 verify.
 
 ### Phase S6e — Final isolation audits
 
