@@ -368,9 +368,10 @@ export async function loadTradeVisiblePlayerOnce(username, options = {}) {
   }
 
   const base = `players/${key}`;
+  // Trade-visible only. Do not load authUid for foreign counterparties (not needed for
+  // create/claim/settle; claimer uid comes from Auth currentUser). Path key is username.
   const paths = {
     username: `${base}/username`,
-    authUid: `${base}/authUid`,
     inventory: `${base}/inventory`,
     groupId: `${base}/groupId`,
     group: `${base}/group`,
@@ -396,7 +397,6 @@ export async function loadTradeVisiblePlayerOnce(username, options = {}) {
   });
 
   const exists = (typeof byKey.username === 'string' && byKey.username.length > 0)
-    || (byKey.authUid != null && byKey.authUid !== '')
     || (byKey.inventory != null && typeof byKey.inventory === 'object')
     || (byKey.groupId != null && byKey.groupId !== '')
     || (byKey.group != null && byKey.group !== '')
@@ -413,7 +413,6 @@ export async function loadTradeVisiblePlayerOnce(username, options = {}) {
 
   const player = {
     username: typeof byKey.username === 'string' && byKey.username ? byKey.username : key,
-    authUid: byKey.authUid != null && byKey.authUid !== '' ? byKey.authUid : null,
     inventory: (byKey.inventory && typeof byKey.inventory === 'object') ? byKey.inventory : {},
     groupId,
     group: groupId,
