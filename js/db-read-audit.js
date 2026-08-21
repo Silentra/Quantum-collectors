@@ -1951,7 +1951,15 @@ What shipped (client + in-repo rules):
 Local simulator proof (already run in implement session):
   npx firebase-tools emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
   Proved: increment(±1) exact-delta PASS; fake grant FAIL; unrelated foreign FAIL;
-  honest direct + listing settlement PASS.
+  honest direct + listing settlement PASS;
+  auth playerDirectory + tradeIndexMeta parent reads PASS;
+  student accessCodes parent FAIL / admin PASS; foreign players/{other} FAIL.
+
+Live-blocker fix (post first Console publish):
+  - playerDirectory parent .read auth!=null (safe social projection)
+  - tradeIndexMeta .read auth!=null (schemaVersion/rebuiltAt only; write still admin)
+  - accessCodes parent .read admin-only; student boot no longer enumerates/seeds
+  Republish full database.rules.json after pulling this fix.
 
 BEFORE Console deploy (checklist):
   1) Every classroom account that must play has players/{u}.authUid
