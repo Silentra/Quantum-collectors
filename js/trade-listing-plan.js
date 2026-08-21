@@ -27,6 +27,10 @@ import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
 import { listingIndexRemovalsForListing } from './trade-index.js';
 import {
+  mergeTradeGrantClear,
+  resolveClaimerAuthUid,
+} from './trade-grants.js';
+import {
   STAT_TYPES,
   buildLeaderboardSummaryPathsForChangedStats,
   playerLikeWithStatOverlay,
@@ -348,6 +352,7 @@ export function buildListingFulfillPlan({
     [`trades/listings/${listingId}/processingBy`]: null,
     [`trades/listings/${listingId}/processingAt`]: null,
     [`trades/listings/${listingId}/claimId`]: null,
+    [`trades/listings/${listingId}/claimerAuthUid`]: null,
     [`players/${accepterId}/lastListingAcceptAt`]: now,
     [`players/${ownerId}/progression/firstTrade`]: true,
     [`players/${accepterId}/progression/firstTrade`]: true,
@@ -357,6 +362,9 @@ export function buildListingFulfillPlan({
       groupId: resolvedGroupId,
     }),
   };
+
+  // S8c-1: clear claim-scoped foreign inventory grant in the same terminal multipath
+  mergeTradeGrantClear(updates, ownerId, resolveClaimerAuthUid());
 
   appendInventoryIncrementSwapPaths(updates, ownerId, offeredCardId, chosenCardId);
   appendInventoryIncrementSwapPaths(updates, accepterId, chosenCardId, offeredCardId);

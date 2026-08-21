@@ -569,6 +569,7 @@ API:
   qcPersonalAudit.workflowS8b()    // S8b Firebase Auth foundation
   qcPersonalAudit.workflowS8bPlusP0() // S8b+ P0 Trusted Teacher Functions
   qcPersonalAudit.workflowS8c0()   // S8c-0 client prep (foreign reads + admins registry)
+  qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules (await Console deploy)
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1813,17 +1814,17 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8a COMPLETE — honest docs, threat model, root matrix, snapshot
   S8b IMPLEMENTED — AWAITING VERIFICATION (see workflowS8b)
   S8b+ P0 IMPLEMENTED — AWAITING VERIFICATION (see workflowS8bPlusP0)
-  S8c-0 IMPLEMENTED — AWAITING VERIFICATION (see workflowS8c0)
-  S8c-1 NOT STARTED (tradeGrants + locked rules; Spark admins/{uid} authority)
+  S8c-0 COMPLETE + VERIFIED (see workflowS8c0)
+  S8c-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (see workflowS8c1)
   S8d NOT STARTED — privileged Admin / Functions; emergency-root reassess
 
-S8b migration preference (planning only):
+  S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
   Prefer one-time/manual reset over a large lazy dual-auth migration.
   New accounts → Auth native; long-term remove players/{u}.password after confidence.
-  Admin custom claims MUST exist before S8c rules use an admin claim.
+  Admin authority after S8c-1: admins/{authUid} registry (not custom claims alone).
 
-STOP: do not paste auth!=null rules; do not remove qc_force_root_loading in S8a.
+STOP: do not paste auth!=null rules from old theater samples; deploy only database.rules.json after S8c-1 verify checklist.
 Foreign-PTI readiness warnings = diagnostic noise (not index corruption).
 `);
 }
@@ -1878,9 +1879,8 @@ export function workflowS8c0() {
   console.info(`
 === S8c-0 Spark client prep (foreign reads + admins registry) ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION.
-S8c-1 (tradeGrants + locked database.rules.json) — NOT STARTED.
-RTDB rules still OPEN. Do not claim security until S8c-1.
+Status: COMPLETE + VERIFIED.
+S8c-1 (tradeGrants + locked database.rules.json) — see workflowS8c1().
 
 What changed:
   - Trading counterparties load trade-visible children only
@@ -1920,8 +1920,60 @@ Verification (rules still open):
   F) Promote/Demote: RTDB shows admins/{targetUid} true/null AND players/{u}.isAdmin mirror.
   G) Smoke: login, pack open, research claim, scoped load unaffected.
 
-Deferred: tradeGrants, rules deploy, Option C, Blaze/Functions.
+Deferred: Option C, Blaze/Functions, Auth production-default flip (after S8c-1 verify).
 Docs: docs/BEFORE_DISTRIBUTION.md
+`);
+}
+
+/**
+ * Pasteable S8c-1 status (tradeGrants + locked rules — NOT auto-deployed).
+ * Console paste is required before live enforcement.
+ */
+export function workflowS8c1() {
+  console.info(`
+=== S8c-1 tradeGrants + locked RTDB rules ===
+
+Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.
+Do NOT assume Console matches repo until you paste database.rules.json.
+Rollback artifact: database.rules.open-rollback.json
+
+What shipped (client + in-repo rules):
+  - claimerAuthUid stamped on direct/listing claim transactions
+  - tradeGrants/{target}/{claimerUid} CREATE just before terminal settle
+  - grant CLEAR on terminal success, release/fail, player-delete paths
+  - Foreign inventory: grant + exact ±1 (give −1 / recv +1) + nonnegative
+  - Locked database.rules.json: admins/{uid}, immutable authUid, private
+    password/activeSession, no student parent read of foreign player,
+    config/cards/packs/groups admin-only writes, accessCodes, trades,
+    tradeGrants, exact foreign inventory grant rule
+  - Foreign stats/LB/PTI tightening DEFERRED (S8c-2) — still broader auth writes
+
+Local simulator proof (already run in implement session):
+  npx firebase-tools emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
+  Proved: increment(±1) exact-delta PASS; fake grant FAIL; unrelated foreign FAIL;
+  honest direct + listing settlement PASS.
+
+BEFORE Console deploy (checklist):
+  1) Every classroom account that must play has players/{u}.authUid
+  2) Teacher(s) have admins/{authUid}: true (Console or Promote while open)
+  3) Firebase Auth Email/Password ON; qc_firebase_auth usable for settle test
+  4) Copy CURRENT Console rules to a safe note (or keep open-rollback file)
+  5) Paste repo database.rules.json into Console → Publish
+  6) Immediately run verification below
+  7) On failure: paste database.rules.open-rollback.json → Publish
+
+Live verification (Auth ON; throwaway test accounts preferred):
+  A) Honest direct trade completes; both inventories correct; grant gone after
+  B) Honest listing fulfill completes; inventories correct; grant gone after
+  C) Student cannot write players/{other}/inventory/{unrelatedCard}
+  D) Student cannot invent tradeGrants without live matching claim
+  E) Teacher Admin panel: config/cards still writable; student cannot
+  F) Register with unused access code still works
+  G) Self pack open / research still works (own inventory)
+  H) Peek grant during settle (optional diag): tradeGrants/{target}/{uid}
+
+Auth production-default flip: NOT in S8c-1 — do after this verification PASSes.
+S8c-2: foreign stats/LB grant binding — NOT STARTED.
 `);
 }
 
@@ -2104,6 +2156,7 @@ function _installWindowApi() {
     workflowS8b,
     workflowS8bPlusP0,
     workflowS8c0,
+    workflowS8c1,
     enableAudit,
     disableAudit,
     enableIsolation,

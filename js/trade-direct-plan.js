@@ -32,6 +32,11 @@ import {
   buildLeaderboardSummaryPathsForChangedStats,
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
+import {
+  clearTradeGrant,
+  mergeTradeGrantClear,
+  resolveClaimerAuthUid,
+} from './trade-grants.js';
 
 /** Dev-only localStorage gate. Absent/false → identical production behavior. */
 export const DIRECT_INVENTORY_DIAG_LS_KEY = 'qc-direct-inventory-diag';
@@ -466,6 +471,7 @@ export function buildDirectTradeAcceptPlan({
     [`trades/direct/${tradeId}/processingBy`]: null,
     [`trades/direct/${tradeId}/processingAt`]: null,
     [`trades/direct/${tradeId}/claimId`]: null,
+    [`trades/direct/${tradeId}/claimerAuthUid`]: null,
     [`players/${offeringPlayerId}/lastDirectTradeAt`]: now,
     [`players/${targetPlayerId}/lastDirectTradeAt`]: now,
     [`players/${offeringPlayerId}/progression/firstTrade`]: true,
@@ -476,6 +482,9 @@ export function buildDirectTradeAcceptPlan({
       targetPlayerId,
     }),
   };
+
+  // S8c-1: clear claim-scoped foreign inventory grant in the same terminal multipath
+  mergeTradeGrantClear(updates, targetPlayerId, resolveClaimerAuthUid());
 
   appendInventoryIncrementSwapPaths(updates, offeringPlayerId, offeredCardId, requestedCardId);
   appendInventoryIncrementSwapPaths(updates, targetPlayerId, requestedCardId, offeredCardId);
@@ -615,8 +624,14 @@ export async function markDirectTradeFailedIfProcessingOwned(
     [`trades/direct/${id}/processingBy`]: null,
     [`trades/direct/${id}/processingAt`]: null,
     [`trades/direct/${id}/claimId`]: null,
+    [`trades/direct/${id}/claimerAuthUid`]: null,
     ...directIndexRemovalsForTrade({ ...trade, id }),
   };
+  // S8c-1: clear grant on permanent post-claim failure
+  const grantUid = trade.claimerAuthUid || resolveClaimerAuthUid();
+  if (trade.targetPlayerId && grantUid) {
+    mergeTradeGrantClear(updates, trade.targetPlayerId, grantUid);
+  }
   const ack = await db.updateAcknowledged(updates);
   metrics.recordTradeIndexLifecycle({
     tag: 'direct-index-dual-write',
@@ -640,6 +655,10 @@ export async function markDirectTradeFailedIfProcessingOwned(
  * @returns {Promise<{ ok: boolean, released?: boolean, indexRestored?: boolean, error?: string }>}
  */
 export async function releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason) {
+  const preTrade = db.get(`trades/direct/${tradeId}`);
+  const grantTarget = preTrade?.targetPlayerId || null;
+  const grantUid = preTrade?.claimerAuthUid || resolveClaimerAuthUid();
+
   const release = await db.releaseDirectTradeClaimIfOwned(tradeId, claimId);
   if (!release.ok) {
     console.warn(`[Trading] Failed to release claim ${claimId} on ${tradeId}:`, release.error);
@@ -650,6 +669,9 @@ export async function releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason
   }
   const restored = release.trade || db.get(`trades/direct/${tradeId}`);
   if (!restored) {
+    if (grantTarget && grantUid) {
+      await clearTradeGrant(grantTarget, grantUid);
+    }
     return { ok: true, released: true, indexRestored: false, error: 'Trade missing after release' };
   }
   const restorePaths = directReleaseIndexRestorePaths({
@@ -657,6 +679,10 @@ export async function releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason
     id: restored.id || tradeId,
     status: 'awaiting_offerer_confirmation',
   });
+  // S8c-1: clear grant on release (same multipath when possible)
+  if (grantTarget && grantUid) {
+    mergeTradeGrantClear(restorePaths, grantTarget, grantUid);
+  }
   if (Object.keys(restorePaths).length === 0) {
     return { ok: true, released: true, indexRestored: true };
   }

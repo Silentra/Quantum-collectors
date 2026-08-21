@@ -38,6 +38,12 @@ import {
   buildCounterpartyAvailabilitySnapshot,
   buildTradingSelfAvailabilitySnapshot,
 } from './trade-availability.js';
+import {
+  createTradeGrant,
+  mergeTradeGrantClear,
+  resolveClaimerAuthUid,
+  clearTradeGrant,
+} from './trade-grants.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -92,11 +98,18 @@ export function getListingAcceptCooldownMinutes() {
 }
 
 async function _releaseOwnedClaim(listingId, claimId, reason) {
+  const pre = db.get(`trades/listings/${listingId}`);
+  const grantTarget = pre?.ownerId || null;
+  const grantUid = pre?.claimerAuthUid || resolveClaimerAuthUid();
+
   const release = await db.releaseListingClaimIfOwned(listingId, claimId);
   if (!release.ok) {
     console.warn(`[Listings] Failed to release claim ${claimId} on ${listingId}:`, release.error);
   } else if (release.released && isDetailedLogging()) {
     console.log(`[Listings][DETAIL] Released claim ${claimId} on ${listingId} (${reason})`);
+  }
+  if (release.released && grantTarget && grantUid) {
+    await clearTradeGrant(grantTarget, grantUid);
   }
   return release;
 }
@@ -347,10 +360,12 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   }
 
   // ── 1. Server claim: active → processing ──────────────────────────────────
+  const claimerAuthUid = resolveClaimerAuthUid();
   const claim = await db.claimListingIfActive(listingId, {
     accepterId,
     chosenCardId,
     claimId,
+    claimerAuthUid,
     now,
   });
 
@@ -563,6 +578,43 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
       giveLeafPaths: plan.giveLeafPaths || null,
       note: 'Relative increments; no absolute planned-after inventory authority',
     });
+  }
+
+  // ── 3b. S8c-1: CREATE tradeGrant immediately before terminal fulfill ───────
+  const grantUid = claimerAuthUid
+    || claim.listing?.claimerAuthUid
+    || resolveClaimerAuthUid();
+  if (!grantUid) {
+    await _releaseOwnedClaimAndRestoreIndex(listingId, claimId, 'CLAIMER_AUTH_UID_MISSING');
+    return { success: false, reason: 'CLAIMER_AUTH_UID_MISSING' };
+  }
+  const grantCreate = await createTradeGrant({
+    targetUsername: ownerId,
+    claimerUid: grantUid,
+    tradeKind: 'listing',
+    tradeId: listingId,
+    claimId,
+    claimerUsername: accepterId,
+    giveCardId: offeredCardId,
+    recvCardId: chosenCardId,
+    now: Date.now(),
+  });
+  if (!grantCreate.ok) {
+    console.warn('[Listings] tradeGrant create failed; releasing claim.', grantCreate.error);
+    await _releaseOwnedClaimAndRestoreIndex(
+      listingId,
+      claimId,
+      grantCreate.error || 'TRADE_GRANT_CREATE_FAILED',
+    );
+    return {
+      success: false,
+      reason: 'TRADE_GRANT_CREATE_FAILED',
+      error: grantCreate.error,
+    };
+  }
+  if (plan.updates) {
+    mergeTradeGrantClear(plan.updates, ownerId, grantUid);
+    plan.updates[`trades/listings/${listingId}/claimerAuthUid`] = null;
   }
 
   // ── 4. Commit fulfill; recover safely on ack error (never replay increments) ─

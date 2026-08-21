@@ -1446,7 +1446,7 @@ export async function getAcknowledged(path) {
  * Speculative Firebase null must not abort (return null → server reconcile/retry).
  * Claim win requires committed + status processing + matching claimId.
  * @param {string} listingId
- * @param {{ accepterId: string, chosenCardId: string, claimId: string, now?: number }} claim
+ * @param {{ accepterId: string, chosenCardId: string, claimId: string, claimerAuthUid?: string, now?: number }} claim
  * @returns {Promise<{ ok: boolean, claimed: boolean, listing?: object|null, reason?: string, mode: string, error?: string }>}
  */
 export async function claimListingIfActive(listingId, claim) {
@@ -1474,7 +1474,7 @@ export async function claimListingIfActive(listingId, claim) {
     if (!current || typeof current !== 'object') return;
     if (current.status !== 'active') return;
     if (current.expiresAt && now > current.expiresAt) return;
-    return {
+    const next = {
       ...current,
       id: current.id || listingId,
       status: 'processing',
@@ -1483,6 +1483,11 @@ export async function claimListingIfActive(listingId, claim) {
       claimId: claim.claimId,
       fulfilledCardId: claim.chosenCardId,
     };
+    // S8c-1: stamp claimer Auth uid for tradeGrants / rules (processingBy stays username)
+    if (claim.claimerAuthUid) {
+      next.claimerAuthUid = String(claim.claimerAuthUid);
+    }
+    return next;
   };
 
   if (!_useFirebase || !_fbDb) {
@@ -1580,6 +1585,7 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
     delete next.processingBy;
     delete next.processingAt;
     delete next.claimId;
+    delete next.claimerAuthUid;
     // Keep fulfilledCardId cleared on release — it was set as chosen during claim
     delete next.fulfilledCardId;
     return next;
@@ -1636,7 +1642,7 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
  * Speculative Firebase null must not abort (return null → server reconcile/retry).
  * Claim win requires committed + status processing + matching claimId.
  * @param {string} tradeId
- * @param {{ processingBy: string, claimId: string, now?: number }} claim
+ * @param {{ processingBy: string, claimId: string, claimerAuthUid?: string, now?: number }} claim
  * @returns {Promise<{ ok: boolean, claimed: boolean, trade?: object|null, reason?: string, mode: string, error?: string }>}
  */
 export async function claimDirectTradeIfAwaiting(tradeId, claim) {
@@ -1661,7 +1667,7 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
     }
     if (!current || typeof current !== 'object') return;
     if (current.status !== 'awaiting_offerer_confirmation') return;
-    return {
+    const next = {
       ...current,
       id: current.id || tradeId,
       status: 'processing',
@@ -1669,6 +1675,11 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
       processingAt: now,
       claimId: claim.claimId,
     };
+    // S8c-1: stamp claimer Auth uid for tradeGrants / rules (processingBy stays username)
+    if (claim.claimerAuthUid) {
+      next.claimerAuthUid = String(claim.claimerAuthUid);
+    }
+    return next;
   };
 
   if (!_useFirebase || !_fbDb) {
@@ -1772,6 +1783,7 @@ export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
     delete next.processingBy;
     delete next.processingAt;
     delete next.claimId;
+    delete next.claimerAuthUid;
     return next;
   };
 

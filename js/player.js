@@ -14,6 +14,7 @@ import {
   listOwnedProcessingListingClaims,
   PLAYER_TRADE_INDEX_ROOT,
 } from './trade-index.js';
+import { TRADE_GRANTS_ROOT, clearTradeGrant } from './trade-grants.js';
 import {
   buildLeaderboardGroupProjectionPaths,
   buildLeaderboardSummaryDeletePaths,
@@ -203,9 +204,16 @@ export async function deletePlayer(username) {
   let claimReleases = 0;
   const processingClaims = listOwnedProcessingListingClaims(playerKey);
   for (const { listingId, claimId } of processingClaims) {
+    const listing = db.get(`trades/listings/${listingId}`);
+    const grantUid = listing?.claimerAuthUid || null;
     const release = await db.releaseListingClaimIfOwned(listingId, claimId);
-    if (release.ok && release.released) claimReleases += 1;
-    else {
+    if (release.ok && release.released) {
+      claimReleases += 1;
+      // S8c-1: clear grant tied to this processing claim (owner = deleted player)
+      if (grantUid) {
+        await clearTradeGrant(playerKey, grantUid);
+      }
+    } else {
       console.warn(
         `[Player] Could not release processing claim on listing ${listingId} before delete; ` +
           'continuing with cancel+clear in multi-path.',
@@ -221,6 +229,8 @@ export async function deletePlayer(username) {
     ...tradeCleanup,
     [`players/${playerKey}`]: null,
     [`playerDirectory/${playerKey}`]: null,
+    // S8c-1: drop any grants targeting this player
+    [`${TRADE_GRANTS_ROOT}/${playerKey}`]: null,
     ...buildLeaderboardSummaryDeletePaths(playerKey),
   };
 

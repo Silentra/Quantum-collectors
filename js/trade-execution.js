@@ -38,6 +38,11 @@ import {
   buildTradingSelfAvailabilitySnapshot,
 } from './trade-availability.js';
 import { getSession } from './auth.js';
+import {
+  createTradeGrant,
+  mergeTradeGrantClear,
+  resolveClaimerAuthUid,
+} from './trade-grants.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -410,6 +415,7 @@ export async function executeDirectTrade(trade) {
 
   const processingBy = me || resolvedOffering;
   const claimId = _newClaimId(processingBy);
+  const claimerAuthUid = resolveClaimerAuthUid();
   if (diag) {
     diag.claimId = claimId;
   }
@@ -419,6 +425,7 @@ export async function executeDirectTrade(trade) {
   const claim = await db.claimDirectTradeIfAwaiting(tradeId, {
     processingBy,
     claimId,
+    claimerAuthUid,
     now: claimNow,
   });
 
@@ -628,6 +635,39 @@ export async function executeDirectTrade(trade) {
       giveLeafPaths: plan.giveLeafPaths || null,
       note: 'Relative increments; no absolute planned-after inventory authority',
     });
+  }
+
+  // ── 5b. S8c-1: CREATE tradeGrant immediately before terminal commit ────────
+  const grantUid = claimerAuthUid
+    || claim.trade?.claimerAuthUid
+    || resolveClaimerAuthUid();
+  if (!grantUid) {
+    return await failTradeIfProcessingOwned(tradeId, claimId, 'CLAIMER_AUTH_UID_MISSING', diag);
+  }
+  const grantCreate = await createTradeGrant({
+    targetUsername: resolvedTarget,
+    claimerUid: grantUid,
+    tradeKind: 'direct',
+    tradeId,
+    claimId,
+    claimerUsername: processingBy,
+    giveCardId: resolvedRequestedId,
+    recvCardId: resolvedOfferedId,
+    now: Date.now(),
+  });
+  if (!grantCreate.ok) {
+    console.warn('[Trading] tradeGrant create failed; releasing claim.', grantCreate.error);
+    return await releaseAfterTransient(
+      tradeId,
+      claimId,
+      grantCreate.error || 'TRADE_GRANT_CREATE_FAILED',
+      diag,
+    );
+  }
+  // Ensure terminal multipath clears the grant even if plan was built without uid
+  if (plan.updates) {
+    mergeTradeGrantClear(plan.updates, resolvedTarget, grantUid);
+    plan.updates[`trades/direct/${tradeId}/claimerAuthUid`] = null;
   }
 
   // ── 6. Lock (UX) + terminal updateAcknowledged under owned claim ───────────

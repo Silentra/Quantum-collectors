@@ -988,6 +988,11 @@ export function buildPlayerDeleteTradeCleanupUpdates(playerKey, now = Date.now()
     updates[`trades/direct/${id}/respondedAt`] = trade.respondedAt != null ? trade.respondedAt : now;
     updates[`trades/direct/${id}/cancellationReason`] = 'player_deleted';
 
+    // S8c-1: clear claim-scoped grant when cancelling a processing direct involving this player
+    if (trade.status === 'processing' && trade.claimerAuthUid && trade.targetPlayerId) {
+      updates[`tradeGrants/${trade.targetPlayerId}/${trade.claimerAuthUid}`] = null;
+    }
+
     const other =
       trade.offeringPlayerId === key
         ? trade.targetPlayerId
@@ -1008,7 +1013,11 @@ export function buildPlayerDeleteTradeCleanupUpdates(playerKey, now = Date.now()
     updates[`trades/listings/${id}/processingBy`] = null;
     updates[`trades/listings/${id}/processingAt`] = null;
     updates[`trades/listings/${id}/claimId`] = null;
+    updates[`trades/listings/${id}/claimerAuthUid`] = null;
     updates[`trades/listings/${id}/fulfilledCardId`] = null;
+    if (listing.status === 'processing' && listing.claimerAuthUid) {
+      updates[`tradeGrants/${key}/${listing.claimerAuthUid}`] = null;
+    }
     if (listing.groupId && id) {
       updates[`${LISTINGS_BY_GROUP_ROOT}/${listing.groupId}/${id}`] = null;
     }
