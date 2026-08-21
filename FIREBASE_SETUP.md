@@ -30,31 +30,102 @@ const firebaseConfig = {
 1. Firebase Console > **Build** > **Realtime Database**
 2. Click **Create Database**
 3. Choose a location close to your users
-4. Start in **test mode** (we'll lock it down later)
+4. Start in **test mode** (lockdown is a later S8 track — see below)
 
-## 4. Enable Authentication
+## 4. Authentication (current vs future)
 
-1. Firebase Console > **Build** > **Authentication**
-2. Click **Get started**
-3. Enable **Email/Password** provider
-4. (Optional) Disable "Email link" — not needed
+### Current (live app)
+
+**S8b Firebase Auth foundation — IMPLEMENTED — AWAITING VERIFICATION.** Default remains legacy RTDB hashes until `localStorage.qc_firebase_auth='true'`. With the flag on, Firebase Auth is authoritative (synthetic `{username}@scicards.local`). Legacy RTDB username/password hashes still exist for rollback:
+
+- Player passwords: SHA-256 hash at `players/{username}.password` ([`js/auth.js`](js/auth.js))
+- Session: `localStorage` `scicards_session` + RTDB `players/{username}/activeSession`
+- Admin: plaintext `config.adminPassword` and/or `players/{u}.isAdmin` (client-enforced only)
+- Scripts loaded: `firebase-app` + `firebase-database` + `firebase-auth` (Auth used only when `qc_firebase_auth=true`)
+
+Client session / scoped loading / `qc_force_root_loading` are **invisible to security rules**.
+
+### S8b (Auth foundation)
+
+### S8b feature flag + migration
+
+```js
+localStorage.setItem('qc_firebase_auth','true'); location.reload();  // Auth ON
+localStorage.removeItem('qc_firebase_auth'); location.reload();       // legacy rollback
+```
+
+Trusted local Admin script (migrate bobby / teacher, set password, set `admin:true` claim):
+[`scripts/s8b-auth-admin.mjs`](scripts/s8b-auth-admin.mjs) — see [`scripts/README-S8b-auth.md`](scripts/README-S8b-auth.md).
+
+Enable **Email/Password** in Firebase Console Authentication before turning the flag on.
+In-game Admin “Reset Password” is disabled while Auth is on (use the script temporarily).
+Do **not** deploy authorization rules in S8b. `__admin__` / `config.adminPassword` remain.
+
+Pasteable: `qcPersonalAudit.workflowS8b()`
+
+### Future (S8c+ — not implemented)
+
+Firebase Auth is layered under the same username/password UX when `qc_firebase_auth` is enabled. Enable Email/Password in Console before Auth-on testing. S8a docs unchanged; S8b is the Auth wiring slice.
+
+Authoritative S8 plan: [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md) §8.
 
 ## 5. Security Rules
 
-### Development Rules (open access for testing)
+**Console is the source of truth for what is deployed.** In-repo snapshot: [`database.rules.json`](database.rules.json) (live classroom rules only).
 
-In Firebase Console > Realtime Database > Rules:
+### Classroom / development rules (currently live) — S8a snapshot
+
+Open read/write for the classroom custom-auth model, plus a **data-integrity** invariant on inventory quantity leaves (not authorization):
 
 ```json
 {
   "rules": {
     ".read": true,
-    ".write": true
+    ".write": true,
+    "players": {
+      "$username": {
+        "inventory": {
+          "$cardId": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          }
+        }
+      }
+    }
   }
 }
 ```
 
-### Production Rules (recommended)
+- **Integrity (now):** inventory card leaves must be numeric and `>= 0`. Deletes/`null` skip `.validate` and remain legal. Supports Hybrid C+ Gate A (`ServerValue.increment` cannot drive a leaf below 0 without rejecting the whole multi-path write).
+- **Authorization:** **not** enforced. Anyone with the public web config can read/write the database (except writing negative inventory numbers).
+- **S8a:** docs + this snapshot only. No authz tighten.
+- **S8b:** Firebase Auth client wiring + flag (does **not** change these open rules).
+
+### Live Gate A Firebase proofs (Console + DevTools)
+
+1. `2 → 1` via `ServerValue.increment(-1)` — PASS  
+2. `1 → 0` via `increment(-1)` — PASS  
+3. `0 → -1` — PERMISSION_DENIED; value remained `0` — PASS  
+4. Multi-path `increment(-1)` from `0` + sibling literal — entire update rejected; sibling remained null — PASS  
+
+### What rules cannot do today (without Firebase Auth)
+
+| Goal | Enforceable now? |
+|------|------------------|
+| Per-user write ownership | **No** |
+| Hide other players’ private fields | **No** (open `.read`) |
+| Admin-only `config` / promote | **No** |
+| Protect `activeSession` / access codes | **No** |
+| Inventory qty `>= 0` | **Yes** (`.validate`) |
+
+Path samples that “look tight” without `auth` are **security theater**. True lockdown needs Firebase Auth (or Admin SDK / Cloud Functions) — **S8b → S8c**, separate approvals.
+
+### Aspirational Auth-gated sample — NOT LIVE / NOT DEPLOY
+
+The historical sample below assumed Firebase Auth and is **incomplete** (omits `playerDirectory`, `playerTradeIndex`, `listingsByGroup`, `tradeIndexMeta`, `leaderboards`, seasons/snapshots). It is also **too weak** (`auth != null` alone does not bind writes to `$username`) and would break anonymous register / Admin bulk under current clients.
+
+**Do not paste into Console** until S8b Auth + Admin custom-claim provisioning exist and S8c is separately approved.
+
+Kept only as a reminder that earlier docs overstated Auth readiness:
 
 ```json
 {
@@ -68,83 +139,44 @@ In Firebase Console > Realtime Database > Rules:
         ".read": true,
         ".write": "auth != null"
       }
-    },
-    "cards": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "packs": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "groups": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "accessCodes": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "admin": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "trades": {
-      ".read": "auth != null",
-      ".write": "auth != null"
-    },
-    "achievements": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "quests": {
-      ".read": true,
-      ".write": "auth != null"
-    },
-    "seasonal": {
-      ".read": true,
-      ".write": "auth != null"
     }
   }
 }
 ```
 
-## 6. Database Structure
+**Ordering (S8b → S8c):** trusted Admin SDK / custom-claim provisioning must exist **before** S8c rules rely on an admin claim. Do not use RTDB `isAdmin` alone as the rules admin check (attacker can set it under open writes).
 
-Once running, your Realtime Database will have this shape:
+## 6. Database Structure (live roots)
 
 ```
 /
-├── config/            # Game settings (odds, economy, etc.)
-├── players/           # Player profiles keyed by username
-│   └── {username}/
-│       ├── inventory/ # cardId -> quantity
-│       ├── packs/     # packId -> quantity
-│       └── stats/     # packsOpened, cardsCollected, etc.
-├── cards/             # Card definitions keyed by cardId
-├── packs/             # Pack type definitions keyed by packId
-├── groups/            # Group hierarchy keyed by groupId
-├── accessCodes/       # Registration codes keyed by code string
-└── admin/             # Admin action log
+├── config/                 # Game settings; adminPassword (plaintext today)
+├── players/                # Profiles keyed by username (password hash, inventory, …)
+├── cards/ / packs/ / groups/
+├── accessCodes/            # Registration codes
+├── trades/                 # Canonical direct/ + listings/
+├── playerDirectory/        # Derived public-ish directory (no passwords)
+├── playerTradeIndex/       # Per-user trade projections
+├── listingsByGroup/        # Group marketplace projections
+├── tradeIndexMeta/
+├── leaderboards/           # Live summary rankings
+├── leaderboardSeasons/ / leaderboardSnapshots/
+└── admin/                  # Legacy stub (largely unused)
 ```
 
-## 7. How It Works
+Production boot loads **scoped** paths (not full `/`) unless `localStorage.qc_force_root_loading='true'`.
 
-- **database.js** maintains an in-memory cache for instant synchronous reads
-- On startup, the full DB is loaded from Firebase once
-- A real-time listener keeps the cache in sync with Firebase changes
-- Writes update both cache (instant) and Firebase (fire-and-forget)
-- If Firebase is unreachable, falls back to localStorage transparently
-- **auth.js** maps usernames to Firebase Auth emails (`{username}@scicards.local`)
-- Firebase Auth handles session persistence across refreshes
+## 7. How It Works (current)
+
+- [`js/database.js`](js/database.js) maintains an in-memory cache for synchronous reads
+- Production default: scoped hydration (sharedDefs + `players/{me}` + tab scopes); emergency root via `qc_force_root_loading`
+- Writes update cache and Firebase; acknowledged paths used where required for races
+- If Firebase is unreachable / unconfigured, falls back to localStorage
+- [`js/auth.js`](js/auth.js): **custom RTDB auth only** — does **not** map usernames to Firebase Auth emails
 
 ## 8. Fallback Behavior
 
-If `firebase-config.js` still has placeholder keys (`YOUR_API_KEY`), the entire system falls back to localStorage — identical behavior to the original. This means:
-
-- You can develop and test locally without Firebase
-- Just update the config when you're ready to go live
-- No code changes needed — the same build works both ways
+If `firebase-config.js` still has placeholder keys (`YOUR_API_KEY`), the system falls back to localStorage — identical local behavior.
 
 ## 9. Verify It Works
 
@@ -152,3 +184,4 @@ If `firebase-config.js` still has placeholder keys (`YOUR_API_KEY`), the entire 
 2. Look for: `[DB] Firebase Realtime Database connected`
 3. If you see: `[DB] Using localStorage fallback` — check your config
 4. Open Firebase Console > Realtime Database to see data appearing in real time
+5. Security posture smoke: `qcPersonalAudit.workflowS8a()`

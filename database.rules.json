@@ -1,0 +1,15 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "players": {
+      "$username": {
+        "inventory": {
+          "$cardId": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          }
+        }
+      }
+    }
+  }
+}

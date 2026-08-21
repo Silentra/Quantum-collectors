@@ -9,7 +9,8 @@ style.css            - Custom styles (cards, tabs, toasts, animations)
 main.js              - Entry point, async init (DB → sharedDefs hydrate → Auth → Config → Seed → UI)
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
 docs/
-  DATABASE_SCOPING_ROADMAP.md - Authoritative remaining S5–S8 scoped-loading roadmap (source of truth)
+  DATABASE_SCOPING_ROADMAP.md - Authoritative roadmap (S5–S7 verified; S8a complete; S8b–S8d remaining)
+database.rules.json  - Live classroom RTDB rules snapshot (open R/W + inventory >=0 validate; Console SoT)
 js/
   firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
   db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 currentPlayer; S5b Admin directory + selected-player; S5c-C playerTradeIndex; S5c-D1 Trading tradeDirectory)
@@ -18,7 +19,7 @@ js/
   trade-index.js     - S5c-A/B trade index schema, dual-writes, drift/rebuild, shadowCompare (Trading readers still canonical through S5c-C)
   database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; root listener legacy safety net)
   config.js          - Centralized live config (reads from /config DB node)
-  auth.js            - Username/password auth via RTDB (SHA-256 hashed passwords, no Firebase Auth)
+  auth.js            - Username/password UX; legacy RTDB hashes OR Firebase Auth when qc_firebase_auth=true
   admin.js           - Admin foundation: isAdmin(username), getPlayer, setPlayerData, listPlayers
   player.js          - Player CRUD, inventory, packs, stats
   cards.js           - Card DB, CRUD, seed data (40 starter science cards), Phase 3 schema
@@ -214,9 +215,11 @@ Canonical resolver for player-facing card images. **No per-card paths in Firebas
 
 **Slug normalization** (`normalizeCardArtSlug(name)`): NFD + strip diacritics → lowercase → remove apostrophes/quotes → non-alphanumeric runs to `-` → trim hyphens. Asset names follow **display name**, not `cardId`.
 
-**Render integration**: `card-render.js` `buildCardRenderModel()` calls `resolveCardArt()`; `renderCardContent()` uses `renderCardDetailArtHtml()`. Research mini cards use `renderMiniCardArtHtml()` from `project-ui.js`. `initCardArtFallback()` in `main.js` registers a silent capture-phase `error` handler: failed `<img data-card-art-fallback="1">` → emoji (no console noise, no broken icon).
+**Render integration**: `card-render.js` `buildCardRenderModel()` calls `resolveCardArt()`; `renderCardContent()` uses `renderCardDetailArtHtml()`. Research mini cards use `renderMiniCardArtHtml()` from `project-ui.js`. `initCardArtFallback()` in `main.js` registers a silent capture-phase `error` handler: failed `<img data-card-art-fallback="1">` → emoji immediately, then **one** same-URL retry after ~500ms (no cache-bust); restore art if retry succeeds; otherwise keep emoji. Max one retry per rendered image; stale/replaced nodes are ignored. Dev diag: `localStorage.qc_card_art_diag='true'`.
 
-**Non-goals**: preload, manifests, build-time registries, storing resolved URLs in DB.
+**Card-art transient retry hardening — COMPLETE + VERIFIED.** Smoke: `qcPersonalAudit.workflowCardArtRetry()`; recovery proof: `await qcCardArtDiag.simulateTransientFailure()` (requires `qc_card_art_diag`).
+
+**Non-goals**: preload, manifests, build-time registries, storing resolved URLs in DB, service workers, HEAD probes.
 
 **Export spec (content)**: WebP **400×500** (4:5) ideal, **512px** max longest edge, **75–82** quality; top-weighted composition for `object-position: center top`. Drop files into `assets/scientists/` and `assets/concepts/` — no DB migration per card.
 
@@ -495,9 +498,9 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 ### Scoped loading / database hydration (roadmap)
 
-**Source of truth for remaining work (S5c-D through S8):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
+**Source of truth for remaining work (S8b–S8d):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
 
-Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped classroom default flip — IMPLEMENTED — AWAITING VERIFICATION:** production default = scoped (`reason: production-default`); emergency root via `qc_force_root_loading=true` + reload; persist follows boot latch; `config/firebase/scopedLoadingEnabled` diagnostic only; deprecated `qc_scoped_loading` ignored for boot. **S8** not started. Historical phase notes below (S1–S7) describe what landed; do not treat unfinished S8 as next automatic work.
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped trade action hydration fix — COMPLETE + VERIFIED.** **Scoped claim null-safety fix — COMPLETE + VERIFIED.** **Scoped classroom default flip — COMPLETE + VERIFIED.** Production default = scoped; emergency root via `qc_force_root_loading`. **Card-art transient retry hardening — COMPLETE + VERIFIED.** **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b Firebase Auth foundation — IMPLEMENTED — AWAITING VERIFICATION** (`qc_firebase_auth` flag; `{u}@scicards.local`; rules still open). **S8b–S8d** not started (separate approvals; Auth before authz; Admin custom claims before S8c). Foreign-PTI readiness warnings = diagnostic noise. Historical phase notes below (S1–S7) describe what landed.
 
 **Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
 
@@ -605,7 +608,7 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase S7d — Final evidence matrix (closure)
 
-**Status: COMPLETE + VERIFIED.** **S7 overall COMPLETE + VERIFIED.** Classroom default flip is a separate slice (below). Do not begin S8 until separately approved.
+**Status: COMPLETE + VERIFIED.** **S7 overall COMPLETE + VERIFIED.** Classroom default flip is a separate slice (below) — **COMPLETE + VERIFIED**. **S8a COMPLETE**; do not begin S8b until separately approved.
 
 **Scope:** docs + pasteable evidence workflow (`workflowS7d()` / `workflowS7()`). Auth scoped-hydration fix (login/register once-load before cache existence checks) verified as part of D3/D4.
 
@@ -616,14 +619,14 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 **Dual-mode at S7 closure (historical):** default was still **root-on**; scoped opt-in via `qc_scoped_loading` — superseded by classroom default flip.
 
 **Non-blocking follow-ups (not S7 blockers):**
-- Recurring low-severity card-art HTTP **503** (isolated; reload + emoji fallback OK) — hosting/asset delivery observation.
+- Recurring low-severity card-art HTTP **503** (GitHub Pages): emoji fallback + **one** delayed same-URL retry — **Card-art transient retry hardening — COMPLETE + VERIFIED**.
 - **Unique Cards correctness repair — COMPLETE + VERIFIED** (enabled-catalog compute; manual repair ran; orphans retained; orphan cleanup / pack hygiene deferred).
 
-**Known limitations:** Admin bulk repair `getChildren('players')` under scoped may be incomplete without dedicated hydrates; S6c deferred.
+**Known limitations:** Admin bulk repair `getChildren('players')` under scoped may be incomplete without dedicated hydrates; S6c deferred. Foreign-PTI readiness warnings = diagnostic noise (not index corruption).
 
 ### Phase — Scoped classroom default flip
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Do not begin S8.
+**Status: COMPLETE + VERIFIED.** Production-default scoped gameplay fully playable; subsequent scoped trade/listing hydration and RTDB speculative-null claim defects fixed and verified.
 
 **Boot authority (reload-latched):**
 1. `localStorage.qc_force_root_loading === 'true'` → `mode: root`, `reason: emergency-override`
@@ -640,7 +643,25 @@ localStorage.setItem('qc_force_root_loading', 'true'); location.reload();
 localStorage.removeItem('qc_force_root_loading'); location.reload();
 ```
 
-**Diagnostics:** `qcDbHydration.getBootModeReport()` / `qcPersonalAudit.workflowClassroomDefaultFlip()`. S7c fail-closed still via `isScopedOnlyMode()`.
+**Diagnostics:** `qcDbHydration.getBootModeReport()` / `qcPersonalAudit.workflowClassroomDefaultFlip()`. S7c fail-closed still via `isScopedOnlyMode()`. Keep emergency root through S8a–S8c.
+
+### Phase — Scoped trade/listing canonical-by-ID hydration
+
+**Status: COMPLETE + VERIFIED.** Cold Accept/Cancel (listing) and Respond/Cancel/Confirm paths no longer false-`NOT_FOUND` under scoped cold cache.
+
+Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings/{id}` via `loadDirectTradeByIdOnce` / `loadListingByIdOnce` ([`js/trade-availability.js`](js/trade-availability.js)) before cache existence gates. No bare trees, no subscriptions, Gate B/C claim/increment unchanged.
+
+### Phase — Scoped RTDB claim null-safety
+
+**Status: COMPLETE + VERIFIED.** Cold Listing Accept: hydrate → `sawSpeculativeNull:true` → claim committed → fulfill OK; cold Direct Confirm claim OK; same-listing race one winner; missing IDs not found; emergency root-on claim regression OK. No bare trade-tree fallback reintroduced.
+
+[`claimListingIfActive`](js/database.js) / [`claimDirectTradeIfAwaiting`](js/database.js): speculative Firebase `null` returns `null` (reconcile/retry), not `undefined` (abort). Claim win only when `committed` and result `status==='processing'` and `claimId` matches.
+
+### Phase — S8a Rules docs + live snapshot
+
+**Status: COMPLETE.** Honest security model docs; threat model; root access matrix; in-repo [`database.rules.json`](database.rules.json) mirroring live open + inventory `.validate`. No Firebase Auth. No authorization tighten. Pasteable: `qcPersonalAudit.workflowS8a()`. Next: **S8b** (separate approval). Long-term: Auth owns passwords; tiny/manual preserve of bobby (+ optional teacher/bobby2); Admin custom claims before S8c.
+
+**Next:** S8b only when separately approved. Do not deploy authz rules. Do not replay Gate B/C or full S7d unless execution paths change.
 
 ### Phase S6e — Final isolation audits
 
@@ -872,7 +893,7 @@ Live Firebase proofs:
 3. `0 → -1` rejected (`PERMISSION_DENIED`); remained `0` — PASS  
 4. Multi-path reject: invalid increment + sibling literal — sibling not written — PASS  
 
-Classroom RTDB rules (Console SoT): open `.read`/`.write` plus `players/$username/inventory/$cardId` `.validate` numeric `>= 0` (data integrity; **not** S8 authorization).
+Classroom RTDB rules (Console SoT; repo mirror [`database.rules.json`](database.rules.json)): open `.read`/`.write` plus `players/$username/inventory/$cardId` `.validate` numeric `>= 0` (data integrity; **not** authorization). **S8a COMPLETE** (docs/snapshot). Authz requires S8b→S8c.
 
 App changes in Gate A:
 
