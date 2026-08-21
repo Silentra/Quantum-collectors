@@ -1141,8 +1141,8 @@ export async function resetPlayerPassword(username, newPassword) {
     return {
       success: false,
       error:
-        'Firebase Auth is on — in-game RTDB hash reset is disabled. '
-        'Use scripts/s8b-auth-admin.mjs set-password (or Firebase Console). '
+        'Firebase Auth is on — in-game RTDB hash reset is disabled. ' +
+        'Use scripts/s8b-auth-admin.mjs set-password (or Firebase Console). ' +
         'Teacher in-app Auth reset (claim-verified Admin SDK) is the next classroom step after S8b verification.',
     };
   }
