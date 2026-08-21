@@ -348,6 +348,104 @@ async function main() {
     await assertFails(get(ref(anon.database(), 'playerDirectory/bobby10')));
     pass('unauthenticated playerDirectory leaf read denied');
 
+    // --- Registration multipath (Auth-first; mirrors js/auth.js register update) ---
+    const registrant = testEnv.authenticatedContext('bobby10Uid');
+    const regNow = Date.now();
+    const regPlayer = {
+      username: 'bobby10',
+      authUid: 'bobby10Uid',
+      createdAt: regNow,
+      lastLogin: regNow,
+      isAdmin: false,
+      group: null,
+      subgroup: null,
+      inventory: { starterA: 1, starterB: 2 },
+      packs: {},
+      stats: { packsOpened: 0, cardsCollected: 3, tradesCompleted: 0, projectsCompleted: 0 },
+      badges: {},
+      achievements: {},
+      progression: { tutorialComplete: false, firstTrade: false },
+      activeSession: { id: 'sess-reg-1', issuedAt: regNow },
+    };
+    await assertSucceeds(
+      update(ref(registrant.database()), {
+        'players/bobby10': regPlayer,
+        'accessCodes/ABC123': {
+          used: true,
+          usedBy: 'bobby10',
+          usedAt: regNow,
+          created: now,
+          group: null,
+        },
+        'playerDirectory/bobby10': {
+          username: 'bobby10',
+          groupId: null,
+          subgroupId: null,
+          isAdmin: false,
+          isTradeRestricted: false,
+          isTradeProfileHidden: false,
+        },
+        'playerTradeIndex/bobby10/_meta': {
+          schemaVersion: 1,
+          rebuiltAt: regNow,
+        },
+        'leaderboards/tradesCompleted/bobby10': {
+          username: 'bobby10',
+          score: 0,
+          updatedAt: regNow,
+        },
+      }),
+    );
+    pass('honest Auth registration multipath allowed');
+
+    // No legacy password hash on Auth-native create
+    const created = await get(ref(registrant.database(), 'players/bobby10'));
+    if (created.val() && Object.prototype.hasOwnProperty.call(created.val(), 'password')) {
+      fail('registration wrote unexpected password field');
+    } else {
+      pass('Auth registration omitted password hash');
+    }
+
+    // Arbitrary create must bind authUid to auth.uid; foreign uid denied
+    await assertFails(
+      update(ref(registrant.database()), {
+        'players/victim': {
+          username: 'victim',
+          authUid: 'notBobby10Uid',
+          isAdmin: false,
+          inventory: { x: 1 },
+        },
+      }),
+    );
+    pass('cannot create player with foreign authUid');
+
+    // Cannot overwrite an existing player
+    await assertFails(
+      update(ref(registrant.database()), {
+        'players/offerer': {
+          username: 'offerer',
+          authUid: 'bobby10Uid',
+          isAdmin: false,
+          inventory: { x: 99 },
+        },
+      }),
+    );
+    pass('cannot overwrite existing foreign player on register-shaped write');
+
+    // Used access code cannot be consumed again
+    await assertFails(
+      update(ref(offerer.database()), {
+        'accessCodes/ABC123': {
+          used: true,
+          usedBy: 'offerer',
+          usedAt: regNow,
+          created: now,
+          group: null,
+        },
+      }),
+    );
+    pass('already-used access code consume denied');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
