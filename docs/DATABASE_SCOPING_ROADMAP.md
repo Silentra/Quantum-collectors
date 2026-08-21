@@ -1,8 +1,8 @@
 # Database Scoping Roadmap (S5–S8)
 
-**Status:** Authoritative roadmap for remaining scoped Firebase loading work.  
-**Verified baseline:** S5c-C (Research reservation cutover). S5c-D is not started.  
-**Constraints:** Canonical `trades/*` remain execution authority. Missing/unverified reservation indexes must never mean zero reservations. The root `/` listener remains the intentional safety net until an evidence-gated S7 cutover. Prefer the smallest safe continuation from the verified architecture.
+**Status:** Authoritative roadmap for remaining Firebase work after scoped loading.  
+**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **IMPLEMENTED — AWAITING VERIFICATION**. **S8c–S8d** not started.  
+**Constraints:** Canonical `trades/*` remain execution authority. Missing/unverified reservation indexes must never mean zero reservations. Prefer the smallest safe continuation from the verified architecture.
 
 This document supersedes the historical S1–S8 investigation plan for **remaining** work. Completed phases below are recorded for reconciliation; implementation PRs must still list every file created/modified/deleted and every new named import/export.
 
@@ -12,7 +12,7 @@ Related code: [`js/database.js`](../js/database.js), [`js/db-hydration.js`](../j
 
 ## 1. Executive status
 
-Infrastructure and derived schemas through **S5c-C** are live beside the legacy root `/` listener. Admin browsing and Research reservations no longer require full `players` / `trades/*` runtime scans. Trading and live Leaderboards still do.
+Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the legacy root `/` listener. Admin browsing, Research, Trading, and live Leaderboards no longer require full `players` / `trades/*` runtime scans for their cutover consumers.
 
 | Area | Status |
 |------|--------|
@@ -22,32 +22,61 @@ Infrastructure and derived schemas through **S5c-C** are live beside the legacy 
 | S5c-A trade indexes + rebuild/drift | COMPLETE + VERIFIED |
 | S5c-B lifecycle dual-writes + `shadowCompare` | COMPLETE + VERIFIED |
 | S5c-C Research → verified `playerTradeIndex/{me}` | COMPLETE + VERIFIED |
-| S5c-D Trading consumer cutover | **NOT STARTED** (prior attempt discarded; do not recover it) |
-| Leaderboard summaries / live LB cutover | NOT STARTED |
-| Root listener removal / scoped-only mode | NOT STARTED (intentionally retained) |
-| Firebase rules tightening | NOT STARTED (docs-only samples; custom RTDB auth) |
+| S5c-D1 Trading `playerDirectory` hydration ownership | COMPLETE + VERIFIED |
+| S5c-D2 Direct trade picker → `playerDirectory` | COMPLETE + VERIFIED |
+| S5c-D3 Pending directs + duplicate → PTI direct | COMPLETE + VERIFIED |
+| S5c-D4 My Listings + create max-count → PTI listings | COMPLETE + VERIFIED |
+| S5c-D5a acceptListing soft-expire index parity | COMPLETE + VERIFIED |
+| S5c-D5b Available Listings → `listingsByGroup` | COMPLETE + VERIFIED |
+| S5c-D5 Trading discovery + soft-expire (umbrella) | COMPLETE + VERIFIED |
+| S5c-D6 Trading self-reservations → PTI | COMPLETE + VERIFIED |
+| S5c-D7a Counterparty once-loads + foreign PTI reservations | COMPLETE + VERIFIED |
+| S5c-D7b Expiry finalization (no student full-tree scan) | COMPLETE + VERIFIED |
+| S5c-D7c Isolation audit + multi-browser cutover proofs | **COMPLETE + VERIFIED** |
+| S5c-D7 / S5c-D (Trading cutover umbrella) | **COMPLETE + VERIFIED** |
+| Hybrid C+ Gate A (inventory ≥0 rules + ack sentinel safety) | **COMPLETE + VERIFIED** |
+| Hybrid C+ Gate B (direct claim + relative inventory) | **COMPLETE + VERIFIED** |
+| Hybrid C+ Gate C (listing claim + relative inventory fulfill) | **COMPLETE + VERIFIED** |
+| Leaderboard summaries / live LB cutover (S5d) | **COMPLETE + VERIFIED** |
+| S6a accessCodes register/bootstrap once-load | **COMPLETE + VERIFIED** |
+| S6b logout / forced-exit personal cache clear | **COMPLETE + VERIFIED** |
+| S6c dead-code cleanup | **OPTIONAL / DEFERRED** (intentionally skipped) |
+| S6d persist-allowlist prep | **COMPLETE + VERIFIED** |
+| S6e final isolation audits | **COMPLETE + VERIFIED** |
+| S6 overall (consumers/polish) | **COMPLETE + VERIFIED** (S6c deferred, not a blocker) |
+| S7a persist enforce + sanitize-on-load | **COMPLETE + VERIFIED** |
+| S7b dual-mode root skip | **COMPLETE + VERIFIED** |
+| S7c fail-closed + Admin access + LB archives | **COMPLETE + VERIFIED** |
+| S7d final evidence matrix | **COMPLETE + VERIFIED** |
+| S7 overall | **COMPLETE + VERIFIED** |
+| Classroom default flip of scoped mode | **COMPLETE + VERIFIED** |
+| Scoped trade/listing canonical-by-ID hydration | **COMPLETE + VERIFIED** |
+| Scoped RTDB claim null-safety | **COMPLETE + VERIFIED** |
+| Card-art transient retry hardening | **COMPLETE + VERIFIED** |
+| Root listener / emergency root | Production default scoped; `qc_force_root_loading` → root once+on (keep through S8c) |
+| S8a rules docs + live snapshot | **COMPLETE** (no authz deploy; no Firebase Auth) |
+| S8b Firebase Auth under username UX | **IMPLEMENTED — AWAITING VERIFICATION** |
+| S8c authorization rules cutover | BLOCKED on S8b + Admin custom-claim provisioning |
+| S8d privileged Admin path / Functions | NOT STARTED (after S8b) |
 
-**What remains:** finish Trading cutover in narrow subphases → leaderboard derived summaries (after a fresh planning pass) → remaining tab/lifecycle polish → evidence-gated root disable → rules docs/cutover.
+**What remains:** **S8b → S8c → S8d** (separate approvals). Scoping architecture is done. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
-  subgraph done [Verified through S5c-C]
-    S1[S1 primitives]
-    S5a[S5a directory]
-    S5b[S5b Admin]
-    S5cABC[S5c-A/B/C indexes + Research]
+  subgraph done [Verified]
+    S5to7[S5cD through S7 + flip]
+    S8a[S8a docs snapshot]
   end
-  subgraph next [Next]
-    S5cD[S5c-D Trading cutover]
-    S5d[S5d Leaderboard summaries]
-    S6[S6 Remaining consumers + polish]
-    S7[S7 Root-off gates]
-    S8[S8 Rules]
+  subgraph next [Separate approvals]
+    S8b[S8b Firebase Auth]
+    S8c[S8c authz rules]
+    S8d[S8d Admin Functions]
   end
-  done --> S5cD --> S5d --> S6 --> S7 --> S8
+  S5to7 --> S8a --> S8b --> S8c
+  S8b --> S8d
 ```
 
-**Next implementation phase after this document is committed:** **S5c-D1** (Trading hydration ownership APIs + Trading-owned `playerDirectory` subscription only — no reader cutover, no `listingsByGroup` acquire).
+**Next:** Verify S8b (`qcPersonalAudit.workflowS8b()`), then approve **S8c** separately. Do not deploy authorization rules before Auth + Admin claims. Do not begin S8c/S8d until approved.
 
 ---
 
@@ -59,19 +88,20 @@ flowchart LR
 | S2 sharedDefs hydrate | COMPLETE + VERIFIED | `db-hydration.js` + `main.js`; `accessCodes` excluded | Keep |
 | S3 `players/{me}` + session guard | COMPLETE + VERIFIED | Auth-owned scope; guard via in-process `onValue` + descendant notify | Keep |
 | S4 personal-tab audit | COMPLETE but superseded/refined | `db-read-audit.js`; `KNOWN_SCOPED_BLOCKERS` empty; Projects blocker remediated in S5c-C | Keep audit tooling |
-| Original “S5 = directory + trade indexes + LB summaries” | PARTIALLY COMPLETE | Directory + trade indexes done; LB summaries not started | Split: S5a–S5c-* done; **S5d = LB** (fresh plan first) |
-| Original “S6 = Trading/LB/Admin consumers + tab lifecycle” | PARTIALLY COMPLETE | Admin S5b; Research S5c-C; Trading not; LB not | Trading → **S5c-D\***; LB → **S5d**; residual → **S6** |
-| Player picker → directory | NOT STARTED (runtime) | `trade-ui.js` `_renderPlayerPicker` → `getAllPlayers()` | **S5c-D2** |
-| Own directs / listings index readers | Writers COMPLETE; Trading readers NOT | Dual-write in `trade-index.js`; Trading still canonical queries | **S5c-D3/D4** |
-| `listingsByGroup` readers | Writers COMPLETE; readers NOT | Written on lifecycle; hydration deferred | **S5c-D5** (after soft-expire fix) |
-| Trading reservations via index | NOT STARTED | Trading uses canonical `buildAvailabilitySnapshot` defaults | **S5c-D6** |
-| Counterparty once-loads | NOT STARTED | Cache `db.get(players/{other})` only | **S5c-D7** |
-| LB `leaderboards/{stat}/{user}` | NOT STARTED | Live boards still scan `players` | **S5d** (design direction only until re-planned) |
-| Tab enter/leave hydrate helpers | PARTIALLY COMPLETE | Admin enter/cleanup exists; Trading cleanup is timer-only | **S5c-D1** + **S6** |
-| Scoped persist allowlist | NOT STARTED | Full `scicards_db` persist remains | **S6/S7** |
+| Original “S5 = directory + trade indexes + LB summaries” | COMPLETE | Directory + trade indexes + LB summaries verified | Split: S5a–S5c-* + **S5d** all **COMPLETE + VERIFIED** |
+| Original “S6 = Trading/LB/Admin consumers + tab lifecycle” | PARTIALLY COMPLETE | Admin/Research/Trading/LB cutovers landed in S5*; residual polish remains | Residual → **S6** |
+| Player picker → directory | COMPLETE + VERIFIED | Trading-owned `playerDirectory` | Keep |
+| Own directs pending + duplicate | COMPLETE + VERIFIED | `playerTradeIndex/{me}/direct` | Keep |
+| Own listings My Listings + max-active | COMPLETE + VERIFIED | `playerTradeIndex/{me}/listings` | Keep |
+| `listingsByGroup` readers | COMPLETE + VERIFIED | Trading-owned hydrate + `getVisibleListings` cutover | Keep |
+| Trading reservations via index | COMPLETE + VERIFIED | `buildTradingSelfAvailabilitySnapshot` → verified PTI | **S5c-D6** |
+| Counterparty once-loads | COMPLETE + VERIFIED | `loadTradingCounterpartyContext` → `players/{other}` + PTI | **S5c-D7a** |
+| LB `leaderboards/{statKey}/{user}` | COMPLETE + VERIFIED | Live boards read Firebase-safe summary keys (no student `players` scan) | **S5d** |
+| Tab enter/leave hydrate helpers | PARTIALLY COMPLETE | Admin + Trading directory + listingsByGroup enter/cleanup done | **S6** residual |
+| Scoped persist allowlist | **S6d** + **S7a** COMPLETE + VERIFIED | Filter ON under production scoped or `qc_persist_enforce` | Classroom default flip: persist follows boot latch |
 | Bundled cards hybrid (S2b) | NO LONGER NEEDED as blocker | Shared once-load works | Out of critical path |
 | Dual-mode flag disables root | Flag prep only | Does not cut over today | **S7** |
-| S8 rules + Auth limits | NOT STARTED | `FIREBASE_SETUP.md` samples omit directory/indexes | **S8** |
+| S8 rules + Auth limits | **S8a COMPLETE**; S8b–S8d not started | Live snapshot in `database.rules.json`; Auth still required for authz | **S8 SPLIT** |
 | Exact RTDB query vs `listingsByGroup` | RESOLVED | Chose denormalized `listingsByGroup` | Preserve; do not reopen |
 | Directory `displayName` | NO LONGER NEEDED | Username is key; no displayName field | Closed |
 | Group vs groupId for directory | COMPLETE + VERIFIED | Directory uses `groupId` / `subgroupId` | Closed for directory |
@@ -89,14 +119,14 @@ Framing: almost all “full-tree reads” are **in-memory cache scans**. Network
 | Path | Caller | Reason | Frequency | Replacement | Phase |
 |------|--------|--------|-----------|-------------|-------|
 | `/` once+on | `database.js` `initDB` | Legacy hydrate/live sync | Session + continuous | Per-scope load/subscribe only | S7 (after gates) |
-| `players` | `trade-ui.js` → `getAllPlayers` | Direct trade picker | Trading renders | Trading-owned `playerDirectory` | S5c-D2 |
-| `trades/direct` | `trading.js` `getPendingTrades` | Pending UI + timer | Trading open / ~5s | `playerTradeIndex/{me}/direct` | S5c-D3 |
-| `trades/direct` | `trading.js` `createTradeOffer` duplicate scan | Duplicate pending | Per offer | Same PTI direct leaves | S5c-D3 |
-| `trades/listings` | `getMyActiveListings` / create max-count | My listings | Trading renders | `playerTradeIndex/{me}/listings` | S5c-D4 |
-| `trades/listings` | `getVisibleListings` | Group browse | Trading renders | `listingsByGroup/{groupId}` | S5c-D5 |
-| `trades/listings` | `expireStaleListings` | Global expire | Tab enter + ~5s | Narrow strategy (D5 retain canonical temporarily → D7 finalize) | S5c-D5/D7 |
-| `trades/direct` + `listings` | `buildTradeReservationCounts` defaults | Trading validation/UI locks | Many Trading call sites | Verified PTI maps (Research pattern) | S5c-D6 |
-| `players` | `leaderboard-queries.js` `_buildPlayerEntries` | Live boards | LB tab | Derived leaderboard summaries | S5d |
+| `players` (picker) | ~~`getAllPlayers`~~ → `playerDirectory` | Direct trade picker | Trading renders | Trusted Trading `playerDirectory` | **S5c-D2 COMPLETE + VERIFIED** |
+| `trades/direct` | `getPendingTrades` / duplicate | Pending UI + duplicate | Trading open / create | `playerTradeIndex/{me}/direct` | **S5c-D3 COMPLETE + VERIFIED** |
+| `trades/listings` | `getMyActiveListings` / create max-count | My listings | Trading renders | `playerTradeIndex/{me}/listings` | **S5c-D4 COMPLETE + VERIFIED** |
+| `trades/listings` | `getVisibleListings` | Group browse | Trading renders | `listingsByGroup/{groupId}` | **S5c-D5b COMPLETE + VERIFIED** |
+| `trades/listings` | `expireStaleListings` | Global expire | Admin/dev repair only | Student → scoped known-ID + wall-clock | **S5c-D7b COMPLETE + VERIFIED** |
+| `trades/direct` + `listings` | `buildTradeReservationCounts` defaults | Trading self validation/UI locks | Migrated self callers | Verified PTI maps (`buildTradingSelfAvailabilitySnapshot`) | **S5c-D6 COMPLETE + VERIFIED** |
+| `players/{other}` + bare reservation trees | Counterparty validate | respond/confirm/accept | Action-time | `loadTradingCounterpartyContext` + foreign PTI maps | **S5c-D7a COMPLETE + VERIFIED** |
+| `players` | ~~`_buildPlayerEntries`~~ → summary reads | Live boards | LB tab | `leaderboards/{statKey}/{user}` | **S5d COMPLETE + VERIFIED** |
 
 ### Expected to remain
 
@@ -108,11 +138,11 @@ Per-id `trades/direct/{id}`, `trades/listings/{id}`, canonical listing **claim t
 
 ### Dead / unwired (cleanup later)
 
-`admin.js` (zero imports), unused `research.js` top-N / bulk migrate helpers at startup, deprecated unused `getMyActiveListing` import in trade-ui.
+`admin.js` (zero imports), unused `research.js` top-N / bulk migrate helpers at startup.
 
 ### Known correctness debt
 
-`acceptListing` soft-expire updates canonical status via `db.update` **without** `listingIndexRemovalsForListing` (`trade-listings.js`). Can leave stale index leaves. **Must be repaired and verified in S5c-D5 before switching visible-listing discovery to `listingsByGroup`.**
+`acceptListing` soft-expire dual-write **COMPLETE + VERIFIED** (D5a). Manual proof: `acceptListing` returned `LISTING_EXPIRED`; canonical expired; owner PTI + group leaves removed; `shadowCompare(owner).match === true`; `expireStaleListings` did not win the race.
 
 ---
 
@@ -121,10 +151,10 @@ Per-id `trades/direct/{id}`, `trades/listings/{id}`, canonical listing **claim t
 | Phase | Goal | Stoppable valid state |
 |-------|------|------------------------|
 | **S5c-D1…D7** | Trading cutover in narrow commits | After each Di, Trading works; root still safety net; reservations never silently zero |
-| **S5d** | Leaderboard summary work — **begins with a fresh investigation/planning pass** | Live LB no longer scans `players` (after approved S5d plan + implementation) |
-| **S6** | Remaining consumers/polish: accessCodes scoped register load, logout foreign-cache clear, dead-code cleanup, persist-allowlist prep, audits green under isolation | App still has root |
+| **S5d** | Leaderboard live summaries | Live LB no longer scans `players` — **COMPLETE + VERIFIED** |
+| **S6** | Remaining consumers/polish: accessCodes scoped register load, logout foreign-cache clear, dead-code cleanup, persist-allowlist prep, audits green under isolation | **COMPLETE + VERIFIED** (S6c deferred); app still has root |
 | **S7** | Evidence-gated disable of root listener | Scoped-only mode; emergency re-enable root |
-| **S8** | Rules documentation + realistic tightening under custom auth limits | Defense-in-depth; Auth/Admin SDK called out as true enforcement |
+| **S8** | **SPLIT:** S8a docs/integrity → S8b Auth → S8c authz rules → S8d privileged Admin | S8a stoppable with open rules; true lockdown needs Auth |
 
 Do **not** remove root merely because indexes exist. Do **not** disable Trading canonical fallback until D6/D7 gates pass.
 
@@ -137,128 +167,211 @@ Self-reservations use `playerTradeIndex/{me}` only (same as Research). `listings
 
 ### S5c-D1 — Trading hydration ownership + `playerDirectory` subscribe (no reader cutover)
 
-- **Goal:** Implement Trading hydration ownership APIs and wire enter/leave lifecycle. The **only new observable Trading Firebase subscription** in this phase is **`playerDirectory`**. Do **not** acquire `listingsByGroup/{groupId}` in D1 (deferred to D5 unless a later investigation proves D1 cannot work without it — current investigation does not).
-- **Functions:** extend `renderTrading` / `cleanupTrading`; add Trading ensure/release helpers in `db-hydration.js`; wire from `ui.js` tab switch.
-- **Files:** `db-hydration.js`, `trade-ui.js`, `ui.js` (thin), optionally `db-read-audit.js` workflow stub.
-- **Reads before/after:** unchanged (canonical). Picker still uses `getAllPlayers` until D2.
-- **Hydration ownership:**
-  - Trading-owned `playerDirectory` once + subscribe (refCount 1 for Trading; **must not** share Admin’s directory subscription).
-  - Auth `playerTradeIndex/{me}` remains auth-owned — Trading reuses cache, does not second-subscribe.
-  - `listingsByGroup` APIs may be stubbed/named for later, but **must not subscribe** in D1.
-- **Fallback:** N/A for readers.
-- **Failure:** directory ensure failure → surface error/retry for Trading shell; do not wipe trades; root still feeds cache; do not fall back to weakening reservation policy.
-- **Verification tests:** enter Trading → registry shows Trading `playerDirectory` (and auth scopes); leave → Trading directory released; Admin directory exclusivity preserved; PTI refCount stays 1; no `listingsByGroup` subscription; gameplay/trading behavior unchanged.
-- **Completion gate:** commit when registry lifecycle is stable, only new Trading sub is `playerDirectory`, and there is no reader/behavior cutover.
+**Status: COMPLETE + VERIFIED**
+
+Manual verification passed: baseline auth pair ×1; Trading adds `playerDirectory` ×1; rerenders/sub-tabs/timer keep refCount 1; leave releases Trading directory only; Admin↔Trading sole ownership; `__admin__` never acquires; no `listingsByGroup`; gameplay and root unchanged.
 
 ### S5c-D2 — Direct player picker → `playerDirectory`
 
-- **Goal:** Replace `getAllPlayers()` in `_renderPlayerPicker` only.
-- **Functions:** `_renderPlayerPicker`; Trading directory read helper; same-group / restricted / hidden filters as today.
-- **Files:** `trade-ui.js`, possibly `player-directory.js` helper; uses D1 hydration.
-- **Reads:** before full `players` scan; after `playerDirectory` children (Trading scope).
-- **Hydration:** Trading-owned `playerDirectory` from D1.
-- **Fallback:** if directory unready → empty picker + rebuild guidance / retry — **not** silent `getAllPlayers` fallback.
-- **Failure:** cannot pick targets until ready; no reservation impact.
-- **Verification tests:** same-group peers appear; hidden/restricted filtered; Admin + Trading both open without shared-sub errors; create offer still works (foreign `players/{target}` may still be root-fed until D7).
-- **Completion gate:** picker never calls `getAllPlayers`.
+**Status: COMPLETE + VERIFIED**
+
+Manual verification passed: picker reads `playerDirectory` only; no bare `players` / `players/{other}` for options; audit observed directory reads; remaining `trades/*` hits expected from later consumers; filtering/reactive/form/canonical create/D1 ownership correct.
 
 ### S5c-D3 — Pending directs + duplicate check → PTI direct
 
-- **Goal:** `getPendingTrades` + duplicate-offer scan read `playerTradeIndex/{me}/direct` when verified.
-- **Functions:** `getPendingTrades`, `createTradeOffer` duplicate loop; UI refresh/timer unchanged.
-- **Files:** `trading.js`, light `trade-ui.js` if needed; metrics/audit.
-- **Reads:** before full `trades/direct`; after PTI direct leaves (actions still per-id canonical).
-- **Hydration:** reuse auth PTI (already session-long).
-- **Fallback:** under root coexistence, prefer explicit `canonical-fallback` when index unready (mirror Research); never treat missing/unverified index as “no pending ⇒ safe.” Under isolation without fallback → fail-closed.
-- **Failure:** fail-closed under isolation; do not invent empty trusted pending state that hides real reservations.
-- **Verification tests:** incoming/outgoing parity vs canonical; duplicate offer still blocked; cancel/respond/confirm unaffected; `shadowCompare` clean for user.
-- **Completion gate:** Trading pending path audit shows no full `trades/direct` when index verified.
+**Status: COMPLETE + VERIFIED**
+
+Manual verification passed: pending discovery and duplicate checks use verified `playerTradeIndex/{me}/direct`; healthy verified-index path performs no full `trades/direct` read; untrusted ≠ empty; actions remain canonical per-id; PTI refCount 1; listing consumers still expected to scan `trades/listings` until D4+.
 
 ### S5c-D4 — My Listings + create max-count → PTI listings
 
-- **Goal:** Owner listing queries use `playerTradeIndex/{me}/listings`.
-- **Functions:** `getMyActiveListings`, `_validateCreateListing` active count; cancel/accept still canonical per-id.
-- **Files:** `trade-listings.js`, `trade-ui.js` as needed.
-- **Reads:** before full `trades/listings` for owner views; after PTI listings.
-- **Hydration:** auth PTI.
-- **Fallback:** same readiness policy as D3.
-- **Verification tests:** multi-listing display; max-active enforcement; create/cancel refresh; Research last-copy still locks.
-- **Completion gate:** My Listings path does not full-scan listings when index verified.
+**Status: COMPLETE + VERIFIED**
 
-### S5c-D5 — Soft-expire index repair, then Available listings → `listingsByGroup`
+Manual verification passed: My Listings + max-active use verified `playerTradeIndex/{me}/listings`; healthy path no full `trades/listings` for those consumers; untrusted ≠ zero; create fail-closed; PTI refCount 1; Available / expire / reservations still canonical until D5b+.
 
-- **Goal:** (1) **First** repair and verify the `acceptListing` soft-expire canonical/index lifecycle gap; (2) **then** switch visible-listing discovery to `listingsByGroup/{groupId}` and acquire the Trading `listingsByGroup` subscription.
-- **Order inside D5 (mandatory):**
-  1. Fix soft-expire path to acknowledged multi-path update including `listingIndexRemovalsForListing` (parity with `expireStaleListings`).
-  2. Manually verify soft-expire clears owner + group index leaves (and does not leave stale browsable group entries).
-  3. Only after that gate: activate Trading-owned `listingsByGroup/{myGroup}` hydrate/subscribe; rewrite `getVisibleListings` to the group index.
-- **Functions:** `acceptListing` expire branch; `getVisibleListings`; Trading `listingsByGroup` ensure/release in `db-hydration.js` / `cleanupTrading`.
-- **Files:** `trade-listings.js`, `db-hydration.js`, `trade-ui.js`, `trade-index.js` if helper needed.
-- **Reads:** discovery before full listings → after group index once cutover begins; **`expireStaleListings` may still scan canonical** this phase (explicit temporary while root exists).
-- **Hydration:** first Trading acquire of `listingsByGroup/{myGroup}` (enter/leave with Trading tab).
-- **Fallback:** unready group meta → empty discovery + retry (or documented canonical-fallback under root for discovery only). Discovery empty is acceptable; reservation correctness is D6.
-- **Failure:** claim transaction remains exclusivity authority; do not treat unready group index as authoritative for claim.
-- **Verification tests:** soft-expire dual-write fix proven; visible listings match group; claim removes from group index; processing not browsable; soft-expired listings disappear from index-backed discovery.
-- **Completion gate:** soft-expire repair verified **and** Available listings no longer full-scan when group index ready; expireStaleListings debt documented for D7.
+### S5c-D5a — acceptListing soft-expire index parity
+
+**Status: COMPLETE + VERIFIED**
+
+Manual verification passed (branch-specific): `acceptListing` returned `LISTING_EXPIRED`; canonical `status` expired; owner `playerTradeIndex/{owner}/listings/{id}` removed; `listingsByGroup/{groupId}/{id}` removed; `shadowCompare(owner).match === true`; normal `expireStaleListings` sweep did not win the race.
+
+### S5c-D5b — Available listings → `listingsByGroup`
+
+**Status: COMPLETE + VERIFIED**
+
+Manual verification passed: Trading owns `listingsByGroup/{g}` while open; healthy `getVisibleListings` uses group index; untrusted ≠ empty; Accept remains canonical per-id; PTI refCount 1; `expireStaleListings` still may full-scan (D7 debt).
+
+### S5c-D5 — umbrella
+
+**Status: COMPLETE + VERIFIED** (D5a + D5b)
 
 ### S5c-D6 — Trading self-reservations → verified PTI
 
-- **Goal:** Trading UI + self validation use index-backed maps (mirror Research), without weakening reservation safety.
-- **Functions:** `buildTradingAvailabilitySnapshot` (or shared resolver with surface tag); switch trade-ui + self-side validators; counterparty snapshots may remain canonical until D7.
-- **Files:** `trade-availability.js`, `trading.js` / `trade-listings.js` validation call sites, `trade-ui.js`, metrics.
-- **Reads:** self reservations before dual full trees → PTI maps when verified.
-- **Hydration:** auth PTI + `tradeIndexMeta` readiness (already).
-- **Fallback:** `canonical-fallback` under root coexistence; `unavailable` / `loading` → `reservationsTrusted: false` and **block** offer/accept/create (fail-closed); never empty trusted counts.
-- **Failure:** fail-closed; missing index ≠ zero reservations.
-- **Verification tests:** last-copy offer/listing blocked; Research + Trading agree; isolation fail-closed; metrics fallback/failClosed counters.
-- **Completion gate:** verified-index Trading self path does not default-scan `trades/*` for reservations.
+**Status: COMPLETE + VERIFIED**
 
-### S5c-D7 — Counterparty once-loads, expiry finalization, audit, cutover verification
+- **API:** `buildTradingSelfAvailabilitySnapshot` (self-only); shared PTI counting with Research; fail-closed untrusted.
+- Counterparty / `expireStaleListings` left for D7a/D7b.
 
-- **Goal:** Accept/respond/confirm work without relying on root-fed foreign players; finalize expiry so normal Trading runtime need not scan all listings; ship S5c-D audit workflow; prove listing claim robustness.
-- **Functions:** `loadPathOnce` for `players/{other}` (and if needed once `playerTradeIndex/{other}` for counterparty reservation checks); expiry policy finalization (expire-on-read / accept-path / Admin sweep — not student full-tree forever); reactive refresh may stay timer-based on indexes; `workflowS5cD`.
-- **Files:** `trading.js`, `trade-listing-execution.js`, `trade-listings.js`, `db-hydration.js`, `db-read-audit.js`, and docs updates as needed.
-- **Reads before/after:** foreign player dependence on root → scoped once-load under action; expiry full scan removed or Admin-only.
-- **Hydration:** action-scoped once-loads; no permanent subscribe to other players.
-- **Fallback:** if counterparty once-load fails → abort action (do not invent inventories).
-- **Mandatory completion gates (verification tests):**
-  1. Listing-accept **happy path** (end-to-end success) — previously deferred; **required** for S5c-D pass.
-  2. **Two-browser listing-claim race** — exactly one winner; loser fails cleanly; indexes/canonical agree — previously deferred; **required**.
-  3. **Browser-close-after-claim** processing / fail-closed behavior — if practical in the test environment: claim reaches `processing`, accepter disconnects/closes before fulfill completes, and the system leaves a recoverable/fail-closed state (no silent double-fulfill; release/restore or explicit failed/processing handling as designed). If impractical to automate, document a manual script and execute it once before calling D7 complete.
-  4. Two-browser direct respond/confirm still correct; logout clears Trading scopes; Trading normal runtime no longer requires full `players` / `trades/direct` / `trades/listings` cache scans (root may still run as safety net).
-- **Completion gate:** all mandatory tests above pass; S5c-D audit workflow documented and green under the agreed isolation/fallback policy.
+### S5c-D7a — Counterparty once-loads + foreign PTI reservations
+
+**Status: COMPLETE + VERIFIED**
+
+### S5c-D7b — Expiry finalization
+
+**Status: COMPLETE + VERIFIED**
+
+### S5c-D7c — Isolation audit + multi-browser cutover proofs
+
+**Status: COMPLETE + VERIFIED** (closes **S5c-D7** + **S5c-D**)
+
+- Final isolation **G** PASS under `qc-personal-scope-audit` + `qc-personal-cache-isolation`; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare trees; no healthy canonical-fallback.
+- B/C/D gameplay + `shadowCompare` credited from Gate B/C relative-inventory verification (not replayed).
+
+### Hybrid C+ Gate A — Rules proof + sentinel-safe infrastructure
+
+**Status: COMPLETE + VERIFIED**
+
+Live Firebase proofs (classroom rules + DevTools):
+
+1. `ServerValue.increment(-1)`: `2 → 1` — PASS  
+2. `1 → 0` — PASS  
+3. `0 → -1` — PERMISSION_DENIED; remained `0` — PASS  
+4. Multi-path invalid increment + sibling literal — entire update rejected; sibling null — PASS  
+
+Code:
+
+- Classroom rules: open `.read`/`.write` + inventory leaf `.validate` numeric `>= 0` (integrity, not S8 authz). Console is source of truth.
+- `updateAcknowledged`: never `applyLocalOnly` raw `{ ".sv": ... }` sentinels; returns `transformedPaths`.
+- `getInventory`: positive numeric quantities only.
+- **Ownership invariant:** inventory ownership = `Number(quantity) > 0`. Missing leaf and quantity `0` are equivalent for ownership. Zero-leaf deletion is optional storage hygiene.
+
+### Hybrid C+ Gate B — Direct claim + relative inventory
+
+**Status: COMPLETE + VERIFIED**
+
+- Direct: claim → `processing` → terminal multi-path with `ServerValue.increment(±1)` on four inventory leaves (no absolute card qtys) + `accepted` + index removals + cooldowns/stats literals.
+- Recovery: claim lost → stale; permanent post-claim validation → fail; transient → release; terminal fail → never replay increments; reread accepted → success; still-owned processing → release or `WRITE_UNCERTAIN`.
+- Optional best-effort give-leaf hygiene after success (`clearInventoryLeafIfNonPositive`); failure must not undo accept. **Not** a Gate B correctness requirement — raw leaf `0` is acceptable.
+- Diagnostics: `localStorage qc-direct-inventory-diag=true` — claim won/lost, deltas, recovery, post-ack observed qtys.
+
+### Hybrid C+ Gate C — Listing relative inventory fulfill
+
+**Status: COMPLETE + VERIFIED**
+
+- Existing listing claim (`active` → `processing`) + D5a soft-expire + PTI/group index transition unchanged.
+- Terminal fulfill: four inventory leaves as `ServerValue.increment(±1)` only (no absolute card qtys) + `fulfilled` + claim clears + index removals + cooldown/stats literals.
+- Recovered success: literal-only local patch (never raw `.sv`). Terminal reject → release when still owned processing; conservative `PERMISSION_DENIED` classify.
+- Optional best-effort give-leaf hygiene (`clearInventoryLeafIfNonPositive`); not a Gate C correctness requirement. Raw leaf `0` is acceptable.
+- Availability helpers: `getUnavailableCardIds` / DevTools parity ignore zero-only inventory keys.
+- Diagnostics: `localStorage qc-listing-inventory-diag=true` (**watch the accepter tab** that clicks Accept).
+- Verification A–I passed under relative inventory; D7c scoped-read smoke included.
 
 ---
 
 ## 6. S5d and later architecture
 
-### S5d — Leaderboard summaries (design direction only)
+### S5d — Leaderboard summaries (live boards)
 
-**S5d begins with a fresh investigation/planning pass before any implementation.** The notes below are **design direction** from the original roadmap and current inventory — **not** an implementation specification. Do not treat field shapes, writer lists, or hydration details here as locked until that planning pass revises and approves them against the then-current repository.
+**Status: COMPLETE + VERIFIED**
 
-**Today:** Live boards scan all `players` (`leaderboard-queries.js` `_buildPlayerEntries`). Archived seasons / snapshots are already entry-shaped.
-
-**Directional ideas to re-evaluate in the S5d planning pass:**
-
-- Derived summary nodes (historically sketched as `leaderboards/{statType}/{usernameKey}` with score + group fields + `updatedAt`)
-- Writers piggybacked on existing acknowledged mutation plans vs rebuild jobs
-- Group filters via projected `groupId` / `subgroupId` (directory remains identity/group projection — scores should not bloat `playerDirectory`)
-- Tab-scoped hydration for live boards; seasons/snapshots largely unchanged
-- Admin season rotate / snapshot may remain explicit bulk operations
-
-**Sequence:** S5d planning → approved S5d plan doc/section update → implementation. S5d must not start until S5c-D is complete unless a later decision explicitly parallelizes planning-only work.
+- Live student boards read `leaderboards/{statKey}/{username}` = `{ value, groupId, subgroupId, updatedAt }` via centralized [`leaderboard-summaries.js`](../js/leaderboard-summaries.js).
+- `statKey` is Firebase-safe (`packsOpened`, …); `playerPath` remains nested (`stats.packsOpened`, …). Single canonical map in summaries module.
+- No student live `getChildren('players')` fallback. Archived seasons / snapshots unchanged. Admin rotate/snapshot may still bulk-scan players.
+- Tab-owned whole-root `leaderboards` subscribe while Leaderboard is mounted; **must release on leave/logout**. Auth/session `players/{me}` ×1 and `playerTradeIndex/{me}` ×1 are expected and are **not** Leaderboard lifecycle leaks.
+- Writers piggyback into existing multi-path plans / grant helpers; `rebuildLeaderboardSummaries()` is admin/dev repair.
+- Verification passed: safe-key rebuild; seven values match sources; live ranking; mount/release; incremental RP + nested packs writer; group projection across all seven; archived regression; no foreign player subs; no student live full `players` scan.
 
 ### S6 — Remaining consumers and polish
 
-accessCodes register-only scoped load; logout foreign-player cache clear; dead-code cleanup; persist-allowlist prep; personal + Trading + LB isolation audits PASS while root still on.
+**Status: COMPLETE + VERIFIED** (S6a–S6e; **S6c** intentionally deferred, not a blocker). Root remains on until S7.
 
-### S7 — Root-off
+#### S6a — accessCodes register/bootstrap once-load
 
-Evidence-gated disable of root listener via existing flag prep (`qc_scoped_loading` / `config/firebase/scopedLoadingEnabled`). Dual-mode: exactly one fan-in authority.
+**Status: COMPLETE + VERIFIED**
 
-### S8 — Rules
+- Register: scoped `loadPathOnce('accessCodes/{code}')` via `loadAccessCodeOnce` before validate; fail-closed on load failure; **no** subscribe.
+- Bootstrap seed: `bootstrapAccessCodesOnce()` once-loads whole `accessCodes` then generates only if empty.
+- Login: no accessCodes dependency.
+- Admin bulk access-code UI unchanged (root coexistence OK for S6a).
+- Root listener remains ON.
+- Verification passed: no accessCodes subscription; valid/invalid/used register; login unaffected; load report leaf path; isolation audit `unexpectedTotal===0`, `hardViolations===0`.
 
-Sample rules + docs for directory/indexes/leaderboards; honest documentation of custom-auth limits; Firebase Auth / Admin SDK as true enforcement follow-on.
+#### S6b — Logout / forced-exit personal cache clear
+
+**Status: COMPLETE + VERIFIED**
+
+- After scope release on `logout`, `forceLocalExit`, and cross-tab session wipe: `clearCachedPath('players')` + `clearCachedPath('playerTradeIndex')`.
+- Does **not** clear shared defs, `playerDirectory`, `listingsByGroup`, `tradeIndexMeta`, `leaderboards`, seasons/snapshots.
+- Proof: `qcAuthS6b.getLastPersonalCacheClearReport()` (sessionStorage across reload).
+- Root listener remains ON (may refill after reload; report proves clear at boundary).
+- Verification passed: foreign personal residue cleared at logout; shared scopes preserved; login restores self scopes; no session-restore regression.
+
+#### S6c — Dead-code cleanup (optional)
+
+**Status: OPTIONAL / DEFERRED** — intentionally skipped; not a completion blocker. Unused scanners (`getTop*`, unwired `getAllPlayers`, etc.) may be removed later. Admin/rebuild scanners and coexistence fallbacks are **not** dead code.
+
+#### S6d — Persist-allowlist prep
+
+**Status: COMPLETE + VERIFIED**
+
+- Canonical policy: [`js/persist-allowlist.js`](../js/persist-allowlist.js) — `PERSIST_ALWAYS_ROOTS`, `PERSIST_PERSONAL_ROOTS`, `PERSIST_NEVER_ROOTS`, `shouldPersistPath`, `filterDbForPersist` (for S7).
+- Always: `config|cards|packs|groups|tradeIndexMeta|playerDirectory|listingsByGroup|leaderboards|leaderboardSeasons|leaderboardSnapshots`.
+- Personal: only `players/{user}` and `playerTradeIndex/{user}` (no bare trees).
+- Never: `accessCodes` (register/bootstrap once-load only — not session state), `trades`, and other non-session roots.
+- `PERSIST_ENFORCEMENT_ENABLED === false` historically meant not globally forced. **S7a** uses `isPersistEnforcementEnabled()` (reload-latched opt-in).
+- No localStorage migration/clear in S6d (sanitize-on-load is S7a).
+- Verification passed: policy allow/deny; enforcement OFF by default; persist behavior unchanged until S7a flag.
+
+#### S6e — Final isolation audits
+
+**Status: COMPLETE + VERIFIED**
+
+- Pasteable: `qcPersonalAudit.workflowS6e()` (alias `workflowS6()`).
+- Labels PASSED: `s6e-personal`, `s6e-trading-idle`, `s6e-trading-action`, `s6e-leaderboard` — `unexpected===0` each; `knownScopedBlockers: []`; overall PASS.
+- Credited (not replayed): S6a register isolation; Gate B/C; D7 races; S5d rebuild/writers.
+- Root stayed ON throughout.
+
+### S7 — Root-off / dual-mode
+
+**Status: COMPLETE + VERIFIED** (S7a–S7d). Historical default was root-on; **classroom default flip** makes scoped the production default (see status table).
+
+| Subphase | Status |
+|----------|--------|
+| **S7a** persist enforce + sanitize-on-load | **COMPLETE + VERIFIED** |
+| **S7b** dual-mode root skip when scoped | **COMPLETE + VERIFIED** |
+| **S7c** fail-closed scoped fallbacks / Admin accessCodes / LB seasons hydrate | **COMPLETE + VERIFIED** |
+| **S7d** final evidence matrix (no default flip) | **COMPLETE + VERIFIED** |
+
+#### S7a — Persist enforcement + sanitize-on-load
+
+**COMPLETE + VERIFIED.** Historical: `qc_persist_enforce` or `qc_scoped_loading`. **After classroom default flip:** ON when `qc_persist_enforce` OR boot mode scoped. Report: `qcPersistAllowlist.getPersistEnforcementReport()` / `workflowS7a()`.
+
+#### S7b — Dual-mode boot (reload-required root skip)
+
+**COMPLETE + VERIFIED.** Historical opt-in via `qc_scoped_loading`. **After classroom default flip:** production default scoped; emergency `qc_force_root_loading`. Report: `qcDbHydration.getBootModeReport()` / `workflowS7b()` / `workflowClassroomDefaultFlip()`.
+
+#### S7c — Fail-closed + Admin access + LB archives
+
+**COMPLETE + VERIFIED.** Trading: `canAllowCanonicalTradeTreeFallback()` denies bare `trades/*` under scoped or isolation; scoped skips empty trades migrate writes. Admin Access: `loadAdminAccessCodesOnce` on sub-tab enter (failure ≠ empty). LB: `hydrateLeaderboardArchivesOnce` before student/Admin archive UI; schema ensure only after successful load. Report: `workflowS7c()`.
+
+#### S7d — Final evidence matrix
+
+**COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS7d()` (alias `workflowS7()`). D1–D11 PASSED (incl. auth scoped once-load before login/register cache checks; D10 = scoped init without root `once('/')`). Classroom default flip shipped later — **COMPLETE + VERIFIED**.
+
+**Non-blocking follow-ups:** **Card-art transient retry hardening — COMPLETE + VERIFIED**. **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred).
+
+### S8 — Rules (SPLIT)
+
+**Verdict: SPLIT.** Scoping is done; S8 is security posture, not another client-load architecture slice.
+
+| Track | Status | Scope |
+|-------|--------|--------|
+| **S8a** | **COMPLETE** | Honest docs; threat model; root access matrix; in-repo live rules snapshot ([`database.rules.json`](../database.rules.json)); no authz deploy; no Firebase Auth |
+| **S8b** | **IMPLEMENTED — AWAITING VERIFICATION** | Firebase Auth under username UX; rules still open; manual 2–3 account migration |
+| **S8c** | Blocked on S8b | Authorization rules cutover (per-user / admin claim / accessCodes) |
+| **S8d** | Not started | Privileged Admin rebuilds via Admin SDK / Functions; emergency-root reassessment |
+
+Pasteable: `qcPersonalAudit.workflowS8a()`. Details: [`FIREBASE_SETUP.md`](../FIREBASE_SETUP.md), §8 below.
 
 ---
 
@@ -266,33 +379,97 @@ Sample rules + docs for directory/indexes/leaderboards; honest documentation of 
 
 Root may be disabled only when **all** are true:
 
-1. Shared defs (`config|cards|packs|groups`) hydrate without root; seeds only if path ready  
-2. Auth: `players/{me}` subscribe; session invalidation works with scoped descendant notify alone  
-3. `playerTradeIndex/{me}` session scope; Research + Trading reservations verified-index or explicit fail-closed  
-4. Trading: directory picker; PTI pending/my listings; `listingsByGroup` discovery; counterparty once-loads; no runtime full `trades/*` / `players` scans  
-5. Leaderboard live boards use summaries (S5d done per its approved plan)  
-6. Admin: directory + selected-player only for browsing  
-7. Register: `accessCodes` available without needing full root (S6)  
-8. Logout: release all scopes; `clearCachedPath` foreign players / prior user  
-9. Metrics: `rootListenerCount === 0` in scoped mode; path snapshots only; isolation audits PASS  
-10. Local-only mode still works  
-11. Dual-mode invariant: never run root wholesale replace and scoped merge as competing authorities without freeze  
-12. Emergency rollback: flag off restores root  
+1. Shared defs (`config|cards|packs|groups`) hydrate without root; seeds only if path ready — **MET**  
+2. Auth: `players/{me}` subscribe; session invalidation works with scoped descendant notify alone — **MET**  
+3. `playerTradeIndex/{me}` session scope; Research + Trading reservations verified-index or explicit fail-closed — **MET**  
+4. Trading: directory picker; PTI pending/my listings; `listingsByGroup` discovery; counterparty once-loads; no runtime full `trades/*` / `players` scans — **MET**  
+5. Leaderboard live boards use summaries (**S5d COMPLETE + VERIFIED**) — **MET**  
+6. Admin: directory + selected-player only for browsing — **MET** (bulk rebuilds remain intentional)  
+7. Register: `accessCodes/{code}` once-load (**S6a COMPLETE + VERIFIED**); Admin Access once-load (**S7c COMPLETE + VERIFIED**) — **MET**  
+8. Logout: release all scopes; `clearCachedPath` foreign players / prior user (**S6b COMPLETE + VERIFIED**) — **MET**  
+9. Metrics: `rootListenerAttached===false` / zero root snaps in scoped mode — **MET** (S7b; confirmed S7d D1)  
+10. Scoped boot initializes `_db` without root `once('/')` — **MET** (S7a sanitize + S7b seed; confirmed S7d D10/D1)  
+11. Dual-mode invariant: never run root wholesale replace and scoped merge as competing authorities without freeze — **MET** (S7b latch)  
+12. Emergency rollback: flag off restores root — **MET** (S7b; confirmed S7d D11)  
 
-Until then, root remains the intentional safety net.
+§7 prerequisites for evidence-gated scoped mode are **MET**. **Scoped trade action hydration — COMPLETE + VERIFIED**. **Scoped claim null-safety — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. Keep emergency `qc_force_root_loading` through S8a–S8c as repair escape hatch; reassess removal only in S8d after Admin tools no longer need client full-tree reads.
 
 ---
 
-## 8. Rules prerequisites
+## 8. S8 security model and staged plan
 
-Before tightening rules beyond open classroom demos:
+### 8.1 Current security model (post S8a docs)
 
-1. Document that **custom RTDB passwords ≠ Firebase Auth** — client scoping is not cryptographic enforcement  
-2. Extend sample rules for `playerDirectory`, `playerTradeIndex`, `listingsByGroup`, `tradeIndexMeta`, `leaderboardSeasons`, `leaderboardSnapshots`, and any leaderboard summary roots approved in S5d  
-3. Directory/indexes must never include password/session/inventory secrets  
-4. Without Firebase Auth, document residual malicious-client risk even if path samples look “tight”  
-5. Claim exclusivity remains the canonical listing transaction; rules cannot replace that without Auth/Cloud Functions  
-6. True production lockdown requires Firebase Auth (or Admin SDK / Functions) — S8 follow-on, not a silent S7 assumption  
+- **Live rules:** open `.read`/`.write` + inventory leaf `.validate` numeric `>= 0` (Gate A integrity). Console SoT; repo mirror [`database.rules.json`](../database.rules.json).
+- **Identity:** custom RTDB username/password hashes — **not** Firebase Auth. No `auth.uid` in rules.
+- **Session / admin / scoped boot:** client conventions only; not server-enforceable.
+- **No Cloud Functions / Admin SDK** today — all clients equal privilege.
+- **Scoped loading** reduces honest-client bandwidth/cache blast radius; it is **not** authorization.
+
+### 8.2 Threat model (classroom)
+
+| Threat | Today | Notes |
+|--------|-------|-------|
+| Casual DevTools self-tamper | Trivial | Open write |
+| Read another student’s private data | Trivial | Open read |
+| Modify another student’s inventory/stats | Trivial | Open write |
+| Modify `config` / admin flags | Trivial | Incl. plaintext `adminPassword` |
+| Forge trades/listings / poison indexes | Trivial | Client dual-write conventions |
+| Access-code abuse | High | Enumerate/consume/forge |
+| Honest-app races | Mitigated | Claims, inventory validate, scoped paths |
+
+### 8.3 Top-level root access matrix (desired roles; today = open)
+
+| Root | Anon / auth screen | Student | Admin | Repair / emergency root |
+|------|--------------------|---------|-------|-------------------------|
+| `config` | R (gates); admin login reads adminPw | R | R/W | R/W |
+| `players` | once `{u}` login/register | R/W self; once counterparties | R/W + rebuilds | bare tree under root |
+| `cards`/`packs`/`groups` | R sharedDefs | R | R/W | R/W |
+| `accessCodes` | once `{code}` register | — | R/W | bootstrap if empty |
+| `trades` | — | by-ID once + indexes | rebuild scans | root / rebuild |
+| `playerDirectory` | — | R picker | R/W rebuild | — |
+| `playerTradeIndex` | — | own + once foreign | rebuild | — |
+| `listingsByGroup` | — | R group; W via listings | rebuild | — |
+| `tradeIndexMeta` | — | indirect | W rebuild | — |
+| `leaderboards` | — | R tab | W + piggyback | — |
+| `leaderboardSeasons` / `Snapshots` | — | R archives | R/W | — |
+| `admin` (stub) | unused | unused | unused | ignore |
+
+**Sensitive:** `players/*/password`, `activeSession`, inventory, stats; `config.adminPassword`; unused access codes.
+
+### 8.4 Enforceable today vs theater vs requires Auth
+
+| | |
+|--|--|
+| **Useful without Auth** | Inventory `.validate`; honest docs; optional future shape `.validate` only |
+| **Theater without Auth** | Fake ownership / admin checks on attacker-writable RTDB fields |
+| **Requires Firebase Auth (or Functions)** | Per-user writes; admin-only config/codes; hide password/session; stop cross-player forge |
+
+### 8.5 S8b implementation notes (AWAITING VERIFICATION)
+
+- **Account preservation is small:** nearly all accounts are disposable test data. Preserve only if convenient: **bobby**, one new teacher account (easy recreate), optionally **bobby2**. Admin can already reset passwords.
+- **Do not** build a large lazy Firebase Auth migration merely to preserve the test population.
+- During S8b investigation: if lazy enrollment on successful legacy login is **genuinely tiny** and low-risk, it may be kept for convenience. If it needs substantial dual-auth state, races, reconciliation, or long-term compatibility machinery → prefer **one-time/manual** migration/reset of the 2–3 important accounts.
+- **New/future accounts** use Firebase Auth natively once S8b ships.
+- **Long-term target:** Firebase Auth owns passwords; remove legacy `players/{u}.password` after migration/rollback confidence.
+- **Ordering:** trusted **Admin SDK / custom-claim** provisioning must exist **before** S8c rules rely on an admin claim (do not trust RTDB `isAdmin` alone).
+
+### 8.6 STOP conditions
+
+- Deploy `auth != null` (or any authz) rules before S8b Auth wiring → outage.
+- S8c admin claim rules before Admin SDK claim provisioning → lock out Admin.
+- Treat scoped loading as security → false confidence.
+- Remove emergency root during S8a–S8c → no client repair if rules misfire.
+- Large dual-auth compatibility layer for disposable test accounts → unnecessary risk.
+
+### 8.7 Verification
+
+| Phase | Gate |
+|-------|------|
+| S8a | Docs + `workflowS8a()`; live rules unchanged; Gate A still holds |
+| S8b | Login/register/refresh/admin with Auth; rules still open until S8c |
+| S8c | Foreign write denied; config write denied; honest gameplay + claim spot checks; Console rollback drill |
+| S8d | Admin rebuilds without needing open student rules |
 
 ---
 
@@ -304,27 +481,60 @@ Before tightening rules beyond open classroom demos:
 | S5c-D2 | Low | UI filter swap; directory already correct |
 | S5c-D3 | Medium | Pending UX + duplicate correctness; fallback policy |
 | S5c-D4 | Medium | Multi-listing + max-active edge cases |
-| S5c-D5 | Medium–High | Soft-expire repair must precede discovery cutover; expiry still hybrid |
+| S5c-D5a | Low–Medium | Soft-expire dual-write parity only |
+| S5c-D5b | Medium–High | Discovery cutover; expiry still hybrid |
 | S5c-D6 | High | Reservation safety; fail-closed vs fallback; Trading/Research parity |
 | S5c-D7 | High | Counterparty loads; claim races; browser-close-after-claim; expiry finalization |
 | S5d | Medium–High | Depends on fresh plan; write amplification / group fan-out likely |
 | S6 | Low–Medium | Polish; accessCodes; cache clearing |
 | S7 | High | Removes safety net |
-| S8 | High (security reality) | Custom auth limits what rules can guarantee |
+| S8a | Low | Docs/snapshot only |
+| S8b | Medium–High | Auth wiring; keep migration tiny |
+| S8c | High | Authz cutover / outage if premature |
+| S8d | Medium | Privileged path extraction |
 
 ---
 
 ## 10. Recommended implementation order
 
-1. **This document** committed as source of truth (done when present in repo)  
-2. **S5c-D1** — Trading hydration ownership + Trading `playerDirectory` subscribe only  
-3. S5c-D2 → D3 → D4 → D5 → D6 → D7 (one commit each; manual test gates; no mega-phase)  
-4. **S5d investigation/planning pass** → approve S5d implementation plan → implement  
-5. S6 polish  
-6. S7 root-off  
-7. S8 rules  
+1. **This document** committed as source of truth  
+2. **S5c-D1** — COMPLETE + VERIFIED  
+3. **S5c-D2** — COMPLETE + VERIFIED  
+4. **S5c-D3** — COMPLETE + VERIFIED  
+5. **S5c-D4** — COMPLETE + VERIFIED  
+6. **S5c-D5a** — COMPLETE + VERIFIED  
+7. **S5c-D5b** — COMPLETE + VERIFIED  
+8. **S5c-D5** (umbrella) — COMPLETE + VERIFIED  
+9. **S5c-D6** — COMPLETE + VERIFIED  
+10. **S5c-D7a** — COMPLETE + VERIFIED  
+11. **S5c-D7b** — COMPLETE + VERIFIED  
+12. **S5c-D7c** — **COMPLETE + VERIFIED**  
+13. **Hybrid C+ Gate A** — **COMPLETE + VERIFIED**  
+14. **Hybrid C+ Gate B** — **COMPLETE + VERIFIED**  
+15. **Hybrid C+ Gate C** — **COMPLETE + VERIFIED**  
+16. **S5c-D7** + **S5c-D** — **COMPLETE + VERIFIED**  
+17. **S5d** — live leaderboard summaries — **COMPLETE + VERIFIED**  
+18. **S6a** — accessCodes scoped once-load — **COMPLETE + VERIFIED**  
+19. **S6b** — logout personal cache clear — **COMPLETE + VERIFIED**  
+20. **S6c** — dead-code cleanup — **OPTIONAL / DEFERRED** (intentionally skipped)  
+21. **S6d** — persist-allowlist prep — **COMPLETE + VERIFIED**  
+22. **S6e** — final isolation audits — **COMPLETE + VERIFIED**  
+23. **S6** overall — **COMPLETE + VERIFIED** (S6c deferred)  
+24. **S7a** — persist enforce + sanitize-on-load — **COMPLETE + VERIFIED**  
+25. **S7b** — dual-mode root skip — **COMPLETE + VERIFIED**  
+26. **S7c** — fail-closed + Admin access + LB archives — **COMPLETE + VERIFIED**  
+27. **S7d** — final evidence matrix — **COMPLETE + VERIFIED** (no default flip at S7 closure)
+28. **S7** overall — **COMPLETE + VERIFIED**
+29. **Scoped classroom default flip** — **COMPLETE + VERIFIED**
+30. **Scoped trade/listing canonical-by-ID hydration** — **COMPLETE + VERIFIED**
+31. **Scoped RTDB claim null-safety** — **COMPLETE + VERIFIED**
+32. **Card-art transient retry hardening** — **COMPLETE + VERIFIED**
+33. **S8a** — docs + live rules snapshot — **COMPLETE**
+34. **S8b** — Firebase Auth under username UX — not started (approve separately; tiny migration preference)
+35. **S8c** — authorization rules — blocked until S8b + Admin custom claims
+36. **S8d** — privileged Admin / Functions + emergency-root reassessment — not started
 
-Do not restart a combined “S5c-D everything” task. Do not implement S5d from this document’s directional notes alone.
+S6c may remain deferred. Unique Cards correctness repair — COMPLETE + VERIFIED. Foreign-PTI readiness warnings — diagnostic noise.
 
 ---
 
@@ -332,5 +542,6 @@ Do not restart a combined “S5c-D everything” task. Do not implement S5d from
 
 - **Canonical path:** [`docs/DATABASE_SCOPING_ROADMAP.md`](DATABASE_SCOPING_ROADMAP.md)  
 - **Pointer:** [`ARCHITECTURE.md`](../ARCHITECTURE.md) scoped-loading section links here  
-- Update this file when a subphase completes (status tables) or when S5d planning supersedes the directional notes in §6  
+- **Rules snapshot:** [`database.rules.json`](../database.rules.json); setup narrative [`FIREBASE_SETUP.md`](../FIREBASE_SETUP.md)  
+- Update this file when a subphase completes (status tables)  
 - Historical phase write-ups in `ARCHITECTURE.md` remain useful archaeology; **remaining work is governed by this roadmap**
