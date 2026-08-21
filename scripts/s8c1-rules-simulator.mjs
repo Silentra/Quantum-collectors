@@ -348,6 +348,9 @@ async function main() {
     await assertFails(get(ref(anon.database(), 'playerDirectory/bobby10')));
     pass('unauthenticated playerDirectory leaf read denied');
 
+    await assertSucceeds(get(ref(offerer.database(), 'leaderboards')));
+    pass('authenticated parent /leaderboards read allowed');
+
     // --- Registration multipath (Auth-first; mirrors js/auth.js register update) ---
     const registrant = testEnv.authenticatedContext('bobby10Uid');
     const regNow = Date.now();
