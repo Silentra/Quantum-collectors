@@ -47,6 +47,16 @@ export const SHARED_DEF_PATHS = Object.freeze(['config', 'cards', 'packs', 'grou
 
 export const SCOPE_SHARED_DEFS = 'sharedDefs';
 
+/**
+ * S8c pre-auth bootstrap: only classroom gate leaves (safe to expose without Auth).
+ * Do not broaden to full /config (adminPassword, economy, etc.).
+ */
+export const PUBLIC_GATE_PATHS = Object.freeze([
+  'config/gameOpen',
+  'config/registrationOpen',
+]);
+export const SCOPE_PUBLIC_GATE = 'publicGate';
+
 /** S6a — accessCodes once-load roots (no subscription ownership). */
 export const ACCESS_CODES_ROOT = 'accessCodes';
 export const SCOPE_ACCESS_CODES = 'accessCodes';
@@ -144,6 +154,43 @@ export function waitForSharedDefs(options = {}) {
     }
     return { ok: true, scope: SCOPE_SHARED_DEFS };
   });
+}
+
+/**
+ * Pre-auth once-load of public classroom gates only.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export async function hydratePublicGateConfig(options = {}) {
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+  const force = options.force === true;
+  const startedAt = Date.now();
+  const pathResults = await Promise.all(
+    PUBLIC_GATE_PATHS.map(async (path) => {
+      const result = await db.loadPathOnce(path, { timeoutMs, force });
+      return {
+        path,
+        ok: result.ok === true,
+        mode: result.mode,
+        reused: result.reused === true,
+        error: result.error || null,
+        ready: db.isPathReady(path),
+      };
+    }),
+  );
+  const completedAt = Date.now();
+  const allOk = pathResults.every((r) => r.ok);
+  return {
+    ok: allOk,
+    scope: SCOPE_PUBLIC_GATE,
+    status: allOk ? 'ready' : 'failed',
+    pathsHydrated: pathResults.filter((r) => r.ok).map((r) => r.path),
+    pathsFailed: pathResults.filter((r) => !r.ok).map((r) => r.path),
+    pathResults,
+    startedAt,
+    completedAt,
+    durationMs: completedAt - startedAt,
+  };
 }
 
 /**
@@ -2776,6 +2823,9 @@ function _installWindowApi() {
     SCOPE_GROUP_LISTINGS,
     SCOPE_LEADERBOARDS,
     hydrateSharedDefs,
+    hydratePublicGateConfig,
+    PUBLIC_GATE_PATHS,
+    SCOPE_PUBLIC_GATE,
     isSharedDefsReady,
     waitForSharedDefs,
     loadAccessCodeOnce,

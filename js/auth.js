@@ -27,6 +27,7 @@ import {
   ensureCurrentPlayerScope,
   ensurePlayerTradeIndexScope,
   hydrateCurrentPlayer,
+  hydrateSharedDefs,
   releaseCurrentPlayerScope,
   releasePlayerTradeIndexScope,
   releaseLeaderboardsScope,
@@ -745,7 +746,22 @@ export async function initAuth() {
   startSessionGuard(session.username);
   await applyPostLoginPlayerMaintenance(session.username);
   await _hydrateOwnAdminRegistry(session);
+  try {
+    await hydrateSharedDefs({ force: false });
+  } catch (e) {
+    console.warn('[Auth] sharedDefs hydrate on session restore:', e?.message || e);
+  }
   console.log(`[Auth] Session restored for: ${session.username}`);
+}
+
+async function rollbackFirebaseAuthUser(reason) {
+  try {
+    const u = getAuth().currentUser;
+    if (u) await u.delete();
+  } catch (delErr) {
+    console.warn('[Auth] Rollback Auth user delete failed:', reason, delErr?.message || delErr);
+  }
+  await signOutFirebaseBestEffort();
 }
 
 // ---------- Login ----------
@@ -754,9 +770,8 @@ export async function initAuth() {
  * Login with username + password
  * Returns { success, error?, session? }
  *
- * Scoped boot: once-load players/{username} before existence/password checks
- * (cache alone is not authoritative without root refill). No subscribe until
- * after successful password + session claim.
+ * Auth-on (S8c): Firebase sign-in first, then load players/{u} (bound read).
+ * Legacy: once-load players/{username} before password hash check.
  */
 export async function login(username, password) {
   if (!username || !username.trim()) {
@@ -772,25 +787,43 @@ export async function login(username, password) {
     return { success: false, error: 'The game is currently closed.' };
   }
 
-  // ID-specific once-load only — do not use hydrateCurrentPlayer here (that sets
-  // auth owner tracking before authentication). force:true avoids stale readiness skips.
-  const preLoad = await db.loadPathOnce(`players/${username}`, { force: true });
-  if (!preLoad.ok) {
-    return { success: false, error: 'Could not verify account. Please try again.' };
-  }
+  const useFirebase = isFirebaseAuthEnabled();
+  let player = null;
 
-  const player = db.get(`players/${username}`);
-  if (!player) {
-    return { success: false, error: 'Account not found. Please register first.' };
-  }
-
-  if (isFirebaseAuthEnabled()) {
+  if (useFirebase) {
     try {
       await getAuth().signInWithEmailAndPassword(usernameToAuthEmail(username), password);
     } catch (err) {
       return { success: false, error: mapFirebaseAuthError(err) };
     }
+
+    // Shared defs need Auth; load after sign-in (cards/config for post-login gameplay).
+    try {
+      await hydrateSharedDefs({ force: false });
+    } catch (e) {
+      console.warn('[Auth] sharedDefs hydrate after login:', e?.message || e);
+    }
+
+    const preLoad = await db.loadPathOnce(`players/${username}`, { force: true });
+    if (!preLoad.ok) {
+      await signOutFirebaseBestEffort();
+      return { success: false, error: 'Could not verify account. Please try again.' };
+    }
+    player = db.get(`players/${username}`);
+    if (!player) {
+      await signOutFirebaseBestEffort();
+      return { success: false, error: 'Account not found. Please register first.' };
+    }
   } else {
+    // Legacy: ID-specific once-load only — do not use hydrateCurrentPlayer here.
+    const preLoad = await db.loadPathOnce(`players/${username}`, { force: true });
+    if (!preLoad.ok) {
+      return { success: false, error: 'Could not verify account. Please try again.' };
+    }
+    player = db.get(`players/${username}`);
+    if (!player) {
+      return { success: false, error: 'Account not found. Please register first.' };
+    }
     const hashedInput = await hashPassword(password);
     if (player.password !== hashedInput) {
       return { success: false, error: 'Incorrect password.' };
@@ -804,7 +837,7 @@ export async function login(username, password) {
     issuedAt
   });
   if (!ack.ok) {
-    if (isFirebaseAuthEnabled()) await signOutFirebaseBestEffort();
+    if (useFirebase) await signOutFirebaseBestEffort();
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
 
@@ -815,7 +848,7 @@ export async function login(username, password) {
     isAdmin: player.isAdmin === true,
     loginTime: issuedAt,
     sessionId,
-    authUid: (isFirebaseAuthEnabled() && getAuth().currentUser)
+    authUid: (useFirebase && getAuth().currentUser)
       ? getAuth().currentUser.uid
       : (player.authUid || null),
   };
@@ -828,7 +861,7 @@ export async function login(username, password) {
     releaseAuthOwnedScopes();
     // Do not clear server activeSession we just claimed — next login replaces it.
     clearLocalSessionOnly();
-    if (isFirebaseAuthEnabled()) await signOutFirebaseBestEffort();
+    if (useFirebase) await signOutFirebaseBestEffort();
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
 
@@ -873,44 +906,10 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'Username must be 3-20 characters, letters/numbers/underscore only.' };
   }
 
-  // S8c-0: do not load full players/{username} for taken check (privacy + future rules).
-  const dirPath = `${DIRECTORY_ROOT}/${username}`;
-  const dirLoad = await db.loadPathOnce(dirPath, { force: true });
-  if (!dirLoad.ok) {
-    return { success: false, error: 'Could not verify username availability. Please try again.' };
-  }
-  if (db.get(dirPath)) {
-    return { success: false, error: 'Username already taken.' };
-  }
-  const authUidLeaf = await db.loadPathOnce(`players/${username}/authUid`, { force: true });
-  if (!authUidLeaf.ok) {
-    return { success: false, error: 'Could not verify username availability. Please try again.' };
-  }
-  const existingUid = db.get(`players/${username}/authUid`);
-  if (existingUid != null && existingUid !== '') {
-    return { success: false, error: 'Username already taken.' };
-  }
-
-  // S6a: scoped once-load of this code leaf only (not all accessCodes; no subscribe).
-  const codeLoad = await loadAccessCodeOnce(accessCode);
-  if (!codeLoad.ok) {
-    return {
-      success: false,
-      error: 'Could not verify access code. Please try again.',
-    };
-  }
-
-  const codeData = db.get(`accessCodes/${accessCode}`);
-  if (!codeData || typeof codeData !== 'object') {
-    return { success: false, error: 'Invalid access code.' };
-  }
-  if (codeData.used) {
-    return { success: false, error: 'This access code has already been used.' };
-  }
-
   const useFirebase = isFirebaseAuthEnabled();
   let authUid = null;
 
+  // S8c Auth-on: create Auth identity first so directory/authUid/accessCodes reads are allowed.
   if (useFirebase) {
     try {
       const cred = await getAuth().createUserWithEmailAndPassword(
@@ -926,6 +925,55 @@ export async function register(username, password, accessCode) {
     } catch (err) {
       return { success: false, error: mapFirebaseAuthError(err) };
     }
+
+    // Need cards for starter inventory; shared defs require Auth.
+    try {
+      await hydrateSharedDefs({ force: false });
+    } catch (e) {
+      console.warn('[Auth] sharedDefs hydrate after register Auth:', e?.message || e);
+    }
+  }
+
+  // Username taken checks (Auth-on: after Auth; legacy: pre-Auth open rules / local).
+  const dirPath = `${DIRECTORY_ROOT}/${username}`;
+  const dirLoad = await db.loadPathOnce(dirPath, { force: true });
+  if (!dirLoad.ok) {
+    if (useFirebase) await rollbackFirebaseAuthUser('directory-load');
+    return { success: false, error: 'Could not verify username availability. Please try again.' };
+  }
+  if (db.get(dirPath)) {
+    if (useFirebase) await rollbackFirebaseAuthUser('directory-taken');
+    return { success: false, error: 'Username already taken.' };
+  }
+  const authUidLeaf = await db.loadPathOnce(`players/${username}/authUid`, { force: true });
+  if (!authUidLeaf.ok) {
+    if (useFirebase) await rollbackFirebaseAuthUser('authUid-load');
+    return { success: false, error: 'Could not verify username availability. Please try again.' };
+  }
+  const existingUid = db.get(`players/${username}/authUid`);
+  if (existingUid != null && existingUid !== '') {
+    if (useFirebase) await rollbackFirebaseAuthUser('authUid-taken');
+    return { success: false, error: 'Username already taken.' };
+  }
+
+  // S6a: scoped once-load of this code leaf only (not all accessCodes; no subscribe).
+  const codeLoad = await loadAccessCodeOnce(accessCode);
+  if (!codeLoad.ok) {
+    if (useFirebase) await rollbackFirebaseAuthUser('access-code-load');
+    return {
+      success: false,
+      error: 'Could not verify access code. Please try again.',
+    };
+  }
+
+  const codeData = db.get(`accessCodes/${accessCode}`);
+  if (!codeData || typeof codeData !== 'object') {
+    if (useFirebase) await rollbackFirebaseAuthUser('access-code-invalid');
+    return { success: false, error: 'Invalid access code.' };
+  }
+  if (codeData.used) {
+    if (useFirebase) await rollbackFirebaseAuthUser('access-code-used');
+    return { success: false, error: 'This access code has already been used.' };
   }
 
   const hashedPassword = useFirebase ? null : await hashPassword(password);
@@ -961,13 +1009,7 @@ export async function register(username, password, accessCode) {
 
   if (!ack.ok) {
     if (useFirebase) {
-      try {
-        const u = getAuth().currentUser;
-        if (u) await u.delete();
-      } catch (delErr) {
-        console.warn('[Auth] Rollback Auth user delete failed:', delErr?.message || delErr);
-      }
-      await signOutFirebaseBestEffort();
+      await rollbackFirebaseAuthUser('rtdb-multipath');
     }
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }

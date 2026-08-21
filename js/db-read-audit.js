@@ -1959,6 +1959,8 @@ Live-blocker fix (post first Console publish):
   - playerDirectory parent .read auth!=null (safe social projection)
   - tradeIndexMeta .read auth!=null (schemaVersion/rebuiltAt only; write still admin)
   - accessCodes parent .read admin-only; student boot no longer enumerates/seeds
+  - Registration/pre-auth: public only config/gameOpen + config/registrationOpen;
+    Auth-first register/login; sharedDefs deferred until authenticated
   Republish full database.rules.json after pulling this fix.
 
 BEFORE Console deploy (checklist):
