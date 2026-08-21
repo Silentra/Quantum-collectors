@@ -570,6 +570,8 @@ API:
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
+`);
+}
 
 /**
  * Print guided pasteable workflow for Shell + personal tabs.
