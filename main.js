@@ -98,16 +98,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       ensureLeaderboardSeasonsSchema();
     }
 
-    // 5. Generate starter access codes if none exist (S6a: scoped once-load; not root-dependent)
-    const accessBootstrap = await bootstrapAccessCodesOnce();
-    if (!accessBootstrap.ok) {
-      console.warn(
-        '[SciCards] Skipping access-code seed — accessCodes once-load failed:',
-        accessBootstrap.error || 'unknown',
+    // 5. Starter access-code seed (S8c: parent /accessCodes is admin-only)
+    // Do not once-load the whole collection for ordinary students — enumeration denied.
+    // Empty-classroom seed only when an admin session is already present; otherwise
+    // teachers generate codes from Admin → Access (loadAdminAccessCodesOnce).
+    if (auth.getSession() && auth.isAdmin()) {
+      const accessBootstrap = await bootstrapAccessCodesOnce();
+      if (!accessBootstrap.ok) {
+        console.warn(
+          '[SciCards] Skipping access-code seed — accessCodes once-load failed:',
+          accessBootstrap.error || 'unknown',
+        );
+      } else if (accessBootstrap.empty) {
+        auth.generateAccessCodes(10);
+        console.log('[SciCards] Generated 10 starter access codes');
+      }
+    } else {
+      console.info(
+        '[SciCards] Skipping access-code seed — no admin session (S8c; codes are not student-enumerable)',
       );
-    } else if (accessBootstrap.empty) {
-      auth.generateAccessCodes(10);
-      console.log('[SciCards] Generated 10 starter access codes');
     }
 
     metrics.mark('migrations-complete');

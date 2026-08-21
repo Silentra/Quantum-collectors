@@ -104,8 +104,8 @@
     },
 
     "playerDirectory": {
+      ".read": "auth != null",
       "$username": {
-        ".read": "auth != null",
         ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || !data.exists())"
       }
     },
@@ -125,7 +125,7 @@
     },
 
     "tradeIndexMeta": {
-      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
+      ".read": "auth != null",
       ".write": "auth != null && root.child('admins').child(auth.uid).val() === true"
     },
 
@@ -169,7 +169,7 @@
     },
 
     "accessCodes": {
-      ".read": false,
+      ".read": "auth != null && root.child('admins').child(auth.uid).val() === true",
       "$code": {
         ".read": "auth != null",
         ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (data.exists() && data.child('used').val() !== true && newData.child('used').val() === true && newData.child('usedBy').isString()))",

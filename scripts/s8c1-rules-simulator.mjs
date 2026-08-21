@@ -54,6 +54,28 @@ async function main() {
       const db = ctx.database();
       await set(ref(db, '/'), {
         admins: { teacherUid: true },
+        tradeIndexMeta: { schemaVersion: 1, rebuiltAt: now },
+        playerDirectory: {
+          offerer: {
+            username: 'offerer',
+            groupId: 'g1',
+            subgroupId: null,
+            isAdmin: false,
+            isTradeRestricted: false,
+            isTradeProfileHidden: false,
+          },
+          target: {
+            username: 'target',
+            groupId: 'g1',
+            subgroupId: null,
+            isAdmin: false,
+            isTradeRestricted: false,
+            isTradeProfileHidden: false,
+          },
+        },
+        accessCodes: {
+          ABC123: { used: false, created: now, group: null },
+        },
         players: {
           offerer: {
             authUid: 'offererUid',
@@ -286,6 +308,24 @@ async function main() {
       }),
     );
     pass('honest listing settlement multipath allowed');
+
+    // --- S8c-1 live-blocker compatibility reads ---
+    await assertSucceeds(get(ref(offerer.database(), 'playerDirectory')));
+    pass('authenticated parent playerDirectory read allowed');
+
+    await assertSucceeds(get(ref(offerer.database(), 'tradeIndexMeta')));
+    pass('authenticated tradeIndexMeta read allowed');
+
+    await assertFails(get(ref(offerer.database(), 'accessCodes')));
+    pass('student parent accessCodes enumeration denied');
+
+    const teacher = testEnv.authenticatedContext('teacherUid');
+    await assertSucceeds(get(ref(teacher.database(), 'accessCodes')));
+    pass('admin parent accessCodes read allowed');
+
+    // Foreign full player still denied for students
+    await assertFails(get(ref(offerer.database(), 'players/target')));
+    pass('student full foreign players/{other} read denied');
 
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
