@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  * S8b trusted local Admin SDK helper (NOT shipped to browsers).
+ * Uses firebase-admin v14 modular API (firebase-admin/app|auth|database).
  *
  * Prerequisites:
  *   1) Enable Email/Password in Firebase Console → Authentication
@@ -12,8 +13,9 @@
  *   set GOOGLE_APPLICATION_CREDENTIALS=C:\path\serviceAccount.json
  *   node scripts/s8b-auth-admin.mjs migrate-user bobby "TempPass123!"
  *   node scripts/s8b-auth-admin.mjs set-password bobby "NewPass123!"
- *   node scripts/s8b-auth-admin.mjs set-admin-claim teacher1 true
+ *   node scripts/s8b-auth-admin.mjs set-admin-claim teacher1
  *   node scripts/s8b-auth-admin.mjs clear-admin-claim teacher1
+ *   node scripts/s8b-auth-admin.mjs delete-auth-user testy
  *
  * migrate-user:
  *   - Creates Auth user {username}@scicards.local with the given password
@@ -24,23 +26,9 @@
  */
 
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-function loadAdmin() {
-  try {
-    return require('firebase-admin');
-  } catch {
-    console.error(
-      'Missing firebase-admin. From repo root run:\n  npm install firebase-admin\n',
-    );
-    process.exit(1);
-  }
-}
+import { initializeApp, getApps, getApp, cert } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getDatabase } from 'firebase-admin/database';
 
 const AUTH_DOMAIN = 'scicards.local';
 
@@ -52,8 +40,8 @@ function usernameToEmail(username) {
   return `${u}@${AUTH_DOMAIN}`;
 }
 
-function initApp(admin) {
-  if (admin.apps.length) return admin.app();
+function initApp() {
+  if (getApps().length) return getApp();
 
   const credPath =
     process.env.GOOGLE_APPLICATION_CREDENTIALS ||
@@ -73,18 +61,19 @@ function initApp(admin) {
     process.env.QC_DATABASE_URL ||
     'https://quantum-collectors-v2-default-rtdb.firebaseio.com/';
 
-  return admin.initializeApp({
-    credential: admin.credential.cert(sa),
+  return initializeApp({
+    credential: cert(sa),
     databaseURL,
   });
 }
 
-async function getOrCreateAuthUser(admin, username, password) {
+async function getOrCreateAuthUser(username, password) {
+  const auth = getAuth();
   const email = usernameToEmail(username);
   try {
-    const existing = await admin.auth().getUserByEmail(email);
+    const existing = await auth.getUserByEmail(email);
     if (password) {
-      await admin.auth().updateUser(existing.uid, { password, displayName: username });
+      await auth.updateUser(existing.uid, { password, displayName: username });
     }
     return existing;
   } catch (err) {
@@ -92,7 +81,7 @@ async function getOrCreateAuthUser(admin, username, password) {
     if (!password) {
       throw new Error(`Auth user ${email} not found; provide a password to create.`);
     }
-    return admin.auth().createUser({
+    return auth.createUser({
       email,
       password,
       displayName: username,
@@ -102,13 +91,13 @@ async function getOrCreateAuthUser(admin, username, password) {
   }
 }
 
-async function cmdMigrateUser(admin, username, password) {
-  const db = admin.database();
+async function cmdMigrateUser(username, password) {
+  const db = getDatabase();
   const snap = await db.ref(`players/${username}`).once('value');
   if (!snap.exists()) {
     throw new Error(`RTDB players/${username} does not exist — create/register first or check spelling.`);
   }
-  const user = await getOrCreateAuthUser(admin, username, password);
+  const user = await getOrCreateAuthUser(username, password);
   await db.ref(`players/${username}/authUid`).set(user.uid);
   console.log(
     JSON.stringify(
@@ -127,11 +116,11 @@ async function cmdMigrateUser(admin, username, password) {
   );
 }
 
-async function cmdSetPassword(admin, username, password) {
+async function cmdSetPassword(username, password) {
   if (!password || password.length < 6) {
     throw new Error('Password must be at least 6 characters.');
   }
-  const user = await getOrCreateAuthUser(admin, username, password);
+  const user = await getOrCreateAuthUser(username, password);
   console.log(
     JSON.stringify(
       {
@@ -147,13 +136,14 @@ async function cmdSetPassword(admin, username, password) {
   );
 }
 
-async function cmdSetAdminClaim(admin, username, value) {
+async function cmdSetAdminClaim(username, value) {
+  const auth = getAuth();
   const email = usernameToEmail(username);
-  const user = await admin.auth().getUserByEmail(email);
+  const user = await auth.getUserByEmail(email);
   const claims = { ...(user.customClaims || {}) };
   if (value) claims.admin = true;
   else delete claims.admin;
-  await admin.auth().setCustomUserClaims(user.uid, claims);
+  await auth.setCustomUserClaims(user.uid, claims);
   console.log(
     JSON.stringify(
       {
@@ -170,6 +160,50 @@ async function cmdSetAdminClaim(admin, username, value) {
   );
 }
 
+/** Auth-only orphan cleanup. Does not touch RTDB. */
+async function cmdDeleteAuthUser(username) {
+  const auth = getAuth();
+  const email = usernameToEmail(username);
+  try {
+    const user = await auth.getUserByEmail(email);
+    await auth.deleteUser(user.uid);
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          command: 'delete-auth-user',
+          username,
+          email,
+          authUid: user.uid,
+          deleted: true,
+        },
+        null,
+        2,
+      ),
+    );
+  } catch (err) {
+    if (err?.code === 'auth/user-not-found') {
+      console.log(
+        JSON.stringify(
+          {
+            ok: true,
+            command: 'delete-auth-user',
+            username,
+            email,
+            authUid: null,
+            deleted: false,
+            note: 'Auth user already absent (idempotent).',
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    }
+    throw err;
+  }
+}
+
 function usage() {
   console.log(`S8b Auth Admin (local trusted script)
 
@@ -178,6 +212,7 @@ Commands:
   set-password <username> <password>   Set Auth password (create if missing)
   set-admin-claim <username>           Set custom claim admin:true
   clear-admin-claim <username>         Remove admin claim
+  delete-auth-user <username>          Delete Auth user only (RTDB untouched; orphan cleanup)
 
 Env:
   GOOGLE_APPLICATION_CREDENTIALS   Path to service account JSON (required)
@@ -192,8 +227,7 @@ async function main() {
     process.exit(0);
   }
 
-  const admin = loadAdmin();
-  initApp(admin);
+  initApp();
 
   const u = String(username || '').trim().toLowerCase();
   if (!u) {
@@ -202,13 +236,15 @@ async function main() {
   }
 
   if (cmd === 'migrate-user') {
-    await cmdMigrateUser(admin, u, arg2);
+    await cmdMigrateUser(u, arg2);
   } else if (cmd === 'set-password') {
-    await cmdSetPassword(admin, u, arg2);
+    await cmdSetPassword(u, arg2);
   } else if (cmd === 'set-admin-claim') {
-    await cmdSetAdminClaim(admin, u, true);
+    await cmdSetAdminClaim(u, true);
   } else if (cmd === 'clear-admin-claim') {
-    await cmdSetAdminClaim(admin, u, false);
+    await cmdSetAdminClaim(u, false);
+  } else if (cmd === 'delete-auth-user') {
+    await cmdDeleteAuthUser(u);
   } else {
     console.error('Unknown command:', cmd);
     usage();

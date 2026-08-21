@@ -29,9 +29,22 @@ node scripts/s8b-auth-admin.mjs set-admin-claim teacher1
 
 # Temporary classroom password reset while Auth is on
 node scripts/s8b-auth-admin.mjs set-password student42 "NewTempPass!"
+
+# Auth-orphan cleanup after RTDB-only Admin Delete Player (S8b transition)
+# Deletes Firebase Auth user only — does NOT touch RTDB players/{username}
+node scripts/s8b-auth-admin.mjs delete-auth-user testy
 ```
 
 Synthetic Auth email is always `{username}@scicards.local` (internal only).
+
+### `delete-auth-user`
+
+Use when Admin Delete Player already removed `players/{username}` but `{username}@scicards.local` remains in Firebase Authentication (Auth orphan during S8b transition).
+
+- Resolves `{username}@scicards.local`, deletes that Auth user only, leaves RTDB alone.
+- `auth/user-not-found` is treated as idempotent success (`deleted: false`).
+
+**Warning:** Do **not** run `delete-auth-user` against bobby, teacher, or other live classroom accounts unless you intentionally want to remove their Firebase Auth identity.
 
 ## Feature flag
 
@@ -42,3 +55,11 @@ localStorage.setItem('qc_firebase_auth', 'true'); location.reload();
 // OFF — legacy RTDB hash auth (rollback while rules remain open)
 localStorage.removeItem('qc_firebase_auth'); location.reload();
 ```
+
+## Next (separate Plan-mode / implementation slices)
+
+- **S8b+ P0** Trusted Teacher Functions foundation — see [`docs/S8b-PLUS-TEACHER-OPS.md`](../docs/S8b-PLUS-TEACHER-OPS.md)
+- Later: password reset, full account delete, display-name moderation, admin claims via Admin panel callables
+- Not started in this script: Cloud Functions classroom ops beyond local CLI recovery
+
+Deep investigation of **Trusted Teacher Operations** is documented in the S8b+ architecture plan; local scripts remain bootstrap/recovery only.

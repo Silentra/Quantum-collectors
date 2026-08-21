@@ -1,7 +1,7 @@
 # Database Scoping Roadmap (S5–S8)
 
 **Status:** Authoritative roadmap for remaining Firebase work after scoped loading.  
-**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **IMPLEMENTED — AWAITING VERIFICATION**. **S8c–S8d** not started.  
+**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **IMPLEMENTED — AWAITING VERIFICATION**. **S8b+ P0** Trusted Teacher Functions foundation — **IMPLEMENTED — AWAITING VERIFICATION** (dormant; not a launch dependency). **S8c-0** client prep (foreign trade-visible reads + `admins/{uid}` registry) — **COMPLETE + VERIFIED**. **S8c-1** (tradeGrants + locked rules) — **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (do not claim live security until Console paste).  
 **Constraints:** Canonical `trades/*` remain execution authority. Missing/unverified reservation indexes must never mean zero reservations. Prefer the smallest safe continuation from the verified architecture.
 
 This document supersedes the historical S1–S8 investigation plan for **remaining** work. Completed phases below are recorded for reconciliation; implementation PRs must still list every file created/modified/deleted and every new named import/export.
@@ -56,10 +56,12 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | Root listener / emergency root | Production default scoped; `qc_force_root_loading` → root once+on (keep through S8c) |
 | S8a rules docs + live snapshot | **COMPLETE** (no authz deploy; no Firebase Auth) |
 | S8b Firebase Auth under username UX | **IMPLEMENTED — AWAITING VERIFICATION** |
-| S8c authorization rules cutover | BLOCKED on S8b + Admin custom-claim provisioning |
-| S8d privileged Admin path / Functions | NOT STARTED (after S8b) |
+| S8b+ P0 Trusted Teacher Functions foundation | **IMPLEMENTED — AWAITING VERIFICATION** (dormant / not launch-required) |
+| S8c-0 client prep (trade-visible foreign reads + admins registry) | **COMPLETE + VERIFIED** |
+| S8c-1 tradeGrants + RTDB authorization rules | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** |
+| S8d privileged Admin path / Functions | NOT STARTED (optional later; Spark path preferred) |
 
-**What remains:** **S8b → S8c → S8d** (separate approvals). Scoping architecture is done. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Paste/deploy [`database.rules.json`](../database.rules.json) in Console → run `qcPersonalAudit.workflowS8c1()` live matrix → then Auth production-default flip (separate). Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). Scoping architecture is done. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
@@ -69,14 +71,15 @@ flowchart LR
   end
   subgraph next [Separate approvals]
     S8b[S8b Firebase Auth]
+    S8bPlus[S8bPlus Teacher Ops]
     S8c[S8c authz rules]
     S8d[S8d Admin Functions]
   end
-  S5to7 --> S8a --> S8b --> S8c
-  S8b --> S8d
+  S5to7 --> S8a --> S8b --> S8bPlus --> S8c
+  S8bPlus --> S8d
 ```
 
-**Next:** Verify S8b (`qcPersonalAudit.workflowS8b()`), then approve **S8c** separately. Do not deploy authorization rules before Auth + Admin claims. Do not begin S8c/S8d until approved.
+**Next:** Verify S8b and S8b+ P0 (`qcPersonalAudit.workflowS8b()` / `workflowS8bPlusP0()`), then approve further S8b+ slices or **S8c** separately. Do not deploy authorization rules before Auth + Admin claims. Do not begin S8c/S8d until approved.
 
 ---
 
