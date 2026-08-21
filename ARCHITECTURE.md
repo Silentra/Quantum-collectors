@@ -663,6 +663,16 @@ Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings
 
 **Next:** S8b only when separately approved. Do not deploy authz rules. Do not replay Gate B/C or full S7d unless execution paths change.
 
+### Phase — S8c-0 client prep (Spark)
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Rules still **open**. Pasteable: `qcPersonalAudit.workflowS8c0()`.
+
+- Foreign trading loads use trade-visible children only ([`loadTradeVisiblePlayerOnce`](js/trade-availability.js)) — not full `players/{other}` (RTDB parent read would expose password/session; child deny cannot hide).
+- Admin authority path: `admins/{authUid}` ([`js/admin-registry.js`](js/admin-registry.js)); Promote/Demote write registry + `players.isAdmin` mirror. **Not secure until S8c-1 rules.**
+- `isAdmin()` prefers registry; legacy `session.isAdmin` / `players.isAdmin` remain transitional fallbacks until rules lock.
+- Distribution blockers only: [`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md).
+- **S8c-1** (tradeGrants + locked rules) — NOT STARTED.
+
 ### Phase S6e — Final isolation audits
 
 **Status: COMPLETE + VERIFIED.** Root listener remains ON. **S6 overall COMPLETE + VERIFIED** (S6c deferred, not a blocker).

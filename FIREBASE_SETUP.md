@@ -41,7 +41,7 @@ const firebaseConfig = {
 - Player passwords: SHA-256 hash at `players/{username}.password` ([`js/auth.js`](js/auth.js))
 - Session: `localStorage` `scicards_session` + RTDB `players/{username}/activeSession`
 - Admin: plaintext `config.adminPassword` and/or `players/{u}.isAdmin` (client-enforced only)
-- Scripts loaded: `firebase-app` + `firebase-database` + `firebase-auth` (Auth used only when `qc_firebase_auth=true`)
+- Scripts loaded: `firebase-app` + `firebase-database` + `firebase-auth` + `firebase-functions` (Auth used only when `qc_firebase_auth=true`; Functions used for S8b+ teacher callables).
 
 Client session / scoped loading / `qc_force_root_loading` are **invisible to security rules**.
 
@@ -54,16 +54,33 @@ localStorage.setItem('qc_firebase_auth','true'); location.reload();  // Auth ON
 localStorage.removeItem('qc_firebase_auth'); location.reload();       // legacy rollback
 ```
 
-Trusted local Admin script (migrate bobby / teacher, set password, set `admin:true` claim):
+Trusted local Admin script (migrate bobby / teacher, set password, set `admin:true` claim, Auth orphan cleanup):
 [`scripts/s8b-auth-admin.mjs`](scripts/s8b-auth-admin.mjs) — see [`scripts/README-S8b-auth.md`](scripts/README-S8b-auth.md).
 
 Enable **Email/Password** in Firebase Console Authentication before turning the flag on.
-In-game Admin “Reset Password” is disabled while Auth is on (use the script temporarily).
+In-game Admin “Reset Password” is disabled while Auth is on (use the script temporarily until S8b+ P1).
 Do **not** deploy authorization rules in S8b. `__admin__` / `config.adminPassword` remain.
 
 Pasteable: `qcPersonalAudit.workflowS8b()`
 
-### Future (S8c+ — not implemented)
+### S8b+ P0 (Trusted Teacher Functions foundation) — IMPLEMENTED — AWAITING VERIFICATION
+
+Callable Cloud Functions scaffolding + `pingTeacherOps` diagnostic only. **No** password reset / delete / promote yet. **No** RTDB rule changes. **Not** a Monday/Spark launch dependency (Blaze optional later).
+
+Full setup + verification: [`docs/S8b-PLUS-TEACHER-OPS.md`](docs/S8b-PLUS-TEACHER-OPS.md)  
+Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
+
+### S8c-0 (client prep) — IMPLEMENTED — AWAITING VERIFICATION
+
+- Trade counterparties: trade-visible child loads only (not full `players/{other}`)
+- Admin registry path `admins/{authUid}` + Promote/Demote writes (rules still open — **not secure yet**)
+- Register taken-check via directory / authUid leaves
+- Pasteable: `qcPersonalAudit.workflowS8c0()`
+- Distribution debt: [`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)
+
+**S8c-1** (tradeGrants + locked rules) — NOT STARTED.
+
+### Future (S8c-1+ — not implemented)
 
 Firebase Auth is layered under the same username/password UX when `qc_firebase_auth` is enabled. Enable Email/Password in Console before Auth-on testing. S8a docs unchanged; S8b is the Auth wiring slice.
 
