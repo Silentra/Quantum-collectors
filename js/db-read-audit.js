@@ -1961,6 +1961,8 @@ Live-blocker fix (post first Console publish):
   - accessCodes parent .read admin-only; student boot no longer enumerates/seeds
   - Registration/pre-auth: public only config/gameOpen + config/registrationOpen;
     Auth-first register/login; sharedDefs deferred until authenticated
+  - Registration multipath: inventory validate allows same-write authUid parent;
+    access-code consume is single-path merge (not leaf multipath)
   Republish full database.rules.json after pulling this fix.
 
 BEFORE Console deploy (checklist):

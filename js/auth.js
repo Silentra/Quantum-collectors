@@ -999,9 +999,14 @@ export async function register(username, password, accessCode) {
 
   const ack = await db.updateAcknowledged({
     [`players/${username}`]: playerRecord,
-    [`accessCodes/${accessCode}/used`]: true,
-    [`accessCodes/${accessCode}/usedBy`]: username,
-    [`accessCodes/${accessCode}/usedAt`]: issuedAt,
+    // Single-path access-code consume (not leaf multipath): $code rules need used+usedBy
+    // together in newData; sibling leaf updates are not visible to each other.
+    [`accessCodes/${accessCode}`]: {
+      ...codeData,
+      used: true,
+      usedBy: username,
+      usedAt: issuedAt,
+    },
     ...directoryPathsForPlayer(username, buildDirectoryEntry(username, playerRecord)),
     ...emptyPlayerTradeIndexPaths(username),
     ...buildLeaderboardSummaryPathsForPlayer(username, playerRecord, { now: issuedAt }),
