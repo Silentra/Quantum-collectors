@@ -5,7 +5,7 @@
  */
 
 import * as auth from './auth.js';
-import { resetPlayerPassword } from './auth.js';
+import { resetPlayerPassword, isFirebaseAuthEnabled } from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
 import { initCardDetailModal, openCardDetailModal } from './card-detail-modal.js';
@@ -1147,6 +1147,11 @@ async function showPlayerDetail(username) {
       <!-- Reset Password -->
       <div class="bg-surface-800 rounded-lg p-4">
         <h4 class="font-semibold text-sm mb-2">Reset Password</h4>
+        <p id="pd-reset-password-auth-note" class="text-xs text-amber-300 mb-2 hidden">
+          Firebase Auth is on: in-game RTDB hash reset is disabled. Use the trusted Admin script
+          (<code class="text-amber-200">scripts/s8b-auth-admin.mjs set-password</code>) for now.
+          Teacher in-app Auth reset (claim-verified) comes next after S8b verification.
+        </p>
         <div class="flex gap-2">
           <input id="pd-new-password" type="password" placeholder="New password (min 4 chars)" class="admin-input flex-1" autocomplete="new-password">
           <button id="pd-reset-password" class="bg-orange-600 hover:bg-orange-500 px-3 py-1 rounded text-sm whitespace-nowrap">Reset</button>
@@ -1401,8 +1406,30 @@ async function showPlayerDetail(username) {
   const resetPwBtn = content.querySelector('#pd-reset-password');
   const resetPwInput = content.querySelector('#pd-new-password');
   const resetPwMsg = content.querySelector('#pd-reset-password-msg');
+  const resetPwAuthNote = content.querySelector('#pd-reset-password-auth-note');
+  if (resetPwAuthNote && isFirebaseAuthEnabled()) {
+    resetPwAuthNote.classList.remove('hidden');
+    if (resetPwBtn) {
+      resetPwBtn.disabled = true;
+      resetPwBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      resetPwBtn.title = 'Disabled while Firebase Auth is on — use s8b-auth-admin.mjs set-password';
+    }
+    if (resetPwInput) {
+      resetPwInput.disabled = true;
+      resetPwInput.placeholder = 'Use Admin script while Auth is on';
+    }
+  }
   if (resetPwBtn && resetPwInput) {
     resetPwBtn.addEventListener('click', async () => {
+      if (isFirebaseAuthEnabled()) {
+        if (resetPwMsg) {
+          resetPwMsg.textContent =
+            'Firebase Auth is on — use scripts/s8b-auth-admin.mjs set-password (in-game hash reset disabled).';
+          resetPwMsg.className = 'text-xs mt-1 text-amber-300';
+          resetPwMsg.classList.remove('hidden');
+        }
+        return;
+      }
       const newPw = resetPwInput.value;
       if (!newPw || newPw.trim().length < 4) {
         resetPwMsg.textContent = 'Password must be at least 4 characters.';

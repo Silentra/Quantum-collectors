@@ -24,6 +24,7 @@ const firebaseConfig = {
 
 let _app = null;
 let _db = null;
+let _auth = null;
 let _initialized = false;
 
 /**
@@ -211,11 +212,12 @@ function installXHRInterceptor() {
 }
 
 /**
- * Initialize Firebase services (App + RTDB only, no Firebase Auth).
+ * Initialize Firebase services (App + RTDB + Auth).
+ * Auth is initialized always; app login/register use it only when qc_firebase_auth=true.
  * Safe to call multiple times — only initializes once.
  */
 export function initFirebase() {
-  if (_initialized) return { app: _app, db: _db };
+  if (_initialized) return { app: _app, db: _db, auth: _auth };
 
   const sdkVersion = typeof firebase !== 'undefined' ? (firebase.SDK_VERSION || 'unknown') : 'not loaded';
   console.log(`[Firebase] SDK version: ${sdkVersion}`);
@@ -242,6 +244,18 @@ export function initFirebase() {
     // Step 6: Go online
     _db.goOnline();
 
+    // Step 7: Auth (LOCAL persistence). Feature flag in auth.js gates usage.
+    if (typeof firebase.auth !== 'function') {
+      throw new Error('Firebase Auth SDK not loaded (firebase-auth-compat.js missing)');
+    }
+    _auth = firebase.auth();
+    try {
+      _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    } catch (persistErr) {
+      console.warn('[Firebase] Auth persistence set failed:', persistErr?.message || persistErr);
+    }
+    console.log('[Firebase] Auth instance created');
+
     _initialized = true;
     console.log(`[Firebase] Ready (transport patch: ${patched ? 'applied' : 'XHR-intercept-only'})`);
   } catch (e) {
@@ -249,7 +263,7 @@ export function initFirebase() {
     throw e;
   }
 
-  return { app: _app, db: _db };
+  return { app: _app, db: _db, auth: _auth };
 }
 
 /** Get Firebase Realtime Database instance */
@@ -258,7 +272,18 @@ export function getDatabase() {
   return _db;
 }
 
+/** Get Firebase Auth instance */
+export function getAuth() {
+  if (!_auth) throw new Error('Firebase Auth not initialized. Call initFirebase() first.');
+  return _auth;
+}
+
 /** Check if Firebase is configured (not placeholder keys) */
 export function isConfigured() {
   return firebaseConfig.apiKey !== 'YOUR_API_KEY';
+}
+
+/** Project id (for Admin scripts / docs). */
+export function getFirebaseProjectId() {
+  return firebaseConfig.projectId;
 }

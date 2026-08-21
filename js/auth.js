@@ -1,7 +1,7 @@
 /**
  * Auth Module - Username/Password Authentication via Firebase RTDB
  *
- * No Firebase Auth — passwords are stored (hashed) in players/{username}.
+ * Firebase Auth optional via qc_firebase_auth (S8b) — passwords are stored (hashed) in players/{username}.
  * Sessions persist via localStorage with a server-backed opaque session id
  * (players/{username}/activeSession). Only username === '__admin__' is exempt.
  *
@@ -22,6 +22,7 @@
 
 import * as db from './database.js';
 import * as config from './config.js';
+import { getAuth } from './firebase-config.js';
 import {
   ensureCurrentPlayerScope,
   ensurePlayerTradeIndexScope,
@@ -119,6 +120,72 @@ function simpleHash(str) {
 // ---------- Session helpers ----------
 
 /** Opaque random session id (16 bytes hex). */
+
+// ---------- Firebase Auth (S8b; gated by qc_firebase_auth) ----------
+
+const FIREBASE_AUTH_FLAG_KEY = 'qc_firebase_auth';
+const AUTH_EMAIL_DOMAIN = 'scicards.local';
+
+/** True when Firebase Auth is authoritative for student login/register. */
+export function isFirebaseAuthEnabled() {
+  try {
+    return localStorage.getItem(FIREBASE_AUTH_FLAG_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+/** Internal synthetic email — never collected from / shown to students. */
+export function usernameToAuthEmail(username) {
+  const u = String(username || '').trim().toLowerCase();
+  return `${u}@${AUTH_EMAIL_DOMAIN}`;
+}
+
+function waitForFirebaseAuthUser() {
+  const auth = getAuth();
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return new Promise((resolve) => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      unsub();
+      resolve(user);
+    });
+  });
+}
+
+async function signOutFirebaseBestEffort() {
+  try {
+    const auth = getAuth();
+    if (auth.currentUser) await auth.signOut();
+  } catch (e) {
+    console.warn('[Auth] Firebase signOut failed:', e?.message || e);
+  }
+}
+
+function mapFirebaseAuthError(err) {
+  const code = err && err.code ? String(err.code) : '';
+  if (
+    code === 'auth/user-not-found'
+    || code === 'auth/wrong-password'
+    || code === 'auth/invalid-credential'
+    || code === 'auth/invalid-login-credentials'
+  ) {
+    return 'Incorrect username or password.';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return 'Username already taken.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'Password must be at least 6 characters when Firebase Auth is on.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Please wait and try again.';
+  }
+  if (code === 'auth/network-request-failed') {
+    return 'Network error. Check your connection and try again.';
+  }
+  return (err && err.message) ? String(err.message) : 'Authentication failed.';
+}
+
 function generateSessionId() {
   const bytes = new Uint8Array(16);
   crypto.getRandomValues(bytes);
@@ -314,6 +381,7 @@ async function ensureAuthPlayerTradeIndex(username, options = {}) {
 function forceLocalExit(message) {
   if (_exitingLocally) return;
   _exitingLocally = true;
+  void signOutFirebaseBestEffort();
   stopSessionGuard();
   releaseAuthOwnedScopes();
   clearPersonalCacheAfterScopeRelease('forceLocalExit');
@@ -426,6 +494,7 @@ function setupCrossTabSessionWatch() {
  */
 export async function logout() {
   stopSessionGuard();
+  await signOutFirebaseBestEffort();
   const session = getSession();
   if (session && session.username && session.username !== '__admin__' && session.sessionId) {
     await db.clearActiveSessionIfOwned(session.username, session.sessionId);
@@ -576,6 +645,19 @@ export async function initAuth() {
     return;
   }
 
+  if (isFirebaseAuthEnabled()) {
+    const fbUser = await waitForFirebaseAuthUser();
+    const expectedEmail = usernameToAuthEmail(session.username);
+    if (!fbUser || String(fbUser.email || '').toLowerCase() !== expectedEmail) {
+      console.warn('[Auth] Stale session cleared (Firebase Auth user missing/mismatch)');
+      await signOutFirebaseBestEffort();
+      releaseAuthOwnedScopes();
+      clearLocalSessionOnly();
+      setPendingAuthMessage(MSG_SESSION_INVALID);
+      return;
+    }
+  }
+
   const hydrated = await hydrateCurrentPlayer(session.username);
   if (!hydrated.ok) {
     console.warn('[Auth] Stale session cleared (current-player hydrate failed)', hydrated.error);
@@ -657,9 +739,17 @@ export async function login(username, password) {
     return { success: false, error: 'Account not found. Please register first.' };
   }
 
-  const hashedInput = await hashPassword(password);
-  if (player.password !== hashedInput) {
-    return { success: false, error: 'Incorrect password.' };
+  if (isFirebaseAuthEnabled()) {
+    try {
+      await getAuth().signInWithEmailAndPassword(usernameToAuthEmail(username), password);
+    } catch (err) {
+      return { success: false, error: mapFirebaseAuthError(err) };
+    }
+  } else {
+    const hashedInput = await hashPassword(password);
+    if (player.password !== hashedInput) {
+      return { success: false, error: 'Incorrect password.' };
+    }
   }
 
   const sessionId = generateSessionId();
@@ -669,6 +759,7 @@ export async function login(username, password) {
     issuedAt
   });
   if (!ack.ok) {
+    if (isFirebaseAuthEnabled()) await signOutFirebaseBestEffort();
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
 
@@ -678,7 +769,10 @@ export async function login(username, password) {
     username,
     isAdmin: player.isAdmin === true,
     loginTime: issuedAt,
-    sessionId
+    sessionId,
+    authUid: (isFirebaseAuthEnabled() && getAuth().currentUser)
+      ? getAuth().currentUser.uid
+      : (player.authUid || null),
   };
   setSession(session);
   armSessionGuardGrace(sessionId);
@@ -689,6 +783,7 @@ export async function login(username, password) {
     releaseAuthOwnedScopes();
     // Do not clear server activeSession we just claimed — next login replaces it.
     clearLocalSessionOnly();
+    if (isFirebaseAuthEnabled()) await signOutFirebaseBestEffort();
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
 
@@ -700,14 +795,6 @@ export async function login(username, password) {
   return { success: true, session };
 }
 
-// ---------- Register ----------
-
-/**
- * Register with username, password, and access code.
- * S6a: once-loads accessCodes/{code} before validate (fail-closed; no subscribe).
- * Scoped: once-loads players/{username} before username-taken check (cache miss ≠ free).
- * Commits player (with activeSession) + access-code consumption in one acknowledged multi-path update.
- */
 export async function register(username, password, accessCode) {
   if (!username || !username.trim()) {
     return { success: false, error: 'Please enter a username.' };
@@ -717,6 +804,9 @@ export async function register(username, password, accessCode) {
   }
   if (password.trim().length < 4) {
     return { success: false, error: 'Password must be at least 4 characters.' };
+  }
+  if (isFirebaseAuthEnabled() && password.trim().length < 6) {
+    return { success: false, error: 'Password must be at least 6 characters when Firebase Auth is on.' };
   }
   if (!accessCode || !accessCode.trim()) {
     return { success: false, error: 'Please enter an access code.' };
@@ -763,11 +853,35 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'This access code has already been used.' };
   }
 
-  const hashedPassword = await hashPassword(password);
+  const useFirebase = isFirebaseAuthEnabled();
+  let authUid = null;
+
+  if (useFirebase) {
+    try {
+      const cred = await getAuth().createUserWithEmailAndPassword(
+        usernameToAuthEmail(username),
+        password,
+      );
+      authUid = cred.user.uid;
+      try {
+        await cred.user.updateProfile({ displayName: username });
+      } catch (profileErr) {
+        console.warn('[Auth] updateProfile failed:', profileErr?.message || profileErr);
+      }
+    } catch (err) {
+      return { success: false, error: mapFirebaseAuthError(err) };
+    }
+  }
+
+  const hashedPassword = useFirebase ? null : await hashPassword(password);
   const sessionId = generateSessionId();
   const issuedAt = Date.now();
 
   const playerRecord = buildPlayerRecord(username, hashedPassword, codeData.group || null);
+  if (useFirebase) {
+    delete playerRecord.password;
+    playerRecord.authUid = authUid;
+  }
   playerRecord.activeSession = { id: sessionId, issuedAt };
 
   // Embed starter projects in the same atomic player write.
@@ -791,18 +905,28 @@ export async function register(username, password, accessCode) {
   });
 
   if (!ack.ok) {
+    if (useFirebase) {
+      try {
+        const u = getAuth().currentUser;
+        if (u) await u.delete();
+      } catch (delErr) {
+        console.warn('[Auth] Rollback Auth user delete failed:', delErr?.message || delErr);
+      }
+      await signOutFirebaseBestEffort();
+    }
     return { success: false, error: MSG_SESSION_ESTABLISH };
   }
 
   console.log(`[ResearchProjects] New account sync — generated:${regSyncResult.generatedCount}`);
-  console.log(`[Auth] New player created: ${username}`);
+  console.log(`[Auth] New player created: ${username}${useFirebase ? ' (Firebase Auth)' : ' (legacy hash)'}`);
 
   const session = {
     username,
     isAdmin: false,
     isTradeRestricted: false,
     loginTime: issuedAt,
-    sessionId
+    sessionId,
+    authUid: authUid || null,
   };
   setSession(session);
   armSessionGuardGrace(sessionId);
@@ -812,7 +936,6 @@ export async function register(username, password, accessCode) {
   const scoped = await ensureCurrentPlayerScope(username, { ackCacheFallback: true });
   if (!scoped.ok) {
     console.warn('[Auth] Current-player scope failed after registration', scoped.error);
-    // Account exists; keep local session if cache has the player so the user can enter.
     if (db.get(`players/${username}`)) {
       const sub = subscribeCurrentPlayer(username);
       if (sub.ok) {
@@ -823,6 +946,7 @@ export async function register(username, password, accessCode) {
     }
     releaseAuthOwnedScopes();
     clearLocalSessionOnly();
+    if (useFirebase) await signOutFirebaseBestEffort();
     return {
       success: false,
       error: 'Account was created but profile hydration failed. Please sign in.',
@@ -836,10 +960,7 @@ export async function register(username, password, accessCode) {
   return { success: true, session };
 }
 
-/**
- * Pick up to `count` random items from `pool` without replacement.
- * Returns at most pool.length items (graceful cap).
- */
+
 function sampleWithoutReplacement(pool, count) {
   if (!pool || pool.length === 0 || count <= 0) return [];
   const copy = [...pool];
@@ -1010,12 +1131,22 @@ export async function adminLogin(password) {
 
 /**
  * Reset a player's password (admin tool).
- * Hashes the new password and writes it — existing password is never read or returned.
+ * When Firebase Auth is authoritative, RTDB hash reset is disabled — use the trusted Admin script.
  * @param {string} username
  * @param {string} newPassword
  * @returns {{ success: boolean, error?: string }}
  */
 export async function resetPlayerPassword(username, newPassword) {
+  if (isFirebaseAuthEnabled()) {
+    return {
+      success: false,
+      error:
+        'Firebase Auth is on — in-game RTDB hash reset is disabled. '
+        'Use scripts/s8b-auth-admin.mjs set-password (or Firebase Console). '
+        'Teacher in-app Auth reset (claim-verified Admin SDK) is the next classroom step after S8b verification.',
+    };
+  }
+
   if (!username || !username.trim()) {
     return { success: false, error: 'No username provided.' };
   }
@@ -1037,12 +1168,6 @@ export async function resetPlayerPassword(username, newPassword) {
   return { success: true };
 }
 
-// ---------- Access codes ----------
-
-/**
- * Generate access codes
- * Returns array of generated code strings
- */
 export function generateAccessCodes(count, group = null) {
   const codes = [];
   for (let i = 0; i < count; i++) {

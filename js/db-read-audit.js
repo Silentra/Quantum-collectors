@@ -563,10 +563,13 @@ API:
   qcPersonalAudit.workflowS5cD7b() // Scoped listing expiry
   qcPersonalAudit.workflowS5cD7()  // Final S5c-D Trading isolation umbrella
   qcPersonalAudit.workflowS6e()    // S6e final isolation matrix (alias: workflowS6)
+  qcPersonalAudit.workflowClassroomDefaultFlip()
+  qcPersonalAudit.workflowCardArtRetry()
+  qcPersonalAudit.workflowS8a()    // S8a security docs + live rules snapshot
+  qcPersonalAudit.workflowS8b()    // S8b Firebase Auth foundation
 
-Never logs values/passwords/sessions/inventories. Root listener unchanged.
-Does not claim all Trading is scoped-clean until later S5c-D phases.`);
-}
+Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
+S8a is docs-only — no Auth / no authz rule deploy.
 
 /**
  * Print guided pasteable workflow for Shell + personal tabs.
@@ -1612,7 +1615,7 @@ rootListenerAttached===false, firebaseActive===true, rootSnapshots.total===0);
 persist auto-on under qc_scoped_loading; allowlist-shaped cache; scoped self-hydration;
 flag OFF + reload restored root-on. Full tab matrix intentionally deferred to later S7.
 S7c is COMPLETE + VERIFIED. S7d + S7 overall COMPLETE + VERIFIED.
-Scoped classroom default flip — IMPLEMENTED — VERIFICATION PAUSED (final gameplay smoke). S8 not started.
+Scoped classroom default flip — COMPLETE + VERIFIED. S8a COMPLETE; S8b not started.
 
 Historical authority was qc_scoped_loading opt-in; production default is now scoped.
 Emergency: qc_force_root_loading=true + reload.
@@ -1633,7 +1636,7 @@ All checks passed: root-on regression; scoped Trading canonical fallback denied;
 no unsafe empty trades/* migration writes; Admin Access purpose admin-access;
 student LB + Admin Seasons archive hydration; rollback to root-on.
 No remaining S7c blocker. S7d + S7 COMPLETE + VERIFIED.
-Scoped classroom default flip — IMPLEMENTED — VERIFICATION PAUSED (final gameplay smoke). S8 not started.
+Scoped classroom default flip — COMPLETE + VERIFIED. S8a COMPLETE; S8b not started.
 
 Historical regression (do not re-run as a gate unless regressing):
   qcTradeIndex.canAllowCanonicalTradeTreeFallback() under scoped → false
@@ -1651,7 +1654,7 @@ export function workflowS7d() {
 
 Status: COMPLETE + VERIFIED. S7 overall COMPLETE + VERIFIED.
 D1–D11 PASSED (incl. auth scoped once-load before login/register cache checks).
-Classroom default flip is separate (see workflowClassroomDefaultFlip). Do not begin S8.
+Classroom default flip is separate (see workflowClassroomDefaultFlip). S8a COMPLETE; do not begin S8b until approved.
 
 CREDITED: S7a persist; S7b dual-mode; S7c fail-closed/Admin/archives; Gate B/C; S6e.
 Unique Cards correctness repair — COMPLETE + VERIFIED.
@@ -1674,9 +1677,9 @@ export function workflowClassroomDefaultFlip() {
   console.info(`
 === Scoped classroom default flip ===
 
-Status: IMPLEMENTED — VERIFICATION PAUSED
-  Remaining: short production-default scoped gameplay smoke only
-  (not another architecture matrix). Do not begin S8.
+Status: COMPLETE + VERIFIED.
+Production-default scoped gameplay fully playable; trade hydration + claim
+null-safety verified. S8a COMPLETE; do not begin S8b until separately approved.
 
 Authority:
   default (no flags) → mode=scoped, reason=production-default, persist ON
@@ -1689,16 +1692,14 @@ Emergency rollback:
 Restore production default:
   localStorage.removeItem('qc_force_root_loading'); location.reload();
 
-Prereq: trade canonical hydration + claim null-safety are COMPLETE + VERIFIED.
-
-Smoke (no flags unless testing rollback):
+Regression smoke (no flags unless testing rollback):
   1) getBootModeReport() → scoped / production-default / rootListenerAttached false / persist true
   2) root snapshots total 0 (qcDbMetrics if enabled)
   3) login or session restore
   4) one personal surface
   5) Leaderboard smoke
   6) Trading idle — canAllowCanonicalTradeTreeFallback() === false
-  7) one Trading action (Respond or Accept) after hydration fix
+  7) one Trading action (Respond or Accept)
   8) logout / user-switch smoke
   9) set force-root + reload → root / emergency-override / rootListenerAttached true
   10) removeItem force-root + reload → scoped restored
@@ -1713,7 +1714,7 @@ export function workflowTradeCanonicalHydration() {
 === Scoped trade/listing canonical-by-ID hydration ===
 
 Status: COMPLETE + VERIFIED.
-Classroom default flip remains VERIFICATION PAUSED for final gameplay smoke only. Do not begin S8.
+Classroom default flip — COMPLETE + VERIFIED. S8a COMPLETE; do not begin S8b until approved.
 
 Evidence: cold Accept/Cancel (listing); cold Respond/Cancel/Confirm (direct);
 missing IDs still NOT_FOUND; no bare trade-tree fallback.
@@ -1745,7 +1746,7 @@ export function workflowClaimNullSafety() {
 === Scoped RTDB claim null-safety ===
 
 Status: COMPLETE + VERIFIED.
-Classroom default flip remains VERIFICATION PAUSED for final gameplay smoke only. Do not begin S8.
+Classroom default flip — COMPLETE + VERIFIED. S8a COMPLETE; do not begin S8b until approved.
 
 Evidence: cold Listing Accept (sawSpeculativeNull → committed → fulfill);
 cold Direct Confirm; same-listing one winner; missing IDs; emergency root-on claim OK.
@@ -1775,23 +1776,49 @@ export function workflowCardArtRetry() {
   console.info(`
 === Card-art transient retry hardening ===
 
-Status: IMPLEMENTED — AWAITING FINAL RECOVERY VERIFICATION. Do not begin S8.
+Status: COMPLETE + VERIFIED.
 
 Behavior: first img error → emoji immediately → one same-URL retry after ~500ms
   (no cache-bust). Success restores art; failure keeps emoji. Max one retry.
 Surfaces: any data-card-art-fallback=1 (Collection, modal, pack face, Research mini).
 
-Recovery proof (deterministic; no DevTools URL race):
+Recovery proof (deterministic):
   localStorage.setItem('qc_card_art_diag','true'); location.reload();
   // open Collection with art visible, then:
   await qcCardArtDiag.simulateTransientFailure()
 Expect [CardArtDiag]: initial_failure → retry_attempted → retry_recovered
   and artwork restored without page reload.
 
-Other smoke:
-  1) Normal load → one network request; artwork shows
-  2) Force persistent fail → emoji; at most two GETs; no loop
-  3) Collection + Research mini + modal inherit central handler
+Also verified: persistent fail / one-retry / no-loop; Collection + Research mini + modal.
+`);
+}
+
+/**
+ * Pasteable S8a security-docs / live-rules snapshot status (non-programmer).
+ * Docs only — no Firebase Auth, no authorization rule tighten.
+ */
+export function workflowS8a() {
+  console.info(`
+=== S8a Rules docs + live snapshot ===
+
+Status: COMPLETE. No authz deploy. No Firebase Auth yet.
+Live rules (Console SoT; repo: database.rules.json):
+  .read true / .write true + inventory leaf .validate numeric >= 0
+
+SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
+  S8a COMPLETE — honest docs, threat model, root matrix, snapshot
+  S8b IMPLEMENTED — AWAITING VERIFICATION (see workflowS8b)
+  S8c BLOCKED on S8b + Admin SDK custom-claim provisioning
+  S8d NOT STARTED — privileged Admin / Functions; emergency-root reassess
+
+S8b migration preference (planning only):
+  Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
+  Prefer one-time/manual reset over a large lazy dual-auth migration.
+  New accounts → Auth native; long-term remove players/{u}.password after confidence.
+  Admin custom claims MUST exist before S8c rules use an admin claim.
+
+STOP: do not paste auth!=null rules; do not remove qc_force_root_loading in S8a.
+Foreign-PTI readiness warnings = diagnostic noise (not index corruption).
 `);
 }
 
@@ -1799,6 +1826,45 @@ Other smoke:
  * Pasteable S6e final isolation audit matrix (short labeled sessions; root stays ON).
  * Alias: workflowS6()
  */
+/**
+ * Pasteable S8b Firebase Auth foundation status (non-programmer).
+ * Rules remain open. No S8c.
+ */
+export function workflowS8b() {
+  console.info(`
+=== S8b Firebase Auth foundation ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8c.
+RTDB authorization rules unchanged (still open + inventory >= 0 validate).
+
+Feature flag:
+  ON:  localStorage.setItem('qc_firebase_auth','true'); location.reload();
+  OFF: localStorage.removeItem('qc_firebase_auth'); location.reload();
+
+Identity: username/password forms unchanged.
+Internal Auth email: {username}@scicards.local (never shown to students).
+
+Verification workflow:
+  1) Flag OFF → legacy bobby (or any hashed) login still works.
+  2) Migrate bobby with trusted script (see scripts/README-S8b-auth.md):
+       node scripts/s8b-auth-admin.mjs migrate-user bobby "TempPass!"
+  3) Flag ON → bobby login → same RTDB inventory/stats; Auth session present.
+  4) Wrong password → rejected by Firebase Auth.
+  5) Logout / reload → session restore; forced exit signs out Auth.
+  6) Fresh student register (Auth on) → Auth user + RTDB player + access code used;
+     no new players/{u}.password hash.
+  7) If RTDB write fails after Auth create → Auth user deleted (rollback).
+  8) Teacher: migrate-user + set-admin-claim; __admin__ / config.adminPassword still work.
+  9) Admin Players → Reset Password shows disabled/warning while Auth flag ON.
+ 10) Temp student reset: node scripts/s8b-auth-admin.mjs set-password <user> "NewPass!"
+ 11) Flag OFF again → legacy hash login still works for unmigrated hashed accounts.
+
+Trusted script: scripts/s8b-auth-admin.mjs (+ scripts/README-S8b-auth.md)
+STOP: no authz rule deploy; no Cloud Functions required for S8b; no scoped-loading changes.
+`);
+}
+
+
 export function workflowS6e() {
   console.info(`
 === S6e Final Isolation Audits ===
@@ -1932,6 +1998,8 @@ function _installWindowApi() {
     workflowTradeCanonicalHydration,
     workflowClaimNullSafety,
     workflowCardArtRetry,
+    workflowS8a,
+    workflowS8b,
     enableAudit,
     disableAudit,
     enableIsolation,
