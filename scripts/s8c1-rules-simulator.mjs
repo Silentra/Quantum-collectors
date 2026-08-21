@@ -55,6 +55,14 @@ async function main() {
       await set(ref(db, '/'), {
         admins: { teacherUid: true },
         tradeIndexMeta: { schemaVersion: 1, rebuiltAt: now },
+        config: {
+          gameOpen: true,
+          registrationOpen: true,
+          adminPassword: 'secret',
+        },
+        cards: { c1: { id: 'c1', name: 'Card' } },
+        packs: {},
+        groups: {},
         playerDirectory: {
           offerer: {
             username: 'offerer',
@@ -326,6 +334,19 @@ async function main() {
     // Foreign full player still denied for students
     await assertFails(get(ref(offerer.database(), 'players/target')));
     pass('student full foreign players/{other} read denied');
+
+    // --- Pre-auth public gates vs locked defs ---
+    const anon = testEnv.unauthenticatedContext();
+    await assertSucceeds(get(ref(anon.database(), 'config/gameOpen')));
+    pass('unauthenticated config/gameOpen read allowed');
+    await assertSucceeds(get(ref(anon.database(), 'config/registrationOpen')));
+    pass('unauthenticated config/registrationOpen read allowed');
+    await assertFails(get(ref(anon.database(), 'config')));
+    pass('unauthenticated full /config read denied');
+    await assertFails(get(ref(anon.database(), 'cards')));
+    pass('unauthenticated /cards read denied');
+    await assertFails(get(ref(anon.database(), 'playerDirectory/bobby10')));
+    pass('unauthenticated playerDirectory leaf read denied');
 
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');

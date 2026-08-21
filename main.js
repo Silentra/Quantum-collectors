@@ -17,9 +17,11 @@ import './js/teacher-ops.js'; // S8b+ P0 Trusted Teacher callables (qcTeacherOps
 import './js/trade-index.js'; // S5c-A trade index builders + qcTradeIndex DevTools
 import {
   hydrateSharedDefs,
+  hydratePublicGateConfig,
   isSharedDefsReady,
   bootstrapAccessCodesOnce,
 } from './js/db-hydration.js';
+import { getAuth } from './js/firebase-config.js';
 import * as config from './js/config.js';
 import * as cards from './js/cards.js';
 import * as packs from './js/packs.js';
@@ -47,18 +49,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     await db.initDB();
     console.log('[SciCards] Database initialized');
 
-    // 1b. Phase S2 — explicit sharedDefs once-loads beside root (config/cards/packs/groups).
-    // accessCodes intentionally excluded. No current-player or social subscriptions.
+    // 1b. S8c: public classroom gates only (gameOpen / registrationOpen).
+    // Full sharedDefs (config/cards/packs/groups) require Auth — deferred below.
     metrics.mark('shared-hydrate-start');
-    const sharedHydration = await hydrateSharedDefs();
-    metrics.mark('shared-hydrate-complete');
+    const gateHydration = await hydratePublicGateConfig();
     console.log(
-      '[SciCards] Shared hydration:',
-      sharedHydration.status,
+      '[SciCards] Public gate hydration:',
+      gateHydration.status,
       'paths=',
-      (sharedHydration.pathsHydrated || []).join(','),
-      'ready=',
-      isSharedDefsReady(),
+      (gateHydration.pathsHydrated || []).join(','),
     );
 
     // 2. Initialize Auth (async — restores session from localStorage)
@@ -67,7 +66,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     metrics.mark('initAuth-complete');
     console.log('[SciCards] Auth initialized');
 
-    // 3. Load config
+    // 2b. Authenticated sharedDefs (full config + cards/packs/groups)
+    const authed =
+      !!auth.getSession()
+      || (auth.isFirebaseAuthEnabled() && !!getAuth().currentUser);
+    if (authed) {
+      const sharedHydration = await hydrateSharedDefs();
+      metrics.mark('shared-hydrate-complete');
+      console.log(
+        '[SciCards] Shared hydration:',
+        sharedHydration.status,
+        'paths=',
+        (sharedHydration.pathsHydrated || []).join(','),
+        'ready=',
+        isSharedDefsReady(),
+      );
+    } else {
+      metrics.mark('shared-hydrate-complete');
+      console.info(
+        '[SciCards] Deferred sharedDefs (config/cards/packs/groups) until authenticated (S8c)',
+      );
+    }
+
+    // 3. Load config (gate leaves already in cache; full config when sharedDefs ran)
     metrics.mark('config-load');
     config.loadConfig();
     console.log('[SciCards] Config loaded');
