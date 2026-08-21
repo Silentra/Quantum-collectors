@@ -18,6 +18,7 @@
 import * as auth from './auth.js';
 import * as player from './player.js';
 import * as groups from './groups.js';
+import * as db from './database.js';
 import {
   STAT_TYPES,
   getLeaderboardByStat,
@@ -29,12 +30,13 @@ import {
   getSnapshotMeta,
 } from './leaderboard-queries.js';
 import { getActiveSeason } from './leaderboard-seasons.js';
-import { areLeaderboardSummariesReady } from './leaderboard-summaries.js';
+import { areLeaderboardSummariesReady, resolveLeaderboardGroupFields } from './leaderboard-summaries.js';
 import {
   ensureLeaderboardsScope,
   releaseLeaderboardsScope,
   hydrateLeaderboardArchivesOnce,
 } from './db-hydration.js';
+import { DIRECTORY_ROOT } from './player-directory.js';
 
 // ─── Category config ───────────────────────────────────────────────────────
 
@@ -111,7 +113,7 @@ export function renderLeaderboard(options = {}) {
   }
 
   const p = player.getPlayer(session.username);
-  const groupId = p?.groupId ?? null;
+  const { groupId } = resolveLeaderboardGroupFields(p);
 
   _renderCategoryTabs();
   _renderSeasonSelector(groupId);
@@ -125,6 +127,15 @@ export function renderLeaderboard(options = {}) {
  * @returns {Promise<void>}
  */
 export async function enterLeaderboardTab() {
+  // Once-load current-player directory so live boards can drop deleted orphans.
+  // Prefer once-load (no Trading-owned subscribe ownership).
+  try {
+    if (typeof db.loadPathOnce === 'function') {
+      await db.loadPathOnce(DIRECTORY_ROOT, { force: false });
+    }
+  } catch (e) {
+    console.warn('[Leaderboard] playerDirectory once-load failed:', e?.message || e);
+  }
   await ensureLeaderboardsScope();
   const archives = await hydrateLeaderboardArchivesOnce({ force: true });
   if (!archives.ok) {

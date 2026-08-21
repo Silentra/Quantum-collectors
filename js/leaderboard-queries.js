@@ -37,7 +37,24 @@ import {
   normalizeLeaderboardStatKey,
   resolveLeaderboardStatValue,
 } from './leaderboard-summaries.js';
+import { DIRECTORY_ROOT } from './player-directory.js';
 
+/**
+ * Live summaries should only show current players. playerDirectory is the safe
+ * current-player projection (nulled on deletePlayer). When directory is not yet
+ * hydrated, fail open so boards are not wiped empty.
+ * @param {string} username
+ * @returns {boolean}
+ */
+function _isCurrentLivePlayer(username) {
+  const key = String(username || '').trim();
+  if (!key || key === '__admin__') return false;
+  const dirReady = typeof db.isPathReady === 'function'
+    ? db.isPathReady(DIRECTORY_ROOT)
+    : db.get(DIRECTORY_ROOT) != null;
+  if (!dirReady && db.get(DIRECTORY_ROOT) == null) return true;
+  return db.get(`${DIRECTORY_ROOT}/${key}`) != null;
+}
 export { STAT_TYPES };
 
 // ---------- Internal helpers ----------
@@ -93,7 +110,7 @@ function _buildSummaryEntries(statType) {
   if (!statKey || !areLeaderboardSummariesReady()) return [];
   const children = db.getChildren(`${LEADERBOARDS_ROOT}/${statKey}`) || [];
   return children
-    .filter(({ key }) => key && key !== '__admin__')
+    .filter(({ key }) => key && key !== '__admin__' && _isCurrentLivePlayer(key))
     .map(({ key: username, value: entry }) => ({
       username,
       value: typeof entry?.value === 'number' && Number.isFinite(entry.value) ? entry.value : 0,

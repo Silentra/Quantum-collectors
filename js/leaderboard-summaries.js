@@ -180,6 +180,22 @@ export function playerLikeWithStatOverlay(basePlayer, overlayByStat = {}) {
 }
 
 /**
+ * Resolve group projection fields the same way as playerDirectory (legacy `group` / `subgroup`).
+ * @param {object|null|undefined} playerLike
+ * @returns {{ groupId: string|null, subgroupId: string|null }}
+ */
+export function resolveLeaderboardGroupFields(playerLike) {
+  const p = playerLike && typeof playerLike === 'object' ? playerLike : {};
+  const groupId = p.groupId != null && p.groupId !== ''
+    ? String(p.groupId)
+    : (p.group != null && p.group !== '' ? String(p.group) : null);
+  const subgroupId = p.subgroupId != null && p.subgroupId !== ''
+    ? String(p.subgroupId)
+    : (p.subgroup != null && p.subgroup !== '' ? String(p.subgroup) : null);
+  return { groupId, subgroupId };
+}
+
+/**
  * @param {string} username
  * @param {object} playerLike
  * @param {string} statInput
@@ -187,10 +203,11 @@ export function playerLikeWithStatOverlay(basePlayer, overlayByStat = {}) {
  * @returns {{ value: number, groupId: string|null, subgroupId: string|null, updatedAt: number }}
  */
 export function buildLeaderboardSummaryEntry(username, playerLike, statInput, now = Date.now()) {
+  const { groupId, subgroupId } = resolveLeaderboardGroupFields(playerLike);
   return {
     value: resolveLeaderboardStatValue(playerLike, statInput),
-    groupId: playerLike?.groupId ?? null,
-    subgroupId: playerLike?.subgroupId ?? null,
+    groupId,
+    subgroupId,
     updatedAt: now,
   };
 }
@@ -434,11 +451,13 @@ function _installWindowApi() {
     rebuildLeaderboardSummaries,
     syncLeaderboardSummariesForPlayer,
     areLeaderboardSummariesReady,
+    resolveLeaderboardGroupFields,
     help() {
       console.info(`Leaderboard summaries (S5d)
 Root: ${LEADERBOARDS_ROOT}/{statKey}/{username} = { value, groupId, subgroupId, updatedAt }
 statKeys: ${LIVE_LEADERBOARD_STAT_KEYS.join(', ')}
 Rebuild: qcLeaderboardSummaries.rebuildLeaderboardSummaries()
+  (also removes orphan leaves for deleted players)
 Sync one: qcLeaderboardSummaries.syncLeaderboardSummariesForPlayer(username)
 Inspect: qcDbHydration.getCached('leaderboards')`);
     },
