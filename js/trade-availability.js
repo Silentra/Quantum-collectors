@@ -349,44 +349,109 @@ function _recordForeignPlayerLoad(ok) {
   });
 }
 
-function _recordForeignTradeIndexLoad(ok) {
-  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
-  metrics.recordTradeIndexLifecycle({
-    tag: ok ? 'foreignTradeIndexScopedLoad:ok' : 'foreignTradeIndexScopedLoad:fail',
-    ops: 1,
-    ok: ok === true,
-  });
-}
-
-function _recordForeignReservationSource(source) {
-  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
-  metrics.recordTradeIndexLifecycle({
-    tag: `foreignReservationSource:${source}`,
-    ops: 0,
-    ok: source === 'index' || source === 'canonical-fallback',
-  });
-  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
-    metrics.recordTradeIndexFallback({ reason: 'foreign-pti-index-unready' });
-  }
-  if ((source === 'unavailable' || source === 'loading')
-    && typeof metrics.recordTradeIndexFailClosed === 'function') {
-    metrics.recordTradeIndexFailClosed({ reason: 'foreign-pti-untrusted' });
-  }
-}
-
 /**
- * @typedef {object} TradingCounterpartyContext
- * @property {boolean} ok
- * @property {string|null} [reason]
- * @property {object|null} player
- * @property {{ direct: object, listings: object }|null} reservationMaps
- * @property {string} reservationSource
- * @property {boolean} reservationsTrusted
+ * S8c-0: trade-visible foreign player fields only (never full players/{u} root).
+ * Avoids caching password, activeSession, shop, achievements, etc. for counterparties.
+ *
+ * @param {string} username
+ * @param {{ force?: boolean }} [options]
+ * @returns {Promise<{ ok: boolean, player: object|null, reason: string|null, mode?: string }>}
  */
+export async function loadTradeVisiblePlayerOnce(username, options = {}) {
+  const key = String(username || '').trim();
+  const force = options.force === true;
+  if (!key || key === '__admin__') {
+    return { ok: false, player: null, reason: 'COUNTERPARTY_INVALID' };
+  }
+  if (typeof db.loadPathOnce !== 'function') {
+    return { ok: false, player: null, reason: 'COUNTERPARTY_LOAD_FAILED' };
+  }
+
+  const base = `players/${key}`;
+  const paths = {
+    username: `${base}/username`,
+    authUid: `${base}/authUid`,
+    inventory: `${base}/inventory`,
+    groupId: `${base}/groupId`,
+    group: `${base}/group`,
+    subgroupId: `${base}/subgroupId`,
+    isTradeRestricted: `${base}/isTradeRestricted`,
+    isTradeProfileHidden: `${base}/isTradeProfileHidden`,
+  };
+
+  const entries = Object.entries(paths);
+  const loads = await Promise.all(
+    entries.map(([, path]) => db.loadPathOnce(path, { force })),
+  );
+
+  for (const load of loads) {
+    if (!load || load.ok !== true) {
+      return { ok: false, player: null, reason: 'COUNTERPARTY_LOAD_FAILED', mode: load?.mode };
+    }
+  }
+
+  const byKey = {};
+  entries.forEach(([field], i) => {
+    byKey[field] = loads[i].value;
+  });
+
+  const exists = (typeof byKey.username === 'string' && byKey.username.length > 0)
+    || (byKey.authUid != null && byKey.authUid !== '')
+    || (byKey.inventory != null && typeof byKey.inventory === 'object')
+    || (byKey.groupId != null && byKey.groupId !== '')
+    || (byKey.group != null && byKey.group !== '')
+    || byKey.isTradeRestricted === true
+    || byKey.isTradeProfileHidden === true;
+
+  if (!exists) {
+    return { ok: false, player: null, reason: 'COUNTERPARTY_NOT_FOUND' };
+  }
+
+  const groupId = byKey.groupId != null && byKey.groupId !== ''
+    ? byKey.groupId
+    : (byKey.group != null && byKey.group !== '' ? byKey.group : null);
+
+  const player = {
+    username: typeof byKey.username === 'string' && byKey.username ? byKey.username : key,
+    authUid: byKey.authUid != null && byKey.authUid !== '' ? byKey.authUid : null,
+    inventory: (byKey.inventory && typeof byKey.inventory === 'object') ? byKey.inventory : {},
+    groupId,
+    group: groupId,
+    subgroupId: byKey.subgroupId != null && byKey.subgroupId !== '' ? byKey.subgroupId : null,
+    isTradeRestricted: byKey.isTradeRestricted === true,
+    isTradeProfileHidden: byKey.isTradeProfileHidden === true,
+  };
+
+  return { ok: true, player, reason: null, mode: loads[0]?.mode };
+}
 
 /**
- * S5c-D7a: action-scoped once-load of a counterparty player (+ optional PTI).
- * No subscribe / no permanent listener. Mutation paths should pass `{ force: true }`.
+ * Observation-only: load a single player's inventory map (no full player root).
+ * @param {string} username
+ * @param {{ force?: boolean }} [options]
+ */
+export async function loadPlayerInventoryOnce(username, options = {}) {
+  const key = String(username || '').trim();
+  const force = options.force === true;
+  if (!key || typeof db.loadPathOnce !== 'function') {
+    return { ok: false, inventory: null, reason: 'LOAD_FAILED' };
+  }
+  const load = await db.loadPathOnce(`players/${key}/inventory`, { force });
+  if (!load || load.ok !== true) {
+    return { ok: false, inventory: null, reason: 'LOAD_FAILED', mode: load?.mode };
+  }
+  const inv = load.value;
+  return {
+    ok: true,
+    inventory: (inv && typeof inv === 'object') ? inv : {},
+    reason: null,
+    mode: load.mode,
+  };
+}
+
+/**
+ * S5c-D7a: Action-scoped counterparty load — trade-visible player children + PTI/{other}.
+ * S8c-0: never once-loads the full players/{other} root.
  *
  * @param {string} username
  * @param {{ force?: boolean, reservations?: boolean, forceUnavailable?: boolean }} [options]
@@ -421,12 +486,12 @@ export async function loadTradingCounterpartyContext(username, options = {}) {
     };
   }
 
-  const playerLoad = await db.loadPathOnce(`players/${key}`, { force });
-  _recordForeignPlayerLoad(playerLoad?.ok === true);
-  if (!playerLoad || playerLoad.ok !== true) {
+  const visible = await loadTradeVisiblePlayerOnce(key, { force });
+  _recordForeignPlayerLoad(visible.ok === true && visible.reason !== 'COUNTERPARTY_NOT_FOUND');
+  if (!visible.ok) {
     return {
       ok: false,
-      reason: 'COUNTERPARTY_LOAD_FAILED',
+      reason: visible.reason || 'COUNTERPARTY_LOAD_FAILED',
       player: null,
       reservationMaps: null,
       reservationSource: 'unavailable',
@@ -434,17 +499,7 @@ export async function loadTradingCounterpartyContext(username, options = {}) {
     };
   }
 
-  const player = playerLoad.value;
-  if (!player || typeof player !== 'object') {
-    return {
-      ok: false,
-      reason: 'COUNTERPARTY_NOT_FOUND',
-      player: null,
-      reservationMaps: null,
-      reservationSource: 'unavailable',
-      reservationsTrusted: false,
-    };
-  }
+  const player = visible.player;
 
   if (!needReservations) {
     return {
@@ -506,6 +561,42 @@ export async function loadTradingCounterpartyContext(username, options = {}) {
     reservationsTrusted: false,
   };
 }
+
+
+function _recordForeignTradeIndexLoad(ok) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: ok ? 'foreignTradeIndexScopedLoad:ok' : 'foreignTradeIndexScopedLoad:fail',
+    ops: 1,
+    ok: ok === true,
+  });
+}
+
+function _recordForeignReservationSource(source) {
+  if (typeof metrics.recordTradeIndexLifecycle !== 'function') return;
+  metrics.recordTradeIndexLifecycle({
+    tag: `foreignReservationSource:${source}`,
+    ops: 0,
+    ok: source === 'index' || source === 'canonical-fallback',
+  });
+  if (source === 'canonical-fallback' && typeof metrics.recordTradeIndexFallback === 'function') {
+    metrics.recordTradeIndexFallback({ reason: 'foreign-pti-index-unready' });
+  }
+  if ((source === 'unavailable' || source === 'loading')
+    && typeof metrics.recordTradeIndexFailClosed === 'function') {
+    metrics.recordTradeIndexFailClosed({ reason: 'foreign-pti-untrusted' });
+  }
+}
+
+/**
+ * @typedef {object} TradingCounterpartyContext
+ * @property {boolean} ok
+ * @property {string|null} [reason]
+ * @property {object|null} player
+ * @property {{ direct: object, listings: object }|null} reservationMaps
+ * @property {string} reservationSource
+ * @property {boolean} reservationsTrusted
+ */
 
 /**
  * Shared ID-specific canonical leaf once-load (no bare trees, no subscribe).
@@ -1060,6 +1151,8 @@ function _installWindowApi() {
     buildTradingSelfAvailabilitySnapshot,
     buildCounterpartyAvailabilitySnapshot,
     loadTradingCounterpartyContext,
+    loadTradeVisiblePlayerOnce,
+    loadPlayerInventoryOnce,
     loadDirectTradeByIdOnce,
     loadListingByIdOnce,
     resolveResearchReservationSource,

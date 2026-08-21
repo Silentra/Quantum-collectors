@@ -567,6 +567,8 @@ API:
   qcPersonalAudit.workflowCardArtRetry()
   qcPersonalAudit.workflowS8a()    // S8a security docs + live rules snapshot
   qcPersonalAudit.workflowS8b()    // S8b Firebase Auth foundation
+  qcPersonalAudit.workflowS8bPlusP0() // S8b+ P0 Trusted Teacher Functions
+  qcPersonalAudit.workflowS8c0()   // S8c-0 client prep (foreign reads + admins registry)
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1810,7 +1812,9 @@ Live rules (Console SoT; repo: database.rules.json):
 SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8a COMPLETE — honest docs, threat model, root matrix, snapshot
   S8b IMPLEMENTED — AWAITING VERIFICATION (see workflowS8b)
-  S8c BLOCKED on S8b + Admin SDK custom-claim provisioning
+  S8b+ P0 IMPLEMENTED — AWAITING VERIFICATION (see workflowS8bPlusP0)
+  S8c-0 IMPLEMENTED — AWAITING VERIFICATION (see workflowS8c0)
+  S8c-1 NOT STARTED (tradeGrants + locked rules; Spark admins/{uid} authority)
   S8d NOT STARTED — privileged Admin / Functions; emergency-root reassess
 
 S8b migration preference (planning only):
@@ -1862,7 +1866,103 @@ Verification workflow:
  11) Flag OFF again → legacy hash login still works for unmigrated hashed accounts.
 
 Trusted script: scripts/s8b-auth-admin.mjs (+ scripts/README-S8b-auth.md)
-STOP: no authz rule deploy; no Cloud Functions required for S8b; no scoped-loading changes.
+STOP: no authz rule deploy; no scoped-loading changes. Cloud Functions arrive in S8b+ (see workflowS8bPlusP0).
+`);
+}
+
+/**
+ * Pasteable S8c-0 status (client prep before locked rules).
+ * Rules still open. No tradeGrants. No Console rules deploy.
+ */
+export function workflowS8c0() {
+  console.info(`
+=== S8c-0 Spark client prep (foreign reads + admins registry) ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+S8c-1 (tradeGrants + locked database.rules.json) — NOT STARTED.
+RTDB rules still OPEN. Do not claim security until S8c-1.
+
+What changed:
+  - Trading counterparties load trade-visible children only
+    (inventory, groupId/group, subgroupId, isTradeRestricted, isTradeProfileHidden)
+    + separate PTI load — NOT the full players/{other} root.
+  - Registration username-taken uses playerDirectory + players/{u}/authUid leaves.
+  - Admin authority transitioning to admins/{authUid}: true
+    Promote/Demote writes registry + players.isAdmin UI mirror.
+  - Auth password reset still script-only; Delete Player = RTDB only (Auth orphan possible).
+
+Legacy isAdmin() fallbacks (UNTIL S8c-1 rules lock):
+  - session.isAdmin (incl. __admin__ password login)
+  - players/{u}.isAdmin mirror
+  Preferred when present: admins/{authUid} === true
+  After S8c-1: only admins/{uid} is security authority.
+
+Bootstrap first teachers (open rules / this install):
+  1) Ensure teacher has Auth + players/{u}.authUid (migrate-user).
+  2) Sign in as teacher → Admin password promote (writes admins/{uid})
+     OR set admins/{uid}: true in Console / Admin SDK.
+  3) Reload / re-login so registry is hydrated.
+
+Verification (rules still open):
+  A) Student Trading: create/accept direct + listing still works.
+  B) After a foreign trade context load, inspect cache — foreign player should NOT
+     carry password, activeSession, achievements, shop, etc.
+     DevTools: after trading with bobby, check that db cache / qc helpers do not
+     show players/bobby/password (full root should not have been once-loaded).
+     Pasteable:
+       const c = await qcTradeAvailability.loadTradingCounterpartyContext('bobby',{force:true,reservations:false});
+       console.log(c.ok, Object.keys(c.player||{}));
+     Expected keys only: username, authUid, inventory, groupId, group, subgroupId,
+       isTradeRestricted, isTradeProfileHidden
+  C) Admin → Manage player still shows full inventory/stats (full selected-player scope).
+  D) Register with an existing username → "already taken" without loading full player.
+  E) Teacher Admin panel still opens (registry and/or legacy fallback).
+  F) Promote/Demote: RTDB shows admins/{targetUid} true/null AND players/{u}.isAdmin mirror.
+  G) Smoke: login, pack open, research claim, scoped load unaffected.
+
+Deferred: tradeGrants, rules deploy, Option C, Blaze/Functions.
+Docs: docs/BEFORE_DISTRIBUTION.md
+`);
+}
+
+/**
+ * Pasteable S8b+ P0 Trusted Teacher Functions foundation status.
+ * No password reset / delete / promote. No S8c rules.
+ */
+export function workflowS8bPlusP0() {
+  console.info(`
+=== S8b+ P0 Trusted Teacher Functions foundation ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+RTDB authorization rules unchanged (still open). No password/delete/promote callables yet.
+
+Docs: docs/S8b-PLUS-TEACHER-OPS.md
+
+Developer setup (once):
+  1) Firebase Console → Blaze plan for quantum-collectors-v2
+  2) npm install -g firebase-tools && firebase login
+  3) cd functions && npm install && cd ..
+  4) firebase deploy --only functions
+
+Exact deploy:
+  firebase deploy --only functions
+
+Bootstrap teacher claim (local script, not teachers):
+  node scripts/s8b-auth-admin.mjs set-admin-claim <teacherUsername>
+  Then teacher sign out / sign in so admin:true is on the ID token.
+
+Verification (Auth flag ON; DevTools):
+  A) Signed out of Firebase Auth:
+       await qcTeacherOps.pingTeacherOps()
+     → { ok:false, code:'unauthenticated', ... }
+  B) Signed in as student (no admin claim):
+       await qcTeacherOps.pingTeacherOps()
+     → { ok:false, code:'permission-denied', ... }
+  C) Signed in as teacher with admin:true:
+       await qcTeacherOps.pingTeacherOps()
+     → { ok:true, data:{ ok:true, command:'pingTeacherOps', uid, admin:true, message } }
+
+STOP: no S8c; no RTDB rule tighten; no Cat1 classroom ops beyond ping.
 `);
 }
 
@@ -2002,6 +2102,8 @@ function _installWindowApi() {
     workflowCardArtRetry,
     workflowS8a,
     workflowS8b,
+    workflowS8bPlusP0,
+    workflowS8c0,
     enableAudit,
     disableAudit,
     enableIsolation,

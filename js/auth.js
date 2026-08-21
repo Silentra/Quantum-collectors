@@ -38,6 +38,7 @@ import {
   directoryPathsForPlayer,
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
+  DIRECTORY_ROOT,
 } from './player-directory.js';
 import { emptyPlayerTradeIndexPaths } from './trade-index.js';
 import { syncProjects } from './project-sync.js';
@@ -48,6 +49,11 @@ import { getPhase2ADefaults, normalizePlayerSchema } from './player-schema.js';
 import { resetLoginAchievementEvaluation, runLoginAchievementEvaluation } from './achievements.js';
 import { ensurePlayerRPFields, ensurePlayerUniqueCardsOwned } from './research.js';
 import { checkAndResetWeeklyCycle } from './weekly-research-pack.js';
+import {
+  isUidInAdminRegistry,
+  loadAdminRegistryEntryOnce,
+  buildAdminRegistryUpdates,
+} from './admin-registry.js';
 
 const SESSION_KEY = 'scicards_session';
 const AUTH_MESSAGE_KEY = 'scicards_auth_message';
@@ -506,18 +512,56 @@ export async function logout() {
   db.persistLocalNow({ sessionUsername: null, reason: 'logout-null-user' });
 }
 
-/** Check if current session is admin */
+/**
+ * S8c-0 admin check.
+ *
+ * Preferred authority: admins/{authUid} === true (Spark registry).
+ *
+ * Legacy fallbacks (PRE-S8c-1 ONLY — open rules; stop treating as security after rules lock):
+ *   - session.isAdmin (includes __admin__ password login)
+ *   - players/{u}.isAdmin UI mirror
+ *
+ * After S8c-1 RTDB rules deploy, only admins/{uid} grants write power; legacy flags
+ * remain cosmetic until removed.
+ */
 export function isAdmin() {
   const session = getSession();
   if (!session) return false;
-  // Admin via admin password login
+
+  const uid = _resolveSessionAuthUid(session);
+  if (uid && isUidInAdminRegistry(uid)) return true;
+
+  // Legacy fallbacks — transition only (not security after S8c-1)
   if (session.isAdmin === true) return true;
-  // Admin via player flag
   if (session.username && session.username !== '__admin__') {
     const player = db.get(`players/${session.username}`);
-    return player && player.isAdmin === true;
+    if (player && player.isAdmin === true) return true;
   }
   return false;
+}
+
+function _resolveSessionAuthUid(session) {
+  if (session?.authUid) return String(session.authUid);
+  try {
+    const u = getAuth().currentUser;
+    if (u?.uid) return u.uid;
+  } catch { /* Auth not ready */ }
+  if (session?.username && session.username !== '__admin__') {
+    const player = db.get(`players/${session.username}`);
+    if (player?.authUid) return String(player.authUid);
+  }
+  return null;
+}
+
+/** Best-effort hydrate admins/{uid} for the signed-in Auth user. */
+async function _hydrateOwnAdminRegistry(session) {
+  const uid = _resolveSessionAuthUid(session);
+  if (!uid) return;
+  await loadAdminRegistryEntryOnce(uid, { force: true });
+  if (isUidInAdminRegistry(uid) && session && session.isAdmin !== true) {
+    session.isAdmin = true;
+    setSession(session);
+  }
 }
 
 /** Get current username */
@@ -700,6 +744,7 @@ export async function initAuth() {
 
   startSessionGuard(session.username);
   await applyPostLoginPlayerMaintenance(session.username);
+  await _hydrateOwnAdminRegistry(session);
   console.log(`[Auth] Session restored for: ${session.username}`);
 }
 
@@ -791,8 +836,9 @@ export async function login(username, password) {
 
   startSessionGuard(username);
   await applyPostLoginPlayerMaintenance(username);
+  await _hydrateOwnAdminRegistry(session);
 
-  return { success: true, session };
+  return { success: true, session: getSession() || session };
 }
 
 export async function register(username, password, accessCode) {
@@ -827,12 +873,21 @@ export async function register(username, password, accessCode) {
     return { success: false, error: 'Username must be 3-20 characters, letters/numbers/underscore only.' };
   }
 
-  // ID-specific once-load before taken check (scoped: missing cache ≠ free username).
-  const takenLoad = await db.loadPathOnce(`players/${username}`, { force: true });
-  if (!takenLoad.ok) {
+  // S8c-0: do not load full players/{username} for taken check (privacy + future rules).
+  const dirPath = `${DIRECTORY_ROOT}/${username}`;
+  const dirLoad = await db.loadPathOnce(dirPath, { force: true });
+  if (!dirLoad.ok) {
     return { success: false, error: 'Could not verify username availability. Please try again.' };
   }
-  if (db.get(`players/${username}`)) {
+  if (db.get(dirPath)) {
+    return { success: false, error: 'Username already taken.' };
+  }
+  const authUidLeaf = await db.loadPathOnce(`players/${username}/authUid`, { force: true });
+  if (!authUidLeaf.ok) {
+    return { success: false, error: 'Could not verify username availability. Please try again.' };
+  }
+  const existingUid = db.get(`players/${username}/authUid`);
+  if (existingUid != null && existingUid !== '') {
     return { success: false, error: 'Username already taken.' };
   }
 
@@ -1106,16 +1161,27 @@ export async function adminLogin(password) {
     const playerKey = resolvePlayerDirectoryKey(existing.username);
     const playerData = db.get(`players/${playerKey}`);
     if (playerData) {
-      const ack = await db.updateAcknowledged({
+      const targetUid = playerData.authUid
+        || existing.authUid
+        || (isFirebaseAuthEnabled() ? getAuth().currentUser?.uid : null)
+        || null;
+      const updates = {
         [`players/${playerKey}/isAdmin`]: true,
         ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isAdmin: true }),
-      });
+        ...(targetUid ? buildAdminRegistryUpdates(String(targetUid), true) : {}),
+      };
+      const ack = await db.updateAcknowledged(updates);
       if (!ack.ok) {
         return { success: false, error: ack.error || 'Could not promote player to admin.' };
       }
+      if (targetUid) {
+        await loadAdminRegistryEntryOnce(String(targetUid), { force: true });
+      }
       existing.isAdmin = true;
+      if (targetUid) existing.authUid = String(targetUid);
       setSession(existing);
-      console.log(`[Auth] Player permanently promoted to admin: ${playerKey}`);
+      console.log(`[Auth] Player permanently promoted to admin: ${playerKey}`
+        + (targetUid ? ` (admins/${targetUid})` : ' (no authUid — registry not written)'));
       return { success: true, session: existing };
     }
   }

@@ -33,6 +33,7 @@ import {
 import { directClaimIndexTransitionPaths } from './trade-index.js';
 import {
   loadTradingCounterpartyContext,
+  loadPlayerInventoryOnce,
   buildCounterpartyAvailabilitySnapshot,
   buildTradingSelfAvailabilitySnapshot,
 } from './trade-availability.js';
@@ -84,20 +85,21 @@ async function _diagPostAckVerify(diag, {
 
   diag.mark('postAckVerificationStarted', { observationOnly: true });
 
-  let offerPlayer = null;
-  let targetPlayer = null;
+  let offerInv = null;
+  let targetInv = null;
   let offerOk = false;
   let targetOk = false;
 
-  if (typeof db.loadPathOnce === 'function') {
-    const offerLoad = await db.loadPathOnce(`players/${offeringPlayerId}`, { force: true });
-    offerOk = !!(offerLoad && offerLoad.ok === true);
-    offerPlayer = offerOk ? offerLoad.value : null;
+  const offerLoad = await loadPlayerInventoryOnce(offeringPlayerId, { force: true });
+  offerOk = offerLoad.ok === true;
+  offerInv = offerOk ? offerLoad.inventory : null;
 
-    const targetLoad = await db.loadPathOnce(`players/${targetPlayerId}`, { force: true });
-    targetOk = !!(targetLoad && targetLoad.ok === true);
-    targetPlayer = targetOk ? targetLoad.value : null;
-  }
+  const targetLoad = await loadPlayerInventoryOnce(targetPlayerId, { force: true });
+  targetOk = targetLoad.ok === true;
+  targetInv = targetOk ? targetLoad.inventory : null;
+
+  const offerPlayer = offerInv ? { inventory: offerInv } : null;
+  const targetPlayer = targetInv ? { inventory: targetInv } : null;
 
   const serverQtys = {
     offerer: {
@@ -677,15 +679,15 @@ export async function executeDirectTrade(trade) {
   // ── 7. Zero-leaf cleanup (give cards only; never undoes accept) ────────────
   await cleanupZeroGiveLeavesAfterAccept(commit.giveLeafPaths || plan.giveLeafPaths || [], diag);
 
-  // Optional UI convergence: refresh transformed inventory paths without synthesizing deltas
+  // Optional UI convergence: refresh inventory leaves only (S8c-0 — never full foreign player roots)
   if (Array.isArray(commit.transformedPaths) && commit.transformedPaths.length > 0
     && typeof db.loadPathOnce === 'function') {
-    const playerRoots = new Set();
+    const inventoryRoots = new Set();
     for (const p of commit.transformedPaths) {
       const m = String(p).match(/^players\/([^/]+)\//);
-      if (m) playerRoots.add(`players/${m[1]}`);
+      if (m) inventoryRoots.add(`players/${m[1]}/inventory`);
     }
-    for (const root of playerRoots) {
+    for (const root of inventoryRoots) {
       try {
         await db.loadPathOnce(root, { force: true });
       } catch { /* ignore — accept already committed */ }

@@ -22,9 +22,13 @@ const firebaseConfig = {
   appId: "1:862398724879:web:bcfd15da93cf89323c5c7a"
 };
 
+/** Callable Functions region (must match functions/index.js). */
+export const FUNCTIONS_REGION = 'us-central1';
+
 let _app = null;
 let _db = null;
 let _auth = null;
+let _functions = null;
 let _initialized = false;
 
 /**
@@ -212,12 +216,13 @@ function installXHRInterceptor() {
 }
 
 /**
- * Initialize Firebase services (App + RTDB + Auth).
+ * Initialize Firebase services (App + RTDB + Auth + Functions).
  * Auth is initialized always; app login/register use it only when qc_firebase_auth=true.
+ * Functions used for S8b+ Trusted Teacher Operations callables.
  * Safe to call multiple times — only initializes once.
  */
 export function initFirebase() {
-  if (_initialized) return { app: _app, db: _db, auth: _auth };
+  if (_initialized) return { app: _app, db: _db, auth: _auth, functions: _functions };
 
   const sdkVersion = typeof firebase !== 'undefined' ? (firebase.SDK_VERSION || 'unknown') : 'not loaded';
   console.log(`[Firebase] SDK version: ${sdkVersion}`);
@@ -256,6 +261,13 @@ export function initFirebase() {
     }
     console.log('[Firebase] Auth instance created');
 
+    // Step 8: Cloud Functions (callables; no service account in browser)
+    if (typeof firebase.functions !== 'function') {
+      throw new Error('Firebase Functions SDK not loaded (firebase-functions-compat.js missing)');
+    }
+    _functions = firebase.app().functions(FUNCTIONS_REGION);
+    console.log(`[Firebase] Functions instance created (region ${FUNCTIONS_REGION})`);
+
     _initialized = true;
     console.log(`[Firebase] Ready (transport patch: ${patched ? 'applied' : 'XHR-intercept-only'})`);
   } catch (e) {
@@ -263,7 +275,7 @@ export function initFirebase() {
     throw e;
   }
 
-  return { app: _app, db: _db, auth: _auth };
+  return { app: _app, db: _db, auth: _auth, functions: _functions };
 }
 
 /** Get Firebase Realtime Database instance */
@@ -276,6 +288,12 @@ export function getDatabase() {
 export function getAuth() {
   if (!_auth) throw new Error('Firebase Auth not initialized. Call initFirebase() first.');
   return _auth;
+}
+
+/** Get Firebase Functions instance (callables region). */
+export function getFunctions() {
+  if (!_functions) throw new Error('Firebase Functions not initialized. Call initFirebase() first.');
+  return _functions;
 }
 
 /** Check if Firebase is configured (not placeholder keys) */

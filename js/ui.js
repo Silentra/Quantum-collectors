@@ -27,6 +27,10 @@ import * as db from './database.js';
 import * as toast from './toast.js';
 import * as metrics from './db-metrics.js';
 import {
+  buildAdminRegistryUpdates,
+  loadAdminRegistryEntryOnce,
+} from './admin-registry.js';
+import {
   rebuildPlayerDirectory,
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
@@ -1148,9 +1152,9 @@ async function showPlayerDetail(username) {
       <div class="bg-surface-800 rounded-lg p-4">
         <h4 class="font-semibold text-sm mb-2">Reset Password</h4>
         <p id="pd-reset-password-auth-note" class="text-xs text-amber-300 mb-2 hidden">
-          Firebase Auth is on: in-game RTDB hash reset is disabled. Use the trusted Admin script
-          (<code class="text-amber-200">scripts/s8b-auth-admin.mjs set-password</code>) for now.
-          Teacher in-app Auth reset (claim-verified) comes next after S8b verification.
+          Firebase Auth is on: in-game password reset is disabled. Use
+          <code class="text-amber-200">scripts/s8b-auth-admin.mjs set-password</code> temporarily.
+          Polished in-panel Auth reset is deferred (Option C / BEFORE_DISTRIBUTION).
         </p>
         <div class="flex gap-2">
           <input id="pd-new-password" type="password" placeholder="New password (min 4 chars)" class="admin-input flex-1" autocomplete="new-password">
@@ -1162,6 +1166,11 @@ async function showPlayerDetail(username) {
       <!-- Danger Zone -->
       <div class="bg-surface-800 rounded-lg p-4 border border-red-900/50">
         <h4 class="font-semibold text-sm mb-2 text-red-400">Danger Zone</h4>
+        <p class="text-xs text-surface-400 mb-2">
+          Deletes RTDB player data (inventory, indexes, directory). When Firebase Auth is on,
+          the Auth user may remain as an orphan until optional
+          <code class="text-surface-300">delete-auth-user</code> cleanup.
+        </p>
         <button id="pd-delete-player" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded text-sm font-medium">
           Delete Player
         </button>
@@ -1324,7 +1333,7 @@ async function showPlayerDetail(username) {
     });
   });
 
-  // Promote to Admin — requires confirmation
+  // Promote to Admin — registry + UI mirror (S8c-0; secure only after S8c-1 rules)
   const promoteBtn = content.querySelector('#pd-promote-admin');
   if (promoteBtn) {
     promoteBtn.addEventListener('click', async () => {
@@ -1335,7 +1344,17 @@ async function showPlayerDetail(username) {
       if (!confirmed) return;
       const playerKey = resolvePlayerDirectoryKey(username);
       const playerData = player.getPlayer(playerKey) || {};
+      const targetUid = playerData.authUid != null && playerData.authUid !== ''
+        ? String(playerData.authUid)
+        : null;
+      if (!targetUid) {
+        toast.error(
+          'This player has no Firebase Auth binding (authUid). Migrate them before promoting.',
+        );
+        return;
+      }
       const result = await db.updateAcknowledged({
+        ...buildAdminRegistryUpdates(targetUid, true),
         [`players/${playerKey}/isAdmin`]: true,
         ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isAdmin: true }),
       });
@@ -1343,13 +1362,14 @@ async function showPlayerDetail(username) {
         toast.error(result.error || 'Failed to promote admin');
         return;
       }
+      await loadAdminRegistryEntryOnce(targetUid, { force: true });
       toast.success(`${username} promoted to admin`);
       void showPlayerDetail(username);
       renderAdminPlayers();
     });
   }
 
-  // Remove Admin — requires confirmation (blocked for self)
+  // Remove Admin — registry + UI mirror (blocked for self)
   const removeAdminBtn = content.querySelector('#pd-remove-admin');
   if (removeAdminBtn) {
     removeAdminBtn.addEventListener('click', async () => {
@@ -1360,7 +1380,15 @@ async function showPlayerDetail(username) {
       if (!confirmed) return;
       const playerKey = resolvePlayerDirectoryKey(username);
       const playerData = player.getPlayer(playerKey) || {};
+      const targetUid = playerData.authUid != null && playerData.authUid !== ''
+        ? String(playerData.authUid)
+        : null;
+      if (!targetUid) {
+        toast.error('This player has no Firebase Auth binding (authUid). Cannot clear registry entry.');
+        return;
+      }
       const result = await db.updateAcknowledged({
+        ...buildAdminRegistryUpdates(targetUid, false),
         [`players/${playerKey}/isAdmin`]: false,
         ...syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, isAdmin: false }),
       });
@@ -1368,6 +1396,7 @@ async function showPlayerDetail(username) {
         toast.error(result.error || 'Failed to remove admin');
         return;
       }
+      await loadAdminRegistryEntryOnce(targetUid, { force: true });
       toast.success(`Admin access removed from ${username}`);
       void showPlayerDetail(username);
       renderAdminPlayers();

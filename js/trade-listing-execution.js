@@ -34,6 +34,7 @@ import {
 } from './trade-index.js';
 import {
   loadTradingCounterpartyContext,
+  loadPlayerInventoryOnce,
   buildCounterpartyAvailabilitySnapshot,
   buildTradingSelfAvailabilitySnapshot,
 } from './trade-availability.js';
@@ -153,20 +154,21 @@ async function _diagPostAckVerify(diag, {
 
   diag.mark('postAckVerificationStarted', { observationOnly: true });
 
-  let ownerPlayer = null;
-  let accepterPlayer = null;
+  let ownerInv = null;
+  let accepterInv = null;
   let ownerOk = false;
   let accepterOk = false;
 
-  if (typeof db.loadPathOnce === 'function') {
-    const ownerLoad = await db.loadPathOnce(`players/${ownerId}`, { force: true });
-    ownerOk = !!(ownerLoad && ownerLoad.ok === true);
-    ownerPlayer = ownerOk ? ownerLoad.value : null;
+  const ownerLoad = await loadPlayerInventoryOnce(ownerId, { force: true });
+  ownerOk = ownerLoad.ok === true;
+  ownerInv = ownerOk ? ownerLoad.inventory : null;
 
-    const accepterLoad = await db.loadPathOnce(`players/${accepterId}`, { force: true });
-    accepterOk = !!(accepterLoad && accepterLoad.ok === true);
-    accepterPlayer = accepterOk ? accepterLoad.value : null;
-  }
+  const accepterLoad = await loadPlayerInventoryOnce(accepterId, { force: true });
+  accepterOk = accepterLoad.ok === true;
+  accepterInv = accepterOk ? accepterLoad.inventory : null;
+
+  const ownerPlayer = ownerInv ? { inventory: ownerInv } : null;
+  const accepterPlayer = accepterInv ? { inventory: accepterInv } : null;
 
   const serverQtys = {
     owner: {
@@ -620,12 +622,12 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
   // Optional UI convergence: refresh transformed inventory paths without synthesizing deltas
   if (Array.isArray(result.transformedPaths) && result.transformedPaths.length > 0
     && typeof db.loadPathOnce === 'function') {
-    const playerRoots = new Set();
+    const inventoryRoots = new Set();
     for (const p of result.transformedPaths) {
       const m = String(p).match(/^players\/([^/]+)\//);
-      if (m) playerRoots.add(`players/${m[1]}`);
+      if (m) inventoryRoots.add(`players/${m[1]}/inventory`);
     }
-    for (const root of playerRoots) {
+    for (const root of inventoryRoots) {
       try {
         await db.loadPathOnce(root, { force: true });
       } catch { /* ignore — fulfill already committed */ }
