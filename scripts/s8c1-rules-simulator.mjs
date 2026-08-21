@@ -335,6 +335,22 @@ async function main() {
     await assertFails(get(ref(offerer.database(), 'players/target')));
     pass('student full foreign players/{other} read denied');
 
+    // Trade-visible foreign leaves
+    await assertSucceeds(get(ref(offerer.database(), 'players/target/username')));
+    pass('foreign username leaf readable');
+    await assertSucceeds(get(ref(offerer.database(), 'players/target/inventory')));
+    pass('foreign inventory readable');
+    await assertSucceeds(get(ref(offerer.database(), 'players/target/groupId')));
+    pass('foreign groupId readable');
+    await assertSucceeds(get(ref(offerer.database(), 'players/target/isTradeRestricted')));
+    pass('foreign isTradeRestricted readable');
+    await assertFails(get(ref(offerer.database(), 'players/target/password')));
+    pass('foreign password denied');
+    await assertFails(get(ref(offerer.database(), 'players/target/activeSession')));
+    pass('foreign activeSession denied');
+    await assertFails(get(ref(offerer.database(), 'players/target/stats')));
+    pass('foreign stats denied');
+
     // --- Pre-auth public gates vs locked defs ---
     const anon = testEnv.unauthenticatedContext();
     await assertSucceeds(get(ref(anon.database(), 'config/gameOpen')));
