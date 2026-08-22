@@ -244,6 +244,7 @@ async function main() {
     pass('stranger foreign inventory write denied');
 
     // --- 4a) Honest direct settlement multipath (reseed grant + processing) ---
+    // Seed foreign tradesCompleted > 0 to match live S8c-2 blocker (cache-blind absolute 1).
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.database();
       await set(ref(db, 'players/target/inventory'), {
@@ -254,6 +255,14 @@ async function main() {
       await set(ref(db, 'players/offerer/inventory'), {
         cardGive: 2,
         cardRecv: 1,
+      });
+      await set(ref(db, 'players/target/stats'), {
+        tradesCompleted: 5,
+        uniqueCardsOwned: 2,
+      });
+      await set(ref(db, 'players/offerer/stats'), {
+        tradesCompleted: 0,
+        uniqueCardsOwned: 2,
       });
       await set(ref(db, 'trades/direct/t1/status'), 'processing');
       await set(ref(db, 'trades/direct/t1/claimId'), 'claim-direct-1');
@@ -274,8 +283,8 @@ async function main() {
       }),
     );
 
-    // qty===1 give leaves use null (canonical absent), not increment(-1)
-    await assertSucceeds(
+    // Live blocker shape: foreign absolute tradesCompleted=1 while server is 5 → denied
+    await assertFails(
       update(ref(offerer.database()), {
         'players/target/inventory/cardGive': null,
         'players/target/inventory/cardRecv': increment(1),
@@ -289,10 +298,31 @@ async function main() {
         'tradeGrants/target/offererUid': null,
         'players/offerer/stats/tradesCompleted': 1,
         'players/target/stats/tradesCompleted': 1,
+        'players/offerer/lastDirectTradeAt': Date.now(),
+        'players/target/lastDirectTradeAt': Date.now(),
+      }),
+    );
+    pass('S8c-2 blocker: complete Direct multipath with foreign absolute tradesCompleted=1 denied');
+
+    // Fixed planner shape: foreign tradesCompleted via increment(1); omit foreign trades LB/achievements
+    await assertSucceeds(
+      update(ref(offerer.database()), {
+        'players/target/inventory/cardGive': null,
+        'players/target/inventory/cardRecv': increment(1),
+        'players/offerer/inventory/cardRecv': null,
+        'players/offerer/inventory/cardGive': increment(1),
+        'trades/direct/t1/status': 'accepted',
+        'trades/direct/t1/processingBy': null,
+        'trades/direct/t1/processingAt': null,
+        'trades/direct/t1/claimId': null,
+        'trades/direct/t1/claimerAuthUid': null,
+        'tradeGrants/target/offererUid': null,
+        'players/offerer/stats/tradesCompleted': 1,
+        'players/target/stats/tradesCompleted': increment(1),
         'players/target/stats/uniqueCardsOwned': 2,
         'players/offerer/progression/firstTrade': true,
         'players/target/progression/firstTrade': true,
-        'players/target/achievements/first_trade_badge': {
+        'players/offerer/achievements/first_trade_badge': {
           unlocked: true,
           unlockedAt: Date.now(),
         },
@@ -303,14 +333,26 @@ async function main() {
           value: 1,
           updatedAt: Date.now(),
         },
-        'leaderboards/tradesCompleted/target': {
+        'leaderboards/uniqueCardsOwned/target': {
           username: 'target',
-          value: 1,
+          value: 2,
           updatedAt: Date.now(),
         },
       }),
     );
-    pass('honest direct settlement multipath allowed (qty1 give → null)');
+    pass('honest complete Direct terminal multipath allowed (foreign tradesCompleted increment)');
+
+    {
+      let tStats = null;
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        tStats = (await get(ref(ctx.database(), 'players/target/stats/tradesCompleted'))).val();
+      });
+      if (tStats !== 6) {
+        fail(`direct foreign tradesCompleted increment expected 6, got ${tStats}`);
+      } else {
+        pass('direct foreign tradesCompleted 5→6 via increment');
+      }
+    }
 
     {
       const tInv = (await get(ref(offerer.database(), 'players/target/inventory'))).val() || {};
@@ -337,6 +379,14 @@ async function main() {
       const db = ctx.database();
       await set(ref(db, 'players/owner/inventory'), { listOffer: 1, listChosen: 0 });
       await set(ref(db, 'players/accepter/inventory'), { listOffer: 0, listChosen: 2 });
+      await set(ref(db, 'players/owner/stats'), {
+        tradesCompleted: 4,
+        uniqueCardsOwned: 1,
+      });
+      await set(ref(db, 'players/accepter/stats'), {
+        tradesCompleted: 0,
+        uniqueCardsOwned: 1,
+      });
       await set(ref(db, 'trades/listings/l1/status'), 'processing');
       await set(ref(db, 'trades/listings/l1/claimId'), 'claim-listing-1');
       await set(ref(db, 'trades/listings/l1/claimerAuthUid'), 'accepterUid');
@@ -358,8 +408,7 @@ async function main() {
     );
     pass('honest listing grant create allowed');
 
-    // owner give qty===1 → null; accepter give qty>1 → increment(-1)
-    await assertSucceeds(
+    await assertFails(
       update(ref(accepter.database()), {
         'players/owner/inventory/listOffer': null,
         'players/owner/inventory/listChosen': increment(1),
@@ -375,13 +424,29 @@ async function main() {
         'players/accepter/lastListingAcceptAt': Date.now(),
         'players/owner/stats/tradesCompleted': 1,
         'players/accepter/stats/tradesCompleted': 1,
+      }),
+    );
+    pass('S8c-2 blocker: complete Listing multipath with foreign absolute tradesCompleted=1 denied');
+
+    // owner give qty===1 → null; accepter give qty>1 → increment(-1); foreign owner trades via increment
+    await assertSucceeds(
+      update(ref(accepter.database()), {
+        'players/owner/inventory/listOffer': null,
+        'players/owner/inventory/listChosen': increment(1),
+        'players/accepter/inventory/listChosen': increment(-1),
+        'players/accepter/inventory/listOffer': increment(1),
+        'trades/listings/l1/status': 'fulfilled',
+        'trades/listings/l1/fulfilledBy': 'accepter',
+        'trades/listings/l1/processingBy': null,
+        'trades/listings/l1/processingAt': null,
+        'trades/listings/l1/claimId': null,
+        'trades/listings/l1/claimerAuthUid': null,
+        'tradeGrants/owner/accepterUid': null,
+        'players/accepter/lastListingAcceptAt': Date.now(),
+        'players/owner/stats/tradesCompleted': increment(1),
+        'players/accepter/stats/tradesCompleted': 1,
         'players/owner/progression/firstTrade': true,
         'players/accepter/progression/firstTrade': true,
-        'leaderboards/tradesCompleted/owner': {
-          username: 'owner',
-          value: 1,
-          updatedAt: Date.now(),
-        },
         'leaderboards/tradesCompleted/accepter': {
           username: 'accepter',
           value: 1,
@@ -389,7 +454,19 @@ async function main() {
         },
       }),
     );
-    pass('honest listing settlement multipath allowed (owner qty1 → null)');
+    pass('honest complete Listing terminal multipath allowed (foreign tradesCompleted increment)');
+
+    {
+      let oStats = null;
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        oStats = (await get(ref(ctx.database(), 'players/owner/stats/tradesCompleted'))).val();
+      });
+      if (oStats !== 5) {
+        fail(`listing foreign tradesCompleted increment expected 5, got ${oStats}`);
+      } else {
+        pass('listing foreign tradesCompleted 4→5 via increment');
+      }
+    }
 
     {
       const oInv = (await get(ref(accepter.database(), 'players/owner/inventory'))).val() || {};
@@ -535,11 +612,23 @@ async function main() {
     );
     pass('S8c-2: live grant created for side-effect allows');
 
-    // Exact +1 tradesCompleted under grant
+    // Exact +1 tradesCompleted under grant (absolute when known)
     await assertSucceeds(
       set(ref(offerer.database(), 'players/target/stats/tradesCompleted'), 4),
     );
     pass('S8c-2: grant-authorized tradesCompleted +1 allowed');
+
+    // ServerValue.increment(1) also satisfies exact +1 validate (settlement fix path)
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/stats/tradesCompleted'), increment(1)),
+    );
+    pass('S8c-2: grant-authorized tradesCompleted ServerValue.increment(1) allowed');
+
+    // Cache-blind absolute 1 while server is 5 → denied (live blocker leaf)
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/stats/tradesCompleted'), 1),
+    );
+    pass('S8c-2: grant-authorized absolute tradesCompleted=1 when server=5 denied');
 
     // +2 / arbitrary under grant denied
     await assertFails(
