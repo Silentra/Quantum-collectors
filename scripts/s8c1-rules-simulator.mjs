@@ -261,7 +261,7 @@ async function main() {
         uniqueCardsOwned: 2,
       });
       await set(ref(db, 'players/offerer/stats'), {
-        tradesCompleted: 0,
+        tradesCompleted: 20,
         uniqueCardsOwned: 2,
       });
       await set(ref(db, 'trades/direct/t1/status'), 'processing');
@@ -304,7 +304,7 @@ async function main() {
     );
     pass('S8c-2 blocker: complete Direct multipath with foreign absolute tradesCompleted=1 denied');
 
-    // Fixed planner shape: foreign tradesCompleted via increment(1); omit foreign trades LB/achievements
+    // Fixed planner shape: BOTH sides tradesCompleted via increment(1) (no cache-blind absolute)
     await assertSucceeds(
       update(ref(offerer.database()), {
         'players/target/inventory/cardGive': null,
@@ -317,7 +317,7 @@ async function main() {
         'trades/direct/t1/claimId': null,
         'trades/direct/t1/claimerAuthUid': null,
         'tradeGrants/target/offererUid': null,
-        'players/offerer/stats/tradesCompleted': 1,
+        'players/offerer/stats/tradesCompleted': increment(1),
         'players/target/stats/tradesCompleted': increment(1),
         'players/target/stats/uniqueCardsOwned': 2,
         'players/offerer/progression/firstTrade': true,
@@ -325,14 +325,11 @@ async function main() {
         'players/offerer/achievements/first_trade_badge': {
           unlocked: true,
           unlockedAt: Date.now(),
+          claimed: true,
+          claimedAt: 123456,
         },
         'players/offerer/lastDirectTradeAt': Date.now(),
         'players/target/lastDirectTradeAt': Date.now(),
-        'leaderboards/tradesCompleted/offerer': {
-          username: 'offerer',
-          value: 1,
-          updatedAt: Date.now(),
-        },
         'leaderboards/uniqueCardsOwned/target': {
           username: 'target',
           value: 2,
@@ -340,17 +337,33 @@ async function main() {
         },
       }),
     );
-    pass('honest complete Direct terminal multipath allowed (foreign tradesCompleted increment)');
+    pass('honest complete Direct terminal multipath allowed (both tradesCompleted increment)');
 
     {
       let tStats = null;
+      let oStats = null;
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         tStats = (await get(ref(ctx.database(), 'players/target/stats/tradesCompleted'))).val();
+        oStats = (await get(ref(ctx.database(), 'players/offerer/stats/tradesCompleted'))).val();
       });
       if (tStats !== 6) {
         fail(`direct foreign tradesCompleted increment expected 6, got ${tStats}`);
+      } else if (oStats !== 21) {
+        fail(`direct claimer tradesCompleted 20→21 via increment expected 21, got ${oStats}`);
       } else {
-        pass('direct foreign tradesCompleted 5→6 via increment');
+        pass('direct tradesCompleted both sides increment (foreign 5→6, claimer 20→21)');
+      }
+    }
+
+    {
+      let claimedAt = null;
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        claimedAt = (await get(ref(ctx.database(), 'players/offerer/achievements/first_trade_badge/claimedAt'))).val();
+      });
+      if (claimedAt !== 123456) {
+        fail(`direct settle must preserve claimedAt, got ${claimedAt}`);
+      } else {
+        pass('direct settle achievement claimedAt preserved under unlock-shaped write');
       }
     }
 
@@ -384,7 +397,7 @@ async function main() {
         uniqueCardsOwned: 1,
       });
       await set(ref(db, 'players/accepter/stats'), {
-        tradesCompleted: 0,
+        tradesCompleted: 20,
         uniqueCardsOwned: 1,
       });
       await set(ref(db, 'trades/listings/l1/status'), 'processing');
@@ -428,7 +441,7 @@ async function main() {
     );
     pass('S8c-2 blocker: complete Listing multipath with foreign absolute tradesCompleted=1 denied');
 
-    // owner give qty===1 → null; accepter give qty>1 → increment(-1); foreign owner trades via increment
+    // owner give qty===1 → null; accepter give qty>1 → increment(-1); BOTH tradesCompleted via increment
     await assertSucceeds(
       update(ref(accepter.database()), {
         'players/owner/inventory/listOffer': null,
@@ -444,27 +457,26 @@ async function main() {
         'tradeGrants/owner/accepterUid': null,
         'players/accepter/lastListingAcceptAt': Date.now(),
         'players/owner/stats/tradesCompleted': increment(1),
-        'players/accepter/stats/tradesCompleted': 1,
+        'players/accepter/stats/tradesCompleted': increment(1),
         'players/owner/progression/firstTrade': true,
         'players/accepter/progression/firstTrade': true,
-        'leaderboards/tradesCompleted/accepter': {
-          username: 'accepter',
-          value: 1,
-          updatedAt: Date.now(),
-        },
       }),
     );
-    pass('honest complete Listing terminal multipath allowed (foreign tradesCompleted increment)');
+    pass('honest complete Listing terminal multipath allowed (both tradesCompleted increment)');
 
     {
       let oStats = null;
+      let aStats = null;
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         oStats = (await get(ref(ctx.database(), 'players/owner/stats/tradesCompleted'))).val();
+        aStats = (await get(ref(ctx.database(), 'players/accepter/stats/tradesCompleted'))).val();
       });
       if (oStats !== 5) {
         fail(`listing foreign tradesCompleted increment expected 5, got ${oStats}`);
+      } else if (aStats !== 21) {
+        fail(`listing claimer tradesCompleted 20→21 via increment expected 21, got ${aStats}`);
       } else {
-        pass('listing foreign tradesCompleted 4→5 via increment');
+        pass('listing tradesCompleted both sides increment (owner 4→5, accepter 20→21)');
       }
     }
 
