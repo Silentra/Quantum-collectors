@@ -1625,7 +1625,7 @@ S7c is COMPLETE + VERIFIED. S7d + S7 overall COMPLETE + VERIFIED.
 Scoped classroom default flip — COMPLETE + VERIFIED. S8a COMPLETE; S8b not started.
 
 Historical authority was qc_scoped_loading opt-in; production default is now scoped.
-Emergency: qc_force_root_loading=true + reload.
+S8d-0: qc_force_root_loading emergency root removed (ignored if still set in localStorage).
 
 Historical regression: qcDbHydration.getBootModeReport() / qcDbMetrics.summary().bootMode
 `);
@@ -1686,20 +1686,17 @@ export function workflowClassroomDefaultFlip() {
 
 Status: COMPLETE + VERIFIED.
 Production-default scoped gameplay fully playable; trade hydration + claim
-null-safety verified. S8a COMPLETE; do not begin S8b until separately approved.
+null-safety verified. S8c COMPLETE + VERIFIED.
+S8d-0: emergency qc_force_root_loading removed — localStorage flag is ignored;
+boot is always scoped / production-default.
 
 Authority:
-  default (no flags) → mode=scoped, reason=production-default, persist ON
-  localStorage.qc_force_root_loading==='true' → mode=root, reason=emergency-override
+  default (any flags) → mode=scoped, reason=production-default, persist ON
   config/firebase/scopedLoadingEnabled → diagnostic only (not boot)
   qc_scoped_loading → deprecated / redundant for boot
+  qc_force_root_loading → removed (S8d-0); no effect
 
-Emergency rollback:
-  localStorage.setItem('qc_force_root_loading','true'); location.reload();
-Restore production default:
-  localStorage.removeItem('qc_force_root_loading'); location.reload();
-
-Regression smoke (no flags unless testing rollback):
+Regression smoke:
   1) getBootModeReport() → scoped / production-default / rootListenerAttached false / persist true
   2) root snapshots total 0 (qcDbMetrics if enabled)
   3) login or session restore
@@ -1708,8 +1705,6 @@ Regression smoke (no flags unless testing rollback):
   6) Trading idle — canAllowCanonicalTradeTreeFallback() === false
   7) one Trading action (Respond or Accept)
   8) logout / user-switch smoke
-  9) set force-root + reload → root / emergency-override / rootListenerAttached true
-  10) removeItem force-root + reload → scoped restored
 `);
 }
 
@@ -1730,7 +1725,7 @@ Helpers: qcTradeAvailability.loadDirectTradeByIdOnce(id)
 Wired: respondToTrade, confirmTrade, declineTrade, cancelTrade,
        acceptListing, cancelListing
 
-Prereq: production-default scoped (no qc_force_root_loading).
+Prereq: production-default scoped (qc_force_root_loading removed / ignored after S8d-0).
 Cold cache: after reload, PTI/index shows item but
   db.get('trades/direct/'+id) or trades/listings/{id} is null until action.
 
@@ -1756,7 +1751,8 @@ Status: COMPLETE + VERIFIED.
 Classroom default flip — COMPLETE + VERIFIED. S8a COMPLETE; do not begin S8b until approved.
 
 Evidence: cold Listing Accept (sawSpeculativeNull → committed → fulfill);
-cold Direct Confirm; same-listing one winner; missing IDs; emergency root-on claim OK.
+cold Direct Confirm; same-listing one winner; missing IDs.
+(Historical note: root-on claim regression was verified before S8d-0 removed emergency root.)
 Fix: claimListingIfActive / claimDirectTradeIfAwaiting
   speculative null → return null (retry), not undefined (abort)
   win only if committed && status==='processing' && claimId matches
@@ -1771,8 +1767,7 @@ Smoke (production-default scoped):
   3) Same-listing race: two accepters → exactly one claim winner
   4) Genuine missing ID → not claimed / LISTING_NOT_ACTIVE or STALE (no synthetic processing)
   5) Inactive/expired listing → still rejected
-  6) Emergency root-on regression: normal claim still works
-  7) Resume workflowClassroomDefaultFlip with one Trading action
+  6) Resume workflowClassroomDefaultFlip with one Trading action
 `);
 }
 

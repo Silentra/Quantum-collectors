@@ -662,7 +662,7 @@ export function summary() {
     enabled: _enabled,
     bootMode: _bootModeReport,
     cacheUpdateSources: {
-      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S7b: scoped boot skips root; root-on remains default',
+      note: 'initial-root / root-listener / scoped-once / scoped-subscription — S8d-0: scoped-only boot; root once+on never attached',
     },
     rootSnapshots: {
       total: snapCount,
@@ -761,7 +761,7 @@ Enable:  localStorage.setItem('qc-db-metrics-enabled','true'); location.reload()
 Verbose: localStorage.setItem('qc-db-metrics-verbose','true')
 Disable: qcDbMetrics.disable() or set flag false + reload
 API: summary() | getBootModeReport() | reset() | resetAll() | measureMajorNodes()
-S7b: summary().bootMode / rootSnapshots.total (expect 0 when mode=scoped)
+S7b: summary().bootMode / rootSnapshots.total (expect 0; scoped-only after S8d-0)
 Boot: qcDbHydration.getBootModeReport()
 Bytes are Estimated JSON — not Firebase billed transfer.`);
     },

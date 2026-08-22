@@ -15,9 +15,8 @@
  * S6a: register uses once-load of accessCodes/{code}; bootstrap seed once-loads accessCodes/.
  * No accessCodes subscription.
  *
- * Production default: scoped boot (root once+on skipped). Emergency root via
- * localStorage.qc_force_root_loading=true + reload. Config/firebase/scopedLoadingEnabled
- * is diagnostic only — not boot authority.
+ * Production default: scoped-only boot (no root once+on). Config/firebase/scopedLoadingEnabled
+ * is diagnostic only — not boot authority. qc_force_root_loading removed in S8d-0.
  */
 
 import * as db from './database.js';
@@ -103,7 +102,7 @@ export function isScopedLoadingDevFlagEnabled() {
 
 /**
  * Flag prep + boot latch surface.
- * Production default: scoped (root skipped). Config path is diagnostic only (not boot authority).
+ * Production default: scoped-only (root never attached). Config path is diagnostic only.
  * @returns {object}
  */
 export function getScopedLoadingFlagState() {
@@ -117,10 +116,10 @@ export function getScopedLoadingFlagState() {
     bootMode: boot ? boot.mode : null,
     bootReason: boot ? boot.reason : null,
     rootListenerAttached: boot ? boot.rootListenerAttached === true : null,
-    rootListenerLegacySafetyNet: !scopedBoot,
+    rootListenerLegacySafetyNet: false,
     note: scopedBoot
-      ? 'Production-default scoped: root once+on skipped. Config path not used for boot. Emergency: localStorage.setItem("qc_force_root_loading","true"); location.reload()'
-      : 'Emergency root override active. Restore scoped: localStorage.removeItem("qc_force_root_loading"); location.reload(). Config path not used for boot.',
+      ? 'Production scoped-only: root once+on never attached. Config path not used for boot. qc_force_root_loading ignored (removed S8d-0).'
+      : 'Unexpected non-scoped boot report. Config path not used for boot.',
   };
 }
 
@@ -324,11 +323,9 @@ export function getSharedHydrationReport() {
       || e.path.startsWith('leaderboardSeasons/')),
     flagState: getScopedLoadingFlagState(),
     rootListenerNote: (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode())
-      ? 'Scoped boot: root once+on skipped this page load.'
-      : (typeof db.isRootListenerAttached === 'function' && db.isRootListenerAttached())
-        ? 'Root-on: legacy root once+on active as safety net (S2/S3 coexistence).'
-        : 'Local/fallback boot: do not assume root refill.',
-    bandwidthNote: 'Do not claim bandwidth reduction from scoped APIs alone; root coexistence may still apply in root-on mode.',
+      ? 'Scoped boot: root once+on never attached this page load.'
+      : 'Local/fallback boot: do not assume root refill.',
+    bandwidthNote: 'Bandwidth claims require scoped path once/subscribe only; no root wholesale listener after S8d-0.',
   };
 }
 
@@ -998,11 +995,9 @@ export function getCurrentPlayerHydrationReport() {
       || e.path === 'leaderboardSeasons'
       || e.path.startsWith('leaderboardSeasons/')),
     rootListenerNote: (typeof db.isScopedOnlyMode === 'function' && db.isScopedOnlyMode())
-      ? 'Scoped boot: root once+on skipped this page load; auth-owned players/{me} once/subscribe is authority when established.'
-      : (typeof db.isRootListenerAttached === 'function' && db.isRootListenerAttached())
-        ? 'Root-on: legacy root once+on active as safety net; scoped player is intended eventual owner — do not depend on root winning.'
-        : 'Local/fallback boot: do not assume root refill; scoped once/subscribe is authority when established.',
-    bandwidthNote: 'Do not claim bandwidth reduction from scoped APIs alone; root coexistence may still apply in root-on mode.',
+      ? 'Scoped boot: root once+on never attached; auth-owned players/{me} once/subscribe is authority when established.'
+      : 'Local/fallback boot: do not assume root refill; scoped once/subscribe is authority when established.',
+    bandwidthNote: 'Bandwidth claims require scoped path once/subscribe only; no root wholesale listener after S8d-0.',
   };
 }
 
@@ -2879,15 +2874,12 @@ function _installWindowApi() {
     getSubscriptionRegistry: () => db.getSubscriptionRegistry(),
     getCached: (path) => db.get(path),
     help() {
-      console.info(`DB Hydration (S2–S7c + classroom default)
+      console.info(`DB Hydration (S2–S7c + scoped-only boot)
 Shared: ${SHARED_DEF_PATHS.join(', ')}
 Access codes: loadAccessCodeOnce | bootstrapAccessCodesOnce | loadAdminAccessCodesOnce
 Archives: hydrateLeaderboardArchivesOnce | getLeaderboardArchivesHydrationReport
 Boot: getBootModeReport | isScopedOnlyMode
-Default: scoped (production-default). Emergency root:
-  localStorage.setItem('qc_force_root_loading','true'); location.reload()
-Restore scoped:
-  localStorage.removeItem('qc_force_root_loading'); location.reload()
+Default: scoped-only (production). qc_force_root_loading removed (S8d-0) and is ignored if still set in localStorage.
 Config/firebase/scopedLoadingEnabled: diagnostic only`);
     },
   };
