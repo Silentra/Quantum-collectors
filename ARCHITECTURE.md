@@ -500,7 +500,7 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 **Source of truth for remaining work (S8b–S8d):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
 
-Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped trade action hydration fix — COMPLETE + VERIFIED.** **Scoped claim null-safety fix — COMPLETE + VERIFIED.** **Scoped classroom default flip — COMPLETE + VERIFIED.** Production default = scoped; emergency root via `qc_force_root_loading`. **Card-art transient retry hardening — COMPLETE + VERIFIED.** **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b Firebase Auth foundation — COMPLETE**. **S8c-1 locked rules — COMPLETE + VERIFIED**. **Auth production-default flip — IMPLEMENTED — AWAITING VERIFICATION** (`qc_force_legacy_auth` emergency rollback; stale `qc_firebase_auth` ignored). **S8c-2 / S8d** not started (separate approvals). Foreign-PTI readiness warnings = diagnostic noise. Historical phase notes below (S1–S7) describe what landed.
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped trade action hydration fix — COMPLETE + VERIFIED.** **Scoped claim null-safety fix — COMPLETE + VERIFIED.** **Scoped classroom default flip — COMPLETE + VERIFIED.** Production default = scoped-only; **S8d-0** removed `qc_force_root_loading`. **Card-art transient retry hardening — COMPLETE + VERIFIED.** **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b Firebase Auth foundation — COMPLETE**. **S8c-1 locked rules — COMPLETE + VERIFIED**. **Auth production-default flip — COMPLETE + VERIFIED** (`qc_force_legacy_auth` emergency rollback; stale `qc_firebase_auth` ignored). **S8d-0 force-root removal — IMPLEMENTED — AWAITING VERIFICATION.** S8d-1+ not started. Foreign-PTI readiness warnings = diagnostic noise. Historical phase notes below (S1–S7) describe what landed.
 
 **Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
 
@@ -628,22 +628,20 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 **Status: COMPLETE + VERIFIED.** Production-default scoped gameplay fully playable; subsequent scoped trade/listing hydration and RTDB speculative-null claim defects fixed and verified.
 
-**Boot authority (reload-latched):**
-1. `localStorage.qc_force_root_loading === 'true'` → `mode: root`, `reason: emergency-override`
-2. otherwise → `mode: scoped`, `reason: production-default`
+**Boot authority (reload-latched; S8d-0 scoped-only):**
+- Always → `mode: scoped`, `reason: production-default`
+- `localStorage.qc_force_root_loading` **removed** (S8d-0); ignored if still present in older browsers
+- No root `/` once or `on('value')` attach path remains in production code
 
-**Persist:** ON when `qc_persist_enforce` OR boot mode scoped (`reason: production-default` or `qc_persist_enforce`). Emergency root without persist flag → OFF. Sanitize-on-load + filtered persist preserved.
+**Persist:** ON when `qc_persist_enforce` OR boot mode scoped (`reason: production-default` or `qc_persist_enforce`). Sanitize-on-load + filtered persist preserved.
 
 **Non-authoritative:** `config/firebase/scopedLoadingEnabled` (diagnostic). Deprecated `qc_scoped_loading` ignored for boot (harmless if still set).
 
-**Rollback:**
-```js
-localStorage.setItem('qc_force_root_loading', 'true'); location.reload();
-// restore:
-localStorage.removeItem('qc_force_root_loading'); location.reload();
-```
+**Diagnostics:** `qcDbHydration.getBootModeReport()` / `qcPersonalAudit.workflowClassroomDefaultFlip()`. Fail-closed via `isScopedOnlyMode()` (always true after S8d-0).
 
-**Diagnostics:** `qcDbHydration.getBootModeReport()` / `qcPersonalAudit.workflowClassroomDefaultFlip()`. S7c fail-closed still via `isScopedOnlyMode()`. Keep emergency root through S8a–S8c.
+### Phase — S8d-0 force-root removal
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Removed obsolete `qc_force_root_loading` emergency root boot. Under locked RTDB rules root `/` reads are denied, so the latch was a false recovery path. Scoped boot + path once/subscribe unchanged. Admin maintenance rebuilds unchanged (later S8d slices).
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
@@ -653,7 +651,7 @@ Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings
 
 ### Phase — Scoped RTDB claim null-safety
 
-**Status: COMPLETE + VERIFIED.** Cold Listing Accept: hydrate → `sawSpeculativeNull:true` → claim committed → fulfill OK; cold Direct Confirm claim OK; same-listing race one winner; missing IDs not found; emergency root-on claim regression OK. No bare trade-tree fallback reintroduced.
+**Status: COMPLETE + VERIFIED.** Cold Listing Accept: hydrate → `sawSpeculativeNull:true` → claim committed → fulfill OK; cold Direct Confirm claim OK; same-listing race one winner; missing IDs not found. (Historical: emergency root-on claim regression OK before S8d-0 removed that path.) No bare trade-tree fallback reintroduced.
 
 [`claimListingIfActive`](js/database.js) / [`claimDirectTradeIfAwaiting`](js/database.js): speculative Firebase `null` returns `null` (reconcile/retry), not `undefined` (abort). Claim win only when `committed` and result `status==='processing'` and `claimId` matches.
 

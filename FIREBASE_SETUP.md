@@ -44,7 +44,8 @@ const firebaseConfig = {
 - Admin: plaintext `config.adminPassword` and/or `players/{u}.isAdmin` / `admins/{uid}` (flag-independent `__admin__`)
 - Scripts loaded: `firebase-app` + `firebase-database` + `firebase-auth` + `firebase-functions` (Auth is production default; Functions for S8b+ teacher callables)
 
-Client session / scoped loading / `qc_force_root_loading` / `qc_force_legacy_auth` are **invisible to security rules**.
+Client session / scoped loading / `qc_force_legacy_auth` are **invisible to security rules**.
+(`qc_force_root_loading` was removed in S8d-0 and is ignored if still set.)
 
 ### S8b (Auth foundation)
 
@@ -210,12 +211,12 @@ Kept only as a reminder that earlier docs overstated Auth readiness:
 └── admin/                  # Legacy stub (largely unused)
 ```
 
-Production boot loads **scoped** paths (not full `/`) unless `localStorage.qc_force_root_loading='true'`.
+Production boot loads **scoped** paths only (not full `/`). `qc_force_root_loading` was removed in S8d-0.
 
 ## 7. How It Works (current)
 
 - [`js/database.js`](js/database.js) maintains an in-memory cache for synchronous reads
-- Production default: scoped hydration (sharedDefs + `players/{me}` + tab scopes); emergency root via `qc_force_root_loading`
+- Production: scoped hydration (sharedDefs + `players/{me}` + tab scopes); no root `/` listener
 - Writes update cache and Firebase; acknowledged paths used where required for races
 - If Firebase is unreachable / unconfigured, falls back to localStorage
 - [`js/auth.js`](js/auth.js): **custom RTDB auth only** — does **not** map usernames to Firebase Auth emails

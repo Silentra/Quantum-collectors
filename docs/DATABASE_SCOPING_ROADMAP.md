@@ -53,7 +53,7 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | Scoped trade/listing canonical-by-ID hydration | **COMPLETE + VERIFIED** |
 | Scoped RTDB claim null-safety | **COMPLETE + VERIFIED** |
 | Card-art transient retry hardening | **COMPLETE + VERIFIED** |
-| Root listener / emergency root | Production default scoped; `qc_force_root_loading` → root once+on (keep through S8c) |
+| Root listener / emergency root | **REMOVED (S8d-0)** — scoped-only boot; `qc_force_root_loading` ignored |
 | S8a rules docs + live snapshot | **COMPLETE** (no authz deploy; no Firebase Auth) |
 | S8b Firebase Auth under username UX | **COMPLETE** (foundation) |
 | S8b+ P0 Trusted Teacher Functions foundation | **IMPLEMENTED — AWAITING VERIFICATION** (dormant / not launch-required) |
@@ -61,7 +61,7 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8c-1 tradeGrants + RTDB authorization rules | **COMPLETE + VERIFIED** (locked rules live) |
 | Auth production-default flip | **COMPLETE + VERIFIED** (`workflowAuthDefaultFlip`) |
 | S8c-2 foreign stats/achievements/LB grant-bind | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (`workflowS8c2`) |
-| S8d privileged Admin path / Functions | NOT STARTED (optional later; Spark path preferred) |
+| S8d maintenance rebuild architecture | **S8d-0 IMPLEMENTED — AWAITING VERIFICATION** (force-root removal); S8d-1+ not started |
 
 **What remains:** Republish `database.rules.json` for S8c-2 → run `qcPersonalAudit.workflowS8c2()` live. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
@@ -117,13 +117,13 @@ flowchart LR
 
 ## 3. Current remaining full-read inventory
 
-Framing: almost all “full-tree reads” are **in-memory cache scans**. Network full-tree is still `ref('/').once` + `ref('/').on` in `database.js`.
+Framing: almost all “full-tree reads” are **in-memory cache scans**. Network root `/` once+on was removed in **S8d-0**; production boot is scoped path once/subscribe only.
 
-### Must disappear from normal runtime (before root-off)
+### Must disappear from normal runtime (before root-off) — HISTORICAL
 
 | Path | Caller | Reason | Frequency | Replacement | Phase |
 |------|--------|--------|-----------|-------------|-------|
-| `/` once+on | `database.js` `initDB` | Legacy hydrate/live sync | Session + continuous | Per-scope load/subscribe only | S7 (after gates) |
+| `/` once+on | ~~`database.js` `initDB`~~ | Legacy hydrate/live sync | Session + continuous | Per-scope load/subscribe only | **S7 + S8d-0 REMOVED** |
 | `players` (picker) | ~~`getAllPlayers`~~ → `playerDirectory` | Direct trade picker | Trading renders | Trusted Trading `playerDirectory` | **S5c-D2 COMPLETE + VERIFIED** |
 | `trades/direct` | `getPendingTrades` / duplicate | Pending UI + duplicate | Trading open / create | `playerTradeIndex/{me}/direct` | **S5c-D3 COMPLETE + VERIFIED** |
 | `trades/listings` | `getMyActiveListings` / create max-count | My listings | Trading renders | `playerTradeIndex/{me}/listings` | **S5c-D4 COMPLETE + VERIFIED** |
@@ -353,7 +353,7 @@ Code:
 
 #### S7b — Dual-mode boot (reload-required root skip)
 
-**COMPLETE + VERIFIED.** Historical opt-in via `qc_scoped_loading`. **After classroom default flip:** production default scoped; emergency `qc_force_root_loading`. Report: `qcDbHydration.getBootModeReport()` / `workflowS7b()` / `workflowClassroomDefaultFlip()`.
+**COMPLETE + VERIFIED.** Historical opt-in via `qc_scoped_loading`. **After classroom default flip:** production default scoped. **S8d-0:** emergency `qc_force_root_loading` **removed**. Report: `qcDbHydration.getBootModeReport()` / `workflowS7b()` / `workflowClassroomDefaultFlip()`.
 
 #### S7c — Fail-closed + Admin access + LB archives
 
@@ -398,7 +398,7 @@ Root may be disabled only when **all** are true:
 11. Dual-mode invariant: never run root wholesale replace and scoped merge as competing authorities without freeze — **MET** (S7b latch)  
 12. Emergency rollback: flag off restores root — **MET** (S7b; confirmed S7d D11)  
 
-§7 prerequisites for evidence-gated scoped mode are **MET**. **Scoped trade action hydration — COMPLETE + VERIFIED**. **Scoped claim null-safety — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. Keep emergency `qc_force_root_loading` through S8a–S8c as repair escape hatch; reassess removal only in S8d after Admin tools no longer need client full-tree reads.
+§7 prerequisites for evidence-gated scoped mode are **MET**. **Scoped trade action hydration — COMPLETE + VERIFIED**. **Scoped claim null-safety — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **S8d-0:** emergency `qc_force_root_loading` **REMOVED** (false recovery under locked root `.read: false`).
 
 ---
 
@@ -426,20 +426,20 @@ Root may be disabled only when **all** are true:
 
 ### 8.3 Top-level root access matrix (desired roles; today = open)
 
-| Root | Anon / auth screen | Student | Admin | Repair / emergency root |
-|------|--------------------|---------|-------|-------------------------|
-| `config` | R (gates); admin login reads adminPw | R | R/W | R/W |
-| `players` | once `{u}` login/register | R/W self; once counterparties | R/W + rebuilds | bare tree under root |
-| `cards`/`packs`/`groups` | R sharedDefs | R | R/W | R/W |
-| `accessCodes` | once `{code}` register | — | R/W | bootstrap if empty |
-| `trades` | — | by-ID once + indexes | rebuild scans | root / rebuild |
-| `playerDirectory` | — | R picker | R/W rebuild | — |
-| `playerTradeIndex` | — | own + once foreign | rebuild | — |
-| `listingsByGroup` | — | R group; W via listings | rebuild | — |
-| `tradeIndexMeta` | — | indirect | W rebuild | — |
-| `leaderboards` | — | R tab | W + piggyback | — |
-| `leaderboardSeasons` / `Snapshots` | — | R archives | R/W | — |
-| `admin` (stub) | unused | unused | unused | ignore |
+| Root | Anon / auth screen | Student | Admin |
+|------|--------------------|---------|-------|
+| `config` | R (gates); admin login reads adminPw | R | R/W |
+| `players` | once `{u}` login/register | R/W self; once counterparties | R/W + rebuilds (S8d hydrate TBD) |
+| `cards`/`packs`/`groups` | R sharedDefs | R | R/W |
+| `accessCodes` | once `{code}` register | — | R/W |
+| `trades` | — | by-ID once + indexes | rebuild scans (S8d hydrate TBD) |
+| `playerDirectory` | — | R picker | R/W rebuild |
+| `playerTradeIndex` | — | own + once foreign | rebuild |
+| `listingsByGroup` | — | R group; W via listings | rebuild |
+| `tradeIndexMeta` | — | indirect | W rebuild |
+| `leaderboards` | — | R tab | W + piggyback |
+| `leaderboardSeasons` / `Snapshots` | — | R archives | R/W |
+| `admin` (stub) | unused | unused | unused |
 
 **Sensitive:** `players/*/password`, `activeSession`, inventory, stats; `config.adminPassword`; unused access codes.
 
@@ -466,7 +466,7 @@ Root may be disabled only when **all** are true:
 - Deploy `auth != null` (or any authz) rules before S8b Auth wiring → outage.
 - S8c admin claim rules before Admin SDK claim provisioning → lock out Admin.
 - Treat scoped loading as security → false confidence.
-- Remove emergency root during S8a–S8c → no client repair if rules misfire.
+- Rely on `qc_force_root_loading` after S8d-0 → no effect; use S8d admin maintenance paths instead.
 - Large dual-auth compatibility layer for disposable test accounts → unnecessary risk.
 - Interpret stale `qc_firebase_auth='false'` as legacy mode → accidental student lockout (must ignore).
 

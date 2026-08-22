@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     // 1. Initialize database (async — connects to Firebase or falls back)
-    // Production default: scoped (skip root). Emergency: qc_force_root_loading → root once+on.
+    // Production: scoped-only boot (no root `/` once+on; S8d-0).
     await db.initDB();
     console.log('[SciCards] Database initialized');
 
