@@ -264,6 +264,20 @@ async function main() {
         tradesCompleted: 20,
         uniqueCardsOwned: 2,
       });
+      await set(ref(db, 'players/offerer/groupId'), 'g1');
+      await set(ref(db, 'players/target/groupId'), 'g1');
+      await set(ref(db, 'leaderboards/tradesCompleted/offerer'), {
+        value: 20,
+        groupId: 'g1',
+        subgroupId: null,
+        updatedAt: now,
+      });
+      await set(ref(db, 'leaderboards/tradesCompleted/target'), {
+        value: 5,
+        groupId: 'g1',
+        subgroupId: 'sgA',
+        updatedAt: now,
+      });
       await set(ref(db, 'trades/direct/t1/status'), 'processing');
       await set(ref(db, 'trades/direct/t1/claimId'), 'claim-direct-1');
       await set(ref(db, 'trades/direct/t1/claimerAuthUid'), 'offererUid');
@@ -330,6 +344,14 @@ async function main() {
         },
         'players/offerer/lastDirectTradeAt': Date.now(),
         'players/target/lastDirectTradeAt': Date.now(),
+        'leaderboards/tradesCompleted/offerer/value': increment(1),
+        'leaderboards/tradesCompleted/offerer/updatedAt': Date.now(),
+        'leaderboards/tradesCompleted/offerer/groupId': 'g1',
+        'leaderboards/tradesCompleted/offerer/subgroupId': null,
+        'leaderboards/tradesCompleted/target/value': increment(1),
+        'leaderboards/tradesCompleted/target/updatedAt': Date.now(),
+        'leaderboards/tradesCompleted/target/groupId': 'g1',
+        'leaderboards/tradesCompleted/target/subgroupId': 'sgA',
         'leaderboards/uniqueCardsOwned/target': {
           username: 'target',
           value: 2,
@@ -342,16 +364,29 @@ async function main() {
     {
       let tStats = null;
       let oStats = null;
+      let oLb = null;
+      let tLb = null;
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         tStats = (await get(ref(ctx.database(), 'players/target/stats/tradesCompleted'))).val();
         oStats = (await get(ref(ctx.database(), 'players/offerer/stats/tradesCompleted'))).val();
+        oLb = (await get(ref(ctx.database(), 'leaderboards/tradesCompleted/offerer'))).val();
+        tLb = (await get(ref(ctx.database(), 'leaderboards/tradesCompleted/target'))).val();
       });
       if (tStats !== 6) {
         fail(`direct foreign tradesCompleted increment expected 6, got ${tStats}`);
       } else if (oStats !== 21) {
         fail(`direct claimer tradesCompleted 20→21 via increment expected 21, got ${oStats}`);
+      } else if (!oLb || oLb.value !== 21) {
+        fail(`direct claimer LB 20→21 expected, got ${JSON.stringify(oLb)}`);
+      } else if (!tLb || tLb.value !== 6) {
+        fail(`direct foreign LB 5→6 expected, got ${JSON.stringify(tLb)}`);
+      } else if (tLb.subgroupId !== 'sgA' || tLb.groupId !== 'g1') {
+        fail(`direct foreign LB group fields not preserved: ${JSON.stringify(tLb)}`);
+      } else if (oStats !== oLb.value || tStats !== tLb.value) {
+        fail(`direct canonical/LB mismatch o=${oStats}/${oLb.value} t=${tStats}/${tLb.value}`);
       } else {
         pass('direct tradesCompleted both sides increment (foreign 5→6, claimer 20→21)');
+        pass('direct LB both sides increment + group/subgroup preserved; canonical===LB');
       }
     }
 
@@ -399,6 +434,20 @@ async function main() {
       await set(ref(db, 'players/accepter/stats'), {
         tradesCompleted: 20,
         uniqueCardsOwned: 1,
+      });
+      await set(ref(db, 'players/owner/groupId'), 'g1');
+      await set(ref(db, 'players/accepter/groupId'), 'g1');
+      await set(ref(db, 'leaderboards/tradesCompleted/owner'), {
+        value: 4,
+        groupId: 'g1',
+        subgroupId: null,
+        updatedAt: now,
+      });
+      await set(ref(db, 'leaderboards/tradesCompleted/accepter'), {
+        value: 20,
+        groupId: 'g1',
+        subgroupId: null,
+        updatedAt: now,
       });
       await set(ref(db, 'trades/listings/l1/status'), 'processing');
       await set(ref(db, 'trades/listings/l1/claimId'), 'claim-listing-1');
@@ -460,6 +509,14 @@ async function main() {
         'players/accepter/stats/tradesCompleted': increment(1),
         'players/owner/progression/firstTrade': true,
         'players/accepter/progression/firstTrade': true,
+        'leaderboards/tradesCompleted/owner/value': increment(1),
+        'leaderboards/tradesCompleted/owner/updatedAt': Date.now(),
+        'leaderboards/tradesCompleted/owner/groupId': 'g1',
+        'leaderboards/tradesCompleted/owner/subgroupId': null,
+        'leaderboards/tradesCompleted/accepter/value': increment(1),
+        'leaderboards/tradesCompleted/accepter/updatedAt': Date.now(),
+        'leaderboards/tradesCompleted/accepter/groupId': 'g1',
+        'leaderboards/tradesCompleted/accepter/subgroupId': null,
       }),
     );
     pass('honest complete Listing terminal multipath allowed (both tradesCompleted increment)');
@@ -467,16 +524,25 @@ async function main() {
     {
       let oStats = null;
       let aStats = null;
+      let oLb = null;
+      let aLb = null;
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
         oStats = (await get(ref(ctx.database(), 'players/owner/stats/tradesCompleted'))).val();
         aStats = (await get(ref(ctx.database(), 'players/accepter/stats/tradesCompleted'))).val();
+        oLb = (await get(ref(ctx.database(), 'leaderboards/tradesCompleted/owner'))).val();
+        aLb = (await get(ref(ctx.database(), 'leaderboards/tradesCompleted/accepter'))).val();
       });
       if (oStats !== 5) {
         fail(`listing foreign tradesCompleted increment expected 5, got ${oStats}`);
       } else if (aStats !== 21) {
         fail(`listing claimer tradesCompleted 20→21 via increment expected 21, got ${aStats}`);
+      } else if (!oLb || oLb.value !== 5 || !aLb || aLb.value !== 21) {
+        fail(`listing LB mismatch owner=${JSON.stringify(oLb)} accepter=${JSON.stringify(aLb)}`);
+      } else if (oStats !== oLb.value || aStats !== aLb.value) {
+        fail(`listing canonical/LB mismatch`);
       } else {
         pass('listing tradesCompleted both sides increment (owner 4→5, accepter 20→21)');
+        pass('listing LB both sides increment; canonical===LB');
       }
     }
 
@@ -489,6 +555,78 @@ async function main() {
         fail(`listing qty>1 preserve failed: accepter=${JSON.stringify(aInv)}`);
       } else {
         pass('listing owner give absent; accepter remaining qty preserved');
+      }
+    }
+
+    // --- First trade: missing LB row → increment creates value 1 + group projection ---
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, 'players/offerer/inventory'), { cardGive: 2, cardRecv: 1 });
+      await set(ref(db, 'players/target/inventory'), { cardGive: 1, cardRecv: 3 });
+      await set(ref(db, 'players/offerer/stats/tradesCompleted'), 0);
+      await set(ref(db, 'players/target/stats/tradesCompleted'), 0);
+      await set(ref(db, 'players/offerer/groupId'), 'g1');
+      await set(ref(db, 'players/target/groupId'), 'g1');
+      await set(ref(db, 'players/offerer/subgroupId'), 'sgNew');
+      await set(ref(db, 'leaderboards/tradesCompleted/offerer'), null);
+      await set(ref(db, 'leaderboards/tradesCompleted/target'), null);
+      await set(ref(db, 'trades/direct/t1/status'), 'processing');
+      await set(ref(db, 'trades/direct/t1/claimId'), 'claim-first-lb');
+      await set(ref(db, 'trades/direct/t1/claimerAuthUid'), 'offererUid');
+      await set(ref(db, 'trades/direct/t1/processingBy'), 'offerer');
+    });
+
+    await assertSucceeds(
+      set(ref(offerer.database(), 'tradeGrants/target/offererUid'), {
+        tradeKind: 'direct',
+        tradeId: 't1',
+        claimId: 'claim-first-lb',
+        claimerUsername: 'offerer',
+        targetUsername: 'target',
+        giveCardId: 'cardGive',
+        recvCardId: 'cardRecv',
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+
+    await assertSucceeds(
+      update(ref(offerer.database()), {
+        'players/target/inventory/cardGive': null,
+        'players/target/inventory/cardRecv': increment(1),
+        'players/offerer/inventory/cardRecv': null,
+        'players/offerer/inventory/cardGive': increment(1),
+        'trades/direct/t1/status': 'accepted',
+        'trades/direct/t1/processingBy': null,
+        'trades/direct/t1/processingAt': null,
+        'trades/direct/t1/claimId': null,
+        'trades/direct/t1/claimerAuthUid': null,
+        'tradeGrants/target/offererUid': null,
+        'players/offerer/stats/tradesCompleted': increment(1),
+        'players/target/stats/tradesCompleted': increment(1),
+        'leaderboards/tradesCompleted/offerer/value': increment(1),
+        'leaderboards/tradesCompleted/offerer/updatedAt': Date.now(),
+        'leaderboards/tradesCompleted/offerer/groupId': 'g1',
+        'leaderboards/tradesCompleted/offerer/subgroupId': 'sgNew',
+        'leaderboards/tradesCompleted/target/value': increment(1),
+        'leaderboards/tradesCompleted/target/updatedAt': Date.now(),
+        'leaderboards/tradesCompleted/target/groupId': 'g1',
+        'leaderboards/tradesCompleted/target/subgroupId': null,
+      }),
+    );
+
+    {
+      let oLb = null;
+      let tLb = null;
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        oLb = (await get(ref(ctx.database(), 'leaderboards/tradesCompleted/offerer'))).val();
+        tLb = (await get(ref(ctx.database(), 'leaderboards/tradesCompleted/target'))).val();
+      });
+      if (!oLb || oLb.value !== 1 || oLb.groupId !== 'g1' || oLb.subgroupId !== 'sgNew') {
+        fail(`first-trade missing LB row offerer expected value1+group, got ${JSON.stringify(oLb)}`);
+      } else if (!tLb || tLb.value !== 1 || tLb.groupId !== 'g1') {
+        fail(`first-trade missing LB row target expected value1+group, got ${JSON.stringify(tLb)}`);
+      } else {
+        pass('first-trade missing LB row creates value:1 with group/subgroup projection');
       }
     }
 
