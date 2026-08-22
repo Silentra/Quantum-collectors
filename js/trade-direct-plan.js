@@ -325,15 +325,28 @@ export function assertNoOverlappingUpdatePaths(updates) {
 }
 
 /**
- * Four relative inventory leaf updates (never absolute quantities).
+ * Inventory swap paths for terminal settlement.
+ * Give leaf: null when pre-qty is exactly 1 (canonical absent leaf; grant still valid
+ * in the same multipath pre-write root). Else ServerValue.increment(-1).
+ * Receive leaf: always increment(+1).
+ *
  * @param {Object} updates
  * @param {string} username
  * @param {string} giveCardId
  * @param {string} receiveCardId
+ * @param {object|null|undefined} inventory - pre-settlement inventory for qty decision
+ * @returns {{ giveNulled: boolean }}
  */
-function appendInventoryIncrementSwapPaths(updates, username, giveCardId, receiveCardId) {
-  updates[`players/${username}/inventory/${giveCardId}`] = serverIncrement(-1);
+function appendInventoryIncrementSwapPaths(updates, username, giveCardId, receiveCardId, inventory) {
+  const giveQty = _invQty(inventory, giveCardId);
+  const givePath = `players/${username}/inventory/${giveCardId}`;
+  if (giveQty === 1) {
+    updates[givePath] = null;
+  } else {
+    updates[givePath] = serverIncrement(-1);
+  }
   updates[`players/${username}/inventory/${receiveCardId}`] = serverIncrement(1);
+  return { giveNulled: giveQty === 1 };
 }
 
 /**
@@ -404,13 +417,15 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
 }
 
 /**
- * True if any inventory card path in updates holds an absolute number/null (not .sv).
+ * True if any inventory card path holds an absolute numeric qty (not .sv, not null).
+ * Null is allowed — canonical removal when giving the last copy.
  * @param {Object} updates
  * @returns {boolean}
  */
 export function terminalPayloadHasAbsoluteInventoryQty(updates) {
   for (const [path, value] of Object.entries(updates || {})) {
     if (!/\/inventory\//.test(path)) continue;
+    if (value == null) continue;
     if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, '.sv')) {
       continue;
     }
@@ -486,8 +501,20 @@ export function buildDirectTradeAcceptPlan({
   // S8c-1: clear claim-scoped foreign inventory grant in the same terminal multipath
   mergeTradeGrantClear(updates, targetPlayerId, resolveClaimerAuthUid());
 
-  appendInventoryIncrementSwapPaths(updates, offeringPlayerId, offeredCardId, requestedCardId);
-  appendInventoryIncrementSwapPaths(updates, targetPlayerId, requestedCardId, offeredCardId);
+  const offererGive = appendInventoryIncrementSwapPaths(
+    updates,
+    offeringPlayerId,
+    offeredCardId,
+    requestedCardId,
+    offeringPlayer?.inventory,
+  );
+  appendInventoryIncrementSwapPaths(
+    updates,
+    targetPlayerId,
+    requestedCardId,
+    offeredCardId,
+    targetPlayer?.inventory,
+  );
 
   const offererSide = planPlayerPostTradeSideEffects(offeringPlayerId, offeringLogical, now);
   const targetSide = planPlayerPostTradeSideEffects(targetPlayerId, targetLogical, now);
@@ -523,10 +550,13 @@ export function buildDirectTradeAcceptPlan({
     return { ok: false, reason: 'INVALID_TRADE_PLAN' };
   }
 
-  const giveLeafPaths = [
-    `players/${offeringPlayerId}/inventory/${offeredCardId}`,
-    `players/${targetPlayerId}/inventory/${requestedCardId}`,
-  ];
+  // Post-commit zero cleanup: own give leaf only (claimer = offerer). Foreign leaf
+  // is already nulled in-terminal when qty===1; after grant clear, foreign cleanup is denied.
+  // When qty>1, foreign remaining positive needs no cleanup.
+  const giveLeafPaths = [];
+  if (!offererGive.giveNulled) {
+    giveLeafPaths.push(`players/${offeringPlayerId}/inventory/${offeredCardId}`);
+  }
 
   const result = {
     ok: true,
