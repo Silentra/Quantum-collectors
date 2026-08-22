@@ -1559,6 +1559,7 @@ export async function claimListingIfActive(listingId, claim) {
 
 /**
  * Revert processing → active only if this claimId still owns the listing.
+ * Speculative Firebase null must not abort (return null → server reconcile/retry).
  * Never touches fulfilled / cancelled / expired / failed.
  * @param {string} listingId
  * @param {string} claimId
@@ -1576,8 +1577,14 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
   }
 
   const path = `trades/listings/${listingId}`;
+  let sawSpeculativeNull = false;
 
   const tryRelease = (current) => {
+    // Speculative empty local cache: return null (not undefined) so RTDB retries with server data.
+    if (current === null) {
+      sawSpeculativeNull = true;
+      return null;
+    }
     if (!current || typeof current !== 'object') return;
     if (current.status !== 'processing') return;
     if (current.claimId !== claimId) return;
@@ -1593,16 +1600,25 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
 
   if (!_useFirebase || !_fbDb) {
     const current = get(path);
-    const next = tryRelease(current);
-    if (!next) {
-      return { ok: true, released: false, listing: current, mode: 'local' };
+    if (current === null || !current || typeof current !== 'object'
+      || current.status !== 'processing' || current.claimId !== claimId) {
+      return { ok: true, released: false, listing: current ?? null, mode: 'local' };
     }
+    const next = {
+      ...current,
+      status: 'active',
+    };
+    delete next.processingBy;
+    delete next.processingAt;
+    delete next.claimId;
+    delete next.claimerAuthUid;
+    delete next.fulfilledCardId;
     applyLocalOnly(path, next);
     return { ok: true, released: true, listing: next, mode: 'local' };
   }
 
   try {
-    const result = await _fbDb.ref(path).transaction(current => tryRelease(current));
+    const result = await _fbDb.ref(path).transaction((current) => tryRelease(current));
     metrics.recordFirebaseWrite({
       op: 'transaction',
       path,
@@ -1612,9 +1628,24 @@ export async function releaseListingClaimIfOwned(listingId, claimId) {
     });
     const nextVal = result.snapshot ? result.snapshot.val() : null;
     applyLocalOnly(path, nextVal == null ? null : nextVal);
+    const released = result.committed === true
+      && nextVal
+      && typeof nextVal === 'object'
+      && nextVal.status === 'active'
+      && nextVal.claimId !== claimId;
+    if (!released) {
+      console.info('[DB] listing-release aborted', {
+        listingId,
+        claimId,
+        sawSpeculativeNull,
+        committed: result.committed === true,
+        status: nextVal?.status ?? null,
+        snapClaimId: nextVal?.claimId ?? null,
+      });
+    }
     return {
       ok: true,
-      released: result.committed === true,
+      released,
       listing: nextVal,
       mode: 'firebase',
     };
@@ -1757,6 +1788,7 @@ export async function claimDirectTradeIfAwaiting(tradeId, claim) {
 
 /**
  * Revert processing → awaiting_offerer_confirmation only if this claimId still owns the trade.
+ * Speculative Firebase null must not abort (return null → server reconcile/retry).
  * Never touches accepted / declined / cancelled / failed.
  * @param {string} tradeId
  * @param {string} claimId
@@ -1774,8 +1806,15 @@ export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
   }
 
   const path = `trades/direct/${tradeId}`;
+  let sawSpeculativeNull = false;
 
   const tryRelease = (current) => {
+    // Speculative empty local cache: return null (not undefined) so RTDB retries with server data.
+    // Returning undefined aborts immediately (committed:false) and never reconciles — claim path already avoids this.
+    if (current === null) {
+      sawSpeculativeNull = true;
+      return null;
+    }
     if (!current || typeof current !== 'object') return;
     if (current.status !== 'processing') return;
     if (current.claimId !== claimId) return;
@@ -1789,10 +1828,18 @@ export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
 
   if (!_useFirebase || !_fbDb) {
     const current = get(path);
-    const next = tryRelease(current);
-    if (!next) {
-      return { ok: true, released: false, trade: current, mode: 'local' };
+    if (current === null || !current || typeof current !== 'object'
+      || current.status !== 'processing' || current.claimId !== claimId) {
+      return { ok: true, released: false, trade: current ?? null, mode: 'local' };
     }
+    const next = {
+      ...current,
+      status: 'awaiting_offerer_confirmation',
+    };
+    delete next.processingBy;
+    delete next.processingAt;
+    delete next.claimId;
+    delete next.claimerAuthUid;
     applyLocalOnly(path, next);
     return { ok: true, released: true, trade: next, mode: 'local' };
   }
@@ -1808,9 +1855,30 @@ export async function releaseDirectTradeClaimIfOwned(tradeId, claimId) {
     });
     const nextVal = result.snapshot ? result.snapshot.val() : null;
     applyLocalOnly(path, nextVal == null ? null : nextVal);
+    const released = result.committed === true
+      && nextVal
+      && typeof nextVal === 'object'
+      && nextVal.status === 'awaiting_offerer_confirmation'
+      && nextVal.claimId !== claimId;
+    if (!released) {
+      console.info('[DB] direct-release aborted', {
+        tradeId,
+        claimId,
+        sawSpeculativeNull,
+        committed: result.committed === true,
+        status: nextVal?.status ?? null,
+        snapClaimId: nextVal?.claimId ?? null,
+      });
+    } else {
+      console.info('[DB] direct-release committed', {
+        tradeId,
+        claimId,
+        sawSpeculativeNull,
+      });
+    }
     return {
       ok: true,
-      released: result.committed === true,
+      released,
       trade: nextVal,
       mode: 'firebase',
     };
