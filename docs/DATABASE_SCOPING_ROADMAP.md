@@ -1,7 +1,7 @@
 # Database Scoping Roadmap (S5–S8)
 
 **Status:** Authoritative roadmap for remaining Firebase work after scoped loading.  
-**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **COMPLETE**. **S8b+ P0** Trusted Teacher Functions foundation — **IMPLEMENTED — AWAITING VERIFICATION** (dormant; not a launch dependency). **S8c-0** client prep (foreign trade-visible reads + `admins/{uid}` registry) — **COMPLETE + VERIFIED**. **S8c-1** (tradeGrants + locked rules) — **COMPLETE + VERIFIED**. **Auth production-default flip** — **IMPLEMENTED — AWAITING VERIFICATION** (`workflowAuthDefaultFlip`). **S8c-2** — NOT STARTED.  
+**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **COMPLETE**. **S8b+ P0** Trusted Teacher Functions foundation — **IMPLEMENTED — AWAITING VERIFICATION** (dormant; not a launch dependency). **S8c-0** client prep (foreign trade-visible reads + `admins/{uid}` registry) — **COMPLETE + VERIFIED**. **S8c-1** (tradeGrants + locked rules) — **COMPLETE + VERIFIED**. **Auth production-default flip** — **COMPLETE + VERIFIED**. **S8c-2** (grant-bound foreign stats/achievements/LB) — **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION**.  
 **Constraints:** Canonical `trades/*` remain execution authority. Missing/unverified reservation indexes must never mean zero reservations. Prefer the smallest safe continuation from the verified architecture.
 
 This document supersedes the historical S1–S8 investigation plan for **remaining** work. Completed phases below are recorded for reconciliation; implementation PRs must still list every file created/modified/deleted and every new named import/export.
@@ -59,11 +59,11 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8b+ P0 Trusted Teacher Functions foundation | **IMPLEMENTED — AWAITING VERIFICATION** (dormant / not launch-required) |
 | S8c-0 client prep (trade-visible foreign reads + admins registry) | **COMPLETE + VERIFIED** |
 | S8c-1 tradeGrants + RTDB authorization rules | **COMPLETE + VERIFIED** (locked rules live) |
-| Auth production-default flip | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowAuthDefaultFlip`) |
-| S8c-2 foreign stats/LB/PTI tightening | NOT STARTED |
+| Auth production-default flip | **COMPLETE + VERIFIED** (`workflowAuthDefaultFlip`) |
+| S8c-2 foreign stats/achievements/LB grant-bind | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (`workflowS8c2`) |
 | S8d privileged Admin path / Functions | NOT STARTED (optional later; Spark path preferred) |
 
-**What remains:** Verify Auth production default on a clean browser (`qcPersonalAudit.workflowAuthDefaultFlip()`). Optional S8c-2 / Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). Scoping architecture is done. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Republish `database.rules.json` for S8c-2 → run `qcPersonalAudit.workflowS8c2()` live. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
@@ -81,7 +81,7 @@ flowchart LR
   S8bPlus --> S8d
 ```
 
-**Next:** Verify Auth production default on a clean browser (`qcPersonalAudit.workflowAuthDefaultFlip()`). Do not begin S8c-2 / Option C / S8d until separately approved.
+**Next:** Republish S8c-2 rules → `qcPersonalAudit.workflowS8c2()` live. Do not begin S8d / Option C until separately approved.
 
 ---
 
@@ -373,7 +373,7 @@ Code:
 |-------|--------|--------|
 | **S8a** | **COMPLETE** | Honest docs; threat model; root access matrix; historical open-rules snapshot |
 | **S8b** | **COMPLETE** | Firebase Auth under username UX; production default via Auth flip |
-| **S8c** | **S8c-1 COMPLETE + VERIFIED**; S8c-2 NOT STARTED | Authorization rules cutover (tradeGrants + locked rules live) |
+| **S8c** | **S8c-1 COMPLETE + VERIFIED**; **S8c-2 AWAITING DEPLOY** | Authorization rules; PTI/LBG remain accepted residuals |
 | **Auth default flip** | **IMPLEMENTED — AWAITING VERIFICATION** | Fresh browser → Auth; emergency `qc_force_legacy_auth` |
 | **S8d** | Not started | Privileged Admin rebuilds via Admin SDK / Functions; emergency-root reassessment |
 

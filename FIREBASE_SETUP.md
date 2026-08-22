@@ -86,15 +86,27 @@ Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
 - Pasteable: `qcPersonalAudit.workflowS8c0()`
 - Distribution debt: [`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)
 
-### S8c-1 (tradeGrants + locked rules) — IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION
+### S8c-1 (tradeGrants + locked rules) — COMPLETE + VERIFIED
 
 - Client: `claimerAuthUid` on claims; `tradeGrants/{target}/{claimerUid}` CREATE/CLEAR lifecycle ([`js/trade-grants.js`](js/trade-grants.js))
-- In-repo locked rules: [`database.rules.json`](database.rules.json) — **not auto-deployed**; Console paste required
+- In-repo locked rules: [`database.rules.json`](database.rules.json) — **Console paste required for each rules change**
 - Rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json)
-- Local emulator proof: `scripts/s8c1-rules-simulator.mjs` (exact ±1 with `increment`, fake grant deny, honest settle)
+- Local emulator proof: `scripts/s8c1-rules-simulator.mjs`
 - Pasteable: `qcPersonalAudit.workflowS8c1()`
-- Deferred to S8c-2: foreign stats/LB/PTI tightening
-- Auth production-default flip: **IMPLEMENTED — AWAITING VERIFICATION** (`qcPersonalAudit.workflowAuthDefaultFlip()`)
+
+### S8c-2 (residual foreign stats/achievements/LB) — IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION
+
+- Grant-bound foreign writes: `stats`, `achievements`, `progression`, `lastDirectTradeAt`, `leaderboards/{stat}/{u}`
+- `lastListingAcceptAt`: owner/admin only
+- `tradesCompleted` under grant: exact +1
+- **Accepted residuals:** `playerTradeIndex` + `listingsByGroup` remain any-auth writable (rebuildable indexes)
+- Pasteable: `qcPersonalAudit.workflowS8c2()`
+- **Republish full `database.rules.json` after pulling this slice**
+
+### Auth production-default flip — COMPLETE + VERIFIED
+
+- Fresh browser → Firebase Auth; emergency `qc_force_legacy_auth`
+- Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()`
 
 ### Future (post Auth-default verify)
 

@@ -681,16 +681,26 @@ Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings
 - Foreign inventory: grant present + exact give −1 / recv +1 + nonnegative (resolved `ServerValue.increment`); qty===1 give → null in-terminal.
 - In-repo rules: [`database.rules.json`](database.rules.json). Rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json).
 - Local emulator proof: [`scripts/s8c1-rules-simulator.mjs`](scripts/s8c1-rules-simulator.mjs).
-- Deferred **S8c-2**: foreign stats / leaderboard / PTI tightening.
+- Deferred historically: foreign stats/LB → **S8c-2** (below). PTI/LBG remain accepted residuals.
 
 ### Phase — Auth production-default flip
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()`.
 
 - Fresh browser / no flag → Firebase Auth.
 - Emergency developer rollback: `qc_force_legacy_auth='true'` → legacy RTDB hash auth.
 - Stale `qc_firebase_auth` ignored.
 - Legacy hashes retained for rollback; Auth-native (no hash) cannot log in under force-legacy.
+
+### Phase — S8c-2 residual foreign write hardening
+
+**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8c2()`.
+
+- Grant-bound: foreign `stats` / `achievements` / `progression` / `lastDirectTradeAt` / leaderboard leaves.
+- `lastListingAcceptAt`: owner/admin only.
+- `tradesCompleted` under grant: exact +1.
+- **Accepted residuals:** `playerTradeIndex`, `listingsByGroup` any-auth writes (rebuildable).
+- Republish full [`database.rules.json`](database.rules.json). Rollback file unchanged.
 
 ### Phase S6e — Final isolation audits
 

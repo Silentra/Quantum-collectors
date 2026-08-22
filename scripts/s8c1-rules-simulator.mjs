@@ -1,17 +1,11 @@
 /**
- * S8c-1 local RTDB rules proof (Firebase emulator + @firebase/rules-unit-testing).
+ * S8c-1 + S8c-2 local RTDB rules proof (Firebase emulator + @firebase/rules-unit-testing).
  *
- * Proves:
- *  1) ServerValue.increment(±1) yields newData that satisfies exact-delta inventory rules
- *  2) Fake grant create fails
- *  3) Unrelated foreign inventory write fails
- *  4) Honest direct + listing settlement multipaths pass under locked rules
+ * Proves S8c-1 inventory/grant + S8c-2 grant-bound foreign stats/achievements/progression/
+ * cooldowns/leaderboards (PTI/LBG intentionally still auth-writable).
  *
  * Run (from repo root, with Java available for emulator):
- *   npm install --no-save firebase @firebase/rules-unit-testing firebase-tools
  *   npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
- *
- * STOP condition: if increment exact-delta cannot be proven, do not weaken inventory rules.
  */
 
 import { readFileSync } from 'node:fs';
@@ -295,10 +289,25 @@ async function main() {
         'tradeGrants/target/offererUid': null,
         'players/offerer/stats/tradesCompleted': 1,
         'players/target/stats/tradesCompleted': 1,
+        'players/target/stats/uniqueCardsOwned': 2,
         'players/offerer/progression/firstTrade': true,
         'players/target/progression/firstTrade': true,
+        'players/target/achievements/first_trade_badge': {
+          unlocked: true,
+          unlockedAt: Date.now(),
+        },
         'players/offerer/lastDirectTradeAt': Date.now(),
         'players/target/lastDirectTradeAt': Date.now(),
+        'leaderboards/tradesCompleted/offerer': {
+          username: 'offerer',
+          value: 1,
+          updatedAt: Date.now(),
+        },
+        'leaderboards/tradesCompleted/target': {
+          username: 'target',
+          value: 1,
+          updatedAt: Date.now(),
+        },
       }),
     );
     pass('honest direct settlement multipath allowed (qty1 give → null)');
@@ -364,8 +373,20 @@ async function main() {
         'trades/listings/l1/claimerAuthUid': null,
         'tradeGrants/owner/accepterUid': null,
         'players/accepter/lastListingAcceptAt': Date.now(),
+        'players/owner/stats/tradesCompleted': 1,
+        'players/accepter/stats/tradesCompleted': 1,
         'players/owner/progression/firstTrade': true,
         'players/accepter/progression/firstTrade': true,
+        'leaderboards/tradesCompleted/owner': {
+          username: 'owner',
+          value: 1,
+          updatedAt: Date.now(),
+        },
+        'leaderboards/tradesCompleted/accepter': {
+          username: 'accepter',
+          value: 1,
+          updatedAt: Date.now(),
+        },
       }),
     );
     pass('honest listing settlement multipath allowed (owner qty1 → null)');
@@ -436,6 +457,149 @@ async function main() {
         pass('direct qty>1 give decremented; remaining positive preserved');
       }
     }
+
+
+    // ========== S8c-2: grant-bound foreign side effects ==========
+    // Reseed processing + grant for side-effect deny/allow tests (after prior settles cleared grant)
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, 'players/target/stats'), { tradesCompleted: 3, uniqueCardsOwned: 2 });
+      await set(ref(db, 'players/target/progression'), { firstTrade: true });
+      await set(ref(db, 'players/target/achievements'), {});
+      await set(ref(db, 'players/target/lastDirectTradeAt'), 1000);
+      await set(ref(db, 'players/target/lastListingAcceptAt'), 1000);
+      await set(ref(db, 'leaderboards/tradesCompleted/target'), {
+        username: 'target',
+        value: 3,
+        updatedAt: now,
+      });
+      await set(ref(db, 'trades/direct/t1/status'), 'processing');
+      await set(ref(db, 'trades/direct/t1/claimId'), 'claim-s8c2');
+      await set(ref(db, 'trades/direct/t1/claimerAuthUid'), 'offererUid');
+      await set(ref(db, 'trades/direct/t1/processingBy'), 'offerer');
+    });
+
+    // Foreign stats without grant denied
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/stats/tradesCompleted'), 99),
+    );
+    pass('S8c-2: foreign tradesCompleted without grant denied');
+
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/achievements/x'), { unlocked: true }),
+    );
+    pass('S8c-2: foreign achievement without grant denied');
+
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/progression/firstTrade'), true),
+    );
+    pass('S8c-2: foreign progression without grant denied');
+
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/lastDirectTradeAt'), Date.now()),
+    );
+    pass('S8c-2: foreign lastDirectTradeAt without grant denied');
+
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/lastListingAcceptAt'), Date.now()),
+    );
+    pass('S8c-2: foreign lastListingAcceptAt denied (owner/admin only)');
+
+    await assertFails(
+      set(ref(offerer.database(), 'leaderboards/tradesCompleted/target'), {
+        username: 'target',
+        value: 999,
+        updatedAt: Date.now(),
+      }),
+    );
+    pass('S8c-2: arbitrary foreign leaderboard write denied');
+
+    // Own lastListingAcceptAt allowed
+    await assertSucceeds(
+      set(ref(accepter.database(), 'players/accepter/lastListingAcceptAt'), Date.now()),
+    );
+    pass('S8c-2: own lastListingAcceptAt allowed');
+
+    // Create live grant for allow tests
+    await assertSucceeds(
+      set(ref(offerer.database(), 'tradeGrants/target/offererUid'), {
+        tradeKind: 'direct',
+        tradeId: 't1',
+        claimId: 'claim-s8c2',
+        claimerUsername: 'offerer',
+        targetUsername: 'target',
+        giveCardId: 'cardGive',
+        recvCardId: 'cardRecv',
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+    pass('S8c-2: live grant created for side-effect allows');
+
+    // Exact +1 tradesCompleted under grant
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/stats/tradesCompleted'), 4),
+    );
+    pass('S8c-2: grant-authorized tradesCompleted +1 allowed');
+
+    // +2 / arbitrary under grant denied
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/stats/tradesCompleted'), 10),
+    );
+    pass('S8c-2: grant-authorized tradesCompleted +2/arbitrary denied');
+
+    // Absolute unique under grant (short-window residual) allowed
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/stats/uniqueCardsOwned'), 5),
+    );
+    pass('S8c-2: grant-authorized uniqueCardsOwned absolute allowed');
+
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/achievements/trade_milestone'), {
+        unlocked: true,
+        unlockedAt: Date.now(),
+      }),
+    );
+    pass('S8c-2: grant-authorized achievement write allowed');
+
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/progression/firstTrade'), true),
+    );
+    pass('S8c-2: grant-authorized progression firstTrade=true allowed');
+
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/lastDirectTradeAt'), Date.now()),
+    );
+    pass('S8c-2: grant-authorized lastDirectTradeAt allowed');
+
+    await assertSucceeds(
+      set(ref(offerer.database(), 'leaderboards/tradesCompleted/target'), {
+        username: 'target',
+        value: 4,
+        updatedAt: Date.now(),
+      }),
+    );
+    pass('S8c-2: grant-authorized leaderboard write allowed');
+
+    // PTI/LBG still auth-writable (accepted residual)
+    await assertSucceeds(
+      set(ref(offerer.database(), 'playerTradeIndex/target/direct/fake'), { id: 'fake' }),
+    );
+    pass('S8c-2: PTI still auth-writable (accepted residual)');
+    await assertSucceeds(
+      set(ref(offerer.database(), 'listingsByGroup/g1/fakeListing'), { id: 'fakeListing' }),
+    );
+    pass('S8c-2: listingsByGroup still auth-writable (accepted residual)');
+
+    // tradeGrants parent read: claimer may not enumerate parent (hygiene); leaf still readable
+    await assertFails(get(ref(offerer.database(), 'tradeGrants/target')));
+    pass('S8c-2: tradeGrants parent read denied to non-target/non-admin');
+    await assertSucceeds(get(ref(offerer.database(), 'tradeGrants/target/offererUid')));
+    pass('S8c-2: tradeGrants claimer leaf still readable');
+
+    // Clear grant
+    await assertSucceeds(
+      set(ref(offerer.database(), 'tradeGrants/target/offererUid'), null),
+    );
 
     // --- S8c-1 live-blocker compatibility reads ---
     await assertSucceeds(get(ref(offerer.database(), 'playerDirectory')));
@@ -588,7 +752,7 @@ async function main() {
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1 rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2 rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();
