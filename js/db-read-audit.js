@@ -570,7 +570,8 @@ API:
   qcPersonalAudit.workflowAuthDefaultFlip() // Auth production default + legacy rollback
   qcPersonalAudit.workflowS8bPlusP0() // S8b+ P0 Trusted Teacher Functions
   qcPersonalAudit.workflowS8c0()   // S8c-0 client prep (foreign reads + admins registry)
-  qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules (await Console deploy)
+  qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules
+  qcPersonalAudit.workflowS8c2()   // S8c-2 grant-bound foreign stats/LB
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1817,8 +1818,8 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8b+ P0 IMPLEMENTED — AWAITING VERIFICATION (see workflowS8bPlusP0)
   S8c-0 COMPLETE + VERIFIED (see workflowS8c0)
   S8c-1 COMPLETE + VERIFIED (locked rules live; see workflowS8c1)
-  Auth production-default flip — IMPLEMENTED — AWAITING VERIFICATION (workflowAuthDefaultFlip)
-  S8c-2 NOT STARTED — foreign stats/LB/PTI tightening
+  Auth production-default flip — COMPLETE + VERIFIED (workflowAuthDefaultFlip)
+  S8c-2 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8c2)
   S8d NOT STARTED — privileged Admin / Functions; emergency-root reassess
 
   S8b migration preference (planning only):
@@ -1997,7 +1998,7 @@ What shipped (client + in-repo rules):
     password/activeSession, no student parent read of foreign player,
     config/cards/packs/groups admin-only writes, accessCodes, trades,
     tradeGrants, exact foreign inventory grant rule
-  - Foreign stats/LB/PTI tightening DEFERRED (S8c-2) — still broader auth writes
+  - Foreign stats/LB grant-bound in S8c-2 — see workflowS8c2(); PTI/LBG remain accepted residuals
 
 Local simulator proof (already run in implement session):
   npx firebase-tools emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
@@ -2035,8 +2036,56 @@ Live verification (Auth ON; throwaway test accounts preferred):
   G) Self pack open / research still works (own inventory)
   H) Peek grant during settle (optional diag): tradeGrants/{target}/{uid}
 
-Auth production-default flip: see qcPersonalAudit.workflowAuthDefaultFlip() (separate from S8c-1).
-S8c-2: foreign stats/LB grant binding — NOT STARTED.
+Auth production-default flip: see qcPersonalAudit.workflowAuthDefaultFlip().
+S8c-2: see qcPersonalAudit.workflowS8c2() (grant-bound foreign stats/achievements/LB).
+`);
+}
+
+/**
+ * Pasteable S8c-2 residual cross-player write hardening.
+ */
+export function workflowS8c2() {
+  console.info(`
+=== S8c-2 residual cross-player write hardening ===
+
+Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.
+Republish FULL database.rules.json in Firebase Console (do not partial-paste).
+Rollback file database.rules.open-rollback.json UNCHANGED.
+
+Hardened (owner | admin | live tradeGrant for that username):
+  players/{u}/stats
+  players/{u}/achievements
+  players/{u}/progression
+  players/{u}/lastDirectTradeAt
+  leaderboards/{statKey}/{u}
+Validates:
+  grant-authorized stats/tradesCompleted exact previous+1
+  progression/firstTrade may only become true under grant (owner/admin may set false on register)
+lastListingAcceptAt: owner | admin ONLY (settlement never writes it foreign)
+
+Accepted residuals (NOT tightened):
+  playerTradeIndex — any auth write (rebuildable index)
+  listingsByGroup — any auth write (rebuildable index)
+Self-cheating (own inventory/stats) remains outside the threat model.
+
+Hygiene:
+  tradeGrants/{target} parent .read → admin | target-owner only (claimer leaf still readable)
+  playerDirectory create-when-player-missing without authUid proof → DEFERRED
+    (rules-only close would require authUid in public directory projection or registration redesign)
+
+Local proof:
+  npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
+
+Live verification (after Console publish; throwaway accounts OK):
+  1) Honest Direct Trade → both inventories + stats/achievements OK; grant cleared
+  2) Honest Listing fulfill → same
+  3) DevTools as student A: set players/{B}/stats/tradesCompleted → PERMISSION_DENIED
+  4) DevTools: set leaderboards/tradesCompleted/{B} → PERMISSION_DENIED
+  5) Own pack open / research / self stats still work
+  6) Teacher Admin config/cards writes still work
+  7) Note: PTI/LBG foreign writes still succeed (accepted residual)
+
+STOP: no S8d; no Option C; no PTI/LBG redesign; no Auth changes.
 `);
 }
 
@@ -2221,6 +2270,7 @@ function _installWindowApi() {
     workflowS8bPlusP0,
     workflowS8c0,
     workflowS8c1,
+    workflowS8c2,
     enableAudit,
     disableAudit,
     enableIsolation,
