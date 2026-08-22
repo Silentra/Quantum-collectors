@@ -1,7 +1,10 @@
 /**
  * Auth Module - Username/Password Authentication via Firebase RTDB
  *
- * Firebase Auth optional via qc_firebase_auth (S8b) — passwords are stored (hashed) in players/{username}.
+ * Production default: Firebase Auth (synthetic {username}@scicards.local).
+ * Emergency developer rollback: localStorage.qc_force_legacy_auth='true' → RTDB SHA-256
+ * hashes at players/{username}.password (Auth-native accounts without a hash cannot log in).
+ * Stale qc_firebase_auth is ignored and does not control mode.
  * Sessions persist via localStorage with a server-backed opaque session id
  * (players/{username}/activeSession). Only username === '__admin__' is exempt.
  *
@@ -128,17 +131,23 @@ function simpleHash(str) {
 
 /** Opaque random session id (16 bytes hex). */
 
-// ---------- Firebase Auth (S8b; gated by qc_firebase_auth) ----------
+// ---------- Firebase Auth (production default; emergency qc_force_legacy_auth) ----------
 
-const FIREBASE_AUTH_FLAG_KEY = 'qc_firebase_auth';
+/** Developer-only emergency rollback to legacy RTDB hash auth. Students never set this. */
+const FORCE_LEGACY_AUTH_LS_KEY = 'qc_force_legacy_auth';
 const AUTH_EMAIL_DOMAIN = 'scicards.local';
 
-/** True when Firebase Auth is authoritative for student login/register. */
+/**
+ * True when Firebase Auth is authoritative for student login/register/restore.
+ * Production default: ON (fresh browser / no flag).
+ * OFF only when localStorage.qc_force_legacy_auth === 'true'.
+ * Stale qc_firebase_auth values are ignored.
+ */
 export function isFirebaseAuthEnabled() {
   try {
-    return localStorage.getItem(FIREBASE_AUTH_FLAG_KEY) === 'true';
+    return localStorage.getItem(FORCE_LEGACY_AUTH_LS_KEY) !== 'true';
   } catch {
-    return false;
+    return true; // fail open to Auth if localStorage throws
   }
 }
 

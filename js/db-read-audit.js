@@ -567,6 +567,7 @@ API:
   qcPersonalAudit.workflowCardArtRetry()
   qcPersonalAudit.workflowS8a()    // S8a security docs + live rules snapshot
   qcPersonalAudit.workflowS8b()    // S8b Firebase Auth foundation
+  qcPersonalAudit.workflowAuthDefaultFlip() // Auth production default + legacy rollback
   qcPersonalAudit.workflowS8bPlusP0() // S8b+ P0 Trusted Teacher Functions
   qcPersonalAudit.workflowS8c0()   // S8c-0 client prep (foreign reads + admins registry)
   qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules (await Console deploy)
@@ -1812,10 +1813,12 @@ Live rules (Console SoT; repo: database.rules.json):
 
 SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8a COMPLETE — honest docs, threat model, root matrix, snapshot
-  S8b IMPLEMENTED — AWAITING VERIFICATION (see workflowS8b)
+  S8b COMPLETE (Auth foundation; production default — see workflowAuthDefaultFlip)
   S8b+ P0 IMPLEMENTED — AWAITING VERIFICATION (see workflowS8bPlusP0)
   S8c-0 COMPLETE + VERIFIED (see workflowS8c0)
-  S8c-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (see workflowS8c1)
+  S8c-1 COMPLETE + VERIFIED (locked rules live; see workflowS8c1)
+  Auth production-default flip — IMPLEMENTED — AWAITING VERIFICATION (workflowAuthDefaultFlip)
+  S8c-2 NOT STARTED — foreign stats/LB/PTI tightening
   S8d NOT STARTED — privileged Admin / Functions; emergency-root reassess
 
   S8b migration preference (planning only):
@@ -1841,33 +1844,81 @@ export function workflowS8b() {
   console.info(`
 === S8b Firebase Auth foundation ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION. Do not begin S8c.
-RTDB authorization rules unchanged (still open + inventory >= 0 validate).
+Status: COMPLETE (foundation). Auth is now the production default — see workflowAuthDefaultFlip().
+RTDB authorization is separate (S8c-1 locked rules).
 
-Feature flag:
-  ON:  localStorage.setItem('qc_firebase_auth','true'); location.reload();
-  OFF: localStorage.removeItem('qc_firebase_auth'); location.reload();
+Historical transitional flag qc_firebase_auth is RETIRED / IGNORED.
+Production: Firebase Auth on by default (no localStorage prep).
+Emergency developer rollback: localStorage.qc_force_legacy_auth='true' + reload.
 
 Identity: username/password forms unchanged.
 Internal Auth email: {username}@scicards.local (never shown to students).
 
-Verification workflow:
-  1) Flag OFF → legacy bobby (or any hashed) login still works.
-  2) Migrate bobby with trusted script (see scripts/README-S8b-auth.md):
-       node scripts/s8b-auth-admin.mjs migrate-user bobby "TempPass!"
-  3) Flag ON → bobby login → same RTDB inventory/stats; Auth session present.
-  4) Wrong password → rejected by Firebase Auth.
-  5) Logout / reload → session restore; forced exit signs out Auth.
-  6) Fresh student register (Auth on) → Auth user + RTDB player + access code used;
+Verification (historical S8b matrix; prefer workflowAuthDefaultFlip for launch):
+  1) Default (no force-legacy) → Auth login for migrated accounts.
+  2) Migrate with trusted script if needed: scripts/README-S8b-auth.md
+  3) Wrong password → rejected by Firebase Auth.
+  4) Logout / reload → session restore; forced exit signs out Auth.
+  5) Fresh student register → Auth user + RTDB player + access code used;
      no new players/{u}.password hash.
-  7) If RTDB write fails after Auth create → Auth user deleted (rollback).
-  8) Teacher: migrate-user + set-admin-claim; __admin__ / config.adminPassword still work.
-  9) Admin Players → Reset Password shows disabled/warning while Auth flag ON.
- 10) Temp student reset: node scripts/s8b-auth-admin.mjs set-password <user> "NewPass!"
- 11) Flag OFF again → legacy hash login still works for unmigrated hashed accounts.
+  6) If RTDB write fails after Auth create → Auth user deleted (rollback).
+  7) Teacher: migrate-user + set-admin-claim; __admin__ / config.adminPassword still work.
+  8) Admin Players → Reset Password disabled while Auth authoritative;
+     use: node scripts/s8b-auth-admin.mjs set-password <user> "NewPass!"
+  9) Emergency: qc_force_legacy_auth='true' → hash login for accounts that still have hashes;
+     Auth-native (no hash) cannot log in until flag removed.
 
 Trusted script: scripts/s8b-auth-admin.mjs (+ scripts/README-S8b-auth.md)
-STOP: no authz rule deploy; no scoped-loading changes. Cloud Functions arrive in S8b+ (see workflowS8bPlusP0).
+Pasteable flip verify: qcPersonalAudit.workflowAuthDefaultFlip()
+`);
+}
+
+/**
+ * Pasteable Auth production-default flip status + clean-browser / rollback verify.
+ */
+export function workflowAuthDefaultFlip() {
+  console.info(`
+=== Firebase Auth production-default flip ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION.
+S8c-2 / Option C / Blaze / Functions: NOT in this slice.
+
+Mode:
+  Fresh browser / no flag     → Firebase Auth (production default)
+  qc_force_legacy_auth=true   → legacy RTDB SHA-256 hash auth (developer only)
+  Stale qc_firebase_auth=*    → IGNORED (does not control mode)
+
+Emergency rollback (developer only — students never do this):
+  localStorage.setItem('qc_force_legacy_auth','true'); location.reload();
+Return to normal:
+  localStorage.removeItem('qc_force_legacy_auth'); location.reload();
+
+Known limitation:
+  Auth-native accounts with no players/{u}.password cannot log in while
+  qc_force_legacy_auth='true'. Restore Auth default (removeItem) to log them in.
+  Migrated accounts that retained hashes can still use legacy rollback.
+
+Legacy hashes are retained for emergency rollback — do not mass-delete in this slice.
+__admin__ / config.adminPassword are independent of this flag.
+
+Clean-browser verification (e.g. fresh Edge profile or InPrivate — NO localStorage prep):
+  1) Open site → login/register UI (public gates hydrate; sharedDefs deferred).
+  2) Confirm no need for qc_firebase_auth or qc_force_legacy_auth.
+  3) Log in as Auth-migrated player (username + password) → succeeds.
+  4) Reload → session restores.
+  5) Logout → login screen; Auth signed out.
+  6) Optional: register fresh username + password + access code → Auth user,
+     RTDB player, no new password hash.
+  7) Optional second InPrivate window: same login smoke.
+
+Rollback verification (developer):
+  A) setItem qc_force_legacy_auth=true + reload
+  B) Migrated account WITH retained hash → legacy login works
+  C) Auth-native WITHOUT hash → fails (expected)
+  D) removeItem qc_force_legacy_auth + reload → Auth login works again
+  E) __admin__ works in both modes
+
+STOP: no RTDB rules changes; no tradeGrants; no S8c-2; no Option C.
 `);
 }
 
@@ -1968,7 +2019,7 @@ Live-blocker fix (post first Console publish):
 BEFORE Console deploy (checklist):
   1) Every classroom account that must play has players/{u}.authUid
   2) Teacher(s) have admins/{authUid}: true (Console or Promote while open)
-  3) Firebase Auth Email/Password ON; qc_firebase_auth usable for settle test
+  3) Firebase Auth Email/Password ON (Auth is production default; no qc_firebase_auth prep)
   4) Copy CURRENT Console rules to a safe note (or keep open-rollback file)
   5) Paste repo database.rules.json into Console → Publish
   6) Immediately run verification below
@@ -1984,7 +2035,7 @@ Live verification (Auth ON; throwaway test accounts preferred):
   G) Self pack open / research still works (own inventory)
   H) Peek grant during settle (optional diag): tradeGrants/{target}/{uid}
 
-Auth production-default flip: NOT in S8c-1 — do after this verification PASSes.
+Auth production-default flip: see qcPersonalAudit.workflowAuthDefaultFlip() (separate from S8c-1).
 S8c-2: foreign stats/LB grant binding — NOT STARTED.
 `);
 }
@@ -2166,6 +2217,7 @@ function _installWindowApi() {
     workflowCardArtRetry,
     workflowS8a,
     workflowS8b,
+    workflowAuthDefaultFlip,
     workflowS8bPlusP0,
     workflowS8c0,
     workflowS8c1,

@@ -217,7 +217,7 @@ function installXHRInterceptor() {
 
 /**
  * Initialize Firebase services (App + RTDB + Auth + Functions).
- * Auth is initialized always; app login/register use it only when qc_firebase_auth=true.
+ * Auth is initialized always; app login/register use it unless qc_force_legacy_auth=true.
  * Functions used for S8b+ Trusted Teacher Operations callables.
  * Safe to call multiple times — only initializes once.
  */
