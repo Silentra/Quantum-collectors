@@ -53,17 +53,19 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | Scoped trade/listing canonical-by-ID hydration | **COMPLETE + VERIFIED** |
 | Scoped RTDB claim null-safety | **COMPLETE + VERIFIED** |
 | Card-art transient retry hardening | **COMPLETE + VERIFIED** |
-| Root listener / emergency root | **REMOVED (S8d-0)** — scoped-only boot; `qc_force_root_loading` ignored |
+| Root listener / emergency root | **REMOVED (S8d-0 COMPLETE + VERIFIED)** |
 | S8a rules docs + live snapshot | **COMPLETE** (no authz deploy; no Firebase Auth) |
 | S8b Firebase Auth under username UX | **COMPLETE** (foundation) |
 | S8b+ P0 Trusted Teacher Functions foundation | **IMPLEMENTED — AWAITING VERIFICATION** (dormant / not launch-required) |
 | S8c-0 client prep (trade-visible foreign reads + admins registry) | **COMPLETE + VERIFIED** |
 | S8c-1 tradeGrants + RTDB authorization rules | **COMPLETE + VERIFIED** (locked rules live) |
 | Auth production-default flip | **COMPLETE + VERIFIED** (`workflowAuthDefaultFlip`) |
-| S8c-2 foreign stats/achievements/LB grant-bind | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (`workflowS8c2`) |
-| S8d maintenance rebuild architecture | **S8d-0 IMPLEMENTED — AWAITING VERIFICATION** (force-root removal); S8d-1+ not started |
+| S8c-2 foreign stats/achievements/LB grant-bind | **COMPLETE + VERIFIED** (`workflowS8c2`) |
+| S8d-0 force-root removal | **COMPLETE + VERIFIED** |
+| S8d-1 admin canonical parent reads | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (`players`, `trades/direct`, `trades/listings`) |
+| S8d-2+ maintenance rebuild rewrites | NOT STARTED |
 
-**What remains:** Republish `database.rules.json` for S8c-2 → run `qcPersonalAudit.workflowS8c2()` live. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Republish `database.rules.json` for **S8d-1** → run `qcPersonalAudit.workflowS8d1()` live. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
@@ -429,10 +431,10 @@ Root may be disabled only when **all** are true:
 | Root | Anon / auth screen | Student | Admin |
 |------|--------------------|---------|-------|
 | `config` | R (gates); admin login reads adminPw | R | R/W |
-| `players` | once `{u}` login/register | R/W self; once counterparties | R/W + rebuilds (S8d hydrate TBD) |
+| `players` | once `{u}` login/register | R/W self; once counterparties | R/W; **admin parent list (S8d-1)** |
 | `cards`/`packs`/`groups` | R sharedDefs | R | R/W |
 | `accessCodes` | once `{code}` register | — | R/W |
-| `trades` | — | by-ID once + indexes | rebuild scans (S8d hydrate TBD) |
+| `trades` | — | by-ID once + indexes | **admin parent list direct/listings (S8d-1)**; rebuild TBD |
 | `playerDirectory` | — | R picker | R/W rebuild |
 | `playerTradeIndex` | — | own + once foreign | rebuild |
 | `listingsByGroup` | — | R group; W via listings | rebuild |

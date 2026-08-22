@@ -47,6 +47,7 @@ const firebaseConfig = {
 Client session / scoped loading / `qc_force_legacy_auth` are **invisible to security rules**.
 (`qc_force_root_loading` was removed in S8d-0 and is ignored if still set.)
 
+**S8d-1:** After publishing locked rules, admins (`admins/{uid}`) may parent-read `players`, `trades/direct`, and `trades/listings` for maintenance. Students cannot enumerate those parents. Helper: `qcAdminMaintenance` / `qcPersonalAudit.workflowS8d1()`.
 ### S8b (Auth foundation)
 
 ### Auth mode + emergency legacy rollback
