@@ -572,6 +572,7 @@ API:
   qcPersonalAudit.workflowS8c0()   // S8c-0 client prep (foreign reads + admins registry)
   qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules
   qcPersonalAudit.workflowS8c2()   // S8c-2 grant-bound foreign stats/LB
+  qcPersonalAudit.workflowS8d1()   // S8d-1 admin canonical parent reads
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1815,7 +1816,9 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8c-1 COMPLETE + VERIFIED (locked rules live; see workflowS8c1)
   Auth production-default flip — COMPLETE + VERIFIED (workflowAuthDefaultFlip)
   S8c-2 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8c2)
-  S8d NOT STARTED — privileged Admin / Functions; emergency-root reassess
+  S8d-0 COMPLETE + VERIFIED (force-root removed)
+  S8d-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d1)
+  S8d-2+ rebuild rewrites NOT STARTED
 
   S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
@@ -2097,7 +2100,52 @@ Stuck processing recovery (do not manually edit canonical trade fields):
   Reopening Trading does NOT auto-release another user's stuck claim; there is no TTL sweeper.
   Admin Rebuild Trade Indexes only repairs PTI/LBG after release — it does not release claims.
 
-STOP: no S8d; no Option C; no PTI/LBG redesign; no Auth changes; no grant-model weaken to auth!=null.
+STOP: no Option C; no PTI/LBG redesign; no Auth changes; no grant-model weaken to auth!=null.
+  S8d-1 admin canonical reads: see qcPersonalAudit.workflowS8d1().
+`);
+}
+
+/**
+ * Pasteable S8d-1 admin canonical parent-read foundation.
+ */
+export function workflowS8d1() {
+  console.info(`
+=== S8d-1 Admin canonical-read foundation ===
+
+Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION
+Republish FULL database.rules.json (Console). Rollback artifact unchanged.
+
+Rules (admin-only parent .read; child rules unchanged; no write changes):
+  players
+  trades/direct
+  trades/listings
+Authority: auth!=null && admins/{auth.uid}===true
+
+Security:
+  Students still cannot enumerate those parents.
+  Admin /players parent intentionally returns full player records
+  (incl. legacy password/activeSession when present) — trusted teacher only.
+  Known-trade child reads (auth) unchanged.
+
+Client helper: js/admin-maintenance.js → window.qcAdminMaintenance
+  Soft-gate: Firebase Auth uid + admins/{uid} (NOT session.isAdmin / players.isAdmin)
+  complete===true only for authoritative Firebase parent reads
+  empty complete tree (value null) ≠ load failure
+  Later rebuilds MUST use result.value/keys — cache is NOT canonical truth
+
+Local proof:
+  npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
+
+Live (after rules publish):
+  1) Student: await qcDbHydration.loadPathOnce('players',{force:true}) → fail
+  2) Admin: await qcAdminMaintenance.adminLoadCanonical('players')
+     → complete:true; count ≈ Console / directory
+  3) Student: loadPathOnce('trades/direct',{force:true}) → fail
+  4) Admin: adminLoadDirectTrades() / adminLoadListings() → complete:true
+  5) Student Trading / packs still work
+  6) Do NOT run rebuilds yet (S8d-2+)
+
+STOP: no rebuild rewrites; no Option C; no Blaze; no PTI/LBG tighten.
 `);
 }
 
@@ -2283,6 +2331,7 @@ function _installWindowApi() {
     workflowS8c0,
     workflowS8c1,
     workflowS8c2,
+    workflowS8d1,
     enableAudit,
     disableAudit,
     enableIsolation,
