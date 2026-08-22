@@ -33,6 +33,7 @@ import {
 import {
   STAT_TYPES,
   buildLeaderboardSummaryPathsForChangedStats,
+  buildTradesCompletedLeaderboardIncrementPaths,
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
 
@@ -448,6 +449,8 @@ export function buildListingFulfillPlan({
       accepterSide.leaderboardStatKeys,
       now,
     ),
+    buildTradesCompletedLeaderboardIncrementPaths(ownerId, ownerLike, now),
+    buildTradesCompletedLeaderboardIncrementPaths(accepterId, accepterLike, now),
   );
 
   assertNoOverlappingUpdatePaths(updates);

@@ -2068,10 +2068,12 @@ lastListingAcceptAt: owner | admin ONLY (settlement never writes it foreign)
 
 Settlement blocker fix (client planners):
   Both sides tradesCompleted → ServerValue.increment(1) (never cache-blind absolute)
+  Both sides leaderboards/tradesCompleted/{u}/value → ServerValue.increment(1) + updatedAt + group projection
   Claimer achievements: hydrate map before plan; mutation builders never downgrade claimed/claimedAt
-  Skip foreign achievements + omit tradesCompleted LB absolute rows in terminal multipath
+  Skip foreign achievements in terminal multipath
   Inventory-derived unique/aura absolute overlays unchanged
   Foreign achievement catch-up on victim login eval
+  After deploy: one-time qcLeaderboardSummaries.rebuildLeaderboardSummaries() recommended to heal pre-fix stale LB rows
 
 Accepted residuals (NOT tightened):
   playerTradeIndex — any auth write (rebuildable index)

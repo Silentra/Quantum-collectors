@@ -31,6 +31,7 @@ import {
 import {
   STAT_TYPES,
   buildLeaderboardSummaryPathsForChangedStats,
+  buildTradesCompletedLeaderboardIncrementPaths,
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
 import {
@@ -572,6 +573,8 @@ export function buildDirectTradeAcceptPlan({
       targetSide.leaderboardStatKeys,
       now,
     ),
+    buildTradesCompletedLeaderboardIncrementPaths(offeringPlayerId, offererLike, now),
+    buildTradesCompletedLeaderboardIncrementPaths(targetPlayerId, targetLike, now),
   );
 
   assertNoOverlappingUpdatePaths(updates);

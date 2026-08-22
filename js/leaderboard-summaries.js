@@ -213,6 +213,30 @@ export function buildLeaderboardSummaryEntry(username, playerLike, statInput, no
 }
 
 /**
+ * Settlement-safe tradesCompleted LB sync: ServerValue.increment(1) on value only.
+ * Does not read or absolute-write canonical/player-stat cache.
+ * Also writes groupId/subgroupId from available playerLike (trade-visible or own)
+ * so a missing row becomes a complete first-trade projection (value resolves to 1).
+ *
+ * @param {string} username
+ * @param {object|null|undefined} playerLike
+ * @param {number} [now]
+ * @returns {Record<string, unknown>}
+ */
+export function buildTradesCompletedLeaderboardIncrementPaths(username, playerLike, now = Date.now()) {
+  const key = String(username || '').trim();
+  if (!key) return {};
+  const base = leaderboardSummaryPath('tradesCompleted', key);
+  const { groupId, subgroupId } = resolveLeaderboardGroupFields(playerLike);
+  return {
+    [`${base}/value`]: { '.sv': { increment: 1 } },
+    [`${base}/updatedAt`]: Number.isFinite(Number(now)) ? Number(now) : Date.now(),
+    [`${base}/groupId`]: groupId,
+    [`${base}/subgroupId`]: subgroupId,
+  };
+}
+
+/**
  * @param {string[]} inputs
  * @returns {string[]}
  */
@@ -452,6 +476,7 @@ function _installWindowApi() {
     syncLeaderboardSummariesForPlayer,
     areLeaderboardSummariesReady,
     resolveLeaderboardGroupFields,
+    buildTradesCompletedLeaderboardIncrementPaths,
     help() {
       console.info(`Leaderboard summaries (S5d)
 Root: ${LEADERBOARDS_ROOT}/{statKey}/{username} = { value, groupId, subgroupId, updatedAt }
@@ -459,6 +484,7 @@ statKeys: ${LIVE_LEADERBOARD_STAT_KEYS.join(', ')}
 Rebuild: qcLeaderboardSummaries.rebuildLeaderboardSummaries()
   (also removes orphan leaves for deleted players)
 Sync one: qcLeaderboardSummaries.syncLeaderboardSummariesForPlayer(username)
+Trade settle: buildTradesCompletedLeaderboardIncrementPaths (LB value +1)
 Inspect: qcDbHydration.getCached('leaderboards')`);
     },
   };
