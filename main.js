@@ -15,6 +15,7 @@ import * as metrics from './js/db-metrics.js';
 import './js/db-read-audit.js'; // S4 personal read-audit / isolation (off by default)
 import './js/teacher-ops.js'; // S8b+ P0 Trusted Teacher callables (qcTeacherOps)
 import './js/trade-index.js'; // S5c-A trade index builders + qcTradeIndex DevTools
+import './js/admin-maintenance.js'; // S8d-1 admin canonical reads (qcAdminMaintenance)
 import {
   hydrateSharedDefs,
   hydratePublicGateConfig,

@@ -2,7 +2,8 @@
  * S8c-1 + S8c-2 local RTDB rules proof (Firebase emulator + @firebase/rules-unit-testing).
  *
  * Proves S8c-1 inventory/grant + S8c-2 grant-bound foreign stats/achievements/progression/
- * cooldowns/leaderboards (PTI/LBG intentionally still auth-writable).
+ * cooldowns/leaderboards (PTI/LBG intentionally still auth-writable) + S8d-1 admin-only
+ * parent reads on players / trades/direct / trades/listings.
  *
  * Run (from repo root, with Java available for emulator):
  *   npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
@@ -988,10 +989,71 @@ async function main() {
     );
     pass('already-used access code consume denied');
 
+    // --- S8d-1: admin-only canonical parent reads ---
+    const teacherS8d1 = testEnv.authenticatedContext('teacherUid');
+    const anonS8d1 = testEnv.unauthenticatedContext();
+
+    await assertFails(get(ref(anonS8d1.database(), 'players')));
+    pass('S8d-1: unauthenticated /players parent denied');
+
+    await assertFails(get(ref(offerer.database(), 'players')));
+    pass('S8d-1: student /players parent denied');
+
+    await assertSucceeds(get(ref(teacherS8d1.database(), 'players')));
+    pass('S8d-1: admin /players parent allowed');
+
+    const adminPlayers = (await get(ref(teacherS8d1.database(), 'players'))).val() || {};
+    if (!adminPlayers.offerer || !adminPlayers.target) {
+      fail('S8d-1: admin /players snapshot missing expected usernames');
+    } else {
+      pass('S8d-1: admin /players enumerates class players');
+    }
+
+    await assertSucceeds(get(ref(offerer.database(), 'players/offerer')));
+    pass('S8d-1: student own players/{self} still allowed');
+
+    await assertFails(get(ref(offerer.database(), 'players/target')));
+    pass('S8d-1: student foreign full player still denied');
+
+    await assertFails(get(ref(offerer.database(), 'players/target/password')));
+    pass('S8d-1: student foreign password still denied');
+
+    await assertFails(get(ref(offerer.database(), 'players/target/stats')));
+    pass('S8d-1: student foreign stats still denied');
+
+    await assertFails(get(ref(offerer.database(), 'trades/direct')));
+    pass('S8d-1: student trades/direct parent denied');
+
+    await assertSucceeds(get(ref(teacherS8d1.database(), 'trades/direct')));
+    pass('S8d-1: admin trades/direct parent allowed');
+
+    await assertSucceeds(get(ref(offerer.database(), 'trades/direct/t1')));
+    pass('S8d-1: student known trades/direct/{id} child still allowed');
+
+    await assertFails(get(ref(offerer.database(), 'trades/listings')));
+    pass('S8d-1: student trades/listings parent denied');
+
+    await assertSucceeds(get(ref(teacherS8d1.database(), 'trades/listings')));
+    pass('S8d-1: admin trades/listings parent allowed');
+
+    await assertSucceeds(get(ref(accepter.database(), 'trades/listings/l1')));
+    pass('S8d-1: student known trades/listings/{id} child still allowed');
+
+    // Write spot-check: parent-read change must not broaden student writes
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/stats/packsOpened'), 99),
+    );
+    pass('S8d-1: student foreign stats write still denied (no write broaden)');
+
+    await assertFails(
+      set(ref(stranger.database(), 'trades/direct/t1/status'), 'accepted'),
+    );
+    pass('S8d-1: stranger trade write still denied (no write broaden)');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2 rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1 rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();
