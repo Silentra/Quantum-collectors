@@ -2048,8 +2048,11 @@ export function workflowS8c2() {
   console.info(`
 === S8c-2 residual cross-player write hardening ===
 
-Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.
-Republish FULL database.rules.json in Firebase Console (do not partial-paste).
+Status: IMPLEMENTED — AWAITING VERIFICATION
+  (rules published; settlement blocker client fix also awaiting live verify).
+
+Rules: FULL database.rules.json already published for S8c-2 grant binding.
+Settlement blocker fix is CLIENT-ONLY (no rules republish required for this fix).
 Rollback file database.rules.open-rollback.json UNCHANGED.
 
 Hardened (owner | admin | live tradeGrant for that username):
@@ -2063,21 +2066,26 @@ Validates:
   progression/firstTrade may only become true under grant (owner/admin may set false on register)
 lastListingAcceptAt: owner | admin ONLY (settlement never writes it foreign)
 
+Settlement blocker fix (client planners):
+  Foreign tradesCompleted → ServerValue.increment(1) (claimer cannot read foreign stats)
+  Skip foreign achievements + foreign tradesCompleted LB absolute rows in terminal multipath
+  Inventory-derived unique/aura absolute + own-side absolute overlays unchanged
+
 Accepted residuals (NOT tightened):
   playerTradeIndex — any auth write (rebuildable index)
   listingsByGroup — any auth write (rebuildable index)
+  Foreign tradesCompleted leaderboard / achievements catch up on victim login eval
 Self-cheating (own inventory/stats) remains outside the threat model.
 
 Hygiene:
   tradeGrants/{target} parent .read → admin | target-owner only (claimer leaf still readable)
   playerDirectory create-when-player-missing without authUid proof → DEFERRED
-    (rules-only close would require authUid in public directory projection or registration redesign)
 
 Local proof:
   npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
 
-Live verification (after Console publish; throwaway accounts OK):
-  1) Honest Direct Trade → both inventories + stats/achievements OK; grant cleared
+Live verification (after client deploy of planner fix):
+  1) Honest Direct Trade → both inventories + claimer stats OK; foreign tradesCompleted +1; grant cleared
   2) Honest Listing fulfill → same
   3) DevTools as student A: set players/{B}/stats/tradesCompleted → PERMISSION_DENIED
   4) DevTools: set leaderboards/tradesCompleted/{B} → PERMISSION_DENIED
@@ -2085,7 +2093,12 @@ Live verification (after Console publish; throwaway accounts OK):
   6) Teacher Admin config/cards writes still work
   7) Note: PTI/LBG foreign writes still succeed (accepted residual)
 
-STOP: no S8d; no Option C; no PTI/LBG redesign; no Auth changes.
+Stuck processing recovery (do not manually edit canonical trade fields):
+  Prefer claimer-owned releaseDirectClaimAndRestoreIndex(tradeId, claimId, reason).
+  Reopening Trading does NOT auto-release another user's stuck claim; there is no TTL sweeper.
+  Admin Rebuild Trade Indexes only repairs PTI/LBG after release — it does not release claims.
+
+STOP: no S8d; no Option C; no PTI/LBG redesign; no Auth changes; no grant-model weaken to auth!=null.
 `);
 }
 

@@ -176,17 +176,34 @@ function logicalInventoryAfterSwap(inventory, giveCardId, receiveCardId) {
 
 /**
  * Plan post-swap unique/aura + tradesCompleted achievement overlay for one player.
+ *
+ * @param {string} username
+ * @param {object} nextInventory
+ * @param {number} now
+ * @param {{ statsReadable?: boolean }} [options]
+ *   statsReadable=true (own/claimer): absolute tradesCompleted + achievements + LB.
+ *   statsReadable=false (foreign owner under grant): ServerValue.increment(1) for
+ *   tradesCompleted; skip achievements; omit tradesCompleted LB absolute row.
+ * @returns {{ updates: Object, plannedStatValues: Object, leaderboardStatKeys: string[], notified: string[], unlocked: string[] }}
  */
-function planPlayerPostTradeSideEffects(username, nextInventory, now) {
+function planPlayerPostTradeSideEffects(username, nextInventory, now, options = {}) {
+  const statsReadable = options.statsReadable !== false;
   const updates = {};
   const plannedStatValues = {};
   const achStatKeys = [];
+  /** @type {string[]} */
+  const leaderboardStatKeys = [];
 
-  const prevTrades = getPlayerStat(username, STAT_KEYS.TRADES_COMPLETED);
-  const nextTrades = prevTrades + 1;
-  updates[`players/${username}/stats/tradesCompleted`] = nextTrades;
-  plannedStatValues[STAT_KEYS.TRADES_COMPLETED] = nextTrades;
-  achStatKeys.push(STAT_KEYS.TRADES_COMPLETED);
+  if (statsReadable) {
+    const prevTrades = getPlayerStat(username, STAT_KEYS.TRADES_COMPLETED);
+    const nextTrades = prevTrades + 1;
+    updates[`players/${username}/stats/tradesCompleted`] = nextTrades;
+    plannedStatValues[STAT_KEYS.TRADES_COMPLETED] = nextTrades;
+    achStatKeys.push(STAT_KEYS.TRADES_COMPLETED);
+    leaderboardStatKeys.push(STAT_TYPES.TRADES_COMPLETED);
+  } else {
+    updates[`players/${username}/stats/tradesCompleted`] = serverIncrement(1);
+  }
 
   const prevUnique = getPlayerStat(username, STAT_KEYS.UNIQUE_CARDS_OWNED);
   const nextUnique = computeUniqueCardsOwnedFromInventory(nextInventory);
@@ -195,6 +212,11 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
   }
   plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED] = nextUnique;
   achStatKeys.push(STAT_KEYS.UNIQUE_CARDS_OWNED);
+  if (statsReadable || nextUnique !== prevUnique) {
+    if (!leaderboardStatKeys.includes(STAT_TYPES.UNIQUE_CARDS_OWNED)) {
+      leaderboardStatKeys.push(STAT_TYPES.UNIQUE_CARDS_OWNED);
+    }
+  }
 
   const prevAura = getPlayerStat(username, STAT_KEYS.MAX_CARD_AURA_TIER);
   const nextAura = computeCardsAtMaxAuraFromInventory(nextInventory);
@@ -204,24 +226,30 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now) {
     achStatKeys.push(STAT_KEYS.MAX_CARD_AURA_TIER);
   }
 
-  const getStat = (statKey) => {
-    if (Object.prototype.hasOwnProperty.call(plannedStatValues, statKey)) {
-      return plannedStatValues[statKey];
-    }
-    return getPlayerStat(username, statKey);
-  };
-
-  const achPlan = planAchievementUpdatesForStats(username, [...new Set(achStatKeys)], {
-    getStat,
-    now,
-  });
-  Object.assign(updates, achPlan.updates);
+  let notified = [];
+  let unlocked = [];
+  if (statsReadable) {
+    const getStat = (statKey) => {
+      if (Object.prototype.hasOwnProperty.call(plannedStatValues, statKey)) {
+        return plannedStatValues[statKey];
+      }
+      return getPlayerStat(username, statKey);
+    };
+    const achPlan = planAchievementUpdatesForStats(username, [...new Set(achStatKeys)], {
+      getStat,
+      now,
+    });
+    Object.assign(updates, achPlan.updates);
+    notified = achPlan.notified;
+    unlocked = achPlan.unlocked;
+  }
 
   return {
     updates,
     plannedStatValues,
-    notified: achPlan.notified,
-    unlocked: achPlan.unlocked,
+    leaderboardStatKeys,
+    notified,
+    unlocked,
   };
 }
 
@@ -396,12 +424,16 @@ export function buildListingFulfillPlan({
     accepterPlayer?.inventory,
   );
 
-  const ownerSide = planPlayerPostTradeSideEffects(ownerId, ownerLogical, now);
-  const accepterSide = planPlayerPostTradeSideEffects(accepterId, accepterLogical, now);
+  // Claimer is accepter. Owner is foreign under tradeGrant — cannot read owner stats.
+  const ownerSide = planPlayerPostTradeSideEffects(ownerId, ownerLogical, now, {
+    statsReadable: false,
+  });
+  const accepterSide = planPlayerPostTradeSideEffects(accepterId, accepterLogical, now, {
+    statsReadable: true,
+  });
   Object.assign(updates, ownerSide.updates, accepterSide.updates);
 
   const ownerLike = playerLikeWithStatOverlay(ownerPlayer, {
-    [STAT_TYPES.TRADES_COMPLETED]: ownerSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
     [STAT_TYPES.UNIQUE_CARDS_OWNED]: ownerSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
   });
   const accepterLike = playerLikeWithStatOverlay(accepterPlayer, {
@@ -413,13 +445,13 @@ export function buildListingFulfillPlan({
     buildLeaderboardSummaryPathsForChangedStats(
       ownerId,
       ownerLike,
-      [STAT_TYPES.TRADES_COMPLETED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+      ownerSide.leaderboardStatKeys,
       now,
     ),
     buildLeaderboardSummaryPathsForChangedStats(
       accepterId,
       accepterLike,
-      [STAT_TYPES.TRADES_COMPLETED, STAT_TYPES.UNIQUE_CARDS_OWNED],
+      accepterSide.leaderboardStatKeys,
       now,
     ),
   );
