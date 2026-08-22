@@ -46,15 +46,21 @@ Use when Admin Delete Player already removed `players/{username}` but `{username
 
 **Warning:** Do **not** run `delete-auth-user` against bobby, teacher, or other live classroom accounts unless you intentionally want to remove their Firebase Auth identity.
 
-## Feature flag
+## Auth mode (production default)
+
+Firebase Auth is the **production default** (no localStorage prep for students).
 
 ```js
-// ON — Firebase Auth login/register
-localStorage.setItem('qc_firebase_auth', 'true'); location.reload();
+// Emergency developer-only legacy RTDB hash auth:
+localStorage.setItem('qc_force_legacy_auth', 'true'); location.reload();
 
-// OFF — legacy RTDB hash auth (rollback while rules remain open)
-localStorage.removeItem('qc_firebase_auth'); location.reload();
+// Return to Auth default:
+localStorage.removeItem('qc_force_legacy_auth'); location.reload();
 ```
+
+Stale `qc_firebase_auth` is ignored. Auth-native accounts without `players/{u}.password` cannot log in under legacy rollback.
+
+Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()`
 
 ## Next (separate Plan-mode / implementation slices)
 

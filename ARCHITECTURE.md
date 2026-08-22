@@ -9,17 +9,17 @@ style.css            - Custom styles (cards, tabs, toasts, animations)
 main.js              - Entry point, async init (DB → sharedDefs hydrate → Auth → Config → Seed → UI)
 FIREBASE_SETUP.md    - Firebase setup instructions, security rules, config example
 docs/
-  DATABASE_SCOPING_ROADMAP.md - Authoritative roadmap (S5–S7 verified; S8a complete; S8b–S8d remaining)
+  DATABASE_SCOPING_ROADMAP.md - Authoritative roadmap (S5–S7 verified; S8a–S8c-1 + Auth default flip)
 database.rules.json  - Live classroom RTDB rules snapshot (open R/W + inventory >=0 validate; Console SoT)
 js/
-  firebase-config.js - Firebase App/DB initialization (RTDB only, no Firebase Auth)
+  firebase-config.js - Firebase App/DB/Auth/Functions initialization (Auth production default)
   db-hydration.js    - Named hydration scopes (S2 sharedDefs; S3 currentPlayer; S5b Admin directory + selected-player; S5c-C playerTradeIndex; S5c-D1 Trading tradeDirectory)
   db-read-audit.js   - S4/S5b/S5c-C dev-only cache-read audit + optional isolation read-gate (off by default)
   player-directory.js - S5a derived playerDirectory projection, drift report, admin rebuild
   trade-index.js     - S5c-A/B trade index schema, dual-writes, drift/rebuild, shadowCompare (Trading readers still canonical through S5c-C)
   database.js        - Firebase RTDB + in-memory cache (sync API; ack helpers; S1 scoped load/subscribe/readiness; root listener legacy safety net)
   config.js          - Centralized live config (reads from /config DB node)
-  auth.js            - Username/password UX; legacy RTDB hashes OR Firebase Auth when qc_firebase_auth=true
+  auth.js            - Username/password UX; Firebase Auth production default; emergency qc_force_legacy_auth → RTDB hashes
   admin.js           - Admin foundation: isAdmin(username), getPlayer, setPlayerData, listPlayers
   player.js          - Player CRUD, inventory, packs, stats
   cards.js           - Card DB, CRUD, seed data (40 starter science cards), Phase 3 schema
@@ -344,8 +344,8 @@ Unknown packs and missing/failed images keep the existing emoji presentation (ti
   - HTML shell: `#admin-trading-controls` container + `#trading-controls-editor` dynamic content + `#btn-save-trading-controls` button (in index.html)
 
 ### Auth System
-- **No Firebase Auth** — passwords stored as SHA-256 hashes in `players/{username}.password`
-- Hashing uses Web Crypto API (SHA-256 + salt) with simple fallback
+- **Firebase Auth production default** — synthetic `{username}@scicards.local` (never shown to students). Emergency developer rollback: `localStorage.qc_force_legacy_auth='true'` → legacy SHA-256 at `players/{username}.password`. Stale `qc_firebase_auth` ignored. Auth-native accounts without a hash cannot log in under legacy rollback.
+- Hashing (legacy path) uses Web Crypto API (SHA-256 + salt) with simple fallback; new Auth-native registers omit `players/{u}.password`
 - Sessions stored in localStorage (`scicards_session`) as `{ username, isAdmin, loginTime, sessionId, … }`
 - **Single active session**: server token at `players/{username}/activeSession = { id, issuedAt }` (opaque random id). Local `sessionId` must match. New login replaces the token; other devices are invalidated via in-process `db.onValue` on that path (root listener fan-in — no extra Firebase subscription, no polling).
 - **Exemption**: only `username === '__admin__'`. Persistent admin player accounts use normal session enforcement.
@@ -500,7 +500,7 @@ Expected restored-session writes: **≈ 1–3** (`lastLogin` ± dirty project sy
 
 **Source of truth for remaining work (S8b–S8d):** [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md).
 
-Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped trade action hydration fix — COMPLETE + VERIFIED.** **Scoped claim null-safety fix — COMPLETE + VERIFIED.** **Scoped classroom default flip — COMPLETE + VERIFIED.** Production default = scoped; emergency root via `qc_force_root_loading`. **Card-art transient retry hardening — COMPLETE + VERIFIED.** **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b Firebase Auth foundation — IMPLEMENTED — AWAITING VERIFICATION** (`qc_firebase_auth` flag; `{u}@scicards.local`; rules still open). **S8b–S8d** not started (separate approvals; Auth before authz; Admin custom claims before S8c). Foreign-PTI readiness warnings = diagnostic noise. Historical phase notes below (S1–S7) describe what landed.
+Verified baseline: **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; S6c intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. Final D7c isolation **G** passed (scope audit + cache isolation ON; representative Trading action; `unexpectedTotal===0`; `hardViolations===0`; no bare `players` / `trades/direct` / `trades/listings`; no healthy canonical-fallback). Direct/listing happy-path and same-listing-race gameplay + `shadowCompare` were **credited** from Gate B/C relative-inventory verification (not redundantly replayed). S5d verification: Firebase-safe `statKey` rebuild; seven summary values match player sources; live ranking; `leaderboards` ×1 while mounted and released on leave; incremental RP + nested `packsOpened` writers; group/subgroup projection across all seven leaves; archived season/snapshot regression OK; no foreign player subscriptions; no student live full `players` scan. Expected auth/session (`players/{me}` ×1, `playerTradeIndex/{me}` ×1) are not Leaderboard lifecycle leaks. S6a–S6e: accessCodes once-load; logout personal cache clear; persist allowlist; final isolation matrix PASS. **S7a–S7d** dual-mode + evidence matrix COMPLETE + VERIFIED. **Scoped trade action hydration fix — COMPLETE + VERIFIED.** **Scoped claim null-safety fix — COMPLETE + VERIFIED.** **Scoped classroom default flip — COMPLETE + VERIFIED.** Production default = scoped; emergency root via `qc_force_root_loading`. **Card-art transient retry hardening — COMPLETE + VERIFIED.** **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b Firebase Auth foundation — COMPLETE**. **S8c-1 locked rules — COMPLETE + VERIFIED**. **Auth production-default flip — IMPLEMENTED — AWAITING VERIFICATION** (`qc_force_legacy_auth` emergency rollback; stale `qc_firebase_auth` ignored). **S8c-2 / S8d** not started (separate approvals). Foreign-PTI readiness warnings = diagnostic noise. Historical phase notes below (S1–S7) describe what landed.
 
 **Inventory ownership invariant:** `Number(quantity) > 0` = owned; quantity `0` or missing = not owned; raw `0` is valid; `0→null` deletion is optional hygiene. Trade correctness = `ServerValue.increment(±1)` + claims/recovery + Firebase `>= 0` validation (not immediate zero deletion).
 
@@ -659,9 +659,9 @@ Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings
 
 ### Phase — S8a Rules docs + live snapshot
 
-**Status: COMPLETE.** Honest security model docs; threat model; root access matrix; in-repo [`database.rules.json`](database.rules.json) mirroring live open + inventory `.validate`. No Firebase Auth. No authorization tighten. Pasteable: `qcPersonalAudit.workflowS8a()`. Next: **S8b** (separate approval). Long-term: Auth owns passwords; tiny/manual preserve of bobby (+ optional teacher/bobby2); Admin custom claims before S8c.
+**Status: COMPLETE.** Honest security model docs; threat model; root access matrix; in-repo [`database.rules.json`](database.rules.json) mirroring live open + inventory `.validate` (historical S8a snapshot). Pasteable: `qcPersonalAudit.workflowS8a()`. Later: **S8b** Auth foundation → **S8c-1** locked rules → **Auth production-default flip** (`workflowAuthDefaultFlip`). Long-term: remove legacy `players/{u}.password` after rollback confidence. Admin authority: `admins/{authUid}` registry.
 
-**Next:** S8b only when separately approved. Do not deploy authz rules. Do not replay Gate B/C or full S7d unless execution paths change.
+**Next (historical):** S8b → S8c → Auth default flip. Do not replay Gate B/C or full S7d unless execution paths change.
 
 ### Phase — S8c-0 client prep (Spark)
 
@@ -674,14 +674,23 @@ Public direct/listing actions once-load `trades/direct/{id}` or `trades/listings
 
 ### Phase — S8c-1 tradeGrants + locked rules (Spark)
 
-**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8c1()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS8c1()`.
 
 - Claim stamp: `claimerAuthUid` on direct/listing claim transactions ([`js/database.js`](js/database.js)).
 - Grant lifecycle: [`js/trade-grants.js`](js/trade-grants.js) — CREATE immediately before terminal settle; CLEAR on success / release / fail / player-delete.
-- Foreign inventory: grant present + exact give −1 / recv +1 + nonnegative (resolved `ServerValue.increment`).
-- In-repo rules: [`database.rules.json`](database.rules.json). Rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json). **Console paste is not automatic.**
+- Foreign inventory: grant present + exact give −1 / recv +1 + nonnegative (resolved `ServerValue.increment`); qty===1 give → null in-terminal.
+- In-repo rules: [`database.rules.json`](database.rules.json). Rollback: [`database.rules.open-rollback.json`](database.rules.open-rollback.json).
 - Local emulator proof: [`scripts/s8c1-rules-simulator.mjs`](scripts/s8c1-rules-simulator.mjs).
-- Deferred **S8c-2**: foreign stats / leaderboard / PTI tightening. Auth production-default flip: after live S8c-1 verify.
+- Deferred **S8c-2**: foreign stats / leaderboard / PTI tightening.
+
+### Phase — Auth production-default flip
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()`.
+
+- Fresh browser / no flag → Firebase Auth.
+- Emergency developer rollback: `qc_force_legacy_auth='true'` → legacy RTDB hash auth.
+- Stale `qc_firebase_auth` ignored.
+- Legacy hashes retained for rollback; Auth-native (no hash) cannot log in under force-legacy.
 
 ### Phase S6e — Final isolation audits
 

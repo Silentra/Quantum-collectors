@@ -1,7 +1,7 @@
 # Database Scoping Roadmap (S5–S8)
 
 **Status:** Authoritative roadmap for remaining Firebase work after scoped loading.  
-**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **IMPLEMENTED — AWAITING VERIFICATION**. **S8b+ P0** Trusted Teacher Functions foundation — **IMPLEMENTED — AWAITING VERIFICATION** (dormant; not a launch dependency). **S8c-0** client prep (foreign trade-visible reads + `admins/{uid}` registry) — **COMPLETE + VERIFIED**. **S8c-1** (tradeGrants + locked rules) — **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (do not claim live security until Console paste).  
+**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **COMPLETE**. **S8b+ P0** Trusted Teacher Functions foundation — **IMPLEMENTED — AWAITING VERIFICATION** (dormant; not a launch dependency). **S8c-0** client prep (foreign trade-visible reads + `admins/{uid}` registry) — **COMPLETE + VERIFIED**. **S8c-1** (tradeGrants + locked rules) — **COMPLETE + VERIFIED**. **Auth production-default flip** — **IMPLEMENTED — AWAITING VERIFICATION** (`workflowAuthDefaultFlip`). **S8c-2** — NOT STARTED.  
 **Constraints:** Canonical `trades/*` remain execution authority. Missing/unverified reservation indexes must never mean zero reservations. Prefer the smallest safe continuation from the verified architecture.
 
 This document supersedes the historical S1–S8 investigation plan for **remaining** work. Completed phases below are recorded for reconciliation; implementation PRs must still list every file created/modified/deleted and every new named import/export.
@@ -55,13 +55,15 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | Card-art transient retry hardening | **COMPLETE + VERIFIED** |
 | Root listener / emergency root | Production default scoped; `qc_force_root_loading` → root once+on (keep through S8c) |
 | S8a rules docs + live snapshot | **COMPLETE** (no authz deploy; no Firebase Auth) |
-| S8b Firebase Auth under username UX | **IMPLEMENTED — AWAITING VERIFICATION** |
+| S8b Firebase Auth under username UX | **COMPLETE** (foundation) |
 | S8b+ P0 Trusted Teacher Functions foundation | **IMPLEMENTED — AWAITING VERIFICATION** (dormant / not launch-required) |
 | S8c-0 client prep (trade-visible foreign reads + admins registry) | **COMPLETE + VERIFIED** |
-| S8c-1 tradeGrants + RTDB authorization rules | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** |
+| S8c-1 tradeGrants + RTDB authorization rules | **COMPLETE + VERIFIED** (locked rules live) |
+| Auth production-default flip | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowAuthDefaultFlip`) |
+| S8c-2 foreign stats/LB/PTI tightening | NOT STARTED |
 | S8d privileged Admin path / Functions | NOT STARTED (optional later; Spark path preferred) |
 
-**What remains:** Paste/deploy [`database.rules.json`](../database.rules.json) in Console → run `qcPersonalAudit.workflowS8c1()` live matrix → then Auth production-default flip (separate). Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). Scoping architecture is done. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Verify Auth production default on a clean browser (`qcPersonalAudit.workflowAuthDefaultFlip()`). Optional S8c-2 / Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). Scoping architecture is done. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
@@ -79,7 +81,7 @@ flowchart LR
   S8bPlus --> S8d
 ```
 
-**Next:** Verify S8b and S8b+ P0 (`qcPersonalAudit.workflowS8b()` / `workflowS8bPlusP0()`), then approve further S8b+ slices or **S8c** separately. Do not deploy authorization rules before Auth + Admin claims. Do not begin S8c/S8d until approved.
+**Next:** Verify Auth production default on a clean browser (`qcPersonalAudit.workflowAuthDefaultFlip()`). Do not begin S8c-2 / Option C / S8d until separately approved.
 
 ---
 
@@ -369,12 +371,13 @@ Code:
 
 | Track | Status | Scope |
 |-------|--------|--------|
-| **S8a** | **COMPLETE** | Honest docs; threat model; root access matrix; in-repo live rules snapshot ([`database.rules.json`](../database.rules.json)); no authz deploy; no Firebase Auth |
-| **S8b** | **IMPLEMENTED — AWAITING VERIFICATION** | Firebase Auth under username UX; rules still open; manual 2–3 account migration |
-| **S8c** | Blocked on S8b | Authorization rules cutover (per-user / admin claim / accessCodes) |
+| **S8a** | **COMPLETE** | Honest docs; threat model; root access matrix; historical open-rules snapshot |
+| **S8b** | **COMPLETE** | Firebase Auth under username UX; production default via Auth flip |
+| **S8c** | **S8c-1 COMPLETE + VERIFIED**; S8c-2 NOT STARTED | Authorization rules cutover (tradeGrants + locked rules live) |
+| **Auth default flip** | **IMPLEMENTED — AWAITING VERIFICATION** | Fresh browser → Auth; emergency `qc_force_legacy_auth` |
 | **S8d** | Not started | Privileged Admin rebuilds via Admin SDK / Functions; emergency-root reassessment |
 
-Pasteable: `qcPersonalAudit.workflowS8a()`. Details: [`FIREBASE_SETUP.md`](../FIREBASE_SETUP.md), §8 below.
+Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()` / `workflowS8c1()` / `workflowS8a()`. Details: [`FIREBASE_SETUP.md`](../FIREBASE_SETUP.md), §8 below.
 
 ---
 
@@ -448,14 +451,15 @@ Root may be disabled only when **all** are true:
 | **Theater without Auth** | Fake ownership / admin checks on attacker-writable RTDB fields |
 | **Requires Firebase Auth (or Functions)** | Per-user writes; admin-only config/codes; hide password/session; stop cross-player forge |
 
-### 8.5 S8b implementation notes (AWAITING VERIFICATION)
+### 8.5 S8b implementation notes (COMPLETE — Auth now production default)
 
 - **Account preservation is small:** nearly all accounts are disposable test data. Preserve only if convenient: **bobby**, one new teacher account (easy recreate), optionally **bobby2**. Admin can already reset passwords.
 - **Do not** build a large lazy Firebase Auth migration merely to preserve the test population.
-- During S8b investigation: if lazy enrollment on successful legacy login is **genuinely tiny** and low-risk, it may be kept for convenience. If it needs substantial dual-auth state, races, reconciliation, or long-term compatibility machinery → prefer **one-time/manual** migration/reset of the 2–3 important accounts.
-- **New/future accounts** use Firebase Auth natively once S8b ships.
-- **Long-term target:** Firebase Auth owns passwords; remove legacy `players/{u}.password` after migration/rollback confidence.
-- **Ordering:** trusted **Admin SDK / custom-claim** provisioning must exist **before** S8c rules rely on an admin claim (do not trust RTDB `isAdmin` alone).
+- **New/future accounts** use Firebase Auth natively (production default; no localStorage prep).
+- **Emergency rollback:** `qc_force_legacy_auth='true'` → RTDB hash auth for accounts that still have hashes. Auth-native (no hash) cannot log in until the flag is removed.
+- **Long-term target:** remove legacy `players/{u}.password` after post-launch rollback confidence.
+- Stale transitional flag `qc_firebase_auth` is **ignored**.
+- Pasteable verify: `qcPersonalAudit.workflowAuthDefaultFlip()`.
 
 ### 8.6 STOP conditions
 
@@ -464,14 +468,16 @@ Root may be disabled only when **all** are true:
 - Treat scoped loading as security → false confidence.
 - Remove emergency root during S8a–S8c → no client repair if rules misfire.
 - Large dual-auth compatibility layer for disposable test accounts → unnecessary risk.
+- Interpret stale `qc_firebase_auth='false'` as legacy mode → accidental student lockout (must ignore).
 
 ### 8.7 Verification
 
 | Phase | Gate |
 |-------|------|
 | S8a | Docs + `workflowS8a()`; live rules unchanged; Gate A still holds |
-| S8b | Login/register/refresh/admin with Auth; rules still open until S8c |
-| S8c | Foreign write denied; config write denied; honest gameplay + claim spot checks; Console rollback drill |
+| S8b | Login/register/refresh/admin with Auth |
+| S8c-1 | Foreign write denied; config write denied; honest gameplay + claim spot checks; Console rollback drill |
+| Auth default flip | Clean browser login/reload/logout; emergency `qc_force_legacy_auth` rollback + restore (`workflowAuthDefaultFlip`) |
 | S8d | Admin rebuilds without needing open student rules |
 
 ---

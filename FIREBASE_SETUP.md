@@ -36,32 +36,40 @@ const firebaseConfig = {
 
 ### Current (live app)
 
-**S8b Firebase Auth foundation — IMPLEMENTED — AWAITING VERIFICATION.** Default remains legacy RTDB hashes until `localStorage.qc_firebase_auth='true'`. With the flag on, Firebase Auth is authoritative (synthetic `{username}@scicards.local`). Legacy RTDB username/password hashes still exist for rollback:
+**Firebase Auth production default — IMPLEMENTED — AWAITING VERIFICATION.** Fresh browsers use Firebase Auth with no localStorage prep (synthetic `{username}@scicards.local`). Legacy RTDB username/password hashes remain for **developer emergency rollback** only (`qc_force_legacy_auth='true'`). Stale `qc_firebase_auth` is ignored.
 
-- Player passwords: SHA-256 hash at `players/{username}.password` ([`js/auth.js`](js/auth.js))
+- Auth path: Firebase Email/Password; no new `players/{username}.password` on Auth-native register ([`js/auth.js`](js/auth.js))
+- Legacy hashes: SHA-256 at `players/{username}.password` retained for emergency rollback of migrated accounts
 - Session: `localStorage` `scicards_session` + RTDB `players/{username}/activeSession`
-- Admin: plaintext `config.adminPassword` and/or `players/{u}.isAdmin` (client-enforced only)
-- Scripts loaded: `firebase-app` + `firebase-database` + `firebase-auth` + `firebase-functions` (Auth used only when `qc_firebase_auth=true`; Functions used for S8b+ teacher callables).
+- Admin: plaintext `config.adminPassword` and/or `players/{u}.isAdmin` / `admins/{uid}` (flag-independent `__admin__`)
+- Scripts loaded: `firebase-app` + `firebase-database` + `firebase-auth` + `firebase-functions` (Auth is production default; Functions for S8b+ teacher callables)
 
-Client session / scoped loading / `qc_force_root_loading` are **invisible to security rules**.
+Client session / scoped loading / `qc_force_root_loading` / `qc_force_legacy_auth` are **invisible to security rules**.
 
 ### S8b (Auth foundation)
 
-### S8b feature flag + migration
+### Auth mode + emergency legacy rollback
 
 ```js
-localStorage.setItem('qc_firebase_auth','true'); location.reload();  // Auth ON
-localStorage.removeItem('qc_firebase_auth'); location.reload();       // legacy rollback
+// Production default: Firebase Auth (no flag needed)
+
+// Emergency developer-only legacy hash auth:
+localStorage.setItem('qc_force_legacy_auth','true'); location.reload();
+
+// Return to Auth default:
+localStorage.removeItem('qc_force_legacy_auth'); location.reload();
 ```
+
+**Limitation:** Auth-native accounts with no RTDB password hash cannot log in while `qc_force_legacy_auth='true'`.
 
 Trusted local Admin script (migrate bobby / teacher, set password, set `admin:true` claim, Auth orphan cleanup):
 [`scripts/s8b-auth-admin.mjs`](scripts/s8b-auth-admin.mjs) — see [`scripts/README-S8b-auth.md`](scripts/README-S8b-auth.md).
 
-Enable **Email/Password** in Firebase Console Authentication before turning the flag on.
-In-game Admin “Reset Password” is disabled while Auth is on (use the script temporarily until S8b+ P1).
-Do **not** deploy authorization rules in S8b. `__admin__` / `config.adminPassword` remain.
+Enable **Email/Password** in Firebase Console Authentication (required for classroom).
+In-game Admin “Reset Password” is disabled while Auth is authoritative (use the script temporarily until S8b+ P1).
+`__admin__` / `config.adminPassword` remain.
 
-Pasteable: `qcPersonalAudit.workflowS8b()`
+Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()` (also `workflowS8b()`)
 
 ### S8b+ P0 (Trusted Teacher Functions foundation) — IMPLEMENTED — AWAITING VERIFICATION
 
@@ -86,11 +94,11 @@ Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
 - Local emulator proof: `scripts/s8c1-rules-simulator.mjs` (exact ±1 with `increment`, fake grant deny, honest settle)
 - Pasteable: `qcPersonalAudit.workflowS8c1()`
 - Deferred to S8c-2: foreign stats/LB/PTI tightening
-- Auth production-default flip: **after** S8c-1 live verification
+- Auth production-default flip: **IMPLEMENTED — AWAITING VERIFICATION** (`qcPersonalAudit.workflowAuthDefaultFlip()`)
 
-### Future (post S8c-1 verify)
+### Future (post Auth-default verify)
 
-Firebase Auth production default (legacy only via emergency flag). Option C password-reset path deferred ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
+Legacy hash retirement after post-launch confidence. Option C password-reset path deferred ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
 Authoritative S8 plan: [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md) §8.
 

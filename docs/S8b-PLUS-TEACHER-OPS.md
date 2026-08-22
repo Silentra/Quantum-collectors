@@ -75,11 +75,9 @@ See [`scripts/README-S8b-auth.md`](README-S8b-auth.md).
 
 ## Non-programmer verification workflow
 
-Prerequisites: Functions deployed; Auth flag on; at least one teacher with `admin:true` claim; one normal student Auth account.
+Prerequisites: Functions deployed; Auth production default (or any session with Firebase Auth signed in); at least one teacher with `admin:true` claim; one normal student Auth account.
 
-```js
-localStorage.setItem('qc_firebase_auth','true'); location.reload();
-```
+No `qc_firebase_auth` prep. Emergency legacy rollback (`qc_force_legacy_auth`) is unrelated to teacher-ops testing — use Auth default.
 
 ### A) Unauthenticated
 
