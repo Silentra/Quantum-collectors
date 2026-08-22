@@ -182,6 +182,37 @@ async function main() {
     );
     pass('absolute wrong-delta foreign inventory denied');
 
+    // Malicious foreign null of give card when qty !== 1 denied
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), 'players/target/inventory/cardGive'), 5);
+    });
+    {
+      const q = (await get(ref(offerer.database(), 'players/target/inventory/cardGive'))).val();
+      if (q !== 5) fail(`expected cardGive=5 before malicious null, got ${q}`);
+    }
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/inventory/cardGive'), null),
+    );
+    pass('malicious foreign null of qty>1 give denied');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), 'players/target/inventory/cardGive'), 1);
+    });
+
+    // Malicious unrelated-card delete denied
+    await assertFails(
+      set(ref(offerer.database(), 'players/target/inventory/unrelated'), null),
+    );
+    pass('malicious unrelated foreign inventory delete denied');
+
+    // Honest foreign null when qty===1 allowed (semantic 1-1=0)
+    await assertSucceeds(
+      set(ref(offerer.database(), 'players/target/inventory/cardGive'), null),
+    );
+    pass('honest foreign null of qty===1 give allowed');
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), 'players/target/inventory/cardGive'), 1);
+    });
+
     // --- 1) ServerValue.increment(±1) satisfies exact-delta ---
     await assertSucceeds(
       update(ref(offerer.database()), {
@@ -249,11 +280,12 @@ async function main() {
       }),
     );
 
+    // qty===1 give leaves use null (canonical absent), not increment(-1)
     await assertSucceeds(
       update(ref(offerer.database()), {
-        'players/target/inventory/cardGive': increment(-1),
+        'players/target/inventory/cardGive': null,
         'players/target/inventory/cardRecv': increment(1),
-        'players/offerer/inventory/cardRecv': increment(-1),
+        'players/offerer/inventory/cardRecv': null,
         'players/offerer/inventory/cardGive': increment(1),
         'trades/direct/t1/status': 'accepted',
         'trades/direct/t1/processingBy': null,
@@ -269,7 +301,27 @@ async function main() {
         'players/target/lastDirectTradeAt': Date.now(),
       }),
     );
-    pass('honest direct settlement multipath allowed');
+    pass('honest direct settlement multipath allowed (qty1 give → null)');
+
+    {
+      const tInv = (await get(ref(offerer.database(), 'players/target/inventory'))).val() || {};
+      const oInv = (await get(ref(offerer.database(), 'players/offerer/inventory'))).val() || {};
+      if (Object.prototype.hasOwnProperty.call(tInv, 'cardGive') || tInv.cardRecv !== 4) {
+        fail(`direct qty1 canonical zero failed: target=${JSON.stringify(tInv)}`);
+      } else if (Object.prototype.hasOwnProperty.call(oInv, 'cardRecv') || oInv.cardGive !== 3) {
+        fail(`direct qty1 canonical zero failed: offerer=${JSON.stringify(oInv)}`);
+      } else {
+        pass('direct qty1 give leaves absent; recv qtys exact');
+      }
+    }
+
+    // Post-settlement replay denied (grant cleared + trade not processing)
+    await assertFails(
+      update(ref(offerer.database()), {
+        'players/target/inventory/cardRecv': increment(-1),
+      }),
+    );
+    pass('post-settlement foreign inventory replay denied');
 
     // --- 4b) Honest listing settlement ---
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -297,9 +349,10 @@ async function main() {
     );
     pass('honest listing grant create allowed');
 
+    // owner give qty===1 → null; accepter give qty>1 → increment(-1)
     await assertSucceeds(
       update(ref(accepter.database()), {
-        'players/owner/inventory/listOffer': increment(-1),
+        'players/owner/inventory/listOffer': null,
         'players/owner/inventory/listChosen': increment(1),
         'players/accepter/inventory/listChosen': increment(-1),
         'players/accepter/inventory/listOffer': increment(1),
@@ -315,7 +368,74 @@ async function main() {
         'players/accepter/progression/firstTrade': true,
       }),
     );
-    pass('honest listing settlement multipath allowed');
+    pass('honest listing settlement multipath allowed (owner qty1 → null)');
+
+    {
+      const oInv = (await get(ref(accepter.database(), 'players/owner/inventory'))).val() || {};
+      const aInv = (await get(ref(accepter.database(), 'players/accepter/inventory'))).val() || {};
+      if (Object.prototype.hasOwnProperty.call(oInv, 'listOffer') || oInv.listChosen !== 1) {
+        fail(`listing qty1 canonical zero failed: owner=${JSON.stringify(oInv)}`);
+      } else if (aInv.listChosen !== 1 || aInv.listOffer !== 1) {
+        fail(`listing qty>1 preserve failed: accepter=${JSON.stringify(aInv)}`);
+      } else {
+        pass('listing owner give absent; accepter remaining qty preserved');
+      }
+    }
+
+
+    // --- Zero-leaf: direct foreign give qty>1 uses increment, leaf remains positive ---
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, 'players/target/inventory'), {
+        cardGive: 3,
+        cardRecv: 3,
+        unrelated: 5,
+      });
+      await set(ref(db, 'players/offerer/inventory'), {
+        cardGive: 2,
+        cardRecv: 2,
+      });
+      await set(ref(db, 'trades/direct/t1/status'), 'processing');
+      await set(ref(db, 'trades/direct/t1/claimId'), 'claim-direct-2');
+      await set(ref(db, 'trades/direct/t1/claimerAuthUid'), 'offererUid');
+      await set(ref(db, 'trades/direct/t1/processingBy'), 'offerer');
+    });
+
+    await assertSucceeds(
+      set(ref(offerer.database(), 'tradeGrants/target/offererUid'), {
+        tradeKind: 'direct',
+        tradeId: 't1',
+        claimId: 'claim-direct-2',
+        claimerUsername: 'offerer',
+        targetUsername: 'target',
+        giveCardId: 'cardGive',
+        recvCardId: 'cardRecv',
+        expiresAt: Date.now() + 60_000,
+      }),
+    );
+
+    await assertSucceeds(
+      update(ref(offerer.database()), {
+        'players/target/inventory/cardGive': increment(-1),
+        'players/target/inventory/cardRecv': increment(1),
+        'players/offerer/inventory/cardRecv': increment(-1),
+        'players/offerer/inventory/cardGive': increment(1),
+        'trades/direct/t1/status': 'accepted',
+        'trades/direct/t1/processingBy': null,
+        'trades/direct/t1/processingAt': null,
+        'trades/direct/t1/claimId': null,
+        'trades/direct/t1/claimerAuthUid': null,
+        'tradeGrants/target/offererUid': null,
+      }),
+    );
+    {
+      const tInv = (await get(ref(offerer.database(), 'players/target/inventory'))).val() || {};
+      if (tInv.cardGive !== 2 || tInv.cardRecv !== 4) {
+        fail(`direct qty>1 preserve failed: ${JSON.stringify(tInv)}`);
+      } else {
+        pass('direct qty>1 give decremented; remaining positive preserved');
+      }
+    }
 
     // --- S8c-1 live-blocker compatibility reads ---
     await assertSucceeds(get(ref(offerer.database(), 'playerDirectory')));
