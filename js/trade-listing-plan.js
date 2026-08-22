@@ -181,9 +181,8 @@ function logicalInventoryAfterSwap(inventory, giveCardId, receiveCardId) {
  * @param {object} nextInventory
  * @param {number} now
  * @param {{ statsReadable?: boolean }} [options]
- *   statsReadable=true (own/claimer): absolute tradesCompleted + achievements + LB.
- *   statsReadable=false (foreign owner under grant): ServerValue.increment(1) for
- *   tradesCompleted; skip achievements; omit tradesCompleted LB absolute row.
+ *   statsReadable=true (own/claimer): achievements + unique LB; tradesCompleted always increment(1).
+ *   statsReadable=false (foreign owner): increment tradesCompleted; skip achievements.
  * @returns {{ updates: Object, plannedStatValues: Object, leaderboardStatKeys: string[], notified: string[], unlocked: string[] }}
  */
 function planPlayerPostTradeSideEffects(username, nextInventory, now, options = {}) {
@@ -194,15 +193,10 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now, options = 
   /** @type {string[]} */
   const leaderboardStatKeys = [];
 
+  updates[`players/${username}/stats/tradesCompleted`] = serverIncrement(1);
   if (statsReadable) {
-    const prevTrades = getPlayerStat(username, STAT_KEYS.TRADES_COMPLETED);
-    const nextTrades = prevTrades + 1;
-    updates[`players/${username}/stats/tradesCompleted`] = nextTrades;
-    plannedStatValues[STAT_KEYS.TRADES_COMPLETED] = nextTrades;
+    plannedStatValues[STAT_KEYS.TRADES_COMPLETED] = getPlayerStat(username, STAT_KEYS.TRADES_COMPLETED) + 1;
     achStatKeys.push(STAT_KEYS.TRADES_COMPLETED);
-    leaderboardStatKeys.push(STAT_TYPES.TRADES_COMPLETED);
-  } else {
-    updates[`players/${username}/stats/tradesCompleted`] = serverIncrement(1);
   }
 
   const prevUnique = getPlayerStat(username, STAT_KEYS.UNIQUE_CARDS_OWNED);
@@ -238,6 +232,7 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now, options = 
     const achPlan = planAchievementUpdatesForStats(username, [...new Set(achStatKeys)], {
       getStat,
       now,
+      requireAchievementsReady: true,
     });
     Object.assign(updates, achPlan.updates);
     notified = achPlan.notified;
@@ -437,7 +432,6 @@ export function buildListingFulfillPlan({
     [STAT_TYPES.UNIQUE_CARDS_OWNED]: ownerSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
   });
   const accepterLike = playerLikeWithStatOverlay(accepterPlayer, {
-    [STAT_TYPES.TRADES_COMPLETED]: accepterSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
     [STAT_TYPES.UNIQUE_CARDS_OWNED]: accepterSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
   });
   Object.assign(

@@ -2067,9 +2067,11 @@ Validates:
 lastListingAcceptAt: owner | admin ONLY (settlement never writes it foreign)
 
 Settlement blocker fix (client planners):
-  Foreign tradesCompleted → ServerValue.increment(1) (claimer cannot read foreign stats)
-  Skip foreign achievements + foreign tradesCompleted LB absolute rows in terminal multipath
-  Inventory-derived unique/aura absolute + own-side absolute overlays unchanged
+  Both sides tradesCompleted → ServerValue.increment(1) (never cache-blind absolute)
+  Claimer achievements: hydrate map before plan; mutation builders never downgrade claimed/claimedAt
+  Skip foreign achievements + omit tradesCompleted LB absolute rows in terminal multipath
+  Inventory-derived unique/aura absolute overlays unchanged
+  Foreign achievement catch-up on victim login eval
 
 Accepted residuals (NOT tightened):
   playerTradeIndex — any auth write (rebuildable index)

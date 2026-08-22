@@ -168,4 +168,4 @@ export function toastAchievementUnlocks(achievementIds = []) {
 
 export { STAT_KEYS };
 export { getAchievementConfig, listAchievementDefinitions } from './achievement-config.js';
-export { evaluateAchievementsForStats, planAchievementUpdatesForStats } from './achievement-mutations.js';
+export { evaluateAchievementsForStats, planAchievementUpdatesForStats, claimFieldsFromExisting } from './achievement-mutations.js';

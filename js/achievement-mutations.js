@@ -20,6 +20,23 @@ function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+/**
+ * Never let evaluation/progress/unlock planning downgrade an existing claim.
+ * claimAchievementReward is the only path that should set claimed → true.
+ * @param {object|null|undefined} existing
+ * @returns {{ claimed: boolean, claimedAt: number }}
+ */
+export function claimFieldsFromExisting(existing) {
+  if (isObject(existing) && existing.claimed === true) {
+    const at = Number(existing.claimedAt);
+    return {
+      claimed: true,
+      claimedAt: Number.isFinite(at) && at > 0 ? at : 0,
+    };
+  }
+  return { claimed: false, claimedAt: 0 };
+}
+
 function getPlayerAchievements(username) {
   const raw = db.get(`players/${username}/achievements`);
   return isObject(raw) ? raw : {};
@@ -32,26 +49,38 @@ function getPlayerSnapshot(username) {
 }
 
 function writeUnlock(username, achievementId, evalResult, now) {
-  const entry = buildUnlockEntry(evalResult, now);
+  const existing = db.get(`players/${username}/achievements/${achievementId}`);
+  const entry = buildUnlockEntry(evalResult, now, existing);
   db.set(`players/${username}/achievements/${achievementId}`, entry);
   return entry;
 }
 
-function buildUnlockEntry(evalResult, now) {
+/**
+ * @param {object} evalResult
+ * @param {number} now
+ * @param {object|null|undefined} [existing]
+ */
+function buildUnlockEntry(evalResult, now, existing) {
+  const claim = claimFieldsFromExisting(existing);
+  const priorUnlockedAt = isObject(existing) && existing.unlocked === true
+    ? Number(existing.unlockedAt)
+    : NaN;
   return {
     unlocked: true,
-    unlockedAt: now,
+    unlockedAt: Number.isFinite(priorUnlockedAt) && priorUnlockedAt > 0 ? priorUnlockedAt : now,
     progress: evalResult.progress ?? 1,
     progressValue: evalResult.progressValue ?? 0,
     targetValue: evalResult.targetValue ?? 1,
-    claimed: false,
-    claimedAt: 0,
+    claimed: claim.claimed,
+    claimedAt: claim.claimedAt,
     lastEvaluatedAt: now,
   };
 }
 
 function buildProgressEntryIfChanged(existing, evalResult, now) {
   if (existing?.unlocked === true) return null;
+  // Never rewrite a claimed row via progress planning (corrupt/legacy or cache gap).
+  if (isObject(existing) && existing.claimed === true) return null;
 
   const progress = evalResult.progress ?? 0;
   const progressValue = evalResult.progressValue ?? 0;
@@ -64,20 +93,20 @@ function buildProgressEntryIfChanged(existing, evalResult, now) {
     existing.unlocked !== true &&
     Number(existing.progress ?? 0) === Number(progress) &&
     Number(existing.progressValue ?? 0) === Number(progressValue) &&
-    Number(existing.targetValue ?? 1) === Number(targetValue) &&
-    existing.claimed !== true
+    Number(existing.targetValue ?? 1) === Number(targetValue)
   ) {
     return null;
   }
 
+  const claim = claimFieldsFromExisting(existing);
   return {
     unlocked: false,
     unlockedAt: 0,
     progress,
     progressValue,
     targetValue,
-    claimed: false,
-    claimedAt: 0,
+    claimed: claim.claimed,
+    claimedAt: claim.claimedAt,
     lastEvaluatedAt: now,
   };
 }
@@ -100,8 +129,10 @@ function writeProgress(username, achievementId, evalResult, now) {
  * @param {Object} [options]
  * @param {(statKey: string) => number} [options.getStat] - override live DB stats (planned overlay)
  * @param {Object} [options.playerAchievements] - override live achievement map
+ * @param {boolean} [options.requireAchievementsReady] - if true, omit all updates when
+ *   players/{u}/achievements is not path-ready (fail closed vs claim clobber)
  * @param {number} [options.now]
- * @returns {{ updates: Object<string, Object>, unlocked: string[], notified: string[] }}
+ * @returns {{ updates: Object<string, Object>, unlocked: string[], notified: string[], skippedReason?: string }}
  */
 export function planAchievementUpdatesForStats(username, statKeys = [], options = {}) {
   const empty = { updates: {}, unlocked: [], notified: [] };
@@ -109,6 +140,13 @@ export function planAchievementUpdatesForStats(username, statKeys = [], options 
 
   const config = getAchievementConfig();
   if (config.meta.enabled === false) return empty;
+
+  if (options.requireAchievementsReady === true) {
+    const achPath = `players/${username}/achievements`;
+    if (typeof db.isPathReady === 'function' && db.isPathReady(achPath) !== true) {
+      return { ...empty, skippedReason: 'ACHIEVEMENTS_NOT_READY' };
+    }
+  }
 
   const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
   const playerAchievements = isObject(options.playerAchievements)
@@ -133,13 +171,13 @@ export function planAchievementUpdatesForStats(username, statKeys = [], options 
 
     const evalResult = evaluateDefinition(definition, getStat);
     const path = `players/${username}/achievements/${achievementId}`;
+    const existing = playerAchievements[achievementId];
 
     if (evalResult.met) {
-      updates[path] = buildUnlockEntry(evalResult, now);
+      updates[path] = buildUnlockEntry(evalResult, now, existing);
       unlocked.push(achievementId);
       if (definition.notifyOnUnlock) notified.push(achievementId);
     } else {
-      const existing = playerAchievements[achievementId];
       const entry = buildProgressEntryIfChanged(existing, evalResult, now);
       if (entry) updates[path] = entry;
     }

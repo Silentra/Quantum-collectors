@@ -8,8 +8,9 @@
  * No absolute inventory card quantities in the terminal payload.
  * navigator.locks is UX/local only; the RTDB claim is the correctness boundary.
  *
- * Trade stats parity: tradesCompleted +1 both; uniqueCardsOwned / maxCardAuraTier
- * from logical ±1 inventory image (not written as absolute card leaves).
+ * Trade stats parity: tradesCompleted ServerValue.increment(+1) both sides; uniqueCardsOwned /
+ * maxCardAuraTier from logical ±1 inventory image (not written as absolute card leaves).
+ * Claimed achievement state is preserved by achievement-mutations (never downgraded by eval).
  *
  * Listings remain on the separate absolute claim+fulfill path (Gate C later).
  */
@@ -371,10 +372,8 @@ function logicalInventoryAfterSwap(inventory, giveCardId, receiveCardId) {
  * @param {object} nextInventory
  * @param {number} now
  * @param {{ statsReadable?: boolean }} [options]
- *   statsReadable=true (own player): absolute tradesCompleted + achievements + LB overlays.
- *   statsReadable=false (foreign counterparty): claimer cannot read foreign stats under S8c-1;
- *   use ServerValue.increment(1) for tradesCompleted; skip achievements; caller must omit
- *   foreign tradesCompleted leaderboard absolute row (would be wrong).
+ *   statsReadable=true (own/claimer): achievements + unique LB; tradesCompleted always increment(1).
+ *   statsReadable=false (foreign): increment tradesCompleted; skip achievements; unique LB when changed.
  * @returns {{ updates: Object, plannedStatValues: Object, leaderboardStatKeys: string[], notified: string[], unlocked: string[] }}
  */
 function planPlayerPostTradeSideEffects(username, nextInventory, now, options = {}) {
@@ -385,16 +384,13 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now, options = 
   /** @type {string[]} */
   const leaderboardStatKeys = [];
 
+  // Both sides: ServerValue.increment(1) — never absolute cache+1 (clobber risk).
+  updates[`players/${username}/stats/tradesCompleted`] = serverIncrement(1);
   if (statsReadable) {
-    const prevTrades = getPlayerStat(username, STAT_KEYS.TRADES_COMPLETED);
-    const nextTrades = prevTrades + 1;
-    updates[`players/${username}/stats/tradesCompleted`] = nextTrades;
-    plannedStatValues[STAT_KEYS.TRADES_COMPLETED] = nextTrades;
+    // Overlay for achievement eval only (not written as absolute).
+    plannedStatValues[STAT_KEYS.TRADES_COMPLETED] = getPlayerStat(username, STAT_KEYS.TRADES_COMPLETED) + 1;
     achStatKeys.push(STAT_KEYS.TRADES_COMPLETED);
-    leaderboardStatKeys.push(STAT_TYPES.TRADES_COMPLETED);
-  } else {
-    // Foreign: exact +1 via increment (client cannot read foreign stats for absolute write).
-    updates[`players/${username}/stats/tradesCompleted`] = serverIncrement(1);
+    // Omit tradesCompleted LB absolute row — value unknown after increment; login/sync refreshes.
   }
 
   const prevUnique = getPlayerStat(username, STAT_KEYS.UNIQUE_CARDS_OWNED);
@@ -430,6 +426,7 @@ function planPlayerPostTradeSideEffects(username, nextInventory, now, options = 
     const achPlan = planAchievementUpdatesForStats(username, [...new Set(achStatKeys)], {
       getStat,
       now,
+      requireAchievementsReady: true,
     });
     Object.assign(updates, achPlan.updates);
     notified = achPlan.notified;
@@ -556,7 +553,6 @@ export function buildDirectTradeAcceptPlan({
   Object.assign(updates, offererSide.updates, targetSide.updates);
 
   const offererLike = playerLikeWithStatOverlay(offeringPlayer, {
-    [STAT_TYPES.TRADES_COMPLETED]: offererSide.plannedStatValues[STAT_KEYS.TRADES_COMPLETED],
     [STAT_TYPES.UNIQUE_CARDS_OWNED]: offererSide.plannedStatValues[STAT_KEYS.UNIQUE_CARDS_OWNED],
   });
   const targetLike = playerLikeWithStatOverlay(targetPlayer, {

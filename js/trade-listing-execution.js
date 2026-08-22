@@ -553,6 +553,12 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
 
   const offeredCardId = claimedListing.offeredCardId;
 
+  // Hydrate claimer (accepter) achievements (+ stats) before unlock planning.
+  if (typeof db.loadPathOnce === 'function') {
+    await db.loadPathOnce(`players/${accepterId}/achievements`, { force: true });
+    await db.loadPathOnce(`players/${accepterId}/stats`, { force: true });
+  }
+
   // ── 3. Build relative fulfill plan ────────────────────────────────────────
   const plan = buildListingFulfillPlan({
     listingId,
