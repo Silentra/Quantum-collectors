@@ -2405,56 +2405,61 @@ STOP: no new implementation from this workflow paste; no Option C planning here.
 }
 
 /**
- * Pasteable Option C-a authDirectory foundation (C-a.1 migration release).
+ * Pasteable Option C-a authDirectory (C-a.2 production-default strict).
  */
 export function workflowOptionCa() {
   console.info(`
-=== Option C-a.1.1 authDirectory + registration LB username ===
+=== Option C-a.2 authDirectory (production-default STRICT) ===
 
-Status: C-a.1.1 IMPLEMENTED — AWAITING LIVE REGISTRATION VERIFICATION
-C-a.1 = migration-compat client (directory present → use; missing → gen0 fallback).
-C-a.1.1 = registration blocker fix: buildLeaderboardSummaryEntry includes username
-  (leaderboards create-rule requires username when players/{u} not yet in pre-write root).
-C-a.2 = later production-default strict micro-deploy (NOT localStorage enableAuthDirectoryStrict).
-No password reset / Delete Player Auth changes (C-b). No rules change for C-a.1.1.
+Status: C-a.2 IMPLEMENTED — AWAITING LIVE VERIFICATION
+C-a.1 / C-a.1.1 LIVE VERIFIED (backfill, existing logins, disposable register, LB username).
+C-a.2 = production-default strict: authDirectory required for login/restore.
+No password reset / Delete Player Auth changes (C-b). No rules change for C-a.2.
 
 Schema: authDirectory/{username} = { loginEmail, authUid, generation }
   gen0 loginEmail = "{u}@scicards.local" (synthetic — not a real inbox)
   players/{u}.authUid remains ownership authority
   Live LB: leaderboards/{stat}/{u} = { username, value, groupId, subgroupId, updatedAt }
-  Backfill gather: per-username public child force-reads (NEVER authDirectory parent)
 
-Failed register notes:
-  Prior failed attempts likely rolled back Auth via deleteUser after RTDB deny.
-  Orphan Auth users remain possible if rollback delete failed.
-  Retest with a NEW disposable username + unused access code.
-  If synthetic email later says email-already-in-use, clean that Auth user manually.
+Production:
+  Directory present → use loginEmail + verify authUid
+  Directory missing/invalid → FAIL CLOSED
+  Fresh browsers require authDirectory by default (no Admin localStorage rollout)
 
-Existing LB rows missing username: safe S8d-3 Rebuild Leaderboards will backfill once
-  (username participates in equality). Do NOT auto-run rebuild; optional Admin maintenance.
+Developer emergency ONLY (this browser):
+  localStorage.setItem('qc_auth_directory_compat', 'true')
+  // or qcAuth.enableAuthDirectoryCompat()
+  → temporary gen0 missing-directory fallback (NOT normal production)
 
-Live retest (client deploy only — NO rules republish):
-  1) Deploy C-a.1.1 client
-  2) Hard refresh
-  3) Freshness:
-       qcAuth.getOptionCaStatus()
-       // PASS: optionCaFoundationVersion === 'option-c-a-1.1.1'
-       // PASS: registrationLbUsername === true
-       // PASS: migrationCompatDefault === true
-  4) Register NEW disposable username + unused access code
-  5) Confirm registration succeeds
-  6) Inspect authDirectory/{u}, players/{u}.authUid, playerDirectory/{u},
-     playerTradeIndex/{u}/_meta, leaderboards/*/{u}
-  7) Verify each LB leaf has username === path key
-  8) Logout / login / reload restore
-  9) Confirm no unexpected permission errors
+Separate emergency:
+  qc_force_legacy_auth=true → full legacy RTDB-hash path (not authDirectory)
 
-*** STOP GATE — verify live registration before C-a.2 strict flip ***
+Backfill: await qcAuth.backfillAuthDirectory() — migration/emergency tooling only
+  (never auto during student login; still idempotent)
+
+Live verify (short — registration already verified under C-a.1.1):
+  1) Deploy C-a.2 client
+  2) Hard refresh / fresh browser context preferred
+  3) qcAuth.getOptionCaStatus()
+       // PASS: optionCaFoundationVersion === 'option-c-a-2'
+       // PASS: strictDefault === true
+       // PASS: migrationCompatDefault === false
+       // PASS: authDirectoryCompatEnabled === false
+  4) Login with one existing backfilled account
+  5) Logout / login
+  6) Reload / restore
+  7) Confirm normal game access
+
+Safe negative (optional, no account damage):
+  In DevTools on a logged-out page:
+    const t = await qcAuth.resolveAuthLoginTarget('__nobody_missing_ca2__')
+    // PASS: t.ok === false && (t.code === 'AUTH_DIRECTORY_REQUIRED' || /missing/i.test(t.error))
+  Do NOT delete a real authDirectory leaf to prove strictness.
+
+*** STOP GATE — after live verify, STOP. Do not begin C-b here. ***
 
 Legacy: qc_force_legacy_auth path does not require authDirectory.
 Unit: node scripts/option-c-a-auth-directory.test.mjs
-     node scripts/s8d3-leaderboard-planner.test.mjs
-STOP GATE: finish C-a.1.1 live register verify → C-a.2 → then Option C-b.
 `);
 }
 

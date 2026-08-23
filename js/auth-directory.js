@@ -5,11 +5,14 @@
  * Pre-auth public read for login email resolution (child paths only — no parent enumerate).
  * players/{u}.authUid remains RTDB ownership authority (Security Rules).
  *
- * C-a.1 (this release): migration compatibility DEFAULT —
- *   directory present → use it; missing → temporary gen0 email fallback.
- *   Backfill uses per-username child force-reads (never authDirectory parent).
- * C-a.2 (later micro-deploy): production-default strict; do not treat
- *   enableAuthDirectoryStrict() / qc_auth_directory_strict as the final global gate.
+ * C-a.2 (production default): authDirectory REQUIRED for Firebase Auth login/restore.
+ *   Missing/invalid directory → FAIL CLOSED.
+ * Developer emergency only: localStorage qc_auth_directory_compat === 'true'
+ *   temporarily allows gen0 {u}@scicards.local fallback (not normal production).
+ * Separate emergency: qc_force_legacy_auth (full legacy RTDB-hash path in auth.js).
+ *
+ * Backfill (qcAuth.backfillAuthDirectory) is migration/emergency tooling — never
+ * auto-run during student login. Per-username child force-reads only.
  */
 
 import * as db from './database.js';
@@ -22,13 +25,19 @@ import {
 export const AUTH_DIRECTORY_ROOT = 'authDirectory';
 export const AUTH_EMAIL_DOMAIN = 'scicards.local';
 
-/** Freshness / feature proof for live C-a.1 builds (per-user backfill fix). */
-export const OPTION_CA_FOUNDATION_VERSION = 'option-c-a-1.1.1';
+/** Freshness / feature proof for live C-a.2 builds (production-default strict). */
+export const OPTION_CA_FOUNDATION_VERSION = 'option-c-a-2';
 
 /**
- * Admin-browser-only localStorage toggle (NOT production-global).
- * C-a.1 default remains migration compat for all browsers until C-a.2.
- * Do not treat enableAuthDirectoryStrict() as the final production rollout step.
+ * Developer/emergency compatibility escape only.
+ * When === 'true', missing authDirectory may fall back to gen0 synthetic email.
+ * Unset/any other value → production STRICT (fail closed).
+ */
+export const AUTH_DIRECTORY_COMPAT_LS_KEY = 'qc_auth_directory_compat';
+
+/**
+ * @deprecated Obsolete C-a.1 localStorage key. Production is strict by default (C-a.2).
+ * No longer read for gating. Kept only so old DevTools notes do not confuse rollout.
  */
 export const AUTH_DIRECTORY_STRICT_LS_KEY = 'qc_auth_directory_strict';
 
@@ -44,35 +53,102 @@ export function usernameToAuthEmail(username) {
   return `${u}@${AUTH_EMAIL_DOMAIN}`;
 }
 
-/**
- * @returns {boolean}
- */
-export function isAuthDirectoryStrict() {
+function _lsGet(key) {
   try {
-    return localStorage.getItem(AUTH_DIRECTORY_STRICT_LS_KEY) === 'true';
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(key);
   } catch {
+    return null;
+  }
+}
+
+function _lsSet(key, value) {
+  try {
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    console.warn('[AuthDirectory] localStorage set failed:', e?.message || e);
     return false;
   }
 }
 
-/** Admin-browser localStorage only — NOT production-global. Prefer C-a.2 deploy for strict default. */
-export function enableAuthDirectoryStrict() {
+function _lsRemove(key) {
   try {
-    localStorage.setItem(AUTH_DIRECTORY_STRICT_LS_KEY, 'true');
+    if (typeof localStorage === 'undefined') return false;
+    localStorage.removeItem(key);
+    return true;
   } catch (e) {
-    console.warn('[AuthDirectory] enableAuthDirectoryStrict failed:', e?.message || e);
+    console.warn('[AuthDirectory] localStorage remove failed:', e?.message || e);
+    return false;
   }
-  return { ok: true, strict: true, scope: 'localStorage-this-browser-only' };
 }
 
-/** Developer: re-open migration compat window. */
+/**
+ * Developer/emergency: temporary gen0 missing-directory fallback.
+ * @returns {boolean}
+ */
+export function isAuthDirectoryCompatEnabled() {
+  return _lsGet(AUTH_DIRECTORY_COMPAT_LS_KEY) === 'true';
+}
+
+/**
+ * Effective production mode for this browser.
+ * Default/unset → strict (true). Compat escape → false.
+ * @returns {boolean}
+ */
+export function isAuthDirectoryStrict() {
+  return !isAuthDirectoryCompatEnabled();
+}
+
+/** Enable developer/emergency gen0 missing-directory fallback (this browser only). */
+export function enableAuthDirectoryCompat() {
+  _lsSet(AUTH_DIRECTORY_COMPAT_LS_KEY, 'true');
+  _lsRemove(AUTH_DIRECTORY_STRICT_LS_KEY);
+  return {
+    ok: true,
+    strictDefault: true,
+    compatEnabled: true,
+    scope: 'localStorage-this-browser-only',
+    note: 'Developer/emergency only — not normal production behavior.',
+  };
+}
+
+/** Clear developer compat escape → this browser back to production strict. */
+export function disableAuthDirectoryCompat() {
+  _lsRemove(AUTH_DIRECTORY_COMPAT_LS_KEY);
+  return {
+    ok: true,
+    strictDefault: true,
+    compatEnabled: false,
+    scope: 'localStorage-this-browser-only',
+  };
+}
+
+/**
+ * @deprecated Alias — production is already strict by default. Clears compat escape only.
+ */
+export function enableAuthDirectoryStrict() {
+  const r = disableAuthDirectoryCompat();
+  return {
+    ...r,
+    strict: true,
+    note:
+      'C-a.2 production is strict by default. This only clears qc_auth_directory_compat. '
+      + 'Do not use as a teacher rollout step.',
+  };
+}
+
+/**
+ * @deprecated Prefer enableAuthDirectoryCompat(). Opens developer gen0 fallback.
+ */
 export function disableAuthDirectoryStrict() {
-  try {
-    localStorage.removeItem(AUTH_DIRECTORY_STRICT_LS_KEY);
-  } catch (e) {
-    console.warn('[AuthDirectory] disableAuthDirectoryStrict failed:', e?.message || e);
-  }
-  return { ok: true, strict: false };
+  const r = enableAuthDirectoryCompat();
+  return {
+    ...r,
+    strict: false,
+    note: 'Developer/emergency compat escape only — not production.',
+  };
 }
 
 /**
@@ -192,29 +268,30 @@ export async function loadAuthDirectoryEntry(username, options = {}) {
 }
 
 /**
- * Resolve login credentials for Firebase Auth path.
- * Strict: authDirectory required.
- * Compat (default until enableAuthDirectoryStrict): missing → gen0 email fallback.
+ * Pure decision after authDirectory load (testable).
+ * Production default: missing → FAIL. Compat escape: gen0 email fallback.
  *
  * @param {string} username
- * @returns {Promise<{
- *   ok: boolean,
+ * @param {{
+ *   ok?: boolean,
+ *   missing?: boolean,
+ *   parsed?: { loginEmail: string, authUid: string, generation: number }|null,
  *   error?: string,
- *   loginEmail?: string,
- *   expectedAuthUid?: string|null,
- *   generation?: number|null,
- *   source?: 'authDirectory'|'gen0Compat',
- * }>}
+ * }} loaded
+ * @param {{ compatEnabled?: boolean }} [options]
  */
-export async function resolveAuthLoginTarget(username) {
+export function decideAuthLoginTargetFromLoad(username, loaded, options = {}) {
   const u = String(username || '').trim().toLowerCase();
   if (!u) return { ok: false, error: 'Please enter a username.' };
 
-  const loaded = await loadAuthDirectoryEntry(u, { force: true });
-  if (!loaded.ok && !loaded.missing) {
+  const compatEnabled = options.compatEnabled === true
+    || (options.compatEnabled == null && isAuthDirectoryCompatEnabled());
+
+  if (!loaded || (!loaded.ok && !loaded.missing)) {
+    const err = loaded?.error;
     return {
       ok: false,
-      error: loaded.error === 'AUTH_DIRECTORY_LOAD_FAILED'
+      error: err === 'AUTH_DIRECTORY_LOAD_FAILED'
         ? 'Could not verify account. Please try again.'
         : 'Account auth directory is invalid. Ask a teacher for help.',
     };
@@ -231,16 +308,16 @@ export async function resolveAuthLoginTarget(username) {
   }
 
   // Missing directory
-  if (isAuthDirectoryStrict()) {
+  if (!compatEnabled) {
     return {
       ok: false,
       error:
         'Account is not ready for login (auth directory missing). '
         + 'Ask a teacher to run auth directory backfill.',
+      code: 'AUTH_DIRECTORY_REQUIRED',
     };
   }
 
-  // Explicit C-a migration window only
   return {
     ok: true,
     loginEmail: usernameToAuthEmail(u),
@@ -248,6 +325,42 @@ export async function resolveAuthLoginTarget(username) {
     generation: 0,
     source: 'gen0Compat',
   };
+}
+
+/**
+ * Whether restore may continue when authDirectory is missing.
+ * Production default: false. Developer compat: true (then gen0 email must still match).
+ *
+ * @param {{ compatEnabled?: boolean }} [options]
+ * @returns {boolean}
+ */
+export function allowMissingAuthDirectoryOnRestore(options = {}) {
+  if (options.compatEnabled === true) return true;
+  if (options.compatEnabled === false) return false;
+  return isAuthDirectoryCompatEnabled();
+}
+
+/**
+ * Resolve login credentials for Firebase Auth path.
+ * C-a.2: authDirectory required unless qc_auth_directory_compat === 'true'.
+ *
+ * @param {string} username
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   error?: string,
+ *   code?: string,
+ *   loginEmail?: string,
+ *   expectedAuthUid?: string|null,
+ *   generation?: number|null,
+ *   source?: 'authDirectory'|'gen0Compat',
+ * }>}
+ */
+export async function resolveAuthLoginTarget(username) {
+  const u = String(username || '').trim().toLowerCase();
+  if (!u) return { ok: false, error: 'Please enter a username.' };
+
+  const loaded = await loadAuthDirectoryEntry(u, { force: true });
+  return decideAuthLoginTargetFromLoad(u, loaded);
 }
 
 /**
@@ -528,19 +641,23 @@ export async function backfillAuthDirectory(options = {}) {
 }
 
 export function getOptionCaStatus() {
+  const compatEnabled = isAuthDirectoryCompatEnabled();
   return {
     optionCaFoundationVersion: OPTION_CA_FOUNDATION_VERSION,
-    release: 'C-a.1.1',
-    migrationCompatDefault: true,
-    authDirectoryStrictLocalOnly: isAuthDirectoryStrict(),
+    release: 'C-a.2',
+    strictDefault: true,
+    migrationCompatDefault: false,
+    authDirectoryCompatEnabled: compatEnabled,
+    authDirectoryStrictEffective: !compatEnabled,
     authDirectoryRoot: AUTH_DIRECTORY_ROOT,
+    authDirectoryCompatLsKey: AUTH_DIRECTORY_COMPAT_LS_KEY,
     backfillGather: 'per-username child force-reads (no authDirectory parent)',
     registrationLbUsername: true,
     note:
-      'C-a.1.1 registration blocker fix: live LB summary entries include username '
-      + '(required by leaderboards create-rule during registration multipath). '
-      + 'No rules republish. C-a.2 = production-default strict micro-deploy '
-      + '(not enableAuthDirectoryStrict localStorage).',
+      'C-a.2 production-default strict: authDirectory required for login/restore. '
+      + 'Developer emergency only: localStorage qc_auth_directory_compat=true allows temporary gen0 fallback. '
+      + 'Separate: qc_force_legacy_auth for full legacy RTDB-hash path. '
+      + 'Backfill is migration/emergency tooling — not student login. No rules republish.',
   };
 }
 
@@ -550,33 +667,42 @@ function _installWindowApi() {
     ...(window.qcAuth || {}),
     OPTION_CA_FOUNDATION_VERSION,
     AUTH_DIRECTORY_ROOT,
+    AUTH_DIRECTORY_COMPAT_LS_KEY,
     AUTH_DIRECTORY_STRICT_LS_KEY,
     getOptionCaStatus,
     usernameToAuthEmail,
     buildGen0AuthDirectoryEntry,
     parseAuthDirectoryEntry,
     loadAuthDirectoryEntry,
+    decideAuthLoginTargetFromLoad,
+    allowMissingAuthDirectoryOnRestore,
     resolveAuthLoginTarget,
     gatherAuthDirectorySnapshotByUsernames,
     prepareAuthDirectoryBackfill,
     commitAuthDirectoryBackfill,
     backfillAuthDirectory,
+    enableAuthDirectoryCompat,
+    disableAuthDirectoryCompat,
+    isAuthDirectoryCompatEnabled,
     enableAuthDirectoryStrict,
     disableAuthDirectoryStrict,
     isAuthDirectoryStrict,
     help() {
-      console.info(`Option C-a.1.1 authDirectory + registration LB username
+      console.info(`Option C-a.2 authDirectory (production-default STRICT)
 Freshness: qcAuth.getOptionCaStatus()
   → optionCaFoundationVersion === '${OPTION_CA_FOUNDATION_VERSION}'
-  → migrationCompatDefault === true
-  → registrationLbUsername === true
-Backfill (Admin Auth): await qcAuth.backfillAuthDirectory()
-  (per-username child reads; never authDirectory parent)
-Registration fix: live LB rows include username (no rules republish)
-After live register verify → C-a.2 strict-default (separate micro-deploy)
-Do NOT treat qcAuth.enableAuthDirectoryStrict() as production-global rollout
+  → strictDefault === true
+  → migrationCompatDefault === false
+  → authDirectoryCompatEnabled === false (unless you set developer escape)
+Login/restore require authDirectory/{u} (fail closed if missing)
+Developer emergency ONLY:
+  localStorage.setItem('${AUTH_DIRECTORY_COMPAT_LS_KEY}', 'true')
+  // or qcAuth.enableAuthDirectoryCompat()
+Separate emergency: qc_force_legacy_auth (legacy RTDB hash — not authDirectory)
+Backfill (Admin, migration/emergency): await qcAuth.backfillAuthDirectory()
 Schema: ${AUTH_DIRECTORY_ROOT}/{u} = { loginEmail, authUid, generation }
-Ownership remains players/{u}/authUid`);
+Ownership remains players/{u}/authUid
+Do NOT tell teachers to call enableAuthDirectoryStrict() as a rollout step`);
     },
   };
 }

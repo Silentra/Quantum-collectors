@@ -2,7 +2,8 @@
  * Auth Module - Username/Password Authentication via Firebase RTDB
  *
  * Production default: Firebase Auth (synthetic emails via authDirectory).
- * Option C-a: login/register/restore resolve loginEmail from authDirectory/{username}.
+ * Option C-a.2: login/register/restore require authDirectory/{username} (strict default).
+ * Developer emergency: qc_auth_directory_compat=true allows temporary gen0 fallback.
  * Emergency developer rollback: localStorage.qc_force_legacy_auth='true' → RTDB SHA-256
  * hashes at players/{username}.password (Auth-native accounts without a hash cannot log in).
  * Stale qc_firebase_auth is ignored and does not control mode.
@@ -65,7 +66,7 @@ import {
   resolveAuthLoginTarget,
   loadAuthDirectoryEntry,
   authDirectoryPathsForRegistration,
-  isAuthDirectoryStrict,
+  allowMissingAuthDirectoryOnRestore,
 } from './auth-directory.js';
 
 export { usernameToAuthEmail, AUTH_DIRECTORY_ROOT };
@@ -735,9 +736,9 @@ export async function initAuth() {
         return;
       }
     } else if (dirLoad.missing || (dirLoad.ok && !dirLoad.parsed)) {
-      // Migration window: allow gen0 email match only when not strict
-      if (isAuthDirectoryStrict()) {
-        console.warn('[Auth] Stale session cleared (authDirectory missing, strict mode)');
+      // C-a.2: missing authDirectory fails closed unless developer compat escape
+      if (!allowMissingAuthDirectoryOnRestore()) {
+        console.warn('[Auth] Stale session cleared (authDirectory missing, strict default)');
         await signOutFirebaseBestEffort();
         releaseAuthOwnedScopes();
         clearLocalSessionOnly();
@@ -886,7 +887,7 @@ export async function login(username, password) {
       return { success: false, error: 'Account not found. Please register first.' };
     }
 
-    // Binding check: authDirectory.authUid (preferred) or players.authUid (gen0 compat)
+    // Binding check: authDirectory.authUid (required under C-a.2) or players.authUid (compat only)
     const expectedUid = target.expectedAuthUid
       || (typeof player.authUid === 'string' ? player.authUid : null);
     if (!expectedUid || String(fbUid) !== String(expectedUid)) {
