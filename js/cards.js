@@ -211,6 +211,247 @@ export function getEnabledCards() {
   return getAllCards().filter(c => c.enabled !== false);
 }
 
+// ---------------------------------------------------------------------------
+// Batch D1 — authoritative card catalog export (READ-ONLY)
+// ---------------------------------------------------------------------------
+
+export const CARD_CATALOG_EXPORT_FILENAME = 'quantum-collectors-card-data.json';
+
+/** Fields intentionally omitted from the trusted base export (not fatal). */
+const CARD_EXPORT_STRIP_KEYS = Object.freeze(new Set([
+  'created',
+  'auraType',
+  'power',
+  'basePower',
+  'finalPower',
+  'auraLevel',
+  'tags',
+  'metadata',
+  'schemaVersion',
+]));
+
+/** Allowed keys on each exported card object (after complete-card normalize). */
+const CARD_EXPORT_ALLOWLIST = Object.freeze(new Set([
+  'id',
+  'name',
+  'rarity',
+  'type',
+  'field',
+  'effect',
+  'image',
+  'flavor',
+  'imageUrl',
+  'keyFact',
+  'enabled',
+  'conceptType',
+  'flavorText',
+]));
+
+/**
+ * Build a deterministic, lossless-for-base-fields export array from a Firebase
+ * /cards snapshot. Pure — does not mutate snapshot or write Firebase.
+ *
+ * @param {object|null|undefined} cardsSnapshot - map of pathId → card object (or null/empty)
+ * @returns {{
+ *   ok: boolean,
+ *   cards?: object[],
+ *   diagnostics: object,
+ *   error?: string,
+ *   fatalIssues?: string[],
+ * }}
+ */
+export function buildCardCatalogExport(cardsSnapshot) {
+  const diagnostics = {
+    firebaseChildCount: 0,
+    exportedCount: 0,
+    uniqueIdCount: 0,
+    disabledCount: 0,
+    malformedChildren: [],
+    pathIdMismatches: [],
+    duplicateIds: [],
+    unexpectedFields: [],
+    missingIds: [],
+  };
+  const fatalIssues = [];
+
+  if (cardsSnapshot == null) {
+    return {
+      ok: true,
+      cards: [],
+      diagnostics: { ...diagnostics, firebaseChildCount: 0, exportedCount: 0, uniqueIdCount: 0 },
+    };
+  }
+
+  if (typeof cardsSnapshot !== 'object' || Array.isArray(cardsSnapshot)) {
+    return {
+      ok: false,
+      error: 'CARDS_SNAPSHOT_INVALID',
+      diagnostics,
+      fatalIssues: ['cards snapshot is not an object map'],
+    };
+  }
+
+  const entries = Object.entries(cardsSnapshot);
+  diagnostics.firebaseChildCount = entries.length;
+  const seenIds = new Set();
+  const cards = [];
+
+  for (const [pathId, raw] of entries) {
+    if (!pathId || typeof pathId !== 'string') {
+      fatalIssues.push('empty_or_invalid_path_id');
+      diagnostics.missingIds.push(String(pathId));
+      continue;
+    }
+
+    if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) {
+      diagnostics.malformedChildren.push(pathId);
+      fatalIssues.push(`malformed_child:${pathId}`);
+      continue;
+    }
+
+    if (raw.id != null && String(raw.id) !== pathId) {
+      diagnostics.pathIdMismatches.push({ pathId, cardId: String(raw.id) });
+      fatalIssues.push(`path_id_mismatch:${pathId}:${raw.id}`);
+      continue;
+    }
+
+    const unexpected = Object.keys(raw).filter(
+      (key) => !CARD_EXPORT_ALLOWLIST.has(key) && !CARD_EXPORT_STRIP_KEYS.has(key),
+    );
+    if (unexpected.length) {
+      diagnostics.unexpectedFields.push({ pathId, fields: unexpected });
+      fatalIssues.push(`unexpected_fields:${pathId}:${unexpected.join(',')}`);
+      continue;
+    }
+
+    if (seenIds.has(pathId)) {
+      diagnostics.duplicateIds.push(pathId);
+      fatalIssues.push(`duplicate_id:${pathId}`);
+      continue;
+    }
+    seenIds.add(pathId);
+
+    const normalized = normalizeCard({ ...raw });
+
+    // Concept-only fields must not be silently dropped from non-concept records
+    if (normalized.type !== 'concept') {
+      const typeUnexpected = [];
+      if (raw.conceptType != null && raw.conceptType !== '') typeUnexpected.push('conceptType');
+      if (typeof raw.flavorText === 'string' && raw.flavorText.trim()) typeUnexpected.push('flavorText');
+      if (typeUnexpected.length) {
+        diagnostics.unexpectedFields.push({ pathId, fields: typeUnexpected });
+        fatalIssues.push(`unexpected_fields:${pathId}:${typeUnexpected.join(',')}`);
+        continue;
+      }
+    }
+
+    const exported = {
+      id: pathId,
+      name: normalized.name,
+      rarity: normalized.rarity,
+      type: normalized.type,
+      field: normalized.field,
+      effect: normalized.effect,
+      image: normalized.image || normalized.imageUrl || '',
+      flavor: normalized.flavor || normalized.keyFact || '',
+      imageUrl: normalized.imageUrl || normalized.image || '',
+      keyFact: normalized.keyFact || normalized.flavor || '',
+      enabled: normalized.enabled !== false,
+    };
+
+    if (normalized.type === 'concept') {
+      exported.conceptType = normalized.conceptType;
+      if (typeof raw.flavorText === 'string' && raw.flavorText.trim()) {
+        exported.flavorText = raw.flavorText;
+      }
+    }
+
+    if (exported.enabled === false) diagnostics.disabledCount += 1;
+    cards.push(exported);
+  }
+
+  cards.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  diagnostics.exportedCount = cards.length;
+  diagnostics.uniqueIdCount = seenIds.size;
+
+  if (fatalIssues.length) {
+    return {
+      ok: false,
+      error: 'CARD_EXPORT_VALIDATION_FAILED',
+      diagnostics,
+      fatalIssues,
+    };
+  }
+
+  return {
+    ok: true,
+    cards,
+    diagnostics,
+  };
+}
+
+/**
+ * Authoritative Firebase once-load of /cards for D1 export.
+ * Confirmed null/empty → empty catalog (ok). Permission/local/timeout → fail.
+ *
+ * @param {{ timeoutMs?: number, loadPathOnce?: Function }} [options]
+ * @returns {Promise<{ ok: boolean, snapshot?: object, error?: string, mode?: string }>}
+ */
+export async function gatherAuthoritativeCardsForExport(options = {}) {
+  const loadFn = typeof options.loadPathOnce === 'function'
+    ? options.loadPathOnce
+    : (path, opts) => db.loadPathOnce(path, opts);
+
+  const load = await loadFn('cards', {
+    force: true,
+    timeoutMs: options.timeoutMs,
+  });
+
+  if (!load || load.ok !== true) {
+    return {
+      ok: false,
+      error: load?.error || 'CARDS_LOAD_FAILED',
+      mode: load?.mode,
+    };
+  }
+
+  if (load.mode !== 'firebase') {
+    return {
+      ok: false,
+      error: 'CARDS_LOAD_NOT_FIREBASE',
+      mode: load.mode,
+    };
+  }
+
+  // Confirmed Firebase null/empty = empty catalog, not failure
+  const snapshot = load.value == null ? {} : load.value;
+  if (typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    return { ok: false, error: 'CARDS_SNAPSHOT_INVALID', mode: 'firebase' };
+  }
+
+  return { ok: true, snapshot, mode: 'firebase' };
+}
+
+/**
+ * Trigger a browser JSON file download (UI-only; no Firebase I/O).
+ * @param {object[]} cards
+ * @param {string} [filename]
+ */
+export function downloadCardCatalogJson(cards, filename = CARD_CATALOG_EXPORT_FILENAME) {
+  const json = `${JSON.stringify(cards, null, 2)}\n`;
+  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  return json;
+}
+
 /**
  * Get cards by rarity
  */

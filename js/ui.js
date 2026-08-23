@@ -1569,6 +1569,50 @@ async function showPlayerDetail(username) {
 
 // ===================== ADMIN CARDS =====================
 
+/**
+ * Batch D1 — Admin-only authoritative /cards JSON export (zero Firebase writes).
+ */
+async function handleAdminCardCatalogExport() {
+  if (!auth.isAdmin()) {
+    toast.error('Admin only.');
+    return;
+  }
+
+  const exportBtn = document.getElementById('btn-export-card-data');
+  if (exportBtn) exportBtn.disabled = true;
+
+  try {
+    const gather = await cards.gatherAuthoritativeCardsForExport();
+    if (!gather.ok) {
+      toast.error(`Card export failed: ${gather.error || 'authoritative read unavailable'}`);
+      console.warn('[D1 Export]', gather);
+      return;
+    }
+
+    const built = cards.buildCardCatalogExport(gather.snapshot);
+    if (!built.ok) {
+      toast.error('Card export aborted — validation failed (see console).');
+      console.error('[D1 Export] validation failed', built.fatalIssues, built.diagnostics);
+      return;
+    }
+
+    cards.downloadCardCatalogJson(built.cards);
+    const n = built.diagnostics.exportedCount;
+    const disabled = built.diagnostics.disabledCount;
+    toast.success(
+      disabled > 0
+        ? `Exported ${n} cards (${disabled} disabled).`
+        : `Exported ${n} cards.`,
+    );
+    console.info('[D1 Export] success', built.diagnostics);
+  } catch (err) {
+    toast.error('Card export failed unexpectedly.');
+    console.error('[D1 Export]', err);
+  } finally {
+    if (exportBtn) exportBtn.disabled = false;
+  }
+}
+
 function renderAdminCards() {
   const allCards = cards.getAllCards();
   document.getElementById('card-count').textContent = allCards.length;
@@ -1641,6 +1685,12 @@ function renderAdminCards() {
   const searchEl = document.getElementById('admin-card-search');
   if (filterRarityEl) filterRarityEl.onchange = () => renderAdminCards();
   if (searchEl) searchEl.oninput = () => renderAdminCards();
+
+  // Batch D1 — temporary read-only Firebase /cards export (Admin Cards tab only)
+  const exportBtn = document.getElementById('btn-export-card-data');
+  if (exportBtn) {
+    exportBtn.onclick = () => { void handleAdminCardCatalogExport(); };
+  }
 
   // Wire up type dropdown to show/hide conceptType in create form
   const newCardTypeEl = document.getElementById('new-card-type');
