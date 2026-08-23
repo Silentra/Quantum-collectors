@@ -3,7 +3,8 @@
  *
  * Proves S8c-1 inventory/grant + S8c-2 grant-bound foreign stats/achievements/progression/
  * cooldowns/leaderboards (PTI/LBG intentionally still auth-writable) + S8d-1 admin-only
- * parent reads on players / trades/direct / trades/listings.
+ * parent reads on players / trades/direct / trades/listings + S8d-4a admin-only parent
+ * reads on playerTradeIndex / listingsByGroup (child R/W unchanged; no write tighten).
  *
  * Run (from repo root, with Java available for emulator):
  *   npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
@@ -1050,10 +1051,64 @@ async function main() {
     );
     pass('S8d-1: stranger trade write still denied (no write broaden)');
 
+    // --- S8d-4a: admin-only parent reads on derived Trade Index roots ---
+    // Child R/W and any-auth write residuals unchanged (accepted S8c classroom residual).
+    const teacherS8d4a = testEnv.authenticatedContext('teacherUid');
+    const anonS8d4a = testEnv.unauthenticatedContext();
+
+    await assertFails(get(ref(anonS8d4a.database(), 'playerTradeIndex')));
+    pass('S8d-4a: unauthenticated /playerTradeIndex parent denied');
+
+    await assertFails(get(ref(offerer.database(), 'playerTradeIndex')));
+    pass('S8d-4a: student /playerTradeIndex parent denied');
+
+    await assertSucceeds(get(ref(teacherS8d4a.database(), 'playerTradeIndex')));
+    pass('S8d-4a: admin /playerTradeIndex parent allowed');
+
+    const adminPti = (await get(ref(teacherS8d4a.database(), 'playerTradeIndex'))).val() || {};
+    if (!adminPti.target && !adminPti.bobby10) {
+      fail('S8d-4a: admin /playerTradeIndex snapshot missing expected usernames');
+    } else {
+      pass('S8d-4a: admin /playerTradeIndex enumerates PTI roots');
+    }
+
+    // Child read still any-auth (unchanged)
+    await assertSucceeds(get(ref(offerer.database(), 'playerTradeIndex/target')));
+    pass('S8d-4a: student known playerTradeIndex/{username} child still allowed');
+
+    await assertFails(get(ref(anonS8d4a.database(), 'listingsByGroup')));
+    pass('S8d-4a: unauthenticated /listingsByGroup parent denied');
+
+    await assertFails(get(ref(offerer.database(), 'listingsByGroup')));
+    pass('S8d-4a: student /listingsByGroup parent denied');
+
+    await assertSucceeds(get(ref(teacherS8d4a.database(), 'listingsByGroup')));
+    pass('S8d-4a: admin /listingsByGroup parent allowed');
+
+    const adminLbg = (await get(ref(teacherS8d4a.database(), 'listingsByGroup'))).val() || {};
+    if (!adminLbg.g1) {
+      fail('S8d-4a: admin /listingsByGroup snapshot missing expected groupId');
+    } else {
+      pass('S8d-4a: admin /listingsByGroup enumerates group roots');
+    }
+
+    await assertSucceeds(get(ref(offerer.database(), 'listingsByGroup/g1')));
+    pass('S8d-4a: student known listingsByGroup/{groupId} child still allowed');
+
+    // Write spot-check: parent-read must not change accepted residual writes
+    await assertSucceeds(
+      set(ref(offerer.database(), 'playerTradeIndex/target/direct/s8d4aProbe'), { id: 's8d4aProbe' }),
+    );
+    pass('S8d-4a: PTI still auth-writable (accepted residual unchanged)');
+    await assertSucceeds(
+      set(ref(offerer.database(), 'listingsByGroup/g1/s8d4aProbe'), { id: 's8d4aProbe' }),
+    );
+    pass('S8d-4a: listingsByGroup still auth-writable (accepted residual unchanged)');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2+S8d-1 rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();

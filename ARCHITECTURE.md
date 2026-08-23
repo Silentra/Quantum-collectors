@@ -672,7 +672,17 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Dense include-zero matrix (7 live stats × every player); equality ignores `updatedAt`; null/missing groups equivalent.
 - Orphans only under the seven known live stat keys vs complete players snapshot; `leaderboardSeasons` / `leaderboardSnapshots` never written.
 - Admin → Leaderboards → Rebuild Leaderboard Summaries uses preview/confirm. Unit: `node scripts/s8d3-leaderboard-planner.test.mjs`. **No rules change.**
-- Trade Index / Unique Cards / season bulk rebuilds remain **unsafe** until later S8d slices.
+- Trade Index rebuild remains **unsafe** until S8d-4b (after S8d-4a admin PTI/LBG parent reads).
+
+### Phase — S8d-4a Admin reads for derived Trade Index roots
+
+**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d4a()`.
+
+- Admin-only parent `.read` on `playerTradeIndex` and `listingsByGroup` (`admins/{uid}`). Students cannot enumerate those parents.
+- Child `$username` / `$groupId` read and write rules **unchanged**. Any-auth PTI/LBG writes remain the accepted S8c residual (not tightened).
+- Simulator proofs in [`scripts/s8c1-rules-simulator.mjs`](scripts/s8c1-rules-simulator.mjs).
+- **Must republish** full [`database.rules.json`](database.rules.json). Rollback [`database.rules.open-rollback.json`](database.rules.open-rollback.json) unchanged.
+- **S8d-4b** Trade Index rebuild rewrite is **NOT STARTED**.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 

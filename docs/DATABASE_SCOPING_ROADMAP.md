@@ -64,10 +64,12 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8d-0 force-root removal | **COMPLETE + VERIFIED** |
 | S8d-1 admin canonical parent reads | **COMPLETE + VERIFIED** (or awaiting your Console publish if not yet) |
 | S8d-2 Player Directory rebuild | **COMPLETE + VERIFIED** (`workflowS8d2`) |
-| S8d-3 Live Leaderboard rebuild | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d3`) |
-| S8d-4+ Trade Index / unique / season rebuilds | NOT STARTED (still unsafe under scoped cache) |
+| S8d-3 Live Leaderboard rebuild | **COMPLETE + VERIFIED** (or awaiting your confirm if not yet) |
+| S8d-4a Admin PTI/LBG parent reads | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (`workflowS8d4a`) |
+| S8d-4b Trade Index rebuild rewrite | NOT STARTED (still unsafe under scoped cache) |
+| S8d-5+ Unique Cards / season rebuilds | NOT STARTED |
 
-**What remains:** Verify S8d-3 live via Admin → Leaderboards → Rebuild Leaderboard Summaries preview. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Republish [`database.rules.json`](../database.rules.json) for S8d-4a, then verify admin can enumerate `playerTradeIndex` / `listingsByGroup` while students cannot. S8d-4b rebuild rewrite is a separate slice. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
