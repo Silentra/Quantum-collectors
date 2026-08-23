@@ -47,7 +47,7 @@ import {
   normalizePurchaseHistory,
 } from './player-schema.js';
 import { generateAvailableProjects } from './project-pool.js';
-import { getLastWeeklyRefreshTimestamp } from './weekly-research-pack.js';
+import { getLastWeeklyRefreshTimestamp, getNextWeeklyRefreshTimestamp } from './weekly-research-pack.js';
 import {
   buildShopPurchasePlan,
   commitShopPurchaseWithRevalidation,
@@ -322,6 +322,56 @@ function hasActiveRotation(player, config, now) {
     rotation.generationVersion === expectedVersion;
 }
 
+/** Soft-sync tolerance: ignore sub-minute drift between stamped and expected refreshAt. */
+export const REFRESH_AT_SYNC_TOLERANCE_MS = 60_000;
+
+/**
+ * Whether persisted shop refreshAt materially differs from the live schedule target.
+ * Pure helper for ensureShopRotation + tests.
+ *
+ * @param {number} persistedRefreshAt
+ * @param {number} expectedRefreshAt
+ * @param {number} [toleranceMs]
+ * @returns {boolean}
+ */
+export function refreshAtNeedsSoftSync(
+  persistedRefreshAt,
+  expectedRefreshAt,
+  toleranceMs = REFRESH_AT_SYNC_TOLERANCE_MS,
+) {
+  const persisted = Number(persistedRefreshAt);
+  const expected = Number(expectedRefreshAt);
+  if (!Number.isFinite(persisted) || !Number.isFinite(expected)) return false;
+  return Math.abs(persisted - expected) > toleranceMs;
+}
+
+/**
+ * Soft-sync plan for an already-active rotation when Admin changed weekly schedule.
+ * Does not write; ensureShopRotation applies the write when synced===true.
+ *
+ * @param {Object|null} rotation
+ * @param {number} [now]
+ * @returns {{ synced: boolean, expectedRefreshAt: number, rotation: Object|null }}
+ */
+export function planActiveRotationRefreshAtSync(rotation, now = Date.now()) {
+  const expectedRefreshAt = getNextWeeklyRefreshTimestamp(now);
+  if (!isObject(rotation)) {
+    return { synced: false, expectedRefreshAt, rotation: null };
+  }
+  const persistedRefreshAt = Number(rotation.refreshAt || 0);
+  if (!refreshAtNeedsSoftSync(persistedRefreshAt, expectedRefreshAt)) {
+    return { synced: false, expectedRefreshAt, rotation };
+  }
+  return {
+    synced: true,
+    expectedRefreshAt,
+    rotation: {
+      ...rotation,
+      refreshAt: expectedRefreshAt,
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // ensureShopRotation
 // ---------------------------------------------------------------------------
@@ -333,6 +383,8 @@ function hasActiveRotation(player, config, now) {
  * - Preserves eligible frozen slots through generateShopRotation().
  * - Weekly/expired regen (!force): preserveFrozenFlag false (carry item, clear freeze).
  * - Admin force refresh: preserveFrozenFlag true (keep frozen).
+ * - Active rotation + schedule drift: soft-sync ONLY currentRotation.refreshAt
+ *   (no regen, no usage/slot/freeze changes).
  * - Resets rotation-scoped usage only when a new full rotation is written.
  * - Does NOT update or derive rerollResetAt behavior.
  *
@@ -358,10 +410,24 @@ export function ensureShopRotation(username, options = {}) {
   const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
 
   if (!options.force && hasActiveRotation(player, config, now)) {
+    const current = getCurrentRotation(player);
+    const plan = planActiveRotationRefreshAtSync(current, now);
+    if (plan.synced) {
+      // Schedule metadata only — do not regenerate slots or reset shopUsage
+      db.set(`players/${username}/shop/currentRotation/refreshAt`, plan.expectedRefreshAt);
+      return {
+        success: true,
+        generated: false,
+        refreshAtSynced: true,
+        rotation: plan.rotation,
+      };
+    }
+
     return {
       success: true,
       generated: false,
-      rotation: getCurrentRotation(player),
+      refreshAtSynced: false,
+      rotation: current,
     };
   }
 
@@ -383,6 +449,7 @@ export function ensureShopRotation(username, options = {}) {
   return {
     success: true,
     generated: true,
+    refreshAtSynced: false,
     rotation,
     preserveFrozenFlag,
   };

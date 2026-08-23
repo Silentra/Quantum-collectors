@@ -2496,6 +2496,12 @@ Rerolls UI near Consumables: used/max + Next cost / Exhausted.
 
 Unit: node scripts/batch-c-shop-freeze.test.mjs
 
+--- Soft schedule sync (label vs countdown) ---
+1. Admin → Project Balance: change weekly Refresh Day/Hour → Save
+2. Open a player Shop whose rotation was generated under the OLD schedule
+3. Expect: label + countdown agree on the NEW next boundary
+4. Expect: items / frozen / shopUsage unchanged (soft sync of refreshAt only)
+
 --- DevTools: simulate WEEKLY expiry (NOT Admin Refresh) ---
 Replace USERNAME. Then leave Shop tab and reopen Shop.
 

@@ -113,7 +113,8 @@ export function getWeeklyRPRequirements() {
 
 /**
  * Compute the most recent past occurrence of the configured refresh time.
- * Returns a UTC timestamp (ms) for the last Friday 23:00 (or configured day/hour).
+ * Returns epoch ms for the last configured weekday/hour in **browser-local**
+ * wall-clock time (`new Date(y, m, d, hour, …)`), not a UTC clock field.
  * @param {number} [now] - reference timestamp, defaults to Date.now()
  * @returns {number}
  */
