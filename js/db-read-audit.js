@@ -573,6 +573,7 @@ API:
   qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules
   qcPersonalAudit.workflowS8c2()   // S8c-2 grant-bound foreign stats/LB
   qcPersonalAudit.workflowS8d1()   // S8d-1 admin canonical parent reads
+  qcPersonalAudit.workflowS8d2()   // S8d-2 safe playerDirectory rebuild
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1818,7 +1819,8 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8c-2 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8c2)
   S8d-0 COMPLETE + VERIFIED (force-root removed)
   S8d-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d1)
-  S8d-2+ rebuild rewrites NOT STARTED
+  S8d-2 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d2; directory rebuild safe)
+  S8d-3+ Leaderboard / Trade Index rebuilds still UNSAFE until rewritten
 
   S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
@@ -2143,9 +2145,42 @@ Live (after rules publish):
   3) Student: loadPathOnce('trades/direct',{force:true}) → fail
   4) Admin: adminLoadDirectTrades() / adminLoadListings() → complete:true
   5) Student Trading / packs still work
-  6) Do NOT run rebuilds yet (S8d-2+)
+  6) Do NOT run unsafe Leaderboard / Trade Index rebuilds yet (later S8d)
 
-STOP: no rebuild rewrites; no Option C; no Blaze; no PTI/LBG tighten.
+STOP: no Option C; no Blaze; no PTI/LBG tighten.
+`);
+}
+
+/**
+ * Pasteable S8d-2 safe Player Directory rebuild.
+ */
+export function workflowS8d2() {
+  console.info(`
+=== S8d-2 Player Directory rebuild (safe under scoped) ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION
+No rules change / no Console republish for this slice.
+
+Gather (fail-closed):
+  adminLoadCanonical('players') → complete===true required
+  loadPathOnce('playerDirectory',{force:true}) → ok && mode==='firebase'
+Plan: buildPlayerDirectoryRebuildPlan({ playersSnapshot, directorySnapshot })
+  Pure — no db.getChildren / cache as player universe
+Commit: one updateAcknowledged(updates); UI previews counts then commits same plan
+
+Unit proof:
+  node scripts/s8d2-directory-planner.test.mjs
+
+Live (Admin teacher):
+  1) Admin → Players → Rebuild Directory
+  2) Inspect preview counts vs class size; Cancel once → zero writes
+  3) Confirm when sane; toast shows created/updated/removed
+  4) Optional: add playerDirectory/_s8d2_ghost_test → rebuild → removed
+  5) Optional: null one test player's directory leaf → rebuild → restored
+  6) Trading partner picker still works
+  7) Leaderboard / Trade Index rebuild buttons remain UNSAFE until later S8d
+
+STOP: no LB/trade/unique/season rebuild rewrites in this slice.
 `);
 }
 
@@ -2332,6 +2367,7 @@ function _installWindowApi() {
     workflowS8c1,
     workflowS8c2,
     workflowS8d1,
+    workflowS8d2,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -7,11 +7,23 @@
  * Key contract: directory map keys MUST match existing players/* keys exactly.
  * Do not lowercase a legacy key into a different path (duplicate risk).
  * New registrations already store lowercase keys (auth.register).
+ *
+ * S8d-2 rebuild: gather authoritative Firebase snapshots (adminLoadCanonical players +
+ * loadPathOnce playerDirectory), plan purely from those snapshots, commit once.
+ * Never treat db.getChildren('players') / local cache as the player universe.
  */
 
 import * as db from './database.js';
+import {
+  adminLoadCanonical,
+  assertCanonicalComplete,
+  canonicalChildEntries,
+} from './admin-maintenance.js';
 
 export const DIRECTORY_ROOT = 'playerDirectory';
+
+/** Non-player infrastructure key under players/* — never projected as a student. */
+export const DIRECTORY_EXCLUDED_PLAYER_KEYS = Object.freeze(['__admin__']);
 
 /**
  * @param {string} usernameKey - Exact Firebase players/* map key
@@ -101,106 +113,219 @@ export function syncDirectoryUpdateFromPlayer(usernameKey, playerLike) {
 }
 
 /**
- * Compare players vs directory without writing.
- * @returns {{
- *   playerCount: number,
- *   directoryCount: number,
- *   missing: string[],
- *   orphans: string[],
- *   stale: string[],
- *   inSync: number
- * }}
- */
-export function getDirectoryDriftReport() {
-  const players = db.getChildren('players');
-  const directory = db.getChildren(DIRECTORY_ROOT);
-  const dirMap = new Map(directory.map(({ key, value }) => [key, value]));
-
-  const missing = [];
-  const stale = [];
-  let inSync = 0;
-
-  for (const { key, value } of players) {
-    if (key === '__admin__') continue;
-    const desired = buildDirectoryEntry(key, value);
-    const existing = dirMap.get(key);
-    if (existing == null) {
-      missing.push(key);
-    } else if (!directoryEntriesEqual(desired, existing)) {
-      stale.push(key);
-    } else {
-      inSync += 1;
-    }
-    dirMap.delete(key);
-  }
-
-  // Remaining dir keys with no player (also drop stray __admin__ dir if present)
-  const orphans = [...dirMap.keys()];
-
-  return {
-    playerCount: players.filter((p) => p.key !== '__admin__').length,
-    directoryCount: directory.length,
-    missing,
-    orphans,
-    stale,
-    inSync,
-  };
-}
-
-/**
- * Admin-only repair: create missing, update stale, remove orphans.
- * Omits unchanged paths. Skips Firebase entirely when no drift.
- * Never writes players/* or activeSession.
+ * Pure planner: no Firebase / DB cache reads.
+ * Orphans only vs the explicit complete playersSnapshot keys.
  *
- * @returns {Promise<{
- *   ok: boolean,
- *   skipped: boolean,
+ * @param {{
+ *   playersSnapshot?: object|null,
+ *   directorySnapshot?: object|null,
+ * }} [input]
+ * @returns {{
+ *   ok: true,
+ *   updates: Record<string, object|null>,
  *   created: number,
  *   updated: number,
  *   removed: number,
  *   unchanged: number,
- *   mode?: string,
- *   error?: string
- * }>}
+ *   scanned: number,
+ *   skippedMalformed: number,
+ *   createdKeys: string[],
+ *   updatedKeys: string[],
+ *   removedKeys: string[],
+ * }}
  */
-export async function rebuildPlayerDirectory() {
-  const players = db.getChildren('players');
-  const directory = db.getChildren(DIRECTORY_ROOT);
-  const dirMap = new Map(directory.map(({ key, value }) => [key, value]));
+export function buildPlayerDirectoryRebuildPlan(input = {}) {
+  const playersSnapshot = input.playersSnapshot == null ? null : input.playersSnapshot;
+  const directorySnapshot = input.directorySnapshot == null ? null : input.directorySnapshot;
+
+  const dirMap = new Map();
+  if (directorySnapshot && typeof directorySnapshot === 'object') {
+    for (const [key, value] of Object.entries(directorySnapshot)) {
+      dirMap.set(key, value);
+    }
+  }
 
   /** @type {Record<string, object|null>} */
   const updates = {};
   let created = 0;
   let updated = 0;
-  let removed = 0;
   let unchanged = 0;
+  let skippedMalformed = 0;
+  /** @type {string[]} */
+  const createdKeys = [];
+  /** @type {string[]} */
+  const updatedKeys = [];
+  /** @type {string[]} */
+  const removedKeys = [];
 
   const seenPlayerKeys = new Set();
+  const playerEntries = canonicalChildEntries(playersSnapshot, {
+    exclude: [...DIRECTORY_EXCLUDED_PLAYER_KEYS],
+  });
 
-  for (const { key, value } of players) {
-    if (key === '__admin__') continue;
+  for (const { key, value } of playerEntries) {
     seenPlayerKeys.add(key);
-    const desired = buildDirectoryEntry(key, value);
+    const malformed = value == null || typeof value !== 'object';
+    if (malformed) skippedMalformed += 1;
+    const desired = buildDirectoryEntry(key, malformed ? {} : value);
     const existing = dirMap.get(key);
     const path = `${DIRECTORY_ROOT}/${key}`;
 
     if (existing == null) {
       updates[path] = desired;
       created += 1;
+      createdKeys.push(key);
     } else if (!directoryEntriesEqual(desired, existing)) {
       updates[path] = desired;
       updated += 1;
+      updatedKeys.push(key);
     } else {
       unchanged += 1;
     }
+    dirMap.delete(key);
   }
 
-  for (const { key } of directory) {
-    if (seenPlayerKeys.has(key)) continue;
-    // Orphan (including any accidental __admin__ directory row)
+  for (const key of dirMap.keys()) {
     updates[`${DIRECTORY_ROOT}/${key}`] = null;
-    removed += 1;
+    removedKeys.push(key);
   }
+  const removed = removedKeys.length;
+
+  return {
+    ok: true,
+    updates,
+    created,
+    updated,
+    removed,
+    unchanged,
+    scanned: playerEntries.length,
+    skippedMalformed,
+    createdKeys,
+    updatedKeys,
+    removedKeys,
+  };
+}
+
+/**
+ * Gather authoritative Firebase snapshots for directory rebuild.
+ * Fail-closed: incomplete loads never become empty universes.
+ *
+ * @param {{ timeoutMs?: number }} [options]
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   complete: boolean,
+ *   playersSnapshot: object|null,
+ *   directorySnapshot: object|null,
+ *   error?: string,
+ * }>}
+ */
+export async function gatherPlayerDirectoryRebuildSnapshots(options = {}) {
+  const playersLoad = await adminLoadCanonical('players', options);
+  if (!assertCanonicalComplete(playersLoad)) {
+    return {
+      ok: false,
+      complete: false,
+      playersSnapshot: null,
+      directorySnapshot: null,
+      error: playersLoad?.error || 'PLAYERS_CANONICAL_INCOMPLETE',
+    };
+  }
+
+  const dirLoad = await db.loadPathOnce(DIRECTORY_ROOT, {
+    force: true,
+    timeoutMs: options.timeoutMs,
+  });
+  if (!dirLoad || dirLoad.ok !== true || dirLoad.mode !== 'firebase') {
+    return {
+      ok: false,
+      complete: false,
+      playersSnapshot: playersLoad.value,
+      directorySnapshot: null,
+      error: dirLoad?.error || 'DIRECTORY_LOAD_INCOMPLETE',
+    };
+  }
+
+  return {
+    ok: true,
+    complete: true,
+    playersSnapshot: playersLoad.value,
+    directorySnapshot: dirLoad.value == null ? null : dirLoad.value,
+  };
+}
+
+/**
+ * Gather + plan (no writes). For Admin preview / DevTools.
+ *
+ * @param {{ timeoutMs?: number }} [options]
+ * @returns {Promise<object>}
+ */
+export async function preparePlayerDirectoryRebuild(options = {}) {
+  const gathered = await gatherPlayerDirectoryRebuildSnapshots(options);
+  if (!gathered.ok || !gathered.complete) {
+    return {
+      ok: false,
+      skipped: false,
+      complete: false,
+      created: 0,
+      updated: 0,
+      removed: 0,
+      unchanged: 0,
+      scanned: 0,
+      skippedMalformed: 0,
+      updates: {},
+      plan: null,
+      error: gathered.error || 'Gather failed',
+    };
+  }
+
+  const plan = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: gathered.playersSnapshot,
+    directorySnapshot: gathered.directorySnapshot,
+  });
+
+  return {
+    ok: true,
+    skipped: Object.keys(plan.updates).length === 0,
+    complete: true,
+    created: plan.created,
+    updated: plan.updated,
+    removed: plan.removed,
+    unchanged: plan.unchanged,
+    scanned: plan.scanned,
+    skippedMalformed: plan.skippedMalformed,
+    updates: plan.updates,
+    plan,
+    error: undefined,
+  };
+}
+
+/**
+ * Commit an already-prepared plan (exact in-memory updates). No re-gather.
+ *
+ * @param {{ updates: Record<string, object|null>, created?: number, updated?: number, removed?: number, unchanged?: number, scanned?: number, skippedMalformed?: number }} plan
+ * @returns {Promise<object>}
+ */
+export async function commitPlayerDirectoryRebuildPlan(plan) {
+  if (!plan || typeof plan !== 'object') {
+    return {
+      ok: false,
+      skipped: false,
+      created: 0,
+      updated: 0,
+      removed: 0,
+      unchanged: 0,
+      scanned: 0,
+      error: 'INVALID_PLAN',
+    };
+  }
+
+  const updates = plan.updates && typeof plan.updates === 'object' ? plan.updates : {};
+  const created = Number(plan.created) || 0;
+  const updated = Number(plan.updated) || 0;
+  const removed = Number(plan.removed) || 0;
+  const unchanged = Number(plan.unchanged) || 0;
+  const scanned = Number(plan.scanned) || 0;
+  const skippedMalformed = Number(plan.skippedMalformed) || 0;
 
   if (Object.keys(updates).length === 0) {
     return {
@@ -210,6 +335,8 @@ export async function rebuildPlayerDirectory() {
       updated: 0,
       removed: 0,
       unchanged,
+      scanned,
+      skippedMalformed,
     };
   }
 
@@ -222,8 +349,10 @@ export async function rebuildPlayerDirectory() {
       updated,
       removed,
       unchanged,
+      scanned,
+      skippedMalformed,
       mode: ack.mode,
-      error: ack.error || 'Rebuild write failed',
+      error: ack.error || 'Directory rebuild write failed',
     };
   }
 
@@ -234,6 +363,88 @@ export async function rebuildPlayerDirectory() {
     updated,
     removed,
     unchanged,
+    scanned,
+    skippedMalformed,
     mode: ack.mode,
+  };
+}
+
+/**
+ * Admin repair: gather → plan → one multipath commit.
+ * Prefer prepare + confirm + commitPlayerDirectoryRebuildPlan from UI so the
+ * previewed plan is the exact commit.
+ *
+ * @param {{ timeoutMs?: number, plan?: object }} [options]
+ * @returns {Promise<object>}
+ */
+export async function rebuildPlayerDirectory(options = {}) {
+  if (options.plan) {
+    return commitPlayerDirectoryRebuildPlan(options.plan);
+  }
+  const prepared = await preparePlayerDirectoryRebuild(options);
+  if (!prepared.ok) {
+    return {
+      ok: false,
+      skipped: false,
+      created: 0,
+      updated: 0,
+      removed: 0,
+      unchanged: 0,
+      scanned: 0,
+      skippedMalformed: 0,
+      error: prepared.error || 'Directory rebuild gather failed',
+    };
+  }
+  return commitPlayerDirectoryRebuildPlan(prepared.plan);
+}
+
+/**
+ * Drift report from explicit snapshots (no cache). Prefer this + prepare for DevTools.
+ *
+ * @param {object|null|undefined} playersSnapshot
+ * @param {object|null|undefined} directorySnapshot
+ */
+export function getDirectoryDriftReportFromSnapshots(playersSnapshot, directorySnapshot) {
+  const plan = buildPlayerDirectoryRebuildPlan({ playersSnapshot, directorySnapshot });
+  const directoryCount = directorySnapshot && typeof directorySnapshot === 'object'
+    ? Object.keys(directorySnapshot).length
+    : 0;
+  return {
+    playerCount: plan.scanned,
+    directoryCount,
+    missing: [...plan.createdKeys],
+    orphans: [...plan.removedKeys],
+    stale: [...plan.updatedKeys],
+    inSync: plan.unchanged,
+    skippedMalformed: plan.skippedMalformed,
+  };
+}
+
+/**
+ * Authoritative drift report (async gather). Never uses scoped cache as class truth.
+ *
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export async function getDirectoryDriftReport(options = {}) {
+  const gathered = await gatherPlayerDirectoryRebuildSnapshots(options);
+  if (!gathered.ok || !gathered.complete) {
+    return {
+      ok: false,
+      error: gathered.error || 'Gather failed',
+      playerCount: 0,
+      directoryCount: 0,
+      missing: [],
+      orphans: [],
+      stale: [],
+      inSync: 0,
+      skippedMalformed: 0,
+    };
+  }
+  return {
+    ok: true,
+    ...getDirectoryDriftReportFromSnapshots(
+      gathered.playersSnapshot,
+      gathered.directorySnapshot,
+    ),
   };
 }

@@ -31,7 +31,8 @@ import {
   loadAdminRegistryEntryOnce,
 } from './admin-registry.js';
 import {
-  rebuildPlayerDirectory,
+  preparePlayerDirectoryRebuild,
+  commitPlayerDirectoryRebuildPlan,
   resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
   DIRECTORY_ROOT,
@@ -736,14 +737,26 @@ function _setupPlayerFilters() {
   if (rebuildBtn && !rebuildBtn.dataset.wired) {
     rebuildBtn.dataset.wired = '1';
     rebuildBtn.addEventListener('click', async () => {
-      const confirmed = await confirmAction(
-        'Rebuild the derived playerDirectory from all player records? This does not change player data. Orphan directory entries will be removed.',
-        'Rebuild Player Directory?'
-      );
-      if (!confirmed) return;
       rebuildBtn.disabled = true;
       try {
-        const result = await rebuildPlayerDirectory();
+        const prepared = await preparePlayerDirectoryRebuild();
+        if (!prepared.ok || !prepared.plan) {
+          toast.error(prepared.error || 'Could not load players/directory for rebuild');
+          return;
+        }
+
+        const confirmed = await confirmAction(
+          `Players scanned: ${prepared.scanned}\n`
+            + `Create: ${prepared.created}\n`
+            + `Update: ${prepared.updated}\n`
+            + `Remove: ${prepared.removed}\n`
+            + `Unchanged: ${prepared.unchanged}\n\n`
+            + 'This does not change player records. Stale directory entries will be removed.',
+          'Rebuild Player Directory?'
+        );
+        if (!confirmed) return;
+
+        const result = await commitPlayerDirectoryRebuildPlan(prepared.plan);
         if (!result.ok) {
           toast.error(result.error || 'Directory rebuild failed');
           return;
@@ -752,7 +765,8 @@ function _setupPlayerFilters() {
           toast.info(`Directory already in sync (unchanged: ${result.unchanged})`);
         } else {
           toast.success(
-            `Directory rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}, unchanged: ${result.unchanged}`,
+            `Directory rebuilt — created: ${result.created}, updated: ${result.updated}, `
+              + `removed: ${result.removed}, unchanged: ${result.unchanged}`,
           );
         }
         renderAdminPlayers();
