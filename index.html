@@ -563,7 +563,12 @@
               <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
                 <div class="p-4 border-b border-surface-700 flex flex-wrap items-center justify-between gap-3">
                   <h3 class="font-semibold">Card Database (<span id="card-count">0</span> cards)</h3>
-                  <div class="flex gap-2">
+                  <div class="flex gap-2 flex-wrap items-center">
+                    <button type="button" id="btn-export-card-data"
+                      class="bg-surface-700 hover:bg-surface-600 border border-amber-700/60 text-amber-200 px-2.5 py-1 rounded-lg text-xs font-medium transition"
+                      title="Temporary migration tooling — read-only Firebase /cards export">
+                      Export Card Data
+                    </button>
                     <select id="admin-card-filter-rarity" class="bg-surface-800 border border-surface-600 rounded-lg px-2 py-1 text-xs">
                       <option value="all">All Rarities</option>
                       <option value="common">Common</option>
