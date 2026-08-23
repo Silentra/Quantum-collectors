@@ -1042,7 +1042,7 @@ App changes in Gate A:
 
 **Status: COMPLETE + VERIFIED.**
 
-- Derived `leaderboards/{statKey}/{username}` = `{ value, groupId, subgroupId, updatedAt }` via [`leaderboard-summaries.js`](js/leaderboard-summaries.js).
+- Derived `leaderboards/{statKey}/{username}` = `{ username, value, groupId, subgroupId, updatedAt }` via [`leaderboard-summaries.js`](js/leaderboard-summaries.js).
 - **statKey** (RTDB segment, no `.`) ≠ **playerPath** (value source). Canonical map: `totalResearchPoints`, `seasonalResearchPoints`, `projectsCompleted`, `packsOpened`→`stats.packsOpened`, `tradesCompleted`→`stats.tradesCompleted`, `uniqueCardsOwned`→`stats.uniqueCardsOwned`, `breakthroughs`→`researchStats.breakthroughs`.
 - Student live boards: [`leaderboard-queries.js`](js/leaderboard-queries.js) reads summaries only (no `getChildren('players')` fallback).
 - Tab-owned whole-root `leaderboards` subscribe while Leaderboard mounted; **must release on leave/logout**. Auth/session `players/{me}` ×1 and `playerTradeIndex/{me}` ×1 are expected and are **not** Leaderboard lifecycle leaks.

@@ -287,7 +287,7 @@ Code:
 
 **Status: COMPLETE + VERIFIED**
 
-- Live student boards read `leaderboards/{statKey}/{username}` = `{ value, groupId, subgroupId, updatedAt }` via centralized [`leaderboard-summaries.js`](../js/leaderboard-summaries.js).
+- Live student boards read `leaderboards/{statKey}/{username}` = `{ username, value, groupId, subgroupId, updatedAt }` via centralized [`leaderboard-summaries.js`](../js/leaderboard-summaries.js).
 - `statKey` is Firebase-safe (`packsOpened`, …); `playerPath` remains nested (`stats.packsOpened`, …). Single canonical map in summaries module.
 - No student live `getChildren('players')` fallback. Archived seasons / snapshots unchanged. Admin rotate/snapshot may still bulk-scan players.
 - Tab-owned whole-root `leaderboards` subscribe while Leaderboard is mounted; **must release on leave/logout**. Auth/session `players/{me}` ×1 and `playerTradeIndex/{me}` ×1 are expected and are **not** Leaderboard lifecycle leaks.

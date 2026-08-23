@@ -28,8 +28,8 @@ Planned approach: disposable Auth identities + `authDirectory` rebind (Option C)
 
 **Option C-a (foundation):** `authDirectory/{username} = { loginEmail, authUid, generation }` with public pre-auth **child** read; production Firebase Auth login/register/restore resolve `loginEmail` via `authDirectory`. Gen0 emails remain `{username}@scicards.local`. Ownership stays `players/{username}.authUid`.
 
-- **C-a.1:** migration-compat release + per-username backfill child reads (`option-c-a-1.1`). Backfill then verify logins.
-- **C-a.2:** production-default strict micro-deploy after C-a.1 verification. `qc_auth_directory_strict` / `enableAuthDirectoryStrict()` is **this-browser localStorage only** and is **not** the final global production mechanism.
+- **C-a.1:** migration-compat release + per-username backfill child reads. **C-a.1.1** (`option-c-a-1.1.1`): registration multipath fix — live LB summary entries include `username` (no rules republish). Backfill then verify logins; then verify disposable registration.
+- **C-a.2:** production-default strict micro-deploy after C-a.1.1 registration verification. `qc_auth_directory_strict` / `enableAuthDirectoryStrict()` is **this-browser localStorage only** and is **not** the final global production mechanism.
 - **C-b** (reset/delete rotation) must not start until C-a (incl. C-a.2) is verified.
 
 Until C-b:

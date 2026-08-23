@@ -33,7 +33,7 @@ function assertEq(a, b, msg) {
   assert(a === b, `${msg} (got ${JSON.stringify(a)}, expected ${JSON.stringify(b)})`);
 }
 
-assertEq(OPTION_CA_FOUNDATION_VERSION, 'option-c-a-1.1', 'foundation version C-a.1');
+assertEq(OPTION_CA_FOUNDATION_VERSION, 'option-c-a-1.1.1', 'foundation version C-a.1.1');
 
 assertEq(usernameToAuthEmail('Bobby'), 'bobby@scicards.local', 'gen0 email');
 

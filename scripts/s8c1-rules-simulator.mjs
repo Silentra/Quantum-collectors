@@ -19,6 +19,13 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import { ref, set, update, get, increment } from 'firebase/database';
+import {
+  buildLeaderboardSummaryPathsForPlayer,
+  LIVE_LEADERBOARD_STAT_KEYS,
+} from '../js/leaderboard-summaries.js';
+import { buildDirectoryEntry, directoryPathsForPlayer } from '../js/player-directory.js';
+import { emptyPlayerTradeIndexPaths } from '../js/trade-index.js';
+import { authDirectoryPathsForRegistration } from '../js/auth-directory.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -1199,10 +1206,120 @@ async function main() {
     );
     pass('C-a: admin may still rewrite players.authUid');
 
+    // --- Option C-a.1: FULL registration multipath (not isolated authDirectory) ---
+    // Isolated authDirectory leaf tests were insufficient: live registration commits
+    // players + accessCodes + playerDirectory + PTI + all live LB leaves + authDirectory
+    // in ONE root update(). Pre-write root has no players/{u}, so LB create requires
+    // newData.username === $username on every leaderboards/{stat}/{u} leaf.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const dbx = ctx.database();
+      await set(ref(dbx, 'accessCodes/REGFIX1'), {
+        used: false,
+        created: now,
+        group: 'g1',
+      });
+    });
+
+    const regFixUid = 'regfixUid';
+    const regFixUser = 'regfixuser';
+    const regFixCtx = testEnv.authenticatedContext(regFixUid);
+    const regFixNow = Date.now();
+    const regFixPlayer = {
+      username: regFixUser,
+      authUid: regFixUid,
+      createdAt: regFixNow,
+      lastLogin: regFixNow,
+      isAdmin: false,
+      inventory: { starterA: 1 },
+      packs: {},
+      stats: {
+        packsOpened: 0,
+        cardsCollected: 1,
+        tradesCompleted: 0,
+        projectsCompleted: 0,
+        uniqueCardsOwned: 1,
+      },
+      badges: {},
+      achievements: {},
+      progression: { tutorialComplete: false, firstTrade: false },
+      totalResearchPoints: 0,
+      seasonalResearchPoints: 0,
+      projectsCompleted: 0,
+      researchStats: { breakthroughs: 0 },
+      activeSession: { id: 'sess-regfix-1', issuedAt: regFixNow },
+    };
+    const regFixLbPaths = buildLeaderboardSummaryPathsForPlayer(regFixUser, regFixPlayer, {
+      now: regFixNow,
+    });
+    const regFixMultipath = {
+      [`players/${regFixUser}`]: regFixPlayer,
+      'accessCodes/REGFIX1': {
+        used: true,
+        usedBy: regFixUser,
+        usedAt: regFixNow,
+        created: now,
+        group: 'g1',
+      },
+      ...directoryPathsForPlayer(regFixUser, buildDirectoryEntry(regFixUser, regFixPlayer)),
+      ...emptyPlayerTradeIndexPaths(regFixUser),
+      ...regFixLbPaths,
+      ...authDirectoryPathsForRegistration(regFixUser, regFixUid),
+    };
+
+    for (const sk of LIVE_LEADERBOARD_STAT_KEYS) {
+      const leaf = regFixLbPaths[`leaderboards/${sk}/${regFixUser}`];
+      if (!leaf || leaf.username !== regFixUser) {
+        fail(`C-a.1 builder LB leaf missing username for ${sk}`);
+      }
+    }
+
+    await assertSucceeds(update(ref(regFixCtx.database()), regFixMultipath));
+    pass('C-a.1: full registration multipath succeeds (LB username + authDirectory)');
+
+    const authDirSnap = await get(ref(regFixCtx.database(), `authDirectory/${regFixUser}`));
+    const authDirVal = authDirSnap.val() || {};
+    if (authDirVal.authUid === regFixUid && authDirVal.generation === 0) {
+      pass('C-a.1: authDirectory authUid matches auth.uid and generation===0');
+    } else {
+      fail(`C-a.1: authDirectory shape unexpected: ${JSON.stringify(authDirVal)}`);
+    }
+
+    let lbUsernameOk = true;
+    for (const sk of LIVE_LEADERBOARD_STAT_KEYS) {
+      const lbSnap = await get(ref(regFixCtx.database(), `leaderboards/${sk}/${regFixUser}`));
+      const lbVal = lbSnap.val() || {};
+      if (lbVal.username !== regFixUser) {
+        lbUsernameOk = false;
+        fail(`C-a.1: leaderboards/${sk}/${regFixUser} username=${JSON.stringify(lbVal.username)}`);
+      }
+    }
+    if (lbUsernameOk) {
+      pass('C-a.1: all live LB rows include username matching path key');
+    }
+
+    const otherReg = testEnv.authenticatedContext('otherRegUid');
+    await assertFails(
+      set(ref(otherReg.database(), `authDirectory/${regFixUser}`), {
+        loginEmail: `${regFixUser}@scicards.local`,
+        authUid: 'otherRegUid',
+        generation: 0,
+      }),
+    );
+    pass('C-a.1: overwrite existing authDirectory still fails');
+
+    await assertFails(
+      set(ref(otherReg.database(), 'authDirectory/hijackuser'), {
+        loginEmail: 'hijackuser@scicards.local',
+        authUid: regFixUid,
+        generation: 0,
+      }),
+    );
+    pass('C-a.1: malicious authDirectory create for another UID still fails');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1 rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();

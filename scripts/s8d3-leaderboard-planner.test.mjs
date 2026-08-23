@@ -6,6 +6,7 @@
 
 import {
   buildLeaderboardRebuildPlan,
+  buildLeaderboardSummaryEntry,
   LIVE_LEADERBOARD_STAT_KEYS,
   LEADERBOARDS_ROOT,
   leaderboardEntriesEqual,
@@ -78,6 +79,24 @@ function denseMatchingLb(players, now = NOW) {
   assertEq(Object.keys(plan.updates).length, 0, 'matching: no writes');
 }
 
+// buildLeaderboardSummaryEntry includes username matching path key
+{
+  const entry = buildLeaderboardSummaryEntry('alice', { totalResearchPoints: 3, groupId: 'g1' }, 'totalResearchPoints', NOW);
+  assertEq(entry.username, 'alice', 'summary-entry: username');
+  assertEq(entry.value, 3, 'summary-entry: value');
+  assertEq(entry.groupId, 'g1', 'summary-entry: groupId');
+  assertEq(entry.updatedAt, NOW, 'summary-entry: updatedAt');
+}
+
+// Matching rows (with username) → unchanged
+{
+  const players = { bob: { stats: { packsOpened: 7 } } };
+  const lb = denseMatchingLb(players);
+  for (const sk of LIVE_LEADERBOARD_STAT_KEYS) {
+    assertEq(lb[sk].bob.username, 'bob', `denseMatchingLb embeds username (${sk})`);
+  }
+}
+
 // Missing row → create
 {
   const players = { bob: { stats: { packsOpened: 7 } } };
@@ -93,6 +112,38 @@ function denseMatchingLb(players, now = NOW) {
   const path = `${LEADERBOARDS_ROOT}/packsOpened/bob`;
   assert(plan.updates[path] != null, 'missing-row: packsOpened path');
   assertEq(plan.updates[path].value, 7, 'missing-row: value');
+  assertEq(plan.updates[path].username, 'bob', 'missing-row: username');
+}
+
+// Legacy live row missing username → one repair (username in equality)
+{
+  const players = { frank: { totalResearchPoints: 10, groupId: 'g1' } };
+  const lb = denseMatchingLb(players);
+  for (const sk of LIVE_LEADERBOARD_STAT_KEYS) {
+    const { username: _drop, ...rest } = lb[sk].frank;
+    lb[sk].frank = rest;
+    assert(lb[sk].frank.username == null, `legacy strip username (${sk})`);
+  }
+  const pass1 = buildLeaderboardRebuildPlan({
+    playersSnapshot: players,
+    leaderboardSnapshot: lb,
+    now: NOW,
+  });
+  assertEq(pass1.updated, LIVE_LEADERBOARD_STAT_KEYS.length, 'legacy-username: all repaired');
+  assertEq(pass1.created, 0, 'legacy-username: no create');
+  for (const sk of LIVE_LEADERBOARD_STAT_KEYS) {
+    const path = `${LEADERBOARDS_ROOT}/${sk}/frank`;
+    assertEq(pass1.updates[path].username, 'frank', `legacy-username: ${sk}`);
+    lb[sk].frank = { ...pass1.updates[path] };
+  }
+  const pass2 = buildLeaderboardRebuildPlan({
+    playersSnapshot: players,
+    leaderboardSnapshot: lb,
+    now: NOW + 1,
+  });
+  assertEq(pass2.updated, 0, 'legacy-username: second pass updated');
+  assertEq(pass2.created, 0, 'legacy-username: second pass created');
+  assertEq(pass2.unchanged, LIVE_LEADERBOARD_STAT_KEYS.length, 'legacy-username: second pass clean');
 }
 
 // Wrong value → update
@@ -230,14 +281,15 @@ function denseMatchingLb(players, now = NOW) {
   assertEq(Object.keys(plan.updates).length, 0, 'updatedAt-only: no writes');
 }
 
-// null/missing group fields → unchanged
+// null/missing group fields → unchanged (username present; Firebase omits null groups)
 {
   const players = { hank: { totalResearchPoints: 1 } }; // null groups
   const lb = {};
   for (const sk of LIVE_LEADERBOARD_STAT_KEYS) {
-    // Firebase-style: omit null group keys
+    // Firebase-style: omit null group keys; username required for live schema equality
     lb[sk] = {
       hank: {
+        username: 'hank',
         value: sk === 'totalResearchPoints' ? 1 : 0,
         updatedAt: NOW,
       },
@@ -256,12 +308,20 @@ function denseMatchingLb(players, now = NOW) {
 {
   assert(
     leaderboardEntriesEqual(
-      { value: 1, groupId: null, subgroupId: null, updatedAt: 1 },
-      { value: 1, updatedAt: 2 },
+      { username: 'u', value: 1, groupId: null, subgroupId: null, updatedAt: 1 },
+      { username: 'u', value: 1, updatedAt: 2 },
     ),
     'equal: null vs missing groups + different updatedAt',
   );
+  assert(
+    !leaderboardEntriesEqual(
+      { value: 1, groupId: null, subgroupId: null },
+      { username: 'u', value: 1, groupId: null, subgroupId: null },
+    ),
+    'equal: missing username ≠ present username',
+  );
   assertEq(normalizeLeaderboardEntry({ value: 'x' }).value, 0, 'normalize: non-finite → 0');
+  assertEq(normalizeLeaderboardEntry({ username: 'z', value: 1 }).username, 'z', 'normalize: username');
 }
 
 // Historical season/snapshot roots never appear in updates
