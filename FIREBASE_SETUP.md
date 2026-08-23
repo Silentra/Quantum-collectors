@@ -36,7 +36,7 @@ const firebaseConfig = {
 
 ### Current (live app)
 
-**Firebase Auth production default — IMPLEMENTED — AWAITING VERIFICATION.** Fresh browsers use Firebase Auth with no localStorage prep (synthetic `{username}@scicards.local`). Legacy RTDB username/password hashes remain for **developer emergency rollback** only (`qc_force_legacy_auth='true'`). Stale `qc_firebase_auth` is ignored.
+**Firebase Auth production default — COMPLETE + VERIFIED.** Fresh browsers use Firebase Auth with no localStorage prep (synthetic emails via `authDirectory`; gen0 `{username}@scicards.local`). Legacy RTDB username/password hashes remain for **developer emergency rollback** only (`qc_force_legacy_auth='true'`). Stale `qc_firebase_auth` is ignored.
 
 - Auth path: Firebase Email/Password; no new `players/{username}.password` on Auth-native register ([`js/auth.js`](js/auth.js))
 - Legacy hashes: SHA-256 at `players/{username}.password` retained for emergency rollback of migrated accounts
@@ -68,7 +68,7 @@ Trusted local Admin script (migrate bobby / teacher, set password, set `admin:tr
 [`scripts/s8b-auth-admin.mjs`](scripts/s8b-auth-admin.mjs) — see [`scripts/README-S8b-auth.md`](scripts/README-S8b-auth.md).
 
 Enable **Email/Password** in Firebase Console Authentication (required for classroom).
-In-game Admin “Reset Password” is disabled while Auth is authoritative (use the script temporarily until S8b+ P1).
+In-game Admin **Reset Password** uses Option C-b identity rotation (LIVE VERIFIED).
 `__admin__` / `config.adminPassword` remain.
 
 Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()` (also `workflowS8b()`)
@@ -110,9 +110,9 @@ Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
 - Fresh browser → Firebase Auth; emergency `qc_force_legacy_auth`
 - Pasteable: `qcPersonalAudit.workflowAuthDefaultFlip()`
 
-### Future (post Auth-default verify)
+### Option C (authDirectory + identity rotation) — COMPLETE + LIVE VERIFIED
 
-Legacy hash retirement after post-launch confidence. **Option C-a** authDirectory is **C-a.2 production-default strict** (live verified). **Option C-b** Admin Reset Password uses secondary Firebase Auth identity rotation (`qcAuth.getOptionCbStatus()` / `qcPersonalAudit.workflowOptionCb()`); Delete Player unbinds `authDirectory` but does not delete Auth users in-browser. Same-username re-register after delete may require `scripts/s8b-auth-admin.mjs delete-auth-user` (or Console). Future read-only orphan Auth report is deferred year-end housekeeping. ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
+**Option C-a** authDirectory is production-default strict (live verified). **Option C-b** Admin Reset Password uses secondary Firebase Auth identity rotation (`qcAuth.getOptionCbStatus()` / `qcPersonalAudit.workflowOptionCb()`); Delete Player unbinds `authDirectory` but does not delete Auth users in-browser. Same-username re-register after delete may require `scripts/s8b-auth-admin.mjs delete-auth-user` (or Console) — **live verified:** after manual Auth-user deletion, same username registered successfully as a fresh account. Future read-only orphan Auth report is deferred year-end housekeeping. ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
 Authoritative S8 plan: [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md) §8.
 

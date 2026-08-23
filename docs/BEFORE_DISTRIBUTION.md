@@ -16,25 +16,29 @@ After S8c locks RTDB writes behind `admins/{authUid}: true`, a brand-new Firebas
 
 **Distribution:** must ship a polished first-run bootstrap before independent installs are supportable.
 
-## 2. Option C — Spark identity rotation (in-panel Auth lifecycle)
+## 2. Option C — Spark identity rotation (COMPLETE for classroom)
 
-Teachers must eventually reset passwords and finish account deletion **from the Admin panel** with:
+**Status: COMPLETE + LIVE VERIFIED** (C-a + C-b). Classroom teachers reset passwords and delete players from the Admin panel with:
 
-- no Blaze / Cloud Functions requirement
-- no terminal / Console for routine use
+- no Blaze / Cloud Functions requirement for routine use
+- no terminal / Console for routine reset/delete
 - no real student emails
 
-Planned approach: disposable Auth identities + `authDirectory` rebind (Option C).
+**Mechanics:** disposable Auth identities + `authDirectory` rebind.
 
-**Option C-a (foundation):** `authDirectory/{username} = { loginEmail, authUid, generation }` with public pre-auth **child** read; production Firebase Auth login/register/restore resolve `loginEmail` via `authDirectory`. Gen0 emails remain `{username}@scicards.local`. Ownership stays `players/{username}.authUid`.
+**Option C-a (foundation):** `authDirectory/{username} = { loginEmail, authUid, generation }` with public pre-auth **child** read; production Firebase Auth login/register/restore resolve `loginEmail` via `authDirectory` (strict-by-default). Gen0 emails remain `{username}@scicards.local`. Ownership stays `players/{username}.authUid`.
 
-- **C-a.1 / C-a.1.1:** LIVE VERIFIED (backfill, existing logins, disposable registration + LB `username`). Migration-compat was temporary.
-- **C-a.2:** LIVE VERIFIED — production-default strict (`option-c-a-2`).
-- **C-b:** Admin Reset Password = secondary Auth **identity rotation** (teacher session intact). Delete Player clears `authDirectory` (Auth orphans may remain). Same-username reuse may need developer Auth cleanup — **not** a product guarantee. Future orphan Auth report is docs-only / deferred. Freshness: `qcAuth.getOptionCbStatus()`.
+- **C-a.1 / C-a.1.1 / C-a.2:** LIVE VERIFIED.
+- **C-b:** LIVE VERIFIED — Reset Password = secondary Auth **identity rotation** (teacher session intact). Delete Player = game identity unbind (`authDirectory` cleared); does **not** delete arbitrary Firebase Auth users. Same-username reuse may require Console/Admin SDK Auth cleanup — immediate re-register can hit `EMAIL_EXISTS`. **Live verified:** after manual Auth cleanup, same username successfully registered as a fresh account. Future read-only orphan Auth report remains deferred. Freshness: `qcAuth.getOptionCbStatus()`.
 
-Repair Game / Admin cleanup / first-admin bootstrap remain deferred distribution items.
+**Still deferred (distribution / polish — not classroom infrastructure blockers):**
 
-**Distribution:** Option C (C-a + C-b, or equivalent Spark-native lifecycle) is required before claiming teacher self-sufficiency.
+- first-admin / empty-database bootstrap
+- Repair Game / Admin UX cleanup
+- Config-tab review
+- end-of-year orphan Auth report/tooling
+
+**Distribution:** Option C classroom lifecycle is done. Independent self-hosted installs still need first-admin bootstrap before claiming full teacher self-sufficiency.
 
 ## Out of scope for this file
 

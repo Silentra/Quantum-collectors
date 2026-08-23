@@ -1,7 +1,7 @@
 # Database Scoping Roadmap (S5–S8)
 
 **Status:** Authoritative roadmap for remaining Firebase work after scoped loading.  
-**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8a** (docs + live rules snapshot) — **COMPLETE**. **S8b** Firebase Auth foundation — **COMPLETE**. **S8b+ P0** Trusted Teacher Functions foundation — **IMPLEMENTED — AWAITING VERIFICATION** (dormant; not a launch dependency). **S8c-0** client prep (foreign trade-visible reads + `admins/{uid}` registry) — **COMPLETE + VERIFIED**. **S8c-1** (tradeGrants + locked rules) — **COMPLETE + VERIFIED**. **Auth production-default flip** — **COMPLETE + VERIFIED**. **S8c-2** (grant-bound foreign stats/achievements/LB) — **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION**.  
+**Verified baseline:** **S5c-D** (incl. **S5c-D7** / **S5c-D7c**), **Hybrid C+ Gates A/B/C**, **S5d**, **S6** (S6a–S6e; **S6c** intentionally deferred), and **S7** (S7a–S7d) are **COMPLETE + VERIFIED**. **Scoped trade action hydration fix — COMPLETE + VERIFIED**. **Scoped claim null-safety fix — COMPLETE + VERIFIED**. **Scoped classroom default flip — COMPLETE + VERIFIED**. **Card-art transient retry hardening — COMPLETE + VERIFIED**. **S8** (S8a–S8d including Auth default, S8c rules, S8d maintenance) — **COMPLETE + LIVE VERIFIED**. **Option C** (C-a authDirectory + C-b identity rotation / delete unbind) — **COMPLETE + LIVE VERIFIED**. **S8b+ P0** Trusted Teacher Functions foundation remains **dormant** (not a launch dependency).
 **Constraints:** Canonical `trades/*` remain execution authority. Missing/unverified reservation indexes must never mean zero reservations. Prefer the smallest safe continuation from the verified architecture.
 
 This document supersedes the historical S1–S8 investigation plan for **remaining** work. Completed phases below are recorded for reconciliation; implementation PRs must still list every file created/modified/deleted and every new named import/export.
@@ -71,25 +71,29 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8d-5b Season/Snapshot class operations | **COMPLETE + VERIFIED** (`workflowS8d5b`) |
 | **S8d (Admin maintenance umbrella)** | **COMPLETE** |
 
-**What remains (outside S8d):** Option C Auth lifecycle ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)) — **C-a** live verified (strict); **C-b** identity rotation + delete unbind implemented (awaiting live verify). First-admin bootstrap (distribution). Future Admin UX / Repair Game tab (deferred polish). Future read-only Auth orphan report (year-end). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains (outside S8d / Option C):** First-admin bootstrap (distribution only). Future Admin UX / Repair Game tab (deferred polish). Future read-only Auth orphan report (year-end). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+
+**Classroom infrastructure:** S8 + S8d + Option C — **COMPLETE**. No required infrastructure blocker before player-facing gameplay/UI work.
 
 ```mermaid
 flowchart LR
   subgraph done [Verified]
     S5to7[S5cD through S7 + flip]
-    S8a[S8a docs snapshot]
+    S8all[S8a through S8d]
+    OptionC[Option C-a + C-b]
   end
-  subgraph next [Separate approvals]
-    S8b[S8b Firebase Auth]
-    S8bPlus[S8bPlus Teacher Ops]
-    S8c[S8c authz rules]
-    S8d[S8d Admin Functions]
+  subgraph deferred [Deferred polish]
+    Dist[First-admin bootstrap]
+    Repair[Repair Game UX]
+    Orphan[Orphan Auth report]
   end
-  S5to7 --> S8a --> S8b --> S8bPlus --> S8c
-  S8bPlus --> S8d
+  S5to7 --> S8all --> OptionC
+  OptionC -.-> Dist
+  OptionC -.-> Repair
+  OptionC -.-> Orphan
 ```
 
-**Next:** Republish S8c-2 rules → `qcPersonalAudit.workflowS8c2()` live. Do not begin S8d / Option C until separately approved.
+**Next:** Player-facing gameplay / UI fixes. Infrastructure track closed for the current classroom deploy.
 
 ---
 

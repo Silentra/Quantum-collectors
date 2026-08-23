@@ -724,14 +724,19 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — Option C-b identity rotation + delete unbind
 
-**Status: C-b IMPLEMENTED — AWAITING LIVE VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCb()`.
+**Status: C-b COMPLETE + LIVE VERIFIED.** Pasteable: `qcPersonalAudit.workflowOptionCb()`.
+
+**Option C overall: COMPLETE.**
 
 - **Reset Password:** secondary named Firebase App/Auth (`Persistence.NONE`) creates replacement identity; Admin multipath rebinds `authDirectory/{u}` + `players/{u}.authUid` and clears `activeSession`. Teacher primary session untouched. Email shape: `{u}.g{generation}.{token}@scicards.local`.
 - **Delete Player:** refuses self/Admin/`__admin__`; requires directory↔player UID match; same multipath clears `authDirectory/{u}`. Browser does **not** delete Firebase Auth users (orphans OK after unbind).
-- Same-username re-register after delete is **not** guaranteed (gen0 Auth email may remain). Future read-only Admin SDK orphan report is deferred (year-end housekeeping).
+- Same-username re-register after delete is **not** guaranteed without Auth cleanup (gen0 email may remain). Future read-only Admin SDK orphan report is deferred (year-end housekeeping).
 - No rules/schema changes. Mid-trade `tradeGrants`/`claimerAuthUid` residual accepted — do not rewrite Trading.
 - Freshness: `qcAuth.getOptionCbStatus()` → `option-c-b-1`.
-- **No** password rotation / Delete Player Auth changes (Option C-b). Unit: `node scripts/option-c-a-auth-directory.test.mjs`.
+- **Live verified (bobby6):** generation 0→1 reset; teacher Auth UID unchanged; directory+player authUid rebound together; activeSession cleared; inventory/progress fingerprints unchanged; old password failed; new password + reload/restore succeeded; Delete Player removed game-side state including authDirectory; Auth orphans remained; immediate same-name register hit `EMAIL_EXISTS`; after manual Console Auth cleanup, `bobby6` re-registered as a fresh gen0 account.
+- Units: `node scripts/option-c-b-auth-rotation.test.mjs`, `node scripts/option-c-a-auth-directory.test.mjs`.
+
+**Classroom infrastructure boundary:** S8 + S8d + Option C are complete. No required infrastructure blocker before player-facing gameplay/UI work. Deferred separately: first-admin bootstrap (distribution), Repair Game/Admin UX, orphan Auth report, PTI/LBG residuals, developer-only migrations.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
