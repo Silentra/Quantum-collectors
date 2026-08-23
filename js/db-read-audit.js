@@ -2412,10 +2412,9 @@ export function workflowOptionCa() {
   console.info(`
 === Option C-a.2 authDirectory (production-default STRICT) ===
 
-Status: C-a.2 LIVE VERIFIED. Proceed to C-b for password reset / delete lifecycle.
+Status: C-a.2 COMPLETE + LIVE VERIFIED. Option C overall COMPLETE (see workflowOptionCb).
 C-a.1 / C-a.1.1 LIVE VERIFIED (backfill, existing logins, disposable register, LB username).
 C-a.2 = production-default strict: authDirectory required for login/restore.
-C-b: see workflowOptionCb() for identity rotation + delete unbind.
 
 Schema: authDirectory/{username} = { loginEmail, authUid, generation }
   gen0 loginEmail = "{u}@scicards.local" (synthetic — not a real inbox)
@@ -2438,26 +2437,10 @@ Separate emergency:
 Backfill: await qcAuth.backfillAuthDirectory() — migration/emergency tooling only
   (never auto during student login; still idempotent)
 
-Live verify (short — registration already verified under C-a.1.1):
-  1) Deploy C-a.2 client
-  2) Hard refresh / fresh browser context preferred
-  3) qcAuth.getOptionCaStatus()
-       // PASS: optionCaFoundationVersion === 'option-c-a-2'
-       // PASS: strictDefault === true
-       // PASS: migrationCompatDefault === false
-       // PASS: authDirectoryCompatEnabled === false
-  4) Login with one existing backfilled account
-  5) Logout / login
-  6) Reload / restore
-  7) Confirm normal game access
-
-Safe negative (optional, no account damage):
-  In DevTools on a logged-out page:
-    const t = await qcAuth.resolveAuthLoginTarget('__nobody_missing_ca2__')
-    // PASS: t.ok === false && (t.code === 'AUTH_DIRECTORY_REQUIRED' || /missing/i.test(t.error))
-  Do NOT delete a real authDirectory leaf to prove strictness.
-
-*** STOP GATE — after live verify, C-a is complete. Use workflowOptionCb() for C-b. ***
+Freshness:
+  qcAuth.getOptionCaStatus()
+  // PASS: optionCaFoundationVersion === 'option-c-a-2'
+  // PASS: strictDefault === true
 
 Legacy: qc_force_legacy_auth path does not require authDirectory.
 Unit: node scripts/option-c-a-auth-directory.test.mjs
@@ -2471,12 +2454,14 @@ export function workflowOptionCb() {
   console.info(`
 === Option C-b identity rotation + player delete ===
 
-Status: IMPLEMENTED — AWAITING LIVE VERIFICATION
+Status: C-b COMPLETE + LIVE VERIFIED. Option C overall COMPLETE.
 Reset Password = secondary Firebase Auth identity rotation (not privileged updatePassword).
 Teacher primary Auth session stays intact.
 Delete Player clears authDirectory; Firebase Auth orphans may remain (Spark).
-Same-username re-register is NOT guaranteed (may need Auth Console / s8b-auth-admin cleanup).
+Same-username re-register is NOT guaranteed without Auth cleanup (EMAIL_EXISTS).
+Live verified once: after manual Console Auth cleanup, same username re-registered fresh.
 No rules republish. Mid-trade grant residual accepted (do not rewrite Trading).
+Future orphan Auth report: deferred (read-only year-end; not implemented).
 
 Freshness:
   qcAuth.getOptionCbStatus()
@@ -2486,19 +2471,8 @@ Freshness:
   qcAuth.getOptionCaStatus()
   // PASS: strictDefault === true (C-a unchanged)
 
-Live (disposable student only):
-  A) Baseline teacher UID + target directory/authUid/generation + fingerprints
-  B) Cancel reset → zero change
-  C) Confirm reset → gen+1, authUid change, fingerprints same, teacher UID same
-  D) Old password fails; new succeeds; reload/restore
-  E) Old session: firebase.database().ref('players/<u>/lastLogin').set(Date.now())
-     → permission_denied
-  *** STOP — review reset before delete ***
-  F) Delete → players/directory/PTI/LB/authDirectory gone; Auth orphan OK
-  Do NOT require same-username re-register
-
-Future (NOT implemented): read-only Admin SDK orphan Auth report for year-end cleanup.
-  Prefer scripts/s8b-auth-admin.mjs subcommand or dedicated script; report-only by default.
+Classroom infrastructure: S8 + S8d + Option C COMPLETE — no required infra blocker
+before player-facing gameplay/UI work.
 
 Unit: node scripts/option-c-b-auth-rotation.test.mjs
 `);
