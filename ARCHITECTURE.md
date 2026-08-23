@@ -692,7 +692,17 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Pure `buildTradeIndexRebuildPlan` / `deriveDesiredTradeIndexes` from snapshots; path invariant (only PTI / LBG / tradeIndexMeta).
 - **Concurrency:** Admin preview is advisory; Confirm **re-gathers** and commits a **fresh** plan (never the preview plan). Soft-expiry omit matches browse; deleted groups do not resurrect LBG.
 - Schema version stays **1**. **No rules change.** Unit: `node scripts/s8d4-trade-index-planner.test.mjs`.
-- Unique Cards / season bulk rebuilds remain **unsafe** until later S8d.
+- Season/Snapshot class ops remain **unsafe** until S8d-5b.
+
+### Phase — S8d-5a Unique Cards Owned repair
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d5a()`.
+
+- [`repairUniqueCardsOwnedStats`](js/research.js) gathers via `adminLoadCanonical('players')` + forced `cards` + `leaderboards/uniqueCardsOwned` once-loads; pure `buildUniqueCardsRepairPlan`; Admin preview then commits the **same** plan.
+- Definition unchanged: `Number(qty)>0` + catalog card + `enabled !== false`. Inventories/achievements/historical archives untouched.
+- Writes only `players/{u}/stats/uniqueCardsOwned` and `leaderboards/uniqueCardsOwned/{u}` when the stored stat needs repair. LB-only drift → S8d-3.
+- Unit: `node scripts/s8d5a-unique-cards-repair.test.mjs`. **No rules change.**
+- **S8d-5b** Season/Snapshot class operations still **NOT STARTED**.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
