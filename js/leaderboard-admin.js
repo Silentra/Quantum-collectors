@@ -32,7 +32,10 @@ import {
   STAT_TYPES,
 } from './leaderboard-seasons.js';
 import { resetSeasonalResearchPoints, repairUniqueCardsOwnedStats } from './research.js';
-import { rebuildLeaderboardSummaries } from './leaderboard-summaries.js';
+import {
+  prepareLeaderboardRebuild,
+  commitLeaderboardRebuildPlan,
+} from './leaderboard-summaries.js';
 import { hydrateLeaderboardArchivesOnce } from './db-hydration.js';
 import {
   ensureSnapshotsSchema,
@@ -143,12 +146,15 @@ function _buildPanelHTML(activeSeason, archived) {
       </div>
     </div>
 
-    <!-- S5d: Rebuild live summaries -->
+    <!-- S5d / S8d-3: Rebuild live summaries -->
     <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
       <h3 class="font-semibold mb-1">Rebuild Live Leaderboard Summaries</h3>
       <p class="text-surface-400 text-xs mb-4">
-        Scans all players once and rewrites derived <code class="text-surface-300">leaderboards/</code> leaves
-        used by the student Leaderboard tab. Does not change player stats. Use for first backfill or repair.
+        This rebuilds current live leaderboard summaries.
+        Historical seasons and snapshots are not changed.
+        Scans all players from an authoritative Firebase read and rewrites derived
+        <code class="text-surface-300">leaderboards/</code> leaves (including zero values).
+        Does not change player stats. Preview counts before writing.
       </p>
       <button
         id="btn-rebuild-leaderboard-summaries"
@@ -340,7 +346,25 @@ function _wireEvents(panel) {
     rebuildSummariesBtn.addEventListener('click', async () => {
       rebuildSummariesBtn.disabled = true;
       try {
-        const result = await rebuildLeaderboardSummaries();
+        const prepared = await prepareLeaderboardRebuild();
+        if (!prepared.ok || !prepared.plan) {
+          toast.error(prepared.error || 'Could not load players/leaderboards for rebuild');
+          return;
+        }
+
+        const confirmed = await _confirmLeaderboardRebuild(
+          `Players scanned: ${prepared.scannedPlayers}\n`
+            + `Rows create: ${prepared.created}\n`
+            + `Rows update: ${prepared.updated}\n`
+            + `Rows remove: ${prepared.removed}\n`
+            + `Rows unchanged: ${prepared.unchanged}\n\n`
+            + 'This rebuilds current live leaderboard summaries.\n'
+            + 'Historical seasons and snapshots are not changed.',
+          'Rebuild Leaderboard Summaries?',
+        );
+        if (!confirmed) return;
+
+        const result = await commitLeaderboardRebuildPlan(prepared.plan);
         if (!result.ok) {
           toast.error(result.error || 'Leaderboard summary rebuild failed');
           return;
@@ -349,7 +373,8 @@ function _wireEvents(panel) {
           toast.info(`Leaderboard summaries already in sync (unchanged: ${result.unchanged})`);
         } else {
           toast.success(
-            `Summaries rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}`,
+            `Summaries rebuilt — created: ${result.created}, updated: ${result.updated}, `
+              + `removed: ${result.removed}, unchanged: ${result.unchanged}`,
           );
         }
       } finally {
@@ -518,6 +543,52 @@ function _doSaveVisibility(list, seasonId) {
   } else {
     toast.error('Could not save visibility. Check console.');
   }
+}
+
+// ─── Confirm rebuild (promise; cancel = zero writes) ───────────────────────
+
+/**
+ * @param {string} message
+ * @param {string} [title]
+ * @returns {Promise<boolean>}
+ */
+function _confirmLeaderboardRebuild(message, title = 'Are you sure?') {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const msgEl = document.getElementById('confirm-message');
+    const okBtn = document.getElementById('btn-confirm-ok');
+    const cancelBtn = document.getElementById('btn-confirm-cancel');
+
+    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
+      toast.error('Confirmation modal not available. Rebuild aborted.');
+      resolve(false);
+      return;
+    }
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.className = 'flex-1 bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm';
+    okBtn.textContent = 'Confirm Rebuild';
+
+    const newOk = okBtn.cloneNode(true);
+    const newCancel = cancelBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+    const closeModal = () => modal.classList.add('hidden');
+
+    newOk.addEventListener('click', () => {
+      closeModal();
+      resolve(true);
+    });
+    newCancel.addEventListener('click', () => {
+      closeModal();
+      resolve(false);
+    });
+
+    modal.classList.remove('hidden');
+  });
 }
 
 // ─── Delete archive ────────────────────────────────────────────────────────

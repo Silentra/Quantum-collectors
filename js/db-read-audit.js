@@ -573,7 +573,8 @@ API:
   qcPersonalAudit.workflowS8c1()   // S8c-1 tradeGrants + locked rules
   qcPersonalAudit.workflowS8c2()   // S8c-2 grant-bound foreign stats/LB
   qcPersonalAudit.workflowS8d1()   // S8d-1 admin canonical parent reads
-  qcPersonalAudit.workflowS8d2()   // S8d-2 safe playerDirectory rebuild
+  qcPersonalAudit.workflowS8d2()   // S8d-2 Player Directory rebuild (COMPLETE + VERIFIED)
+  qcPersonalAudit.workflowS8d3()   // S8d-3 safe live leaderboard rebuild
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1819,8 +1820,9 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8c-2 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8c2)
   S8d-0 COMPLETE + VERIFIED (force-root removed)
   S8d-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d1)
-  S8d-2 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d2; directory rebuild safe)
-  S8d-3+ Leaderboard / Trade Index rebuilds still UNSAFE until rewritten
+  S8d-2 COMPLETE + VERIFIED (workflowS8d2; directory rebuild safe)
+  S8d-3 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d3; live LB rebuild safe)
+  Trade Index / Unique Cards / season bulk rebuilds still UNSAFE until later S8d
 
   S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
@@ -2145,7 +2147,7 @@ Live (after rules publish):
   3) Student: loadPathOnce('trades/direct',{force:true}) → fail
   4) Admin: adminLoadDirectTrades() / adminLoadListings() → complete:true
   5) Student Trading / packs still work
-  6) Do NOT run unsafe Leaderboard / Trade Index rebuilds yet (later S8d)
+  6) Leaderboard rebuild is S8d-3 (workflowS8d3); Trade Index rebuild still UNSAFE
 
 STOP: no Option C; no Blaze; no PTI/LBG tighten.
 `);
@@ -2158,7 +2160,7 @@ export function workflowS8d2() {
   console.info(`
 === S8d-2 Player Directory rebuild (safe under scoped) ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION
+Status: COMPLETE + VERIFIED
 No rules change / no Console republish for this slice.
 
 Gather (fail-closed):
@@ -2181,9 +2183,56 @@ Live (Admin teacher):
   4) Optional: add playerDirectory/_s8d2_ghost_test → rebuild → removed
   5) Optional: null one test player's directory leaf → rebuild → restored
   6) Trading partner picker still works
-  7) Leaderboard / Trade Index rebuild buttons remain UNSAFE until later S8d
+  7) Leaderboard rebuild is S8d-3 (workflowS8d3); Trade Index still UNSAFE
 
-STOP: no LB/trade/unique/season rebuild rewrites in this slice.
+STOP: no trade-index / unique / season rebuild rewrites in this slice.
+`);
+}
+
+/**
+ * Pasteable S8d-3 safe live Leaderboard summaries rebuild.
+ */
+export function workflowS8d3() {
+  console.info(`
+=== S8d-3 Live Leaderboard rebuild (safe under scoped) ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION
+No rules change / no Console republish for this slice.
+
+Canonical: players/{username}
+Derived:   leaderboards/{statKey}/{username}  (seven live keys; dense include-zero)
+Untouched: leaderboardSeasons / leaderboardSnapshots
+
+Gather (fail-closed):
+  adminLoadCanonical('players') → complete===true; use result.value / keys only
+  loadPathOnce('leaderboards',{force:true}) → ok && mode==='firebase'
+  Confirmed null leaderboards = empty tree (valid)
+Plan: buildLeaderboardRebuildPlan({ playersSnapshot, leaderboardSnapshot, now })
+  Pure — no db.getChildren('players') as universe
+  Equality: value + groupId + subgroupId only (updatedAt ignored)
+  Null/missing group fields equivalent; non-finite value → 0
+Commit: prepareLeaderboardRebuild → preview → commitLeaderboardRebuildPlan(same plan)
+  One updateAcknowledged(updates); cancel = zero writes
+
+Unit proof:
+  node scripts/s8d3-leaderboard-planner.test.mjs
+
+Live (Admin teacher):
+  1) Admin → Leaderboards → Rebuild Leaderboard Summaries
+  2) Preview: Players scanned / Rows create|update|remove|unchanged
+     Copy states historical seasons/snapshots are NOT changed
+  3) Cancel once → reopen → counts match; zero writes
+  4) Confirm; first run may show many creates (expected after prior unsafe wipe)
+  5) Reopen immediately → create/update/remove all 0
+  6) Controlled: set one leaderboards/{stat}/{user}/value wrong → preview 1 update → repair → next 0
+  7) Student Leaderboard tab still filters by group; season/snapshot views unchanged
+  8) Trade Index rebuild remains UNSAFE until later S8d
+
+DevTools:
+  await qcLeaderboardSummaries.prepareLeaderboardRebuild()
+  typeof qcLeaderboardSummaries.buildLeaderboardRebuildPlan
+
+STOP: no Trade Index / Unique Cards / season reset rewrites; no rules changes.
 `);
 }
 
@@ -2371,6 +2420,7 @@ function _installWindowApi() {
     workflowS8c2,
     workflowS8d1,
     workflowS8d2,
+    workflowS8d3,
     enableAudit,
     disableAudit,
     enableIsolation,
