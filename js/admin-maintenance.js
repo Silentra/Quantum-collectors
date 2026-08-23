@@ -217,7 +217,11 @@ export function adminLoadListings(options = {}) {
 
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
+  const prev = window.qcAdminMaintenance && typeof window.qcAdminMaintenance === 'object'
+    ? window.qcAdminMaintenance
+    : {};
   window.qcAdminMaintenance = {
+    ...prev,
     ADMIN_CANONICAL_PATHS,
     adminLoadCanonical,
     adminLoadPlayers,
@@ -233,7 +237,8 @@ Soft-gate: Firebase Auth uid + admins/{uid} (rules remain final)
 Load: await qcAdminMaintenance.adminLoadCanonical('players')
   complete===true → may plan orphans (incl. empty tree)
   complete===false → abort; never use db.getChildren as canonical
-Rebuilds (S8d-2+): consume result.value / result.keys only — cache is not truth`);
+Rebuilds (S8d-2+): consume result.value / result.keys only — cache is not truth
+Drift diagnose (S8d-2 read-only): await qcAdminMaintenance.diagnosePlayerDirectoryRebuildDrift()`);
     },
   };
 }

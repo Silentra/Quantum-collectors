@@ -125,6 +125,158 @@ export function directoryEntriesEqual(a, b) {
   );
 }
 
+/** Projected directory fields used by equality / rebuild. */
+export const DIRECTORY_PROJECTED_FIELDS = Object.freeze([
+  'username',
+  'groupId',
+  'subgroupId',
+  'isAdmin',
+  'isTradeRestricted',
+  'isTradeProfileHidden',
+]);
+
+/**
+ * @param {object|null|undefined} playerLike
+ */
+function _playerSourceFields(playerLike) {
+  const p = playerLike && typeof playerLike === 'object' ? playerLike : {};
+  return {
+    groupId: Object.prototype.hasOwnProperty.call(p, 'groupId') ? p.groupId : undefined,
+    group: Object.prototype.hasOwnProperty.call(p, 'group') ? p.group : undefined,
+    subgroupId: Object.prototype.hasOwnProperty.call(p, 'subgroupId') ? p.subgroupId : undefined,
+    subgroup: Object.prototype.hasOwnProperty.call(p, 'subgroup') ? p.subgroup : undefined,
+    isAdmin: Object.prototype.hasOwnProperty.call(p, 'isAdmin') ? p.isAdmin : undefined,
+    isTradeRestricted: Object.prototype.hasOwnProperty.call(p, 'isTradeRestricted')
+      ? p.isTradeRestricted
+      : undefined,
+    isTradeProfileHidden: Object.prototype.hasOwnProperty.call(p, 'isTradeProfileHidden')
+      ? p.isTradeProfileHidden
+      : undefined,
+  };
+}
+
+/**
+ * Pure read-only drift dump for rows the S8d-2 planner would mark updated.
+ * Does not read Firebase / DB cache.
+ *
+ * @param {object|null|undefined} playersSnapshot
+ * @param {object|null|undefined} directorySnapshot
+ * @returns {{
+ *   ok: true,
+ *   scanned: number,
+ *   created: number,
+ *   updatedCount: number,
+ *   removed: number,
+ *   unchanged: number,
+ *   updated: Array<object>,
+ *   createdKeys: string[],
+ *   removedKeys: string[],
+ *   readOnly: true,
+ * }}
+ */
+export function diffDirectoryRebuildRows(playersSnapshot, directorySnapshot) {
+  const plan = buildPlayerDirectoryRebuildPlan({ playersSnapshot, directorySnapshot });
+  const dirSnap = directorySnapshot && typeof directorySnapshot === 'object' ? directorySnapshot : {};
+  const playersSnap = playersSnapshot && typeof playersSnapshot === 'object' ? playersSnapshot : {};
+
+  /** @type {Array<object>} */
+  const updatedRows = [];
+
+  for (const username of plan.updatedKeys) {
+    const playerLike = playersSnap[username];
+    const malformed = playerLike == null || typeof playerLike !== 'object';
+    const desiredRaw = buildDirectoryEntry(username, malformed ? {} : playerLike);
+    const actualRaw = dirSnap[username] != null && typeof dirSnap[username] === 'object'
+      ? { ...dirSnap[username] }
+      : dirSnap[username];
+    const desiredNormalized = normalizeDirectoryEntry(username, desiredRaw);
+    const actualNormalized = normalizeDirectoryEntry(
+      username,
+      actualRaw && typeof actualRaw === 'object' ? actualRaw : {},
+    );
+
+    /** @type {Record<string, object>} */
+    const differences = {};
+    for (const field of DIRECTORY_PROJECTED_FIELDS) {
+      const dNorm = desiredNormalized[field];
+      const aNorm = actualNormalized[field];
+      if (dNorm !== aNorm) {
+        differences[field] = {
+          desiredRaw: desiredRaw[field],
+          actualRaw: actualRaw && typeof actualRaw === 'object' ? actualRaw[field] : undefined,
+          desiredNormalized: dNorm,
+          actualNormalized: aNorm,
+        };
+      }
+    }
+
+    const projectedSet = new Set(DIRECTORY_PROJECTED_FIELDS);
+    const extraActualKeys = actualRaw && typeof actualRaw === 'object'
+      ? Object.keys(actualRaw).filter((k) => !projectedSet.has(k))
+      : [];
+
+    updatedRows.push({
+      username,
+      playerSource: _playerSourceFields(malformed ? {} : playerLike),
+      desiredRaw,
+      actualRaw,
+      desiredNormalized,
+      actualNormalized,
+      differences,
+      extraActualKeys,
+    });
+  }
+
+  return {
+    ok: true,
+    scanned: plan.scanned,
+    created: plan.created,
+    updatedCount: plan.updated,
+    removed: plan.removed,
+    unchanged: plan.unchanged,
+    updated: updatedRows,
+    createdKeys: [...plan.createdKeys],
+    removedKeys: [...plan.removedKeys],
+    readOnly: true,
+  };
+}
+
+/**
+ * Authoritative gather + planner classification dump. Read-only (no writes).
+ *
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export async function diagnosePlayerDirectoryRebuildDrift(options = {}) {
+  const gathered = await gatherPlayerDirectoryRebuildSnapshots(options);
+  if (!gathered.ok || !gathered.complete) {
+    return {
+      ok: false,
+      complete: false,
+      readOnly: true,
+      error: gathered.error || 'Gather failed',
+      updated: [],
+      scanned: 0,
+      created: 0,
+      updatedCount: 0,
+      removed: 0,
+      unchanged: 0,
+    };
+  }
+
+  const diff = diffDirectoryRebuildRows(
+    gathered.playersSnapshot,
+    gathered.directorySnapshot,
+  );
+
+  return {
+    ...diff,
+    ok: true,
+    complete: true,
+    readOnly: true,
+    hasNormalizeDirectoryEntry: typeof normalizeDirectoryEntry === 'function',
+  };
+}
+
 /**
  * Build multi-path updates that sync directory projection with a player snapshot.
  * @param {string} usernameKey
@@ -471,3 +623,19 @@ export async function getDirectoryDriftReport(options = {}) {
     ),
   };
 }
+
+function _installDirectoryMaintenanceApi() {
+  if (typeof window === 'undefined') return;
+  const prev = window.qcAdminMaintenance && typeof window.qcAdminMaintenance === 'object'
+    ? window.qcAdminMaintenance
+    : {};
+  window.qcAdminMaintenance = {
+    ...prev,
+    diagnosePlayerDirectoryRebuildDrift,
+    diffDirectoryRebuildRows,
+    normalizeDirectoryEntry,
+    DIRECTORY_PROJECTED_FIELDS,
+  };
+}
+
+_installDirectoryMaintenanceApi();
