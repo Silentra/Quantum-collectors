@@ -62,10 +62,11 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | Auth production-default flip | **COMPLETE + VERIFIED** (`workflowAuthDefaultFlip`) |
 | S8c-2 foreign stats/achievements/LB grant-bind | **COMPLETE + VERIFIED** (`workflowS8c2`) |
 | S8d-0 force-root removal | **COMPLETE + VERIFIED** |
-| S8d-1 admin canonical parent reads | **IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION** (`players`, `trades/direct`, `trades/listings`) |
-| S8d-2+ maintenance rebuild rewrites | NOT STARTED |
+| S8d-1 admin canonical parent reads | **COMPLETE + VERIFIED** (or awaiting your Console publish if not yet) |
+| S8d-2 Player Directory rebuild | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d2`) |
+| S8d-3+ LB / trade-index / unique / season rebuilds | NOT STARTED (still unsafe under scoped cache) |
 
-**What remains:** Republish `database.rules.json` for **S8d-1** → run `qcPersonalAudit.workflowS8d1()` live. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Verify S8d-2 live via Admin Rebuild Directory preview. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR

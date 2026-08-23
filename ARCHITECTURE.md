@@ -654,6 +654,17 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Simulator proofs extended in [`scripts/s8c1-rules-simulator.mjs`](scripts/s8c1-rules-simulator.mjs).
 - **Must republish** full [`database.rules.json`](database.rules.json). Rollback [`database.rules.open-rollback.json`](database.rules.open-rollback.json) unchanged.
 
+### Phase — S8d-2 Player Directory rebuild
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d2()`.
+
+- [`rebuildPlayerDirectory`](js/player-directory.js) gathers via `adminLoadCanonical('players')` + forced `playerDirectory` Firebase once-load; pure `buildPlayerDirectoryRebuildPlan`; one `updateAcknowledged` commit.
+- Admin UI previews create/update/remove/unchanged counts, then commits the **same** in-memory plan (cancel = zero writes).
+- Orphan deletes only when the complete players snapshot confirms absence; incomplete gather → abort.
+- `getDirectoryDriftReport` is async authoritative gather (no scoped-cache universe).
+- Unit: `node scripts/s8d2-directory-planner.test.mjs`. **No rules change.**
+- Leaderboard / Trade Index / Unique Cards / season bulk rebuilds remain **unsafe** until later S8d slices.
+
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
 **Status: COMPLETE + VERIFIED.** Cold Accept/Cancel (listing) and Respond/Cancel/Confirm paths no longer false-`NOT_FOUND` under scoped cold cache.
@@ -762,7 +773,7 @@ Derived node `playerDirectory/{username}` projected from canonical `players/{use
 Fields only: `username`, `groupId`, `subgroupId`, `isAdmin`, `isTradeRestricted`, `isTradeProfileHidden`.  
 **Not included:** lastLogin, inventory/packs, password, session, RP, cosmetics, shop.
 
-[`js/player-directory.js`](js/player-directory.js): `buildDirectoryEntry`, `rebuildPlayerDirectory`, `getDirectoryDriftReport`, key resolution that **preserves exact Firebase player keys** (no lowercased duplicate paths for legacy keys).
+[`js/player-directory.js`](js/player-directory.js): `buildDirectoryEntry`, S8d-2 `buildPlayerDirectoryRebuildPlan` / `preparePlayerDirectoryRebuild` / `commitPlayerDirectoryRebuildPlan`, `getDirectoryDriftReport` (async authoritative), key resolution that **preserves exact Firebase player keys** (no lowercased duplicate paths for legacy keys).
 
 Live writers dual-path via one `updateAcknowledged`: registration, group assign, admin promote/demote (incl. `adminLogin` promote), trade lock, hidden trading profile, player delete. Login maintenance dual-writes directory **only** when directory-relevant flags are first seeded (not for lastLogin alone).
 
