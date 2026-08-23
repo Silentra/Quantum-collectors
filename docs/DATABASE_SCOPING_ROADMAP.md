@@ -63,10 +63,11 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8c-2 foreign stats/achievements/LB grant-bind | **COMPLETE + VERIFIED** (`workflowS8c2`) |
 | S8d-0 force-root removal | **COMPLETE + VERIFIED** |
 | S8d-1 admin canonical parent reads | **COMPLETE + VERIFIED** (or awaiting your Console publish if not yet) |
-| S8d-2 Player Directory rebuild | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d2`) |
-| S8d-3+ LB / trade-index / unique / season rebuilds | NOT STARTED (still unsafe under scoped cache) |
+| S8d-2 Player Directory rebuild | **COMPLETE + VERIFIED** (`workflowS8d2`) |
+| S8d-3 Live Leaderboard rebuild | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d3`) |
+| S8d-4+ Trade Index / unique / season rebuilds | NOT STARTED (still unsafe under scoped cache) |
 
-**What remains:** Verify S8d-2 live via Admin Rebuild Directory preview. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains:** Verify S8d-3 live via Admin → Leaderboards → Rebuild Leaderboard Summaries preview. Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). **Unique Cards correctness repair — COMPLETE + VERIFIED** (orphans retained; orphan cleanup / pack hygiene deferred). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
@@ -286,7 +287,7 @@ Code:
 - `statKey` is Firebase-safe (`packsOpened`, …); `playerPath` remains nested (`stats.packsOpened`, …). Single canonical map in summaries module.
 - No student live `getChildren('players')` fallback. Archived seasons / snapshots unchanged. Admin rotate/snapshot may still bulk-scan players.
 - Tab-owned whole-root `leaderboards` subscribe while Leaderboard is mounted; **must release on leave/logout**. Auth/session `players/{me}` ×1 and `playerTradeIndex/{me}` ×1 are expected and are **not** Leaderboard lifecycle leaks.
-- Writers piggyback into existing multi-path plans / grant helpers; `rebuildLeaderboardSummaries()` is admin/dev repair.
+- Writers piggyback into existing multi-path plans / grant helpers; S8d-3 `rebuildLeaderboardSummaries()` / prepare+commit is admin/dev repair (authoritative gather).
 - Verification passed: safe-key rebuild; seven values match sources; live ranking; mount/release; incremental RP + nested packs writer; group projection across all seven; archived regression; no foreign player subs; no student live full `players` scan.
 
 ### S6 — Remaining consumers and polish

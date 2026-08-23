@@ -656,14 +656,23 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — S8d-2 Player Directory rebuild
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d2()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS8d2()`.
 
 - [`rebuildPlayerDirectory`](js/player-directory.js) gathers via `adminLoadCanonical('players')` + forced `playerDirectory` Firebase once-load; pure `buildPlayerDirectoryRebuildPlan`; one `updateAcknowledged` commit.
 - Admin UI previews create/update/remove/unchanged counts, then commits the **same** in-memory plan (cancel = zero writes).
 - Orphan deletes only when the complete players snapshot confirms absence; incomplete gather → abort.
 - `getDirectoryDriftReport` is async authoritative gather (no scoped-cache universe).
 - Unit: `node scripts/s8d2-directory-planner.test.mjs`. **No rules change.**
-- Leaderboard / Trade Index / Unique Cards / season bulk rebuilds remain **unsafe** until later S8d slices.
+
+### Phase — S8d-3 Live Leaderboard rebuild
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d3()`.
+
+- [`rebuildLeaderboardSummaries`](js/leaderboard-summaries.js) gathers via `adminLoadCanonical('players')` + forced `leaderboards` Firebase once-load; pure `buildLeaderboardRebuildPlan`; prepare → preview → `commitLeaderboardRebuildPlan` (exact in-memory plan).
+- Dense include-zero matrix (7 live stats × every player); equality ignores `updatedAt`; null/missing groups equivalent.
+- Orphans only under the seven known live stat keys vs complete players snapshot; `leaderboardSeasons` / `leaderboardSnapshots` never written.
+- Admin → Leaderboards → Rebuild Leaderboard Summaries uses preview/confirm. Unit: `node scripts/s8d3-leaderboard-planner.test.mjs`. **No rules change.**
+- Trade Index / Unique Cards / season bulk rebuilds remain **unsafe** until later S8d slices.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
@@ -988,7 +997,7 @@ App changes in Gate A:
 - **statKey** (RTDB segment, no `.`) ≠ **playerPath** (value source). Canonical map: `totalResearchPoints`, `seasonalResearchPoints`, `projectsCompleted`, `packsOpened`→`stats.packsOpened`, `tradesCompleted`→`stats.tradesCompleted`, `uniqueCardsOwned`→`stats.uniqueCardsOwned`, `breakthroughs`→`researchStats.breakthroughs`.
 - Student live boards: [`leaderboard-queries.js`](js/leaderboard-queries.js) reads summaries only (no `getChildren('players')` fallback).
 - Tab-owned whole-root `leaderboards` subscribe while Leaderboard mounted; **must release on leave/logout**. Auth/session `players/{me}` ×1 and `playerTradeIndex/{me}` ×1 are expected and are **not** Leaderboard lifecycle leaks.
-- Writers piggyback into claim/packs/trade plans, RP grant builders, group/delete/register; `rebuildLeaderboardSummaries()` admin repair.
+- Writers piggyback into claim/packs/trade plans, RP grant builders, group/delete/register; S8d-3 `rebuildLeaderboardSummaries()` / prepare+commit is admin repair (authoritative gather).
 - Archived seasons/snapshots unchanged; admin rotate/snapshot may still bulk-scan players.
 - Verification passed: safe-key rebuild; seven values match sources; live ranking; mount/release lifecycle; incremental RP + nested packs writer; group projection across all seven; archived regression; no foreign player subs; no student live full `players` scan.
 
