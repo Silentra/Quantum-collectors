@@ -1235,9 +1235,14 @@ body.app-mode-game #screen-game.screen.active {
   overflow-x: hidden;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
-  scroll-padding-bottom: 1.5rem;
-  /* Reach final controls without large empty dead space */
-  padding-bottom: 1.25rem;
+  /* Anchors scrollIntoView above the physical bottom edge (classroom displays) */
+  scroll-padding-bottom: 4rem;
+  /*
+   * Bottom breathing room for final tab controls.
+   * Primary tabs also use .tab-content.p-4 (1rem bottom) — together ≈ 4.5rem
+   * (~72px) practical clearance without per-tab spacers.
+   */
+  padding-bottom: 3.5rem;
   position: relative;
   z-index: 1;
 }
