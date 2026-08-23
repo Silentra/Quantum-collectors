@@ -68,6 +68,9 @@ import {
   authDirectoryPathsForRegistration,
   allowMissingAuthDirectoryOnRestore,
 } from './auth-directory.js';
+import {
+  resetPasswordViaIdentityRotation,
+} from './auth-rotation.js';
 
 export { usernameToAuthEmail, AUTH_DIRECTORY_ROOT };
 const SESSION_KEY = 'scicards_session';
@@ -1362,15 +1365,11 @@ export async function adminLogin(password) {
  * @param {string} newPassword
  * @returns {{ success: boolean, error?: string }}
  */
-export async function resetPlayerPassword(username, newPassword) {
+export async function resetPlayerPassword(username, newPassword, options = {}) {
   if (isFirebaseAuthEnabled()) {
-    return {
-      success: false,
-      error:
-        'Firebase Auth is on — in-game RTDB hash reset is disabled. ' +
-        'Use scripts/s8b-auth-admin.mjs set-password (or Firebase Console). ' +
-        'Teacher in-app Auth reset (claim-verified Admin SDK) is the next classroom step after S8b verification.',
-    };
+    return resetPasswordViaIdentityRotation(username, newPassword, {
+      confirmPassword: options.confirmPassword,
+    });
   }
 
   if (!username || !username.trim()) {

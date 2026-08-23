@@ -1200,14 +1200,14 @@ async function showPlayerDetail(username) {
       <!-- Reset Password -->
       <div class="bg-surface-800 rounded-lg p-4">
         <h4 class="font-semibold text-sm mb-2">Reset Password</h4>
-        <p id="pd-reset-password-auth-note" class="text-xs text-amber-300 mb-2 hidden">
-          Firebase Auth is on: in-game password reset is disabled. Use
-          <code class="text-amber-200">scripts/s8b-auth-admin.mjs set-password</code> temporarily.
-          Polished in-panel Auth reset is deferred (Option C / BEFORE_DISTRIBUTION).
+        <p id="pd-reset-password-auth-note" class="text-xs text-surface-400 mb-2 hidden">
+          Sets a new password by rotating the student's login identity.
+          Their inventory and progress are unchanged; their current session is invalidated.
         </p>
-        <div class="flex gap-2">
-          <input id="pd-new-password" type="password" placeholder="New password (min 4 chars)" class="admin-input flex-1" autocomplete="new-password">
-          <button id="pd-reset-password" class="bg-orange-600 hover:bg-orange-500 px-3 py-1 rounded text-sm whitespace-nowrap">Reset</button>
+        <div class="flex flex-col gap-2">
+          <input id="pd-new-password" type="password" placeholder="New password (min 6 chars)" class="admin-input w-full" autocomplete="new-password">
+          <input id="pd-confirm-password" type="password" placeholder="Confirm new password" class="admin-input w-full" autocomplete="new-password">
+          <button id="pd-reset-password" class="bg-orange-600 hover:bg-orange-500 px-3 py-1 rounded text-sm whitespace-nowrap self-start">Reset Password</button>
         </div>
         <p id="pd-reset-password-msg" class="text-xs mt-1 hidden"></p>
       </div>
@@ -1216,9 +1216,9 @@ async function showPlayerDetail(username) {
       <div class="bg-surface-800 rounded-lg p-4 border border-red-900/50">
         <h4 class="font-semibold text-sm mb-2 text-red-400">Danger Zone</h4>
         <p class="text-xs text-surface-400 mb-2">
-          Deletes RTDB player data (inventory, indexes, directory). When Firebase Auth is on,
-          the Auth user may remain as an orphan until optional
-          <code class="text-surface-300">delete-auth-user</code> cleanup.
+          Deletes RTDB player data (inventory, indexes, directory, auth directory).
+          Firebase Auth users may remain until optional administrator cleanup.
+          Deleted usernames may require administrator cleanup before being reused.
         </p>
         <button id="pd-delete-player" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded text-sm font-medium">
           Delete Player
@@ -1347,10 +1347,12 @@ async function showPlayerDetail(username) {
     if (sel) sel.innerHTML = _renderAdminGrantCosmeticItemOptions(cat);
   });
 
-  // Delete player — DESTRUCTIVE (requires confirmation); clears directory in same ack
+  // Delete player — DESTRUCTIVE (requires confirmation); clears directory + authDirectory
   content.querySelector('#pd-delete-player').addEventListener('click', async () => {
     const confirmed = await confirmAction(
-      `This will permanently delete "${username}" and all their data. This cannot be undone.`,
+      `This will permanently delete "${username}" and all their game data. `
+      + 'Deleted usernames may require administrator cleanup before being reused. '
+      + 'This cannot be undone.',
       `Delete player "${username}"?`
     );
     if (!confirmed) return;
@@ -1480,57 +1482,84 @@ async function showPlayerDetail(username) {
     });
   }
 
-  // Reset Password — admin sets a new password (existing password never shown)
+  // Reset Password — Option C-b identity rotation when Firebase Auth is on
   const resetPwBtn = content.querySelector('#pd-reset-password');
   const resetPwInput = content.querySelector('#pd-new-password');
+  const resetPwConfirm = content.querySelector('#pd-confirm-password');
   const resetPwMsg = content.querySelector('#pd-reset-password-msg');
   const resetPwAuthNote = content.querySelector('#pd-reset-password-auth-note');
   if (resetPwAuthNote && isFirebaseAuthEnabled()) {
     resetPwAuthNote.classList.remove('hidden');
-    if (resetPwBtn) {
-      resetPwBtn.disabled = true;
-      resetPwBtn.classList.add('opacity-50', 'cursor-not-allowed');
-      resetPwBtn.title = 'Disabled while Firebase Auth is on — use s8b-auth-admin.mjs set-password';
-    }
-    if (resetPwInput) {
-      resetPwInput.disabled = true;
-      resetPwInput.placeholder = 'Use Admin script while Auth is on';
-    }
   }
   if (resetPwBtn && resetPwInput) {
     resetPwBtn.addEventListener('click', async () => {
-      if (isFirebaseAuthEnabled()) {
-        if (resetPwMsg) {
-          resetPwMsg.textContent =
-            'Firebase Auth is on — use scripts/s8b-auth-admin.mjs set-password (in-game hash reset disabled).';
-          resetPwMsg.className = 'text-xs mt-1 text-amber-300';
-          resetPwMsg.classList.remove('hidden');
-        }
-        return;
-      }
       const newPw = resetPwInput.value;
-      if (!newPw || newPw.trim().length < 4) {
+      const confirmPw = resetPwConfirm ? resetPwConfirm.value : newPw;
+      if (isFirebaseAuthEnabled()) {
+        if (!newPw || !String(newPw).trim()) {
+          resetPwMsg.textContent = 'Please enter a new password.';
+          resetPwMsg.className = 'text-xs mt-1 text-red-400';
+          resetPwMsg.classList.remove('hidden');
+          return;
+        }
+        if (String(newPw).trim().length < 6) {
+          resetPwMsg.textContent = 'Password must be at least 6 characters.';
+          resetPwMsg.className = 'text-xs mt-1 text-red-400';
+          resetPwMsg.classList.remove('hidden');
+          return;
+        }
+        if (String(confirmPw) !== String(newPw)) {
+          resetPwMsg.textContent = 'Password confirmation does not match.';
+          resetPwMsg.className = 'text-xs mt-1 text-red-400';
+          resetPwMsg.classList.remove('hidden');
+          return;
+        }
+      } else if (!newPw || newPw.trim().length < 4) {
         resetPwMsg.textContent = 'Password must be at least 4 characters.';
         resetPwMsg.className = 'text-xs mt-1 text-red-400';
         resetPwMsg.classList.remove('hidden');
         return;
       }
+
       const confirmed = await confirmAction(
-        `Reset the password for "${username}"? They will need to use the new password on next login.`,
+        isFirebaseAuthEnabled()
+          ? `Reset login for "${username}"? Their password will change, their current session will be invalidated, and inventory/progress stay the same.`
+          : `Reset the password for "${username}"? They will need to use the new password on next login.`,
         'Reset player password?'
       );
       if (!confirmed) return;
-      const result = await resetPlayerPassword(username, newPw);
-      if (result.success) {
-        resetPwInput.value = '';
-        resetPwMsg.textContent = 'Password reset successfully.';
-        resetPwMsg.className = 'text-xs mt-1 text-green-400';
-        resetPwMsg.classList.remove('hidden');
-        toast.success(`Password reset for ${username}`);
-      } else {
-        resetPwMsg.textContent = result.error || 'Reset failed.';
-        resetPwMsg.className = 'text-xs mt-1 text-red-400';
-        resetPwMsg.classList.remove('hidden');
+
+      resetPwBtn.disabled = true;
+      if (resetPwInput) resetPwInput.disabled = true;
+      if (resetPwConfirm) resetPwConfirm.disabled = true;
+      resetPwMsg.textContent = 'Resetting…';
+      resetPwMsg.className = 'text-xs mt-1 text-amber-300';
+      resetPwMsg.classList.remove('hidden');
+
+      try {
+        const result = await resetPlayerPassword(username, newPw, {
+          confirmPassword: isFirebaseAuthEnabled() ? confirmPw : undefined,
+        });
+        if (result.success) {
+          resetPwInput.value = '';
+          if (resetPwConfirm) resetPwConfirm.value = '';
+          resetPwMsg.textContent = 'Password reset successfully.';
+          resetPwMsg.className = 'text-xs mt-1 text-green-400';
+          resetPwMsg.classList.remove('hidden');
+          toast.success(`Password reset for ${username}`);
+        } else {
+          if (result.code) {
+            console.warn('[Admin] Password reset failed:', result.code, result.detail || result.error);
+          }
+          resetPwMsg.textContent = result.error || 'Password reset failed.';
+          resetPwMsg.className = 'text-xs mt-1 text-red-400';
+          resetPwMsg.classList.remove('hidden');
+          toast.error(result.error || 'Password reset failed');
+        }
+      } finally {
+        resetPwBtn.disabled = false;
+        if (resetPwInput) resetPwInput.disabled = false;
+        if (resetPwConfirm) resetPwConfirm.disabled = false;
       }
     });
   }

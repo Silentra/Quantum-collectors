@@ -19,6 +19,10 @@ import {
   buildLeaderboardGroupProjectionPaths,
   buildLeaderboardSummaryDeletePaths,
 } from './leaderboard-summaries.js';
+import {
+  preparePlayerDeleteLifecycle,
+  buildAuthLifecycleDeleteUpdates,
+} from './auth-rotation.js';
 
 /**
  * Create a new player profile
@@ -191,14 +195,25 @@ export function incrementStat(username, statKey, amount = 1) {
 
 /**
  * Delete a player: terminalize open trades/listings as cancelled, clear indexes,
- * remove player + directory. Processing listings are claim-released first when possible.
+ * remove player + directory + authDirectory. Processing listings are claim-released
+ * first when possible. Browser does NOT delete Firebase Auth users (orphans OK).
+ * v1: refuse self, Admin targets, __admin__; require authDirectory/player UID match.
  * @param {string} username
- * @returns {Promise<{ ok: boolean, mode?: string, error?: string, claimReleases?: number }>}
+ * @returns {Promise<{ ok: boolean, mode?: string, error?: string, code?: string, claimReleases?: number }>}
  */
 export async function deletePlayer(username) {
   const playerKey = resolvePlayerDirectoryKey(username);
   if (!playerKey) {
-    return { ok: false, error: 'Invalid username' };
+    return { ok: false, error: 'Invalid username', code: 'INVALID_USERNAME' };
+  }
+
+  const lifecycle = await preparePlayerDeleteLifecycle({ username: playerKey });
+  if (!lifecycle.ok) {
+    return {
+      ok: false,
+      error: lifecycle.error || 'Delete precheck failed',
+      code: lifecycle.code,
+    };
   }
 
   let claimReleases = 0;
@@ -232,6 +247,12 @@ export async function deletePlayer(username) {
     // S8c-1: drop any grants targeting this player
     [`${TRADE_GRANTS_ROOT}/${playerKey}`]: null,
     ...buildLeaderboardSummaryDeletePaths(playerKey),
+    // Option C-b: unbind login directory (Auth user may remain orphaned)
+    ...buildAuthLifecycleDeleteUpdates({
+      username: playerKey,
+      oldUid: lifecycle.oldUid,
+      clearAdminRegistry: false, // v1 refuses Admin targets
+    }),
   };
 
   // Safety: ensure trade index root for deleted user is cleared even if no actives

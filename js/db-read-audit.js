@@ -580,6 +580,7 @@ API:
   qcPersonalAudit.workflowS8d5a()  // S8d-5a safe Unique Cards repair
   qcPersonalAudit.workflowS8d5b()  // S8d-5b safe Season + Lifetime Snapshot class ops
   qcPersonalAudit.workflowOptionCa() // Option C-a authDirectory foundation
+  qcPersonalAudit.workflowOptionCb() // Option C-b identity rotation + delete
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -2411,10 +2412,10 @@ export function workflowOptionCa() {
   console.info(`
 === Option C-a.2 authDirectory (production-default STRICT) ===
 
-Status: C-a.2 IMPLEMENTED — AWAITING LIVE VERIFICATION
+Status: C-a.2 LIVE VERIFIED. Proceed to C-b for password reset / delete lifecycle.
 C-a.1 / C-a.1.1 LIVE VERIFIED (backfill, existing logins, disposable register, LB username).
 C-a.2 = production-default strict: authDirectory required for login/restore.
-No password reset / Delete Player Auth changes (C-b). No rules change for C-a.2.
+C-b: see workflowOptionCb() for identity rotation + delete unbind.
 
 Schema: authDirectory/{username} = { loginEmail, authUid, generation }
   gen0 loginEmail = "{u}@scicards.local" (synthetic — not a real inbox)
@@ -2456,10 +2457,50 @@ Safe negative (optional, no account damage):
     // PASS: t.ok === false && (t.code === 'AUTH_DIRECTORY_REQUIRED' || /missing/i.test(t.error))
   Do NOT delete a real authDirectory leaf to prove strictness.
 
-*** STOP GATE — after live verify, STOP. Do not begin C-b here. ***
+*** STOP GATE — after live verify, C-a is complete. Use workflowOptionCb() for C-b. ***
 
 Legacy: qc_force_legacy_auth path does not require authDirectory.
 Unit: node scripts/option-c-a-auth-directory.test.mjs
+`);
+}
+
+/**
+ * Pasteable Option C-b identity rotation + delete lifecycle.
+ */
+export function workflowOptionCb() {
+  console.info(`
+=== Option C-b identity rotation + player delete ===
+
+Status: IMPLEMENTED — AWAITING LIVE VERIFICATION
+Reset Password = secondary Firebase Auth identity rotation (not privileged updatePassword).
+Teacher primary Auth session stays intact.
+Delete Player clears authDirectory; Firebase Auth orphans may remain (Spark).
+Same-username re-register is NOT guaranteed (may need Auth Console / s8b-auth-admin cleanup).
+No rules republish. Mid-trade grant residual accepted (do not rewrite Trading).
+
+Freshness:
+  qcAuth.getOptionCbStatus()
+  // PASS: optionCbVersion === 'option-c-b-1'
+  // PASS: identityRotation === true
+  // PASS: deleteUnbindsAuthDirectory === true
+  qcAuth.getOptionCaStatus()
+  // PASS: strictDefault === true (C-a unchanged)
+
+Live (disposable student only):
+  A) Baseline teacher UID + target directory/authUid/generation + fingerprints
+  B) Cancel reset → zero change
+  C) Confirm reset → gen+1, authUid change, fingerprints same, teacher UID same
+  D) Old password fails; new succeeds; reload/restore
+  E) Old session: firebase.database().ref('players/<u>/lastLogin').set(Date.now())
+     → permission_denied
+  *** STOP — review reset before delete ***
+  F) Delete → players/directory/PTI/LB/authDirectory gone; Auth orphan OK
+  Do NOT require same-username re-register
+
+Future (NOT implemented): read-only Admin SDK orphan Auth report for year-end cleanup.
+  Prefer scripts/s8b-auth-admin.mjs subcommand or dedicated script; report-only by default.
+
+Unit: node scripts/option-c-b-auth-rotation.test.mjs
 `);
 }
 
@@ -2653,6 +2694,7 @@ function _installWindowApi() {
     workflowS8d5a,
     workflowS8d5b,
     workflowOptionCa,
+    workflowOptionCb,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -305,3 +305,90 @@ export function isConfigured() {
 export function getFirebaseProjectId() {
   return firebaseConfig.projectId;
 }
+
+/**
+ * Option C-b: ephemeral secondary Firebase App + Auth for identity rotation.
+ * Never uses the default/primary app. Teacher getAuth() session stays intact.
+ *
+ * @param {{ name?: string }} [options]
+ * @returns {{
+ *   ok: true,
+ *   appName: string,
+ *   app: object,
+ *   auth: object,
+ * } | { ok: false, error: string }}
+ */
+export function createSecondaryAuthApp(options = {}) {
+  if (typeof firebase === 'undefined' || typeof firebase.initializeApp !== 'function') {
+    return { ok: false, error: 'FIREBASE_SDK_MISSING' };
+  }
+  if (typeof firebase.auth !== 'function') {
+    return { ok: false, error: 'FIREBASE_AUTH_SDK_MISSING' };
+  }
+  if (!_initialized || !_app) {
+    return { ok: false, error: 'PRIMARY_FIREBASE_NOT_INITIALIZED' };
+  }
+
+  const appName = String(options.name || `qc-auth-rotate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  if (!appName || appName === '[DEFAULT]') {
+    return { ok: false, error: 'INVALID_SECONDARY_APP_NAME' };
+  }
+
+  try {
+    // Refuse colliding with default app
+    const existing = typeof firebase.app === 'function'
+      ? (() => { try { return firebase.app(appName); } catch { return null; } })()
+      : null;
+    if (existing) {
+      return { ok: false, error: 'SECONDARY_APP_NAME_IN_USE' };
+    }
+
+    const app = firebase.initializeApp(firebaseConfig, appName);
+    const auth = app.auth ? app.auth() : firebase.auth(app);
+    try {
+      auth.setPersistence(firebase.auth.Auth.Persistence.NONE);
+    } catch (persistErr) {
+      console.warn('[Firebase] Secondary Auth NONE persistence failed:', persistErr?.message || persistErr);
+    }
+    return { ok: true, appName, app, auth };
+  } catch (e) {
+    return { ok: false, error: e?.code || e?.message || 'SECONDARY_APP_INIT_FAILED' };
+  }
+}
+
+/**
+ * Tear down a secondary app created by createSecondaryAuthApp.
+ * Never touches the primary/default app.
+ *
+ * @param {{ app?: object, auth?: object, appName?: string }} handle
+ * @returns {Promise<{ ok: boolean, warnings?: string[] }>}
+ */
+export async function disposeSecondaryAuthApp(handle = {}) {
+  const warnings = [];
+  const app = handle.app;
+  const auth = handle.auth;
+  const name = handle.appName || (app && app.name);
+
+  if (name === '[DEFAULT]' || (app && app === _app)) {
+    return { ok: false, error: 'REFUSED_PRIMARY_APP_DISPOSE', warnings };
+  }
+
+  if (auth && typeof auth.signOut === 'function') {
+    try {
+      await auth.signOut();
+    } catch (e) {
+      warnings.push(`signOut:${e?.message || e}`);
+    }
+  }
+
+  if (app && typeof app.delete === 'function') {
+    try {
+      await app.delete();
+    } catch (e) {
+      warnings.push(`app.delete:${e?.message || e}`);
+      return { ok: false, error: e?.message || 'SECONDARY_APP_DELETE_FAILED', warnings };
+    }
+  }
+
+  return { ok: true, warnings: warnings.length ? warnings : undefined };
+}
