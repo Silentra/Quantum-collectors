@@ -692,11 +692,11 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Pure `buildTradeIndexRebuildPlan` / `deriveDesiredTradeIndexes` from snapshots; path invariant (only PTI / LBG / tradeIndexMeta).
 - **Concurrency:** Admin preview is advisory; Confirm **re-gathers** and commits a **fresh** plan (never the preview plan). Soft-expiry omit matches browse; deleted groups do not resurrect LBG.
 - Schema version stays **1**. **No rules change.** Unit: `node scripts/s8d4-trade-index-planner.test.mjs`.
-- Season/Snapshot class ops: **S8d-5b IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d5b`).
+- Season/Snapshot class ops: **S8d-5b COMPLETE + VERIFIED** (`workflowS8d5b`).
 
 ### Phase — S8d-5a Unique Cards Owned repair
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d5a()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS8d5a()`.
 
 - [`repairUniqueCardsOwnedStats`](js/research.js) gathers via `adminLoadCanonical('players')` + forced `cards` + `leaderboards/uniqueCardsOwned` once-loads; pure `buildUniqueCardsRepairPlan`; Admin preview then commits the **same** plan.
 - Definition unchanged: `Number(qty)>0` + catalog card + `enabled !== false`. Inventories/achievements/historical archives untouched.
@@ -705,13 +705,14 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — S8d-5b Safe Season + Lifetime Snapshot class operations
 
-**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d5b()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS8d5b()`. **S8d umbrella: COMPLETE.**
 
 - Authoritative `adminLoadCanonical('players')` + forced season/snapshot metadata; Confirm **re-gathers** (never commits preview plan). Empty class refused.
 - Start New Season: awaited Phase A archive → B rotate → C seasonal reset; activeSeasonId recheck abort.
 - Lifetime Snapshot: awaited snapshot write then optional resetAfter; seasonal RP never a Lifetime reset category.
 - Pure planners in [`js/season-class-ops.js`](js/season-class-ops.js) + [`js/leaderboard-snapshots.js`](js/leaderboard-snapshots.js). Unit: `node scripts/s8d5b-season-snapshot.test.mjs`. **No rules / schema change.**
-- Live QA: Tier 2 previews + optional disposable snapshot-only; real Start New Season only when teacher intends it.
+- Live QA credited: Tier 2 Start New Season preview (5 players) cancelled with zero writes; Tier 3 disposable Packs Opened snapshot-only created/verified/deleted; historical isolation confirmed after a live pack open. No resetAfter live test; no real Start New Season (intentional).
+- Future Admin UX / Repair Game tab remains deferred ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 

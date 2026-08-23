@@ -67,10 +67,11 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8d-3 Live Leaderboard rebuild | **COMPLETE + VERIFIED** (or awaiting your confirm if not yet) |
 | S8d-4a Admin PTI/LBG parent reads | **COMPLETE + VERIFIED** (`workflowS8d4a`) |
 | S8d-4b Trade Index rebuild rewrite | **COMPLETE + VERIFIED** (or awaiting your confirm) |
-| S8d-5a Unique Cards Owned repair | **COMPLETE + LIVE VERIFIED** (or awaiting your confirm) |
-| S8d-5b Season/Snapshot class operations | **IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d5b`) |
+| S8d-5a Unique Cards Owned repair | **COMPLETE + LIVE VERIFIED** |
+| S8d-5b Season/Snapshot class operations | **COMPLETE + VERIFIED** (`workflowS8d5b`) |
+| **S8d (Admin maintenance umbrella)** | **COMPLETE** |
 
-**What remains:** Live-verify S8d-5b (Tier 2 previews + optional disposable snapshot-only). Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains (outside S8d):** Optional Option C / distribution bootstrap ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)). Future Admin UX / Repair Game tab (deferred polish in same doc). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
