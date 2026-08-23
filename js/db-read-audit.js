@@ -576,6 +576,7 @@ API:
   qcPersonalAudit.workflowS8d2()   // S8d-2 Player Directory rebuild (COMPLETE + VERIFIED)
   qcPersonalAudit.workflowS8d3()   // S8d-3 safe live leaderboard rebuild
   qcPersonalAudit.workflowS8d4a()  // S8d-4a admin PTI/LBG parent reads (rules)
+  qcPersonalAudit.workflowS8d4b()  // S8d-4b safe Trade Index rebuild
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1823,8 +1824,8 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8d-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d1)
   S8d-2 COMPLETE + VERIFIED (workflowS8d2; directory rebuild safe)
   S8d-3 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d3; live LB rebuild safe)
-  S8d-4a IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d4a; admin PTI/LBG parent reads)
-  S8d-4b Trade Index rebuild rewrite — NOT STARTED (still unsafe under scoped cache)
+  S8d-4a COMPLETE + VERIFIED (workflowS8d4a; admin PTI/LBG parent reads)
+  S8d-4b IMPLEMENTED — AWAITING VERIFICATION (workflowS8d4b; Trade Index rebuild safe)
   Unique Cards / season bulk rebuilds still UNSAFE until later S8d
 
   S8b migration preference (planning only):
@@ -2229,7 +2230,7 @@ Live (Admin teacher):
   5) Reopen immediately → create/update/remove all 0
   6) Controlled: set one leaderboards/{stat}/{user}/value wrong → preview 1 update → repair → next 0
   7) Student Leaderboard tab still filters by group; season/snapshot views unchanged
-  8) Trade Index rebuild remains UNSAFE until later S8d
+  8) Trade Index rebuild is S8d-4b (workflowS8d4b)
 
 DevTools:
   await qcLeaderboardSummaries.prepareLeaderboardRebuild()
@@ -2272,6 +2273,48 @@ Live (after rules publish; Admin teacher Auth + admins/{uid}):
   7) Do NOT run Rebuild Trade Indexes as "safe" yet — that is S8d-4b
 
 STOP: no S8d-4b rebuild rewrite; no write tighten; no Directory/LB/Auth changes.
+`);
+}
+
+/**
+ * Pasteable S8d-4b safe Trade Index rebuild (re-gather on confirm).
+ */
+export function workflowS8d4b() {
+  console.info(`
+=== S8d-4b Safe Trade Index rebuild ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION
+No rules change (S8d-4a already live). Schema version stays 1.
+
+Concurrency model (required):
+  Preview = advisory gather+plan
+  Confirm = RE-GATHER all roots + fresh plan + commit
+  Never commit the preview plan (students may claim/settle during wait)
+
+Gather (fail-closed):
+  adminLoadCanonical('players'|'trades/direct'|'trades/listings') → complete===true
+  loadPathOnce('groups'|'playerTradeIndex'|'listingsByGroup'|'tradeIndexMeta',{force:true})
+    → ok && mode==='firebase' (null = empty OK)
+Plan: buildTradeIndexRebuildPlan({ ...snapshots, now }) — pure; path invariant
+  Only writes under playerTradeIndex/ | listingsByGroup/ | tradeIndexMeta/
+  Soft-expired actives omitted (match browse); missing groups skip LBG (skippedMissingGroup)
+  _meta equality: ready+v only; rebuiltAt stamped only with content writes
+
+Unit:
+  node scripts/s8d4-trade-index-planner.test.mjs
+
+Live (Admin teacher; quiet Trading preferred):
+  1) Admin → Players → Rebuild Trade Indexes → preview counts; Cancel once
+  2) Confirm → toast shows FRESH post-confirm counts (may differ slightly)
+  3) Immediate second preview → content/readiness zeros
+  4) Corrupt: delete one PTI leaf for open Direct → preview create 1 → repair
+  5) Corrupt: add bogus PTI direct leaf → preview remove 1 → repair
+  6) Corrupt: _meta.ready=false → readiness repair
+  7) Corrupt: remove one LBG leaf for active listing → create 1 → repair
+  8) Confirm trades/* and inventories unchanged; Unready warnings quiet for current players
+  9) Smoke: create Direct → confirm; create Listing → fulfill
+
+STOP: no rules; no settlement rewrite; no Unique/season; no S8d-5.
 `);
 }
 
@@ -2461,6 +2504,7 @@ function _installWindowApi() {
     workflowS8d2,
     workflowS8d3,
     workflowS8d4a,
+    workflowS8d4b,
     enableAudit,
     disableAudit,
     enableIsolation,

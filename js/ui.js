@@ -37,7 +37,10 @@ import {
   syncDirectoryUpdateFromPlayer,
   DIRECTORY_ROOT,
 } from './player-directory.js';
-import { rebuildTradeIndexes } from './trade-index.js';
+import {
+  prepareTradeIndexRebuild,
+  commitTradeIndexRebuildFresh,
+} from './trade-index.js';
 import {
   ensureAdminDirectoryScope,
   releaseAdminDirectoryScope,
@@ -780,23 +783,55 @@ function _setupPlayerFilters() {
   if (rebuildTradeIdxBtn && !rebuildTradeIdxBtn.dataset.wired) {
     rebuildTradeIdxBtn.dataset.wired = '1';
     rebuildTradeIdxBtn.addEventListener('click', async () => {
-      const confirmed = await confirmAction(
-        'Rebuild derived trade indexes from canonical trades/direct and trades/listings? This does not change inventories or canonical trade records. Seeds ready metadata for all players and groups.',
-        'Rebuild Trade Indexes?'
-      );
-      if (!confirmed) return;
       rebuildTradeIdxBtn.disabled = true;
       try {
-        const result = await rebuildTradeIndexes();
+        const prepared = await prepareTradeIndexRebuild();
+        if (!prepared.ok) {
+          toast.error(prepared.error || 'Could not load trade indexes for rebuild');
+          return;
+        }
+
+        const confirmed = await confirmAction(
+          `Players scanned: ${prepared.playersScanned}\n`
+            + `Direct trades scanned: ${prepared.directTradesScanned}\n`
+            + `Listings scanned: ${prepared.listingsScanned}\n\n`
+            + 'Player Trade Index\n'
+            + `  Entries create: ${prepared.ptiCreated}\n`
+            + `  Entries update: ${prepared.ptiUpdated}\n`
+            + `  Entries remove: ${prepared.ptiRemoved}\n`
+            + `  Readiness repairs: ${prepared.ptiReadinessRepairs}\n\n`
+            + 'Group Listing Index\n'
+            + `  Entries create: ${prepared.groupCreated}\n`
+            + `  Entries update: ${prepared.groupUpdated}\n`
+            + `  Entries remove: ${prepared.groupRemoved}\n`
+            + `  Readiness repairs: ${prepared.groupReadinessRepairs}\n\n`
+            + 'This repairs derived Trading indexes only.\n'
+            + 'Trade records and inventories are not changed.\n\n'
+            + 'Confirm will refresh current Trading data from Firebase before writing.\n'
+            + 'Final counts may differ slightly from this preview.',
+          'Rebuild Trade Indexes?',
+        );
+        if (!confirmed) return;
+
+        // S8d-4b: re-gather + fresh plan — never commit the advisory preview plan
+        const result = await commitTradeIndexRebuildFresh();
         if (!result.ok) {
           toast.error(result.error || 'Trade index rebuild failed');
           return;
         }
         if (result.skipped) {
-          toast.info(`Trade indexes already in sync (unchanged: ${result.unchanged})`);
+          toast.info(
+            `Trade indexes already in sync `
+            + `(PTI unchanged entries: ${result.ptiUnchanged}, group unchanged: ${result.groupUnchanged})`,
+          );
         } else {
           toast.success(
-            `Trade indexes rebuilt — created: ${result.created}, updated: ${result.updated}, removed: ${result.removed}, written: ${result.written}`,
+            `Trade indexes rebuilt — `
+              + `PTI create/update/remove: ${result.ptiCreated}/${result.ptiUpdated}/${result.ptiRemoved}, `
+              + `readiness: ${result.ptiReadinessRepairs}; `
+              + `Group create/update/remove: ${result.groupCreated}/${result.groupUpdated}/${result.groupRemoved}, `
+              + `readiness: ${result.groupReadinessRepairs}; `
+              + `written: ${result.written}`,
           );
         }
       } finally {

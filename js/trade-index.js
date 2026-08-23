@@ -12,6 +12,8 @@
  *
  * S5c-A: builders, readiness, drift, Admin rebuild, registration/group seeds.
  * S5c-B: lifecycle dual-write path planners + shadowCompare (Trading still canonical).
+ * S8d-4b: authoritative gather + pure buildTradeIndexRebuildPlan; Admin preview then
+ *   Confirm RE-GATHERS and commits a fresh plan (never the stale preview plan).
  * S5c-C: Research uses verified playerTradeIndex via trade-availability
  *   buildResearchAvailabilitySnapshot.
  * S5c-D6: Trading self-availability uses the same PTI maps via
@@ -22,6 +24,11 @@
  */
 
 import * as db from './database.js';
+import {
+  adminLoadCanonical,
+  assertCanonicalComplete,
+  canonicalChildEntries,
+} from './admin-maintenance.js';
 import { buildTradeReservationCounts } from './trade-availability.js';
 import * as metrics from './db-metrics.js';
 
@@ -32,6 +39,16 @@ export const TRADE_INDEX_META_ROOT = 'tradeIndexMeta';
 export const PLAYER_TRADE_INDEX_ROOT = 'playerTradeIndex';
 export const LISTINGS_BY_GROUP_ROOT = 'listingsByGroup';
 export const TRADE_INDEX_META_KEY = '_meta';
+
+/** Non-player infrastructure key under players/ — never seed PTI. */
+const TRADE_INDEX_EXCLUDED_PLAYER_KEYS = Object.freeze(['__admin__']);
+
+/** Hard allowlist for rebuild multipath keys (S8d-4b invariant). */
+export const TRADE_INDEX_REBUILD_ALLOWED_PREFIXES = Object.freeze([
+  `${PLAYER_TRADE_INDEX_ROOT}/`,
+  `${LISTINGS_BY_GROUP_ROOT}/`,
+  `${TRADE_INDEX_META_ROOT}/`,
+]);
 
 /** Direct statuses that belong in playerTradeIndex (mirrors reservation set). */
 export const INDEXED_DIRECT_STATUSES = new Set([
@@ -309,7 +326,7 @@ export function directTradeIndexEntriesEqual(a, b) {
     && a.offeringPlayerId === b.offeringPlayerId
     && a.targetPlayerId === b.targetPlayerId
     && a.offeredCardId === b.offeredCardId
-    && a.requestedCardId === b.requestedCardId
+    && (a.requestedCardId ?? null) === (b.requestedCardId ?? null)
     && Number(a.createdAt) === Number(b.createdAt)
     && (a.respondedAt == null ? b.respondedAt == null : Number(a.respondedAt) === Number(b.respondedAt))
   );
@@ -326,7 +343,7 @@ export function ownerListingIndexEntriesEqual(a, b) {
     a.id === b.id
     && a.status === b.status
     && a.offeredCardId === b.offeredCardId
-    && a.groupId === b.groupId
+    && (a.groupId ?? null) === (b.groupId ?? null)
     && Number(a.createdAt) === Number(b.createdAt)
     && (a.expiresAt == null ? b.expiresAt == null : Number(a.expiresAt) === Number(b.expiresAt))
     && _stringArraysEqual(a.requestedCardIds, b.requestedCardIds)
@@ -373,18 +390,47 @@ function _stringArraysEqual(a, b) {
 }
 
 /**
- * Derive the full desired index projection from canonical trades (Admin rebuild only).
- * @param {{ now?: number, rebuiltAt?: number }} [opts]
+ * @param {Record<string, unknown>|null|undefined} updates
+ * @returns {true}
  */
-export function deriveDesiredTradeIndexes(opts = {}) {
-  const now = Number.isFinite(Number(opts.now)) ? Number(opts.now) : Date.now();
-  const rebuiltAt = Number.isFinite(Number(opts.rebuiltAt)) ? Number(opts.rebuiltAt) : now;
+export function assertTradeIndexRebuildPathsAllowed(updates) {
+  const keys = updates && typeof updates === 'object' ? Object.keys(updates) : [];
+  for (const path of keys) {
+    const ok = TRADE_INDEX_REBUILD_ALLOWED_PREFIXES.some((prefix) => path.startsWith(prefix));
+    if (!ok) {
+      throw new Error(
+        `[TradeIndex] Illegal rebuild path ${JSON.stringify(path)} — `
+        + `only ${TRADE_INDEX_REBUILD_ALLOWED_PREFIXES.join(' | ')} allowed`,
+      );
+    }
+  }
+  return true;
+}
+
+/**
+ * Pure: derive desired PTI/LBG projection from explicit snapshots (no DB/cache).
+ *
+ * @param {{
+ *   playersSnapshot?: object|null,
+ *   groupsSnapshot?: object|null,
+ *   directTradesSnapshot?: object|null,
+ *   listingsSnapshot?: object|null,
+ *   now?: number,
+ *   rebuiltAt?: number,
+ * }} [input]
+ */
+export function deriveDesiredTradeIndexes(input = {}) {
+  const now = Number.isFinite(Number(input.now)) ? Number(input.now) : Date.now();
+  const rebuiltAt = Number.isFinite(Number(input.rebuiltAt)) ? Number(input.rebuiltAt) : now;
   const meta = buildTradeIndexMeta(rebuiltAt);
 
   /** @type {Map<string, { meta: object, direct: Map<string, object>, listings: Map<string, object> }>} */
   const players = new Map();
   /** @type {Map<string, { meta: object, listings: Map<string, object> }>} */
   const groups = new Map();
+  let skippedMissingGroup = 0;
+  let directTradesScanned = 0;
+  let listingsScanned = 0;
 
   const ensurePlayer = (username) => {
     if (!players.has(username)) {
@@ -400,32 +446,56 @@ export function deriveDesiredTradeIndexes(opts = {}) {
     return groups.get(groupId);
   };
 
-  // Seed every existing player / group (including zero-trade / zero-listing).
-  for (const { key } of db.getChildren('players')) {
-    if (key === '__admin__') continue;
+  const playerEntries = canonicalChildEntries(input.playersSnapshot, {
+    exclude: [...TRADE_INDEX_EXCLUDED_PLAYER_KEYS],
+  });
+  for (const { key } of playerEntries) {
     ensurePlayer(key);
   }
-  for (const { key } of db.getChildren('groups')) {
+
+  const groupEntries = canonicalChildEntries(input.groupsSnapshot, { exclude: [] });
+  const knownGroups = new Set(groupEntries.map(({ key }) => key));
+  for (const { key } of groupEntries) {
     ensureGroup(key);
   }
 
-  const allDirect = db.get('trades/direct') || {};
+  const allDirect = input.directTradesSnapshot && typeof input.directTradesSnapshot === 'object'
+    ? input.directTradesSnapshot
+    : {};
   for (const [tradeId, trade] of Object.entries(allDirect)) {
+    directTradesScanned += 1;
     const entry = buildDirectTradeIndexEntry(trade, tradeId);
     if (!entry) continue;
-    ensurePlayer(entry.offeringPlayerId).direct.set(entry.id, entry);
-    ensurePlayer(entry.targetPlayerId).direct.set(entry.id, entry);
+    // Only project under current canonical players (never invent deleted-user PTI roots)
+    if (players.has(entry.offeringPlayerId)) {
+      ensurePlayer(entry.offeringPlayerId).direct.set(entry.id, entry);
+    }
+    if (players.has(entry.targetPlayerId)) {
+      ensurePlayer(entry.targetPlayerId).direct.set(entry.id, entry);
+    }
   }
 
-  const allListings = db.get('trades/listings') || {};
+  const allListings = input.listingsSnapshot && typeof input.listingsSnapshot === 'object'
+    ? input.listingsSnapshot
+    : {};
   for (const [listingId, listing] of Object.entries(allListings)) {
+    listingsScanned += 1;
     const ownerEntry = buildOwnerListingIndexEntry(listing, listingId, now);
     if (ownerEntry && listing.ownerId) {
-      ensurePlayer(String(listing.ownerId)).listings.set(ownerEntry.id, ownerEntry);
+      const ownerKey = String(listing.ownerId);
+      if (players.has(ownerKey)) {
+        ensurePlayer(ownerKey).listings.set(ownerEntry.id, ownerEntry);
+      }
     }
     const groupEntry = buildGroupListingIndexEntry(listing, listingId, now);
     if (groupEntry && listing.groupId) {
-      ensureGroup(String(listing.groupId)).listings.set(groupEntry.id, groupEntry);
+      const gid = String(listing.groupId);
+      if (knownGroups.has(gid)) {
+        ensureGroup(gid).listings.set(groupEntry.id, groupEntry);
+      } else {
+        // Active listing points at deleted/missing group — owner PTI may still exist; no LBG
+        skippedMissingGroup += 1;
+      }
     }
   }
 
@@ -439,11 +509,19 @@ export function deriveDesiredTradeIndexes(opts = {}) {
       schemaVersion: CURRENT_TRADE_INDEX_SCHEMA_VERSION,
       rebuiltAt,
     },
+    skippedMissingGroup,
+    playersScanned: playerEntries.length,
+    groupsScanned: groupEntries.length,
+    directTradesScanned,
+    listingsScanned,
   };
 }
 
-function _childMap(path) {
-  const node = db.get(path);
+/**
+ * @param {object|null|undefined} node
+ * @returns {Map<string, object>}
+ */
+function _childMapFromNode(node) {
   if (!node || typeof node !== 'object') return new Map();
   const map = new Map();
   for (const [key, value] of Object.entries(node)) {
@@ -454,10 +532,539 @@ function _childMap(path) {
 }
 
 /**
- * Compare desired vs existing indexes without writing.
+ * Pure rebuild plan from explicit snapshots. No DB/cache reads.
+ *
+ * @param {{
+ *   playersSnapshot?: object|null,
+ *   groupsSnapshot?: object|null,
+ *   directTradesSnapshot?: object|null,
+ *   listingsSnapshot?: object|null,
+ *   playerTradeIndexSnapshot?: object|null,
+ *   listingsByGroupSnapshot?: object|null,
+ *   tradeIndexMetaSnapshot?: object|null,
+ *   now?: number,
+ *   rebuiltAt?: number,
+ * }} [input]
+ */
+export function buildTradeIndexRebuildPlan(input = {}) {
+  const desired = deriveDesiredTradeIndexes(input);
+  const ptiSnap = input.playerTradeIndexSnapshot && typeof input.playerTradeIndexSnapshot === 'object'
+    ? input.playerTradeIndexSnapshot
+    : {};
+  const lbgSnap = input.listingsByGroupSnapshot && typeof input.listingsByGroupSnapshot === 'object'
+    ? input.listingsByGroupSnapshot
+    : {};
+  const metaSnap = input.tradeIndexMetaSnapshot && typeof input.tradeIndexMetaSnapshot === 'object'
+    ? input.tradeIndexMetaSnapshot
+    : {};
+
+  /** @type {Record<string, object|null>} */
+  const updates = {};
+  let ptiCreated = 0;
+  let ptiUpdated = 0;
+  let ptiRemoved = 0;
+  let ptiUnchanged = 0;
+  let ptiReadinessRepairs = 0;
+  let groupCreated = 0;
+  let groupUpdated = 0;
+  let groupRemoved = 0;
+  let groupUnchanged = 0;
+  let groupReadinessRepairs = 0;
+  let deletedPlayerRootsRemoved = 0;
+  let deletedGroupRootsRemoved = 0;
+  let metaChanged = false;
+  /** @type {string[]} */
+  const createdKeys = [];
+  /** @type {string[]} */
+  const updatedKeys = [];
+  /** @type {string[]} */
+  const removedKeys = [];
+
+  const touchPtiEntry = (path, next, equalFn, existing) => {
+    if (existing == null) {
+      updates[path] = next;
+      ptiCreated += 1;
+      createdKeys.push(path);
+    } else if (!equalFn(existing, next)) {
+      updates[path] = next;
+      ptiUpdated += 1;
+      updatedKeys.push(path);
+    } else {
+      ptiUnchanged += 1;
+    }
+  };
+
+  const touchGroupEntry = (path, next, equalFn, existing) => {
+    if (existing == null) {
+      updates[path] = next;
+      groupCreated += 1;
+      createdKeys.push(path);
+    } else if (!equalFn(existing, next)) {
+      updates[path] = next;
+      groupUpdated += 1;
+      updatedKeys.push(path);
+    } else {
+      groupUnchanged += 1;
+    }
+  };
+
+  const existingPlayerKeys = new Set(Object.keys(ptiSnap));
+
+  for (const [username, bucket] of desired.players) {
+    existingPlayerKeys.delete(username);
+    const playerNode = ptiSnap[username];
+    const metaPath = `${PLAYER_TRADE_INDEX_ROOT}/${username}/${TRADE_INDEX_META_KEY}`;
+    const existingMeta = playerNode && typeof playerNode === 'object'
+      ? playerNode[TRADE_INDEX_META_KEY]
+      : undefined;
+    const nextMeta = isTradeIndexMetaReady(existingMeta)
+      ? buildTradeIndexMeta(existingMeta.rebuiltAt)
+      : bucket.meta;
+    if (existingMeta == null) {
+      updates[metaPath] = nextMeta;
+      ptiReadinessRepairs += 1;
+      createdKeys.push(metaPath);
+    } else if (!tradeIndexMetaEqual(existingMeta, nextMeta)) {
+      updates[metaPath] = nextMeta;
+      ptiReadinessRepairs += 1;
+      updatedKeys.push(metaPath);
+    } else {
+      ptiUnchanged += 1;
+    }
+
+    const existingDirect = _childMapFromNode(
+      playerNode && typeof playerNode === 'object' ? playerNode.direct : null,
+    );
+    for (const [tradeId, entry] of bucket.direct) {
+      const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}/direct/${tradeId}`;
+      touchPtiEntry(path, entry, directTradeIndexEntriesEqual, existingDirect.get(tradeId));
+      existingDirect.delete(tradeId);
+    }
+    for (const tradeId of existingDirect.keys()) {
+      const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}/direct/${tradeId}`;
+      updates[path] = null;
+      ptiRemoved += 1;
+      removedKeys.push(path);
+    }
+
+    const existingListings = _childMapFromNode(
+      playerNode && typeof playerNode === 'object' ? playerNode.listings : null,
+    );
+    for (const [listingId, entry] of bucket.listings) {
+      const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}/listings/${listingId}`;
+      touchPtiEntry(path, entry, ownerListingIndexEntriesEqual, existingListings.get(listingId));
+      existingListings.delete(listingId);
+    }
+    for (const listingId of existingListings.keys()) {
+      const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}/listings/${listingId}`;
+      updates[path] = null;
+      ptiRemoved += 1;
+      removedKeys.push(path);
+    }
+  }
+
+  for (const username of existingPlayerKeys) {
+    if (username === TRADE_INDEX_EXCLUDED_PLAYER_KEYS[0]) {
+      // still remove __admin__ PTI if present
+    }
+    const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}`;
+    updates[path] = null;
+    deletedPlayerRootsRemoved += 1;
+    ptiRemoved += 1;
+    removedKeys.push(path);
+  }
+
+  const existingGroupKeys = new Set(Object.keys(lbgSnap));
+
+  for (const [groupId, bucket] of desired.groups) {
+    existingGroupKeys.delete(groupId);
+    const groupNode = lbgSnap[groupId];
+    const metaPath = `${LISTINGS_BY_GROUP_ROOT}/${groupId}/${TRADE_INDEX_META_KEY}`;
+    const existingMeta = groupNode && typeof groupNode === 'object'
+      ? groupNode[TRADE_INDEX_META_KEY]
+      : undefined;
+    const nextMeta = isTradeIndexMetaReady(existingMeta)
+      ? buildTradeIndexMeta(existingMeta.rebuiltAt)
+      : bucket.meta;
+    if (existingMeta == null) {
+      updates[metaPath] = nextMeta;
+      groupReadinessRepairs += 1;
+      createdKeys.push(metaPath);
+    } else if (!tradeIndexMetaEqual(existingMeta, nextMeta)) {
+      updates[metaPath] = nextMeta;
+      groupReadinessRepairs += 1;
+      updatedKeys.push(metaPath);
+    } else {
+      groupUnchanged += 1;
+    }
+
+    const existingListings = _childMapFromNode(groupNode);
+    for (const [listingId, entry] of bucket.listings) {
+      const path = `${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`;
+      touchGroupEntry(path, entry, groupListingIndexEntriesEqual, existingListings.get(listingId));
+      existingListings.delete(listingId);
+    }
+    for (const listingId of existingListings.keys()) {
+      const path = `${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`;
+      updates[path] = null;
+      groupRemoved += 1;
+      removedKeys.push(path);
+    }
+  }
+
+  for (const groupId of existingGroupKeys) {
+    const path = `${LISTINGS_BY_GROUP_ROOT}/${groupId}`;
+    updates[path] = null;
+    deletedGroupRootsRemoved += 1;
+    groupRemoved += 1;
+    removedKeys.push(path);
+  }
+
+  const gv = metaSnap.schemaVersion;
+  if (Number(gv) !== desired.global.schemaVersion) {
+    updates[`${TRADE_INDEX_META_ROOT}/schemaVersion`] = desired.global.schemaVersion;
+    metaChanged = true;
+  }
+
+  const gr = metaSnap.rebuiltAt;
+  const contentPending = Object.keys(updates).length;
+  if (contentPending > 0) {
+    const stamp = desired.global.rebuiltAt;
+    updates[`${TRADE_INDEX_META_ROOT}/rebuiltAt`] = stamp;
+    metaChanged = true;
+    const stampedMeta = buildTradeIndexMeta(stamp);
+    for (const path of Object.keys(updates)) {
+      if (path.endsWith(`/${TRADE_INDEX_META_KEY}`) && updates[path] != null) {
+        updates[path] = stampedMeta;
+      }
+    }
+  } else if (gr == null) {
+    // First global stamp only when schemaVersion already correct but rebuiltAt never set —
+    // still a meta-only write (rare). Prefer zero writes when fully clean including rebuiltAt.
+    if (Number(gv) !== desired.global.schemaVersion) {
+      updates[`${TRADE_INDEX_META_ROOT}/schemaVersion`] = desired.global.schemaVersion;
+      updates[`${TRADE_INDEX_META_ROOT}/rebuiltAt`] = desired.global.rebuiltAt;
+      metaChanged = true;
+    }
+    // If schema ok and only rebuiltAt null with zero content: leave clean (no stamp) for true idempotency
+  }
+
+  assertTradeIndexRebuildPathsAllowed(updates);
+
+  return {
+    ok: true,
+    updates,
+    playersScanned: desired.playersScanned,
+    groupsScanned: desired.groupsScanned,
+    directTradesScanned: desired.directTradesScanned,
+    listingsScanned: desired.listingsScanned,
+    ptiCreated,
+    ptiUpdated,
+    ptiRemoved,
+    ptiUnchanged,
+    ptiReadinessRepairs,
+    groupCreated,
+    groupUpdated,
+    groupRemoved,
+    groupUnchanged,
+    groupReadinessRepairs,
+    deletedPlayerRootsRemoved,
+    deletedGroupRootsRemoved,
+    skippedMissingGroup: desired.skippedMissingGroup,
+    metaChanged,
+    createdKeys,
+    updatedKeys,
+    removedKeys,
+    now: desired.now,
+    rebuiltAt: updates[`${TRADE_INDEX_META_ROOT}/rebuiltAt`] ?? gr ?? desired.rebuiltAt,
+  };
+}
+
+/**
+ * @deprecated Prefer buildTradeIndexRebuildPlan with explicit snapshots.
+ * Thin alias for callers that still pass opts shaped like the old API.
+ */
+export function buildTradeIndexRebuildUpdates(opts = {}) {
+  return buildTradeIndexRebuildPlan(opts);
+}
+
+/**
+ * Gather authoritative Firebase snapshots for Trade Index rebuild (fail-closed).
+ *
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export async function gatherTradeIndexRebuildSnapshots(options = {}) {
+  const playersLoad = await adminLoadCanonical('players', options);
+  if (!assertCanonicalComplete(playersLoad)) {
+    return {
+      ok: false,
+      complete: false,
+      error: playersLoad?.error || 'PLAYERS_CANONICAL_INCOMPLETE',
+    };
+  }
+
+  const directLoad = await adminLoadCanonical('trades/direct', options);
+  if (!assertCanonicalComplete(directLoad)) {
+    return {
+      ok: false,
+      complete: false,
+      error: directLoad?.error || 'DIRECT_TRADES_CANONICAL_INCOMPLETE',
+    };
+  }
+
+  const listingsLoad = await adminLoadCanonical('trades/listings', options);
+  if (!assertCanonicalComplete(listingsLoad)) {
+    return {
+      ok: false,
+      complete: false,
+      error: listingsLoad?.error || 'LISTINGS_CANONICAL_INCOMPLETE',
+    };
+  }
+
+  const forceOnce = async (path) => {
+    const load = await db.loadPathOnce(path, {
+      force: true,
+      timeoutMs: options.timeoutMs,
+    });
+    if (!load || load.ok !== true || load.mode !== 'firebase') {
+      return { ok: false, error: load?.error || `${path}_LOAD_INCOMPLETE`, value: null };
+    }
+    return { ok: true, value: load.value == null ? null : load.value };
+  };
+
+  const groupsLoad = await forceOnce('groups');
+  if (!groupsLoad.ok) {
+    return { ok: false, complete: false, error: groupsLoad.error };
+  }
+  const ptiLoad = await forceOnce(PLAYER_TRADE_INDEX_ROOT);
+  if (!ptiLoad.ok) {
+    return { ok: false, complete: false, error: ptiLoad.error };
+  }
+  const lbgLoad = await forceOnce(LISTINGS_BY_GROUP_ROOT);
+  if (!lbgLoad.ok) {
+    return { ok: false, complete: false, error: lbgLoad.error };
+  }
+  const metaLoad = await forceOnce(TRADE_INDEX_META_ROOT);
+  if (!metaLoad.ok) {
+    return { ok: false, complete: false, error: metaLoad.error };
+  }
+
+  return {
+    ok: true,
+    complete: true,
+    playersSnapshot: playersLoad.value,
+    groupsSnapshot: groupsLoad.value,
+    directTradesSnapshot: directLoad.value,
+    listingsSnapshot: listingsLoad.value,
+    playerTradeIndexSnapshot: ptiLoad.value,
+    listingsByGroupSnapshot: lbgLoad.value,
+    tradeIndexMetaSnapshot: metaLoad.value,
+  };
+}
+
+/**
+ * Advisory preview: gather + plan. Does not write.
+ * Confirm path must re-gather (do not commit this plan).
+ *
+ * @param {{ timeoutMs?: number, now?: number }} [options]
+ */
+export async function prepareTradeIndexRebuild(options = {}) {
+  const gathered = await gatherTradeIndexRebuildSnapshots(options);
+  if (!gathered.ok || !gathered.complete) {
+    return {
+      ok: false,
+      skipped: false,
+      complete: false,
+      plan: null,
+      error: gathered.error || 'Gather failed',
+      playersScanned: 0,
+      groupsScanned: 0,
+      directTradesScanned: 0,
+      listingsScanned: 0,
+      ptiCreated: 0,
+      ptiUpdated: 0,
+      ptiRemoved: 0,
+      ptiReadinessRepairs: 0,
+      groupCreated: 0,
+      groupUpdated: 0,
+      groupRemoved: 0,
+      groupReadinessRepairs: 0,
+    };
+  }
+
+  const plan = buildTradeIndexRebuildPlan({
+    playersSnapshot: gathered.playersSnapshot,
+    groupsSnapshot: gathered.groupsSnapshot,
+    directTradesSnapshot: gathered.directTradesSnapshot,
+    listingsSnapshot: gathered.listingsSnapshot,
+    playerTradeIndexSnapshot: gathered.playerTradeIndexSnapshot,
+    listingsByGroupSnapshot: gathered.listingsByGroupSnapshot,
+    tradeIndexMetaSnapshot: gathered.tradeIndexMetaSnapshot,
+    now: options.now,
+  });
+
+  return {
+    ok: true,
+    skipped: Object.keys(plan.updates).length === 0,
+    complete: true,
+    plan,
+    advisory: true,
+    error: undefined,
+    playersScanned: plan.playersScanned,
+    groupsScanned: plan.groupsScanned,
+    directTradesScanned: plan.directTradesScanned,
+    listingsScanned: plan.listingsScanned,
+    ptiCreated: plan.ptiCreated,
+    ptiUpdated: plan.ptiUpdated,
+    ptiRemoved: plan.ptiRemoved,
+    ptiUnchanged: plan.ptiUnchanged,
+    ptiReadinessRepairs: plan.ptiReadinessRepairs,
+    groupCreated: plan.groupCreated,
+    groupUpdated: plan.groupUpdated,
+    groupRemoved: plan.groupRemoved,
+    groupUnchanged: plan.groupUnchanged,
+    groupReadinessRepairs: plan.groupReadinessRepairs,
+    deletedPlayerRootsRemoved: plan.deletedPlayerRootsRemoved,
+    deletedGroupRootsRemoved: plan.deletedGroupRootsRemoved,
+    skippedMissingGroup: plan.skippedMissingGroup,
+    metaChanged: plan.metaChanged,
+  };
+}
+
+/**
+ * Commit a fresh in-memory plan (exact updates). Does not re-gather.
+ * Prefer commitTradeIndexRebuildFresh() from Admin UI.
+ *
+ * @param {object} plan
+ */
+export async function commitTradeIndexRebuildPlan(plan) {
+  if (!plan || typeof plan !== 'object') {
+    return {
+      ok: false,
+      skipped: false,
+      written: 0,
+      error: 'INVALID_PLAN',
+    };
+  }
+
+  const updates = plan.updates && typeof plan.updates === 'object' ? plan.updates : {};
+  try {
+    assertTradeIndexRebuildPathsAllowed(updates);
+  } catch (err) {
+    return {
+      ok: false,
+      skipped: false,
+      written: 0,
+      error: err?.message || 'ILLEGAL_REBUILD_PATH',
+    };
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return {
+      ok: true,
+      skipped: true,
+      written: 0,
+      ..._planCounts(plan),
+    };
+  }
+
+  const ack = await db.updateAcknowledged(updates);
+  if (!ack.ok) {
+    return {
+      ok: false,
+      skipped: false,
+      written: 0,
+      mode: ack.mode,
+      error: ack.error || 'COMMIT_FAILED',
+      ..._planCounts(plan),
+    };
+  }
+
+  return {
+    ok: true,
+    skipped: false,
+    written: Object.keys(updates).length,
+    mode: ack.mode,
+    ..._planCounts(plan),
+    rebuiltAt: plan.rebuiltAt,
+  };
+}
+
+function _planCounts(plan) {
+  return {
+    playersScanned: Number(plan.playersScanned) || 0,
+    groupsScanned: Number(plan.groupsScanned) || 0,
+    directTradesScanned: Number(plan.directTradesScanned) || 0,
+    listingsScanned: Number(plan.listingsScanned) || 0,
+    ptiCreated: Number(plan.ptiCreated) || 0,
+    ptiUpdated: Number(plan.ptiUpdated) || 0,
+    ptiRemoved: Number(plan.ptiRemoved) || 0,
+    ptiUnchanged: Number(plan.ptiUnchanged) || 0,
+    ptiReadinessRepairs: Number(plan.ptiReadinessRepairs) || 0,
+    groupCreated: Number(plan.groupCreated) || 0,
+    groupUpdated: Number(plan.groupUpdated) || 0,
+    groupRemoved: Number(plan.groupRemoved) || 0,
+    groupUnchanged: Number(plan.groupUnchanged) || 0,
+    groupReadinessRepairs: Number(plan.groupReadinessRepairs) || 0,
+    deletedPlayerRootsRemoved: Number(plan.deletedPlayerRootsRemoved) || 0,
+    deletedGroupRootsRemoved: Number(plan.deletedGroupRootsRemoved) || 0,
+    skippedMissingGroup: Number(plan.skippedMissingGroup) || 0,
+    metaChanged: plan.metaChanged === true,
+  };
+}
+
+/**
+ * S8d-4b confirm path: re-gather → fresh plan → commit. Never commits a stale preview plan.
+ *
+ * @param {{ timeoutMs?: number, now?: number }} [options]
+ */
+export async function commitTradeIndexRebuildFresh(options = {}) {
+  const gathered = await gatherTradeIndexRebuildSnapshots(options);
+  if (!gathered.ok || !gathered.complete) {
+    return {
+      ok: false,
+      skipped: false,
+      written: 0,
+      error: gathered.error || 'Fresh gather failed',
+      ..._planCounts({}),
+    };
+  }
+
+  const plan = buildTradeIndexRebuildPlan({
+    playersSnapshot: gathered.playersSnapshot,
+    groupsSnapshot: gathered.groupsSnapshot,
+    directTradesSnapshot: gathered.directTradesSnapshot,
+    listingsSnapshot: gathered.listingsSnapshot,
+    playerTradeIndexSnapshot: gathered.playerTradeIndexSnapshot,
+    listingsByGroupSnapshot: gathered.listingsByGroupSnapshot,
+    tradeIndexMetaSnapshot: gathered.tradeIndexMetaSnapshot,
+    now: options.now,
+  });
+
+  return commitTradeIndexRebuildPlan(plan);
+}
+
+/**
+ * Legacy DevTools drift report (still uses scoped cache — not for Admin rebuild).
+ * Prefer prepareTradeIndexRebuild for authoritative preview.
  */
 export function getTradeIndexDriftReport(opts = {}) {
-  const desired = deriveDesiredTradeIndexes(opts);
+  const playersSnap = {};
+  for (const { key, value } of db.getChildren('players')) {
+    playersSnap[key] = value;
+  }
+  const groupsSnap = {};
+  for (const { key, value } of db.getChildren('groups')) {
+    groupsSnap[key] = value;
+  }
+  const desired = deriveDesiredTradeIndexes({
+    playersSnapshot: playersSnap,
+    groupsSnapshot: groupsSnap,
+    directTradesSnapshot: db.get('trades/direct'),
+    listingsSnapshot: db.get('trades/listings'),
+    now: opts.now,
+    rebuiltAt: opts.rebuiltAt,
+  });
 
   const missing = [];
   const stale = [];
@@ -482,13 +1089,12 @@ export function getTradeIndexDriftReport(opts = {}) {
     if (!isTradeIndexMetaReady(existingMeta)) {
       unreadyPlayer.push(username);
     } else if (!tradeIndexMetaEqual(existingMeta, bucket.meta)) {
-      // ready but rebuiltAt / v detail differs — count as stale meta
       stale.push(`${metaPath}`);
     } else {
       inSync += 1;
     }
 
-    const existingDirect = _childMap(`${PLAYER_TRADE_INDEX_ROOT}/${username}/direct`);
+    const existingDirect = _childMapFromNode(db.get(`${PLAYER_TRADE_INDEX_ROOT}/${username}/direct`));
     for (const [tradeId, entry] of bucket.direct) {
       const cur = existingDirect.get(tradeId);
       if (cur == null) {
@@ -510,7 +1116,7 @@ export function getTradeIndexDriftReport(opts = {}) {
       orphaned.push(`${PLAYER_TRADE_INDEX_ROOT}/${username}/direct/${tradeId}`);
     }
 
-    const existingListings = _childMap(`${PLAYER_TRADE_INDEX_ROOT}/${username}/listings`);
+    const existingListings = _childMapFromNode(db.get(`${PLAYER_TRADE_INDEX_ROOT}/${username}/listings`));
     for (const [listingId, entry] of bucket.listings) {
       const cur = existingListings.get(listingId);
       if (cur == null) {
@@ -548,7 +1154,7 @@ export function getTradeIndexDriftReport(opts = {}) {
       inSync += 1;
     }
 
-    const existingListings = _childMap(`${LISTINGS_BY_GROUP_ROOT}/${groupId}`);
+    const existingListings = _childMapFromNode(db.get(`${LISTINGS_BY_GROUP_ROOT}/${groupId}`));
     for (const [listingId, entry] of bucket.listings) {
       const cur = existingListings.get(listingId);
       if (cur == null) {
@@ -559,12 +1165,7 @@ export function getTradeIndexDriftReport(opts = {}) {
         } else if (cur.status !== entry.status) {
           wrongStatus.push(`${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`);
         } else {
-          // Wrong group bucket would appear as orphan elsewhere + missing here
-          if (entry.groupId && entry.groupId !== groupId) {
-            wrongGroup.push(`${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`);
-          } else {
-            stale.push(`${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`);
-          }
+          stale.push(`${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`);
         }
       } else {
         inSync += 1;
@@ -616,200 +1217,13 @@ export function getTradeIndexDriftReport(opts = {}) {
 }
 
 /**
- * Build multi-path updates to bring indexes in sync. Omits unchanged paths.
- * Never includes players/* inventory or canonical trades/* bodies.
- * Global/player rebuiltAt is stamped only when this rebuild writes other paths
- * (second clean run → zero writes).
- * @param {{ now?: number, rebuiltAt?: number }} [opts]
- */
-export function buildTradeIndexRebuildUpdates(opts = {}) {
-  const desired = deriveDesiredTradeIndexes(opts);
-  /** @type {Record<string, object|null>} */
-  const updates = {};
-  let created = 0;
-  let updated = 0;
-  let removed = 0;
-  let unchanged = 0;
-
-  const touch = (path, next, equalFn, existing) => {
-    if (existing == null) {
-      updates[path] = next;
-      created += 1;
-    } else if (!equalFn(existing, next)) {
-      updates[path] = next;
-      updated += 1;
-    } else {
-      unchanged += 1;
-    }
-  };
-
-  const existingPlayerKeys = new Set(
-    db.getChildren(PLAYER_TRADE_INDEX_ROOT).map(({ key }) => key),
-  );
-
-  for (const [username, bucket] of desired.players) {
-    existingPlayerKeys.delete(username);
-    const metaPath = `${PLAYER_TRADE_INDEX_ROOT}/${username}/${TRADE_INDEX_META_KEY}`;
-    // Compare ready+v only; preserve existing rebuiltAt when already ready
-    const existingMeta = db.get(metaPath);
-    const nextMeta = isTradeIndexMetaReady(existingMeta)
-      ? buildTradeIndexMeta(existingMeta.rebuiltAt)
-      : bucket.meta;
-    touch(metaPath, nextMeta, tradeIndexMetaEqual, existingMeta);
-
-    const existingDirect = _childMap(`${PLAYER_TRADE_INDEX_ROOT}/${username}/direct`);
-    for (const [tradeId, entry] of bucket.direct) {
-      const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}/direct/${tradeId}`;
-      touch(path, entry, directTradeIndexEntriesEqual, existingDirect.get(tradeId));
-      existingDirect.delete(tradeId);
-    }
-    for (const tradeId of existingDirect.keys()) {
-      updates[`${PLAYER_TRADE_INDEX_ROOT}/${username}/direct/${tradeId}`] = null;
-      removed += 1;
-    }
-
-    const existingListings = _childMap(`${PLAYER_TRADE_INDEX_ROOT}/${username}/listings`);
-    for (const [listingId, entry] of bucket.listings) {
-      const path = `${PLAYER_TRADE_INDEX_ROOT}/${username}/listings/${listingId}`;
-      touch(path, entry, ownerListingIndexEntriesEqual, existingListings.get(listingId));
-      existingListings.delete(listingId);
-    }
-    for (const listingId of existingListings.keys()) {
-      updates[`${PLAYER_TRADE_INDEX_ROOT}/${username}/listings/${listingId}`] = null;
-      removed += 1;
-    }
-  }
-
-  for (const username of existingPlayerKeys) {
-    updates[`${PLAYER_TRADE_INDEX_ROOT}/${username}`] = null;
-    removed += 1;
-  }
-
-  const existingGroupKeys = new Set(
-    db.getChildren(LISTINGS_BY_GROUP_ROOT).map(({ key }) => key),
-  );
-
-  for (const [groupId, bucket] of desired.groups) {
-    existingGroupKeys.delete(groupId);
-    const metaPath = `${LISTINGS_BY_GROUP_ROOT}/${groupId}/${TRADE_INDEX_META_KEY}`;
-    const existingMeta = db.get(metaPath);
-    const nextMeta = isTradeIndexMetaReady(existingMeta)
-      ? buildTradeIndexMeta(existingMeta.rebuiltAt)
-      : bucket.meta;
-    touch(metaPath, nextMeta, tradeIndexMetaEqual, existingMeta);
-
-    const existingListings = _childMap(`${LISTINGS_BY_GROUP_ROOT}/${groupId}`);
-    for (const [listingId, entry] of bucket.listings) {
-      const path = `${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`;
-      touch(path, entry, groupListingIndexEntriesEqual, existingListings.get(listingId));
-      existingListings.delete(listingId);
-    }
-    for (const listingId of existingListings.keys()) {
-      updates[`${LISTINGS_BY_GROUP_ROOT}/${groupId}/${listingId}`] = null;
-      removed += 1;
-    }
-  }
-
-  for (const groupId of existingGroupKeys) {
-    updates[`${LISTINGS_BY_GROUP_ROOT}/${groupId}`] = null;
-    removed += 1;
-  }
-
-  const gv = db.get(`${TRADE_INDEX_META_ROOT}/schemaVersion`);
-  if (Number(gv) !== desired.global.schemaVersion) {
-    updates[`${TRADE_INDEX_META_ROOT}/schemaVersion`] = desired.global.schemaVersion;
-    if (gv == null) created += 1;
-    else updated += 1;
-  } else {
-    unchanged += 1;
-  }
-
-  const gr = db.get(`${TRADE_INDEX_META_ROOT}/rebuiltAt`);
-  const pendingWrites = Object.keys(updates).length;
-  if (pendingWrites > 0) {
-    // Stamp rebuiltAt + refresh any meta nodes included in this write batch
-    const stamp = desired.global.rebuiltAt;
-    updates[`${TRADE_INDEX_META_ROOT}/rebuiltAt`] = stamp;
-    if (gr == null) created += 1;
-    else if (Number(gr) !== Number(stamp)) updated += 1;
-    else unchanged += 1;
-
-    const stampedMeta = buildTradeIndexMeta(stamp);
-    for (const path of Object.keys(updates)) {
-      if (path.endsWith(`/${TRADE_INDEX_META_KEY}`) && updates[path] != null) {
-        updates[path] = stampedMeta;
-      }
-    }
-  } else if (gr == null) {
-    // First global stamp with otherwise-empty tree (only players/groups with ready meta already)
-    updates[`${TRADE_INDEX_META_ROOT}/schemaVersion`] = desired.global.schemaVersion;
-    updates[`${TRADE_INDEX_META_ROOT}/rebuiltAt`] = desired.global.rebuiltAt;
-    created += Number(gv) === desired.global.schemaVersion ? 1 : 2;
-  } else {
-    unchanged += 1;
-  }
-
-  return {
-    updates,
-    created,
-    updated,
-    removed,
-    unchanged,
-    rebuiltAt: updates[`${TRADE_INDEX_META_ROOT}/rebuiltAt`] ?? gr ?? desired.rebuiltAt,
-  };
-}
-
-/**
- * Admin-only repair: scan canonical trades/direct + trades/listings, rewrite derived indexes.
- * Omits unchanged paths. Zero Firebase writes when already in sync.
- * Never modifies inventories or canonical trade bodies.
+ * Admin repair: fresh gather → plan → commit (same as confirm path).
+ * Prefer prepareTradeIndexRebuild + commitTradeIndexRebuildFresh for Admin UI.
  *
- * @returns {Promise<object>}
+ * @param {{ timeoutMs?: number, now?: number }} [opts]
  */
 export async function rebuildTradeIndexes(opts = {}) {
-  const plan = buildTradeIndexRebuildUpdates(opts);
-  const pathCount = Object.keys(plan.updates).length;
-
-  if (pathCount === 0) {
-    return {
-      ok: true,
-      skipped: true,
-      created: 0,
-      updated: 0,
-      removed: 0,
-      unchanged: plan.unchanged,
-      written: 0,
-      rebuiltAt: plan.rebuiltAt,
-    };
-  }
-
-  const ack = await db.updateAcknowledged(plan.updates);
-  if (!ack.ok) {
-    return {
-      ok: false,
-      skipped: false,
-      created: plan.created,
-      updated: plan.updated,
-      removed: plan.removed,
-      unchanged: plan.unchanged,
-      written: pathCount,
-      rebuiltAt: plan.rebuiltAt,
-      mode: ack.mode,
-      error: ack.error || 'Trade index rebuild write failed',
-    };
-  }
-
-  return {
-    ok: true,
-    skipped: false,
-    created: plan.created,
-    updated: plan.updated,
-    removed: plan.removed,
-    unchanged: plan.unchanged,
-    written: pathCount,
-    rebuiltAt: plan.rebuiltAt,
-    mode: ack.mode,
-  };
+  return commitTradeIndexRebuildFresh(opts);
 }
 
 // ─── S5c-B: lifecycle path planners (single source of projection fields) ─────
@@ -1202,6 +1616,7 @@ function _installWindowApi() {
     TRADE_INDEX_META_ROOT,
     PLAYER_TRADE_INDEX_ROOT,
     LISTINGS_BY_GROUP_ROOT,
+    TRADE_INDEX_REBUILD_ALLOWED_PREFIXES,
     buildTradeIndexMeta,
     isTradeIndexMetaReady,
     isGlobalTradeIndexMetaCurrent,
@@ -1210,8 +1625,14 @@ function _installWindowApi() {
     getReservationIndexSource,
     canAllowCanonicalTradeTreeFallback,
     getTradeIndexDriftReport,
-    rebuildTradeIndexes,
     deriveDesiredTradeIndexes,
+    buildTradeIndexRebuildPlan,
+    assertTradeIndexRebuildPathsAllowed,
+    gatherTradeIndexRebuildSnapshots,
+    prepareTradeIndexRebuild,
+    commitTradeIndexRebuildFresh,
+    commitTradeIndexRebuildPlan,
+    rebuildTradeIndexes,
     directIndexUpdatesForTrade,
     directIndexRemovalsForTrade,
     directClaimIndexTransitionPaths,
@@ -1223,9 +1644,11 @@ function _installWindowApi() {
     buildPlayerDeleteTradeCleanupUpdates,
     shadowCompare,
     help() {
-      console.info(`Trade Index (S5c-A/B)
+      console.info(`Trade Index (S5c + S8d-4b safe rebuild)
 Roots: ${PLAYER_TRADE_INDEX_ROOT}, ${LISTINGS_BY_GROUP_ROOT}, ${TRADE_INDEX_META_ROOT}
-API: getTradeIndexDriftReport | rebuildTradeIndexes | shadowCompare | isPlayerTradeIndexReady
+Safe rebuild: prepareTradeIndexRebuild() → confirm → commitTradeIndexRebuildFresh()
+  (Confirm RE-GATHERS; never commits stale preview plan)
+API: getTradeIndexDriftReport (cache diagnostic) | rebuildTradeIndexes
 S5c-B: lifecycle dual-writes keep indexes current; consumers still read canonical trades.
 Safety: unready index must never mean zero reservations.`);
     },
