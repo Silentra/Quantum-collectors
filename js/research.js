@@ -18,11 +18,23 @@
 import * as db from './database.js';
 import * as cards from './cards.js';
 import {
+  adminLoadCanonical,
+  assertCanonicalComplete,
+  canonicalChildEntries,
+} from './admin-maintenance.js';
+import {
   STAT_TYPES,
+  LEADERBOARDS_ROOT,
   buildLeaderboardSummaryPathsForChangedStats,
   playerLikeWithStatOverlay,
   syncLeaderboardSummariesForPlayer,
 } from './leaderboard-summaries.js';
+
+/** Infra key under players/ — never repair as a student. */
+const UNIQUE_CARDS_EXCLUDED_PLAYER_KEYS = Object.freeze(['__admin__']);
+
+const UNIQUE_CARDS_STAT_PATH_RE = /^players\/[^/]+\/stats\/uniqueCardsOwned$/;
+const UNIQUE_CARDS_LB_PATH_RE = /^leaderboards\/uniqueCardsOwned\/[^/]+$/;
 
 // ---------- Default RP fields ----------
 
@@ -296,6 +308,27 @@ export function computeUniqueCardsOwned(username) {
 }
 
 /**
+ * Unique card count from an inventory map against an explicit cards catalog snapshot.
+ * Pure — no DB/cache. Same rules as computeUniqueCardsOwnedFromInventory.
+ *
+ * @param {object|null|undefined} inventory
+ * @param {object|null|undefined} cardsSnapshot - map of cardId → card
+ * @returns {number}
+ */
+export function countUniqueCardsOwnedFromSnapshots(inventory = {}, cardsSnapshot = null) {
+  const catalog = cardsSnapshot && typeof cardsSnapshot === 'object' ? cardsSnapshot : {};
+  let count = 0;
+  const inv = inventory && typeof inventory === 'object' ? inventory : {};
+  for (const [cardId, qty] of Object.entries(inv)) {
+    if (!(Number(qty) > 0)) continue;
+    const card = catalog[cardId];
+    if (!card || card.enabled === false) continue;
+    count += 1;
+  }
+  return count;
+}
+
+/**
  * Unique card count from an inventory map (no DB writes).
  * Aligns with Collection/Profile progress — uses `cards.getCard` (same catalog cache).
  * @param {Object} inventory
@@ -310,6 +343,324 @@ export function computeUniqueCardsOwnedFromInventory(inventory = {}) {
     count += 1;
   }
   return count;
+}
+
+/**
+ * @param {Record<string, unknown>|null|undefined} updates
+ * @returns {true}
+ */
+export function assertUniqueCardsRepairPathsAllowed(updates) {
+  const keys = updates && typeof updates === 'object' ? Object.keys(updates) : [];
+  for (const path of keys) {
+    if (UNIQUE_CARDS_STAT_PATH_RE.test(path) || UNIQUE_CARDS_LB_PATH_RE.test(path)) continue;
+    throw new Error(
+      `[UniqueCardsRepair] Illegal path ${JSON.stringify(path)} — `
+      + 'only players/{u}/stats/uniqueCardsOwned and leaderboards/uniqueCardsOwned/{u} allowed',
+    );
+  }
+  return true;
+}
+
+/**
+ * Pure Unique Cards repair planner (S8d-5a). No DB/cache reads.
+ * Only plans writes when stored stats.uniqueCardsOwned differs from inventory-derived count.
+ * When a stat is repaired, also writes the live uniqueCardsOwned LB leaf (create/update).
+ * Does not repair LB-only drift when the stored stat is already correct (use S8d-3 for that).
+ *
+ * @param {{
+ *   playersSnapshot?: object|null,
+ *   cardsSnapshot?: object|null,
+ *   leaderboardSnapshot?: object|null,
+ *   now?: number,
+ * }} [input]
+ */
+export function buildUniqueCardsRepairPlan(input = {}) {
+  const now = Number.isFinite(Number(input.now)) ? Number(input.now) : Date.now();
+  const cardsSnap = input.cardsSnapshot && typeof input.cardsSnapshot === 'object'
+    ? input.cardsSnapshot
+    : {};
+  // Accept full leaderboards root or uniqueCardsOwned subtree
+  let lbUnique = null;
+  const lbRoot = input.leaderboardSnapshot;
+  if (lbRoot && typeof lbRoot === 'object') {
+    if (lbRoot.uniqueCardsOwned && typeof lbRoot.uniqueCardsOwned === 'object') {
+      lbUnique = lbRoot.uniqueCardsOwned;
+    } else {
+      lbUnique = lbRoot;
+    }
+  }
+  lbUnique = lbUnique && typeof lbUnique === 'object' ? lbUnique : {};
+
+  /** @type {Record<string, object|number>} */
+  const updates = {};
+  let playersChanged = 0;
+  let unchanged = 0;
+  let statRepairs = 0;
+  let leaderboardCreates = 0;
+  let leaderboardUpdates = 0;
+  /** @type {string[]} */
+  const changedPlayers = [];
+
+  const playerEntries = canonicalChildEntries(input.playersSnapshot, {
+    exclude: [...UNIQUE_CARDS_EXCLUDED_PLAYER_KEYS],
+  });
+
+  for (const { key: username, value: player } of playerEntries) {
+    const playerObj = player != null && typeof player === 'object' ? player : {};
+    const inventory = playerObj.inventory && typeof playerObj.inventory === 'object'
+      ? playerObj.inventory
+      : {};
+    const next = countUniqueCardsOwnedFromSnapshots(inventory, cardsSnap);
+    const prev = playerObj.stats?.uniqueCardsOwned;
+    if (typeof prev === 'number' && prev === next) {
+      unchanged += 1;
+      continue;
+    }
+
+    const statPath = `players/${username}/stats/uniqueCardsOwned`;
+    updates[statPath] = next;
+    statRepairs += 1;
+
+    const playerLike = playerLikeWithStatOverlay(playerObj, {
+      [STAT_TYPES.UNIQUE_CARDS_OWNED]: next,
+    });
+    const lbPaths = buildLeaderboardSummaryPathsForChangedStats(
+      username,
+      playerLike,
+      [STAT_TYPES.UNIQUE_CARDS_OWNED],
+      now,
+    );
+    Object.assign(updates, lbPaths);
+
+    const lbPath = `${LEADERBOARDS_ROOT}/uniqueCardsOwned/${username}`;
+    if (lbUnique[username] == null) leaderboardCreates += 1;
+    else leaderboardUpdates += 1;
+
+    playersChanged += 1;
+    changedPlayers.push(username);
+  }
+
+  assertUniqueCardsRepairPathsAllowed(updates);
+
+  return {
+    ok: true,
+    updates,
+    playersScanned: playerEntries.length,
+    playersChanged,
+    unchanged,
+    statRepairs,
+    leaderboardCreates,
+    leaderboardUpdates,
+    changedPlayers,
+    now,
+  };
+}
+
+/**
+ * Authoritative gather for Unique Cards repair (fail-closed).
+ * @param {{ timeoutMs?: number }} [options]
+ */
+export async function gatherUniqueCardsRepairSnapshots(options = {}) {
+  const playersLoad = await adminLoadCanonical('players', options);
+  if (!assertCanonicalComplete(playersLoad)) {
+    return {
+      ok: false,
+      complete: false,
+      error: playersLoad?.error || 'PLAYERS_CANONICAL_INCOMPLETE',
+    };
+  }
+
+  const cardsLoad = await db.loadPathOnce('cards', {
+    force: true,
+    timeoutMs: options.timeoutMs,
+  });
+  if (!cardsLoad || cardsLoad.ok !== true || cardsLoad.mode !== 'firebase') {
+    return {
+      ok: false,
+      complete: false,
+      error: cardsLoad?.error || 'CARDS_LOAD_INCOMPLETE',
+    };
+  }
+
+  const lbPath = `${LEADERBOARDS_ROOT}/uniqueCardsOwned`;
+  const lbLoad = await db.loadPathOnce(lbPath, {
+    force: true,
+    timeoutMs: options.timeoutMs,
+  });
+  if (!lbLoad || lbLoad.ok !== true || lbLoad.mode !== 'firebase') {
+    return {
+      ok: false,
+      complete: false,
+      error: lbLoad?.error || 'UNIQUE_CARDS_LB_LOAD_INCOMPLETE',
+    };
+  }
+
+  return {
+    ok: true,
+    complete: true,
+    playersSnapshot: playersLoad.value,
+    cardsSnapshot: cardsLoad.value == null ? null : cardsLoad.value,
+    leaderboardSnapshot: lbLoad.value == null ? null : lbLoad.value,
+  };
+}
+
+/**
+ * Gather + plan (no writes). For Admin preview.
+ * @param {{ timeoutMs?: number, now?: number }} [options]
+ */
+export async function prepareUniqueCardsRepair(options = {}) {
+  const gathered = await gatherUniqueCardsRepairSnapshots(options);
+  if (!gathered.ok || !gathered.complete) {
+    return {
+      ok: false,
+      skipped: false,
+      complete: false,
+      plan: null,
+      error: gathered.error || 'Gather failed',
+      playersScanned: 0,
+      playersChanged: 0,
+      unchanged: 0,
+      statRepairs: 0,
+      leaderboardCreates: 0,
+      leaderboardUpdates: 0,
+      changedPlayers: [],
+    };
+  }
+
+  const plan = buildUniqueCardsRepairPlan({
+    playersSnapshot: gathered.playersSnapshot,
+    cardsSnapshot: gathered.cardsSnapshot,
+    leaderboardSnapshot: gathered.leaderboardSnapshot,
+    now: options.now,
+  });
+
+  return {
+    ok: true,
+    skipped: Object.keys(plan.updates).length === 0,
+    complete: true,
+    plan,
+    error: undefined,
+    playersScanned: plan.playersScanned,
+    playersChanged: plan.playersChanged,
+    unchanged: plan.unchanged,
+    statRepairs: plan.statRepairs,
+    leaderboardCreates: plan.leaderboardCreates,
+    leaderboardUpdates: plan.leaderboardUpdates,
+    changedPlayers: [...plan.changedPlayers],
+  };
+}
+
+/**
+ * Commit an already-prepared plan (exact in-memory updates). No re-gather.
+ * @param {{ updates: Record<string, object|number>, playersScanned?: number, playersChanged?: number, unchanged?: number, statRepairs?: number, leaderboardCreates?: number, leaderboardUpdates?: number, changedPlayers?: string[] }} plan
+ */
+export async function commitUniqueCardsRepairPlan(plan) {
+  if (!plan || typeof plan !== 'object') {
+    return {
+      ok: false,
+      skipped: false,
+      scanned: 0,
+      changed: 0,
+      unchanged: 0,
+      failed: 0,
+      written: 0,
+      error: 'INVALID_PLAN',
+    };
+  }
+
+  const updates = plan.updates && typeof plan.updates === 'object' ? plan.updates : {};
+  try {
+    assertUniqueCardsRepairPathsAllowed(updates);
+  } catch (err) {
+    return {
+      ok: false,
+      skipped: false,
+      scanned: Number(plan.playersScanned) || 0,
+      changed: Number(plan.playersChanged) || 0,
+      unchanged: Number(plan.unchanged) || 0,
+      failed: Number(plan.playersChanged) || 0,
+      written: 0,
+      error: err?.message || 'ILLEGAL_REPAIR_PATH',
+    };
+  }
+
+  const scanned = Number(plan.playersScanned) || 0;
+  const changed = Number(plan.playersChanged) || 0;
+  const unchanged = Number(plan.unchanged) || 0;
+
+  if (Object.keys(updates).length === 0) {
+    return {
+      ok: true,
+      skipped: true,
+      scanned,
+      changed: 0,
+      unchanged,
+      failed: 0,
+      written: 0,
+      statRepairs: 0,
+      leaderboardCreates: 0,
+      leaderboardUpdates: 0,
+    };
+  }
+
+  const ack = await db.updateAcknowledged(updates);
+  if (!ack.ok) {
+    return {
+      ok: false,
+      skipped: false,
+      scanned,
+      changed,
+      unchanged,
+      failed: changed,
+      written: 0,
+      mode: ack.mode,
+      error: ack.error || 'COMMIT_FAILED',
+    };
+  }
+
+  return {
+    ok: true,
+    skipped: false,
+    scanned,
+    changed,
+    unchanged,
+    failed: 0,
+    written: Object.keys(updates).length,
+    mode: ack.mode,
+    statRepairs: Number(plan.statRepairs) || 0,
+    leaderboardCreates: Number(plan.leaderboardCreates) || 0,
+    leaderboardUpdates: Number(plan.leaderboardUpdates) || 0,
+    changedPlayers: Array.isArray(plan.changedPlayers) ? [...plan.changedPlayers] : [],
+  };
+}
+
+/**
+ * One-time Admin/dev repair: recompute stats.uniqueCardsOwned for all players
+ * (enabled catalog only) and sync leaderboards/uniqueCardsOwned/{u} when the
+ * value differs. Does not delete inventory leaves. Not invoked on startup.
+ * S8d-5a: authoritative gather → plan → commit (no scoped getChildren universe).
+ *
+ * @param {{ timeoutMs?: number, now?: number, plan?: object }} [options]
+ */
+export async function repairUniqueCardsOwnedStats(options = {}) {
+  if (options.plan) {
+    return commitUniqueCardsRepairPlan(options.plan);
+  }
+
+  const prepared = await prepareUniqueCardsRepair(options);
+  if (!prepared.ok || !prepared.plan) {
+    return {
+      ok: false,
+      scanned: 0,
+      changed: 0,
+      unchanged: 0,
+      failed: 0,
+      written: 0,
+      error: prepared.error || 'Prepare failed',
+    };
+  }
+
+  return commitUniqueCardsRepairPlan(prepared.plan);
 }
 
 /**
@@ -336,7 +687,6 @@ export function ensurePlayerUniqueCardsOwned(username) {
 /**
  * Migrate all existing players to include stats.uniqueCardsOwned.
  * Safe to call multiple times — skips players that already have the field.
- * Called once at startup from main.js alongside migrateAllPlayersRP.
  * Phase B: no longer invoked from ordinary student startup — use ensurePlayerUniqueCardsOwned on login
  * or call this helper manually/admin.
  */
@@ -371,113 +721,23 @@ export function refreshUniqueCardsOwned(username) {
   });
 }
 
-/**
- * One-time Admin/dev repair: recompute stats.uniqueCardsOwned for all players
- * (enabled catalog only) and sync leaderboards/uniqueCardsOwned/{u} when the
- * value differs. Does not delete inventory leaves. Not invoked on startup.
- *
- * @returns {Promise<{
- *   ok: boolean,
- *   scanned: number,
- *   changed: number,
- *   unchanged: number,
- *   failed: number,
- *   written: number,
- *   mode?: string,
- *   error?: string
- * }>}
- */
-export async function repairUniqueCardsOwnedStats() {
-  const players = db.getChildren('players') || [];
-  const now = Date.now();
-  /** @type {Record<string, object|number>} */
-  const updates = {};
-  let scanned = 0;
-  let changed = 0;
-  let unchanged = 0;
-
-  for (const { key: username, value: player } of players) {
-    if (!username || username === '__admin__') continue;
-    scanned += 1;
-    const inventory = (player && player.inventory) || {};
-    const next = computeUniqueCardsOwnedFromInventory(inventory);
-    const prev = player?.stats?.uniqueCardsOwned;
-    if (typeof prev === 'number' && prev === next) {
-      unchanged += 1;
-      continue;
-    }
-
-    updates[`players/${username}/stats/uniqueCardsOwned`] = next;
-    const playerLike = playerLikeWithStatOverlay(player || {}, {
-      [STAT_TYPES.UNIQUE_CARDS_OWNED]: next,
-    });
-    Object.assign(
-      updates,
-      buildLeaderboardSummaryPathsForChangedStats(
-        username,
-        playerLike,
-        [STAT_TYPES.UNIQUE_CARDS_OWNED],
-        now,
-      ),
-    );
-    changed += 1;
-  }
-
-  if (Object.keys(updates).length === 0) {
-    console.log(
-      `[Research] Unique Cards repair — scanned: ${scanned}, changed: 0, unchanged: ${unchanged}, failed: 0`,
-    );
-    return {
-      ok: true,
-      scanned,
-      changed: 0,
-      unchanged,
-      failed: 0,
-      written: 0,
-    };
-  }
-
-  const ack = await db.updateAcknowledged(updates);
-  if (!ack.ok) {
-    console.warn('[Research] Unique Cards repair failed:', ack.error);
-    return {
-      ok: false,
-      scanned,
-      changed,
-      unchanged,
-      failed: changed,
-      written: 0,
-      mode: ack.mode,
-      error: ack.error || 'Write failed',
-    };
-  }
-
-  console.log(
-    `[Research] Unique Cards repair — scanned: ${scanned}, changed: ${changed}, unchanged: ${unchanged}, failed: 0, written: ${Object.keys(updates).length}`,
-  );
-  return {
-    ok: true,
-    scanned,
-    changed,
-    unchanged,
-    failed: 0,
-    written: Object.keys(updates).length,
-    mode: ack.mode,
-  };
-}
-
 function _installWindowApi() {
   if (typeof window === 'undefined') return;
   window.qcResearch = {
     computeUniqueCardsOwned,
     computeUniqueCardsOwnedFromInventory,
+    countUniqueCardsOwnedFromSnapshots,
+    buildUniqueCardsRepairPlan,
+    prepareUniqueCardsRepair,
+    commitUniqueCardsRepairPlan,
     refreshUniqueCardsOwned,
     ensurePlayerUniqueCardsOwned,
     repairUniqueCardsOwnedStats,
     help() {
-      console.info(`Research / Unique Cards
+      console.info(`Research / Unique Cards (S8d-5a)
 Compute (enabled catalog only): qcResearch.computeUniqueCardsOwned('bobby')
-Repair all players (manual, once): await qcResearch.repairUniqueCardsOwnedStats()
+Safe repair: await qcResearch.prepareUniqueCardsRepair() then commitUniqueCardsRepairPlan(plan)
+  or await qcResearch.repairUniqueCardsOwnedStats()
 Does not delete orphan inventory leaves. Not run on startup.`);
     },
   };

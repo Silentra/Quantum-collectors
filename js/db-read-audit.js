@@ -577,6 +577,7 @@ API:
   qcPersonalAudit.workflowS8d3()   // S8d-3 safe live leaderboard rebuild
   qcPersonalAudit.workflowS8d4a()  // S8d-4a admin PTI/LBG parent reads (rules)
   qcPersonalAudit.workflowS8d4b()  // S8d-4b safe Trade Index rebuild
+  qcPersonalAudit.workflowS8d5a()  // S8d-5a safe Unique Cards repair
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1826,7 +1827,8 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8d-3 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d3; live LB rebuild safe)
   S8d-4a COMPLETE + VERIFIED (workflowS8d4a; admin PTI/LBG parent reads)
   S8d-4b IMPLEMENTED — AWAITING VERIFICATION (workflowS8d4b; Trade Index rebuild safe)
-  Unique Cards / season bulk rebuilds still UNSAFE until later S8d
+  S8d-5a IMPLEMENTED — AWAITING VERIFICATION (workflowS8d5a; Unique Cards repair safe)
+  S8d-5b Season/Snapshot class ops still UNSAFE until rewritten
 
   S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
@@ -2314,7 +2316,44 @@ Live (Admin teacher; quiet Trading preferred):
   8) Confirm trades/* and inventories unchanged; Unready warnings quiet for current players
   9) Smoke: create Direct → confirm; create Listing → fulfill
 
-STOP: no rules; no settlement rewrite; no Unique/season; no S8d-5.
+STOP: no rules; no settlement rewrite; S8d-5a Unique Cards is separate (workflowS8d5a); no S8d-5b.
+`);
+}
+
+/**
+ * Pasteable S8d-5a safe Unique Cards Owned repair.
+ */
+export function workflowS8d5a() {
+  console.info(`
+=== S8d-5a Unique Cards Owned repair (safe under scoped) ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION
+No rules change. S8d-5b Season/Snapshot still pending.
+
+Definition (unchanged): Number(qty)>0 AND card in catalog AND enabled!==false
+  orphans/disabled ignored; inventory never mutated; achievements not touched
+
+Gather (fail-closed):
+  adminLoadCanonical('players') → complete===true
+  loadPathOnce('cards',{force:true}) → ok && mode==='firebase'
+  loadPathOnce('leaderboards/uniqueCardsOwned',{force:true}) → ok && mode==='firebase'
+Plan: buildUniqueCardsRepairPlan({ playersSnapshot, cardsSnapshot, leaderboardSnapshot, now })
+  Writes ONLY: players/{u}/stats/uniqueCardsOwned + leaderboards/uniqueCardsOwned/{u}
+  LB written only when stored uniqueCardsOwned needs repair (LB-only drift → use S8d-3)
+Commit: prepare → preview → commit SAME plan (one updateAcknowledged)
+
+Unit: node scripts/s8d5a-unique-cards-repair.test.mjs
+
+Live (Admin teacher):
+  1) Pick a player; note inventory-derived unique count (DevTools / Collection)
+  2) Manually set ONLY players/{u}/stats/uniqueCardsOwned to a wrong number (not inventory)
+  3) Admin → Leaderboards → Repair Unique Cards Owned → preview: needing repair ≥1
+  4) Cancel once → zero writes; reopen → same advisory counts
+  5) Confirm → toast changed; inventory unchanged; LB uniqueCardsOwned matches
+  6) Immediate second preview → Players needing repair: 0
+  7) Do NOT run Start New Season / Snapshot as part of 5a
+
+STOP: no S8d-5b; no season/snapshot; no achievements; no rules.
 `);
 }
 
@@ -2505,6 +2544,7 @@ function _installWindowApi() {
     workflowS8d3,
     workflowS8d4a,
     workflowS8d4b,
+    workflowS8d5a,
     enableAudit,
     disableAudit,
     enableIsolation,

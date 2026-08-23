@@ -31,7 +31,7 @@ import {
   deleteArchivedSeason,
   STAT_TYPES,
 } from './leaderboard-seasons.js';
-import { resetSeasonalResearchPoints, repairUniqueCardsOwnedStats } from './research.js';
+import { resetSeasonalResearchPoints, prepareUniqueCardsRepair, commitUniqueCardsRepairPlan } from './research.js';
 import {
   prepareLeaderboardRebuild,
   commitLeaderboardRebuildPlan,
@@ -165,15 +165,15 @@ function _buildPanelHTML(activeSeason, archived) {
       </button>
     </div>
 
-    <!-- Unique Cards correctness repair (manual, once) -->
+    <!-- Unique Cards correctness repair (S8d-5a) -->
     <div class="bg-surface-900 rounded-xl border border-surface-700 p-6 mb-4">
       <h3 class="font-semibold mb-1">Repair Unique Cards Owned Stats</h3>
       <p class="text-surface-400 text-xs mb-4">
-        Recomputes <code class="text-surface-300">stats.uniqueCardsOwned</code> from inventory using
-        enabled catalog cards only (matches Collection/Profile), and syncs
-        <code class="text-surface-300">leaderboards/uniqueCardsOwned/</code> for players whose value changes.
-        Does not delete orphan inventory leaves. Run once after deploying the Unique Cards correctness fix —
-        do not use Rebuild Summaries alone for this.
+        Recalculates Unique Cards Owned from player inventories (enabled catalog cards only).
+        Inventories are not changed. Syncs
+        <code class="text-surface-300">leaderboards/uniqueCardsOwned/</code>
+        only for players whose stored count changes.
+        Preview counts before writing.
       </p>
       <button
         id="btn-repair-unique-cards-owned"
@@ -389,14 +389,36 @@ function _wireEvents(panel) {
     repairUniqueBtn.addEventListener('click', async () => {
       repairUniqueBtn.disabled = true;
       try {
-        const result = await repairUniqueCardsOwnedStats();
+        const prepared = await prepareUniqueCardsRepair();
+        if (!prepared.ok || !prepared.plan) {
+          toast.error(prepared.error || 'Could not load players/cards for Unique Cards repair');
+          return;
+        }
+
+        const confirmed = await _confirmLeaderboardRebuild(
+          `Players scanned: ${prepared.playersScanned}\n`
+            + `Players needing repair: ${prepared.playersChanged}\n\n`
+            + 'This recalculates Unique Cards Owned from player inventories.\n'
+            + 'Inventories are not changed.',
+          'Repair Unique Cards Owned?',
+        );
+        if (!confirmed) return;
+
+        const result = await commitUniqueCardsRepairPlan(prepared.plan);
         if (!result.ok) {
           toast.error(result.error || 'Unique Cards repair failed');
           return;
         }
-        toast.success(
-          `Unique Cards repaired — scanned: ${result.scanned}, changed: ${result.changed}, unchanged: ${result.unchanged}, failed: ${result.failed}`,
-        );
+        if (result.skipped) {
+          toast.info(
+            `Unique Cards already in sync (scanned: ${result.scanned}, unchanged: ${result.unchanged})`,
+          );
+        } else {
+          toast.success(
+            `Unique Cards repaired — scanned: ${result.scanned}, changed: ${result.changed}, `
+              + `unchanged: ${result.unchanged}, written: ${result.written}`,
+          );
+        }
       } finally {
         repairUniqueBtn.disabled = false;
       }
