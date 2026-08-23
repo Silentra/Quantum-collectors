@@ -716,11 +716,11 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — Option C-a authDirectory foundation
 
-**Status: C-a.1 IMPLEMENTED — AWAITING DEPLOYMENT / BACKFILL VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
+**Status: C-a.2 IMPLEMENTED — AWAITING LIVE VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
 
 - Schema: `authDirectory/{username} = { loginEmail, authUid, generation }` (public **child** read; student create gen0 only; admin update/delete). **No parent enumerate read.**
-- **C-a.1:** migration-compat default (missing directory → temporary gen0 email fallback). Backfill: per-username `loadPathOnce('authDirectory/{u}')` only. Version: `option-c-a-1.1`.
-- **C-a.2 (not yet):** production-default strict micro-deploy after backfill/login verify. Do not treat `enableAuthDirectoryStrict()` localStorage as global production.
+- **C-a.1 / C-a.1.1:** LIVE VERIFIED (migration-compat + registration LB `username` fix).
+- **C-a.2:** production-default strict (`option-c-a-2`). Login/restore require `authDirectory`. Developer emergency: `qc_auth_directory_compat=true` → temporary gen0 fallback. Separate: `qc_force_legacy_auth`. Do not treat `enableAuthDirectoryStrict()` as a teacher rollout step.
 - **No** password rotation / Delete Player Auth changes (Option C-b). Unit: `node scripts/option-c-a-auth-directory.test.mjs`.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
