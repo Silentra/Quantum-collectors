@@ -1825,12 +1825,12 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8d-0 COMPLETE + VERIFIED (force-root removed)
   S8d-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d1)
   S8d-2 COMPLETE + VERIFIED (workflowS8d2; directory rebuild safe)
-  S8d-3 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d3; live LB rebuild safe)
+  S8d-3 COMPLETE + VERIFIED (workflowS8d3; live LB rebuild safe)
   S8d-4a COMPLETE + VERIFIED (workflowS8d4a; admin PTI/LBG parent reads)
-  S8d-4b IMPLEMENTED — AWAITING VERIFICATION (workflowS8d4b; Trade Index rebuild safe)
-  S8d-5a IMPLEMENTED — AWAITING VERIFICATION (workflowS8d5a; Unique Cards repair safe)
-  S8d-5b IMPLEMENTED — AWAITING VERIFICATION (workflowS8d5b; Season + Lifetime Snapshot safe)
-  S8d-5b Season/Snapshot class ops still UNSAFE until rewritten
+  S8d-4b COMPLETE + VERIFIED (workflowS8d4b; Trade Index rebuild safe)
+  S8d-5a COMPLETE + VERIFIED (workflowS8d5a; Unique Cards repair safe)
+  S8d-5b COMPLETE + VERIFIED (workflowS8d5b; Season + Lifetime Snapshot safe)
+  S8d COMPLETE (Admin maintenance umbrella)
 
   S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
@@ -2329,8 +2329,8 @@ export function workflowS8d5a() {
   console.info(`
 === S8d-5a Unique Cards Owned repair (safe under scoped) ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION
-No rules change. S8d-5b Season/Snapshot: see workflowS8d5b().
+Status: COMPLETE + VERIFIED. S8d umbrella: COMPLETE (see workflowS8d5b).
+No rules change.
 
 Definition (unchanged): Number(qty)>0 AND card in catalog AND enabled!==false
   orphans/disabled ignored; inventory never mutated; achievements not touched
@@ -2366,7 +2366,7 @@ export function workflowS8d5b() {
   console.info(`
 === S8d-5b Season + Lifetime Snapshot class ops (safe under scoped) ===
 
-Status: IMPLEMENTED — AWAITING VERIFICATION
+Status: COMPLETE + VERIFIED. S8d umbrella: COMPLETE.
 No rules change. No schema bump. database.rules.json unchanged.
 
 Authoritative gather: adminLoadCanonical('players') complete===true
@@ -2389,18 +2389,17 @@ Lifetime Snapshot:
 
 Unit: node scripts/s8d5b-season-snapshot.test.mjs
 
-Live QA (required before marking verified):
-  Tier 2 — read-only previews
-    Start New Season: preview shows correct player count/season; Cancel → zero writes
-    Lifetime Snapshot: preview shows correct count/category; Cancel → zero writes
-  Tier 3 — disposable snapshot-only (recommended)
-    Create clearly titled test snapshot; resetAfter=false
-    Verify entries include all current players
-    Delete via existing Admin snapshot delete; live stats unchanged
-  Do NOT require resetAfter live test or real Start New Season solely for QA
-  Tier 4 real Start New Season only when teacher intends a real transition
+Live QA credited:
+  Tier 2 — Start New Season preview (5 players) cancelled; zero writes
+  Tier 2/3 — Lifetime Snapshot Packs Opened preview; disposable snapshot-only
+    created (full class); live pack open changed only live LB; historical
+    snapshot unchanged; snapshot deleted. No resetAfter; no real Start Season.
 
-STOP: no Repair Game UI; no bootstrap; no S8d-5a redo; no rules republish.
+Deferred (not S8d blockers): Repair Game Admin tab / Admin UX cleanup /
+  Config review — docs/BEFORE_DISTRIBUTION.md Future Admin UX section.
+  Option C / first-admin bootstrap — same file.
+
+STOP: no new implementation from this workflow paste; no Option C planning here.
 `);
 }
 
