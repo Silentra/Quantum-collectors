@@ -578,6 +578,7 @@ API:
   qcPersonalAudit.workflowS8d4a()  // S8d-4a admin PTI/LBG parent reads (rules)
   qcPersonalAudit.workflowS8d4b()  // S8d-4b safe Trade Index rebuild
   qcPersonalAudit.workflowS8d5a()  // S8d-5a safe Unique Cards repair
+  qcPersonalAudit.workflowS8d5b()  // S8d-5b safe Season + Lifetime Snapshot class ops
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1828,6 +1829,7 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8d-4a COMPLETE + VERIFIED (workflowS8d4a; admin PTI/LBG parent reads)
   S8d-4b IMPLEMENTED — AWAITING VERIFICATION (workflowS8d4b; Trade Index rebuild safe)
   S8d-5a IMPLEMENTED — AWAITING VERIFICATION (workflowS8d5a; Unique Cards repair safe)
+  S8d-5b IMPLEMENTED — AWAITING VERIFICATION (workflowS8d5b; Season + Lifetime Snapshot safe)
   S8d-5b Season/Snapshot class ops still UNSAFE until rewritten
 
   S8b migration preference (planning only):
@@ -2316,7 +2318,7 @@ Live (Admin teacher; quiet Trading preferred):
   8) Confirm trades/* and inventories unchanged; Unready warnings quiet for current players
   9) Smoke: create Direct → confirm; create Listing → fulfill
 
-STOP: no rules; no settlement rewrite; S8d-5a Unique Cards is separate (workflowS8d5a); no S8d-5b.
+STOP: no rules; no settlement rewrite; S8d-5a Unique Cards is separate (workflowS8d5a).
 `);
 }
 
@@ -2328,7 +2330,7 @@ export function workflowS8d5a() {
 === S8d-5a Unique Cards Owned repair (safe under scoped) ===
 
 Status: IMPLEMENTED — AWAITING VERIFICATION
-No rules change. S8d-5b Season/Snapshot still pending.
+No rules change. S8d-5b Season/Snapshot: see workflowS8d5b().
 
 Definition (unchanged): Number(qty)>0 AND card in catalog AND enabled!==false
   orphans/disabled ignored; inventory never mutated; achievements not touched
@@ -2353,7 +2355,52 @@ Live (Admin teacher):
   6) Immediate second preview → Players needing repair: 0
   7) Do NOT run Start New Season / Snapshot as part of 5a
 
-STOP: no S8d-5b; no season/snapshot; no achievements; no rules.
+STOP: no S8d-5b required for 5a verify; no achievements; no rules.
+`);
+}
+
+/**
+ * Pasteable S8d-5b safe Start New Season + Lifetime Snapshot class operations.
+ */
+export function workflowS8d5b() {
+  console.info(`
+=== S8d-5b Season + Lifetime Snapshot class ops (safe under scoped) ===
+
+Status: IMPLEMENTED — AWAITING VERIFICATION
+No rules change. No schema bump. database.rules.json unchanged.
+
+Authoritative gather: adminLoadCanonical('players') complete===true
+  (+ forced leaderboardSeasons / snapshot id reads where needed)
+Never use db.getChildren('players') / cache as class universe.
+EMPTY_CLASS (playersScanned===0 after excluding __admin__) → refuse all ops.
+
+Start New Season:
+  prepareStartNewSeason → preview → Confirm RE-GATHERS
+  Recheck activeSeasonId vs preview; mismatch → ABORT zero writes
+  Phase A archive entries → await → Phase B rotate multipath → await
+  → Phase C seasonal RP reset multipath → await
+  Fail codes: SEASON_ARCHIVE_FAILED | SEASON_ROTATE_FAILED | SEASON_RESET_FAILED
+
+Lifetime Snapshot:
+  prepareLifetimeSnapshot → preview → Confirm RE-GATHERS + fresh snapshotId
+  await snapshot write; if resetAfter await reset multipath
+  Fail codes: SNAPSHOT_WRITE_FAILED | SNAPSHOT_RESET_FAILED
+  Seasonal RP never a Lifetime reset category
+
+Unit: node scripts/s8d5b-season-snapshot.test.mjs
+
+Live QA (required before marking verified):
+  Tier 2 — read-only previews
+    Start New Season: preview shows correct player count/season; Cancel → zero writes
+    Lifetime Snapshot: preview shows correct count/category; Cancel → zero writes
+  Tier 3 — disposable snapshot-only (recommended)
+    Create clearly titled test snapshot; resetAfter=false
+    Verify entries include all current players
+    Delete via existing Admin snapshot delete; live stats unchanged
+  Do NOT require resetAfter live test or real Start New Season solely for QA
+  Tier 4 real Start New Season only when teacher intends a real transition
+
+STOP: no Repair Game UI; no bootstrap; no S8d-5a redo; no rules republish.
 `);
 }
 
@@ -2545,6 +2592,7 @@ function _installWindowApi() {
     workflowS8d4a,
     workflowS8d4b,
     workflowS8d5a,
+    workflowS8d5b,
     enableAudit,
     disableAudit,
     enableIsolation,

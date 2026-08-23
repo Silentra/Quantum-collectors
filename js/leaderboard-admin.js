@@ -17,21 +17,21 @@
  *   - Group / subgroup systems
  */
 
-import * as db from './database.js';
 import * as auth from './auth.js';
 import * as toast from './toast.js';
 import * as groups from './groups.js';
 import {
   getActiveSeason,
   getAllSeasons,
-  rotateSeason,
-  updateSeasonEntry,
   ensureLeaderboardSeasonsSchema,
   updateArchiveMetadata,
   deleteArchivedSeason,
-  STAT_TYPES,
 } from './leaderboard-seasons.js';
-import { resetSeasonalResearchPoints, prepareUniqueCardsRepair, commitUniqueCardsRepairPlan } from './research.js';
+import {
+  prepareStartNewSeason,
+  commitStartNewSeasonFresh,
+} from './season-class-ops.js';
+import { prepareUniqueCardsRepair, commitUniqueCardsRepairPlan } from './research.js';
 import {
   prepareLeaderboardRebuild,
   commitLeaderboardRebuildPlan,
@@ -39,16 +39,18 @@ import {
 import { hydrateLeaderboardArchivesOnce } from './db-hydration.js';
 import {
   ensureSnapshotsSchema,
-  createSnapshot,
+  prepareLifetimeSnapshot,
+  commitLifetimeSnapshotFresh,
   getAllSnapshots,
-  getVisibleSnapshots,
   updateSnapshotMetadata,
   deleteSnapshot,
-  getLastResetTime,
   SNAPSHOT_STAT_TYPES,
   SNAPSHOT_STAT_LABELS,
 } from './leaderboard-snapshots.js';
 
+/** In-memory duplicate-submit guards (S8d-5b). */
+let _seasonInFlight = false;
+let _snapshotInFlight = false;
 // ─── Public entry point ────────────────────────────────────────────────────
 
 /**
@@ -325,18 +327,58 @@ function _buildArchivedRow(s) {
 // ─── Event wiring ──────────────────────────────────────────────────────────
 
 function _wireEvents(panel) {
-  // ── Start new season ──
+  // ── Start new season (S8d-5b: prepare → confirm re-gather) ──
   const btn   = panel.querySelector('#btn-start-new-season');
   const input = panel.querySelector('#admin-season-name-input');
-  if (btn && input) {
-    btn.addEventListener('click', () => {
+  if (btn && input && !btn.dataset.wired) {
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', async () => {
       const name = input.value.trim();
       if (!name) {
         toast.error('Please enter a season name before starting.');
         input.focus();
         return;
       }
-      _confirmStartSeason(name);
+      if (_seasonInFlight) return;
+      _seasonInFlight = true;
+      btn.disabled = true;
+      try {
+        const prepared = await prepareStartNewSeason({ name });
+        if (!prepared.ok) {
+          const err = prepared.error || 'Could not load players/seasons';
+          if (err === 'EMPTY_CLASS') {
+            toast.error('No players found. Start New Season refused (empty class).');
+          } else {
+            toast.error(err);
+          }
+          return;
+        }
+
+        const confirmed = await _confirmStartSeasonPreview(prepared);
+        if (!confirmed) return;
+
+        const result = await commitStartNewSeasonFresh({
+          name,
+          expectedActiveSeasonId: prepared.expectedActiveSeasonId,
+        });
+        if (!result.ok) {
+          const phase = result.phase || 'FAILED';
+          toast.error(`${phase}: ${result.error || 'Start New Season failed'}`);
+          return;
+        }
+        const archivedMsg = result.archivedSeasonId ? ' Previous season archived.' : '';
+        toast.success(`Season "${name}" started!${archivedMsg}`);
+        console.log(
+          `[LeaderboardAdmin] Season rotated — archived: ${result.archivedSeasonId ?? 'none'}, new: ${result.newSeasonId}`,
+        );
+        renderAdminSeasons();
+      } catch (err) {
+        console.error('[LeaderboardAdmin] Season rotation failed:', err);
+        toast.error('Failed to start new season. See console for details.');
+      } finally {
+        _seasonInFlight = false;
+        btn.disabled = false;
+      }
     });
   }
 
@@ -661,105 +703,65 @@ function _doDeleteArchive(seasonId, seasonName) {
   }
 }
 
-// ─── Season rotation logic ─────────────────────────────────────────────────
+// ─── Season rotation logic (S8d-5b) ────────────────────────────────────────
 
-function _confirmStartSeason(name) {
-  const activeSeason = getActiveSeason();
-  const modal = document.getElementById('confirm-modal');
-  const titleEl   = document.getElementById('confirm-title');
-  const msgEl     = document.getElementById('confirm-message');
-  const okBtn     = document.getElementById('btn-confirm-ok');
-  const cancelBtn = document.getElementById('btn-confirm-cancel');
+/**
+ * Show Start New Season confirm with prepare preview copy.
+ * @returns {Promise<boolean>}
+ */
+function _confirmStartSeasonPreview(prepared) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl   = document.getElementById('confirm-title');
+    const msgEl     = document.getElementById('confirm-message');
+    const okBtn     = document.getElementById('btn-confirm-ok');
+    const cancelBtn = document.getElementById('btn-confirm-cancel');
 
-  if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-    // No confirm modal available — proceed directly
-    _doStartSeason(name);
-    return;
-  }
+    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
+      resolve(true);
+      return;
+    }
 
-  titleEl.textContent = 'Start New Season?';
-  msgEl.textContent = activeSeason
-    ? `"${activeSeason.name}" will be archived. A new season named "${name}" will begin immediately. All players' Seasonal RP will reset to 0. Lifetime RP is unaffected.`
-    : `A new season named "${name}" will begin immediately. All players' Seasonal RP will reset to 0. Lifetime RP is unaffected.`;
+    const n = prepared.playersScanned;
+    const cur = prepared.currentSeasonName
+      ? `${prepared.currentSeasonName} (${prepared.currentSeasonId})`
+      : '(none)';
+    const next = prepared.proposedNewSeasonName;
 
-  // Style OK button as amber (action, not destructive)
-  okBtn.className = 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm';
-  okBtn.textContent = 'Start Season';
+    titleEl.textContent = 'Start New Season?';
+    msgEl.textContent = [
+      `Players included: ${n}`,
+      `Current season: ${cur}`,
+      `New season: ${next}`,
+      '',
+      'This archives the current season and resets',
+      `Seasonal Research Points to 0 for all ${n} players.`,
+      '',
+      'Confirm refreshes current values from Firebase before writing.',
+      'This cannot be undone from the game.',
+    ].join('\n');
 
-  // Clone to remove old listeners
-  const newOk = okBtn.cloneNode(true);
-  okBtn.parentNode.replaceChild(newOk, okBtn);
-  const newCancel = cancelBtn.cloneNode(true);
-  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+    okBtn.className = 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm';
+    okBtn.textContent = 'Start Season';
 
-  const closeModal = () => modal.classList.add('hidden');
+    const newOk = okBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    const newCancel = cancelBtn.cloneNode(true);
+    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
 
-  newOk.addEventListener('click', () => {
-    closeModal();
-    _doStartSeason(name);
-  });
-  newCancel.addEventListener('click', closeModal);
+    const closeModal = () => modal.classList.add('hidden');
 
-  modal.classList.remove('hidden');
-}
-
-function _doStartSeason(name) {
-  try {
-    // 1. Snapshot all player seasonal RP into the current active season entries
-    //    before archiving (so the archived season has final scores).
-    _snapshotActiveSeasonRP();
-
-    // 2. Archive current season + create + activate new season
-    const { archivedSeasonId, newSeasonId } = rotateSeason({
-      name,
-      statType: STAT_TYPES.SEASONAL_RP,
+    newOk.addEventListener('click', () => {
+      closeModal();
+      resolve(true);
+    });
+    newCancel.addEventListener('click', () => {
+      closeModal();
+      resolve(false);
     });
 
-    // 3. Reset seasonalResearchPoints to 0 for all players
-    _resetAllSeasonalRP();
-
-    const archivedMsg = archivedSeasonId ? ` Previous season archived.` : '';
-    toast.success(`Season "${name}" started!${archivedMsg}`);
-    console.log(`[LeaderboardAdmin] Season rotated — archived: ${archivedSeasonId ?? 'none'}, new: ${newSeasonId}`);
-
-    // 4. Re-render the panel to show updated state
-    renderAdminSeasons();
-
-  } catch (err) {
-    console.error('[LeaderboardAdmin] Season rotation failed:', err);
-    toast.error('Failed to start new season. See console for details.');
-  }
-}
-
-// ─── Snapshot helpers ────────────────────────���─────────────────────────────
-
-/**
- * Snapshot every player's current seasonalResearchPoints into the active
- * season's entries. This preserves scores at the moment of archiving.
- * Only called immediately before rotation — never called in isolation.
- */
-function _snapshotActiveSeasonRP() {
-  const season = getActiveSeason();
-  if (!season) return; // nothing to snapshot
-
-  const players = db.getChildren('players');
-  for (const { key: username, value: p } of players) {
-    const value     = typeof p?.seasonalResearchPoints === 'number' ? p.seasonalResearchPoints : 0;
-    const groupId   = p?.groupId ?? null;
-    const subgroupId = p?.subgroupId ?? null;
-    updateSeasonEntry(username, value, groupId, subgroupId);
-  }
-
-  console.log(`[LeaderboardAdmin] Snapshotted ${players.length} players into season ${season.id}`);
-}
-
-/**
- * Reset seasonalResearchPoints to 0 for every player (+ live seasonal summaries).
- * Lifetime (totalResearchPoints) is untouched.
- */
-function _resetAllSeasonalRP() {
-  const count = resetSeasonalResearchPoints();
-  console.log(`[LeaderboardAdmin] Reset seasonal RP for ${count} players`);
+    modal.classList.remove('hidden');
+  });
 }
 
 // ─── LB-5: Snapshots HTML builder ─────────────────────────────────────────
@@ -934,15 +936,15 @@ function _buildSnapshotRow(s) {
   `;
 }
 
-// ─── LB-5: Snapshot event wiring ──────────────────────────────────────────
+// ─── LB-5: Snapshot event wiring (S8d-5b) ─────────────────────────────────
 
 function _wireSnapshotEvents(panel) {
-  // Create snapshot
   const createBtn = panel.querySelector('#btn-create-snapshot');
-  if (createBtn) {
-    createBtn.addEventListener('click', () => {
-      const title      = (panel.querySelector('#snap-title-input')?.value ?? '').trim();
-      const statType   = panel.querySelector('#snap-stat-select')?.value ?? '';
+  if (createBtn && !createBtn.dataset.wired) {
+    createBtn.dataset.wired = '1';
+    createBtn.addEventListener('click', async () => {
+      const title = (panel.querySelector('#snap-title-input')?.value ?? '').trim();
+      const statType = panel.querySelector('#snap-stat-select')?.value ?? '';
       const resetAfter = panel.querySelector('#snap-reset-after')?.checked === true;
 
       if (!title) {
@@ -954,11 +956,56 @@ function _wireSnapshotEvents(panel) {
         toast.error('Please select a leaderboard category.');
         return;
       }
-      _confirmCreateSnapshot({ title, statType, resetAfter });
+      if (_snapshotInFlight) return;
+      _snapshotInFlight = true;
+      createBtn.disabled = true;
+      try {
+        const prepared = await prepareLifetimeSnapshot({
+          title,
+          category: statType,
+          resetAfter,
+        });
+        if (!prepared.ok) {
+          const err = prepared.error || 'Could not load players for snapshot';
+          if (err === 'EMPTY_CLASS') {
+            toast.error('No players found. Lifetime Snapshot refused (empty class).');
+          } else {
+            toast.error(err);
+          }
+          return;
+        }
+
+        const confirmed = await _confirmCreateSnapshotPreview(prepared);
+        if (!confirmed) return;
+
+        const result = await commitLifetimeSnapshotFresh({
+          title,
+          category: statType,
+          resetAfter,
+        });
+        if (!result.ok) {
+          const phase = result.phase || 'FAILED';
+          toast.error(`${phase}: ${result.error || 'Snapshot failed'}`);
+          return;
+        }
+
+        const catLabel = SNAPSHOT_STAT_LABELS[statType] ?? statType;
+        const msg = result.resetDone
+          ? `Snapshot "${title}" created and ${catLabel} reset to 0.`
+          : `Snapshot "${title}" created.`;
+        toast.success(msg);
+        console.log(`[LB-5] Snapshot created: ${result.snapshotId}`);
+        renderAdminSeasons();
+      } catch (err) {
+        console.error('[LB-5] Snapshot creation failed:', err);
+        toast.error('Failed to create snapshot. See console for details.');
+      } finally {
+        _snapshotInFlight = false;
+        createBtn.disabled = false;
+      }
     });
   }
 
-  // Show-hidden toggle
   const showHiddenCheck = panel.querySelector('#snap-show-hidden');
   if (showHiddenCheck) {
     showHiddenCheck.addEventListener('change', () => {
@@ -967,7 +1014,6 @@ function _wireSnapshotEvents(panel) {
     _applySnapshotHiddenFilter(panel, false);
   }
 
-  // Delegated events on snapshot list
   const list = panel.querySelector('#snapshots-list');
   if (!list) return;
 
@@ -997,55 +1043,62 @@ function _wireSnapshotEvents(panel) {
   });
 }
 
-// ─── LB-5: Snapshot action handlers ───────────────────────────────────────
+/**
+ * @returns {Promise<boolean>}
+ */
+function _confirmCreateSnapshotPreview(prepared) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('confirm-modal');
+    const titleEl = document.getElementById('confirm-title');
+    const msgEl = document.getElementById('confirm-message');
+    const okBtn = document.getElementById('btn-confirm-ok');
+    const cancelBtn = document.getElementById('btn-confirm-cancel');
 
-function _confirmCreateSnapshot({ title, statType, resetAfter }) {
-  const modal     = document.getElementById('confirm-modal');
-  const titleEl   = document.getElementById('confirm-title');
-  const msgEl     = document.getElementById('confirm-message');
-  const okBtn     = document.getElementById('btn-confirm-ok');
-  const cancelBtn = document.getElementById('btn-confirm-cancel');
+    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
+      resolve(true);
+      return;
+    }
 
-  if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-    _doCreateSnapshot({ title, statType, resetAfter });
-    return;
-  }
+    const catLabel = SNAPSHOT_STAT_LABELS[prepared.category] ?? prepared.category;
+    const n = prepared.playersScanned;
+    const resetAfter = prepared.resetAfter === true;
 
-  const catLabel = SNAPSHOT_STAT_LABELS[statType] ?? statType;
-  titleEl.textContent = 'Create Snapshot?';
-  msgEl.textContent   = resetAfter
-    ? `"${title}" will archive the current ${catLabel} leaderboard, then reset ${catLabel} to 0 for all players. All other leaderboards and Seasonal RP are unaffected. This cannot be undone.`
-    : `"${title}" will archive the current ${catLabel} leaderboard as a read-only snapshot. Player stats will not be changed.`;
+    titleEl.textContent = resetAfter ? 'Snapshot & Reset?' : 'Create Snapshot?';
+    if (resetAfter) {
+      msgEl.textContent = [
+        `Category: ${catLabel}`,
+        `Players included: ${n}`,
+        'Reset afterward: YES',
+        '',
+        'Current values will be saved, then this stat will be reset for all players.',
+        '',
+        'Confirm refreshes Firebase first.',
+      ].join('\n');
+      okBtn.className = 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm';
+      okBtn.textContent = 'Snapshot & Reset';
+    } else {
+      msgEl.textContent = [
+        `Category: ${catLabel}`,
+        `Players included: ${n}`,
+        'Reset afterward: No',
+        '',
+        'Confirm refreshes Firebase first.',
+      ].join('\n');
+      okBtn.className = 'flex-1 bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm';
+      okBtn.textContent = 'Create Snapshot';
+    }
 
-  okBtn.className   = 'flex-1 bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm';
-  okBtn.textContent = resetAfter ? '📸 Snapshot & Reset' : '📸 Create Snapshot';
+    const newOk = okBtn.cloneNode(true);
+    const newCancel = cancelBtn.cloneNode(true);
+    okBtn.parentNode.replaceChild(newOk, okBtn);
+    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
 
-  const newOk     = okBtn.cloneNode(true);
-  const newCancel = cancelBtn.cloneNode(true);
-  okBtn.parentNode.replaceChild(newOk, okBtn);
-  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+    const closeModal = () => modal.classList.add('hidden');
+    newOk.addEventListener('click', () => { closeModal(); resolve(true); });
+    newCancel.addEventListener('click', () => { closeModal(); resolve(false); });
 
-  const closeModal = () => modal.classList.add('hidden');
-  newOk.addEventListener('click', () => { closeModal(); _doCreateSnapshot({ title, statType, resetAfter }); });
-  newCancel.addEventListener('click', closeModal);
-
-  modal.classList.remove('hidden');
-}
-
-function _doCreateSnapshot({ title, statType, resetAfter }) {
-  try {
-    const { snapshotId, resetDone } = createSnapshot({ title, statType, resetAfter });
-    const catLabel = SNAPSHOT_STAT_LABELS[statType] ?? statType;
-    const msg = resetDone
-      ? `Snapshot "${title}" created and ${catLabel} reset to 0.`
-      : `Snapshot "${title}" created.`;
-    toast.success(msg);
-    console.log(`[LB-5] Snapshot created: ${snapshotId}`);
-    renderAdminSeasons();
-  } catch (err) {
-    console.error('[LB-5] Snapshot creation failed:', err);
-    toast.error('Failed to create snapshot. See console for details.');
-  }
+    modal.classList.remove('hidden');
+  });
 }
 
 function _doSnapshotHide(snapId, hide) {

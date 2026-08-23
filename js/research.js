@@ -748,6 +748,9 @@ _installWindowApi();
 /**
  * Reset seasonal research points for ALL players.
  * Preserves lifetime RP, inventories, accounts — only touches seasonalResearchPoints.
+ * S8d-5b: prefer buildSeasonalResetPlan + awaited update from season-class-ops.
+ * This sync helper remains for legacy callers; it still uses cache children (unsafe under scoped).
+ * @deprecated Use commitStartNewSeasonFresh / buildSeasonalResetPlan for Admin class ops.
  */
 export function resetSeasonalResearchPoints() {
   const players = db.getChildren('players');
@@ -781,3 +784,7 @@ export function resetSeasonalResearchPoints() {
   console.log(`[Research] Seasonal RP reset — ${count} player(s) cleared`);
   return count;
 }
+
+/** Re-export pure planner for tests / DevTools (authoritative path). */
+export { buildSeasonalResetPlan } from './season-class-ops.js';
+
