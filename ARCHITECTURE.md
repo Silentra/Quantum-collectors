@@ -22,7 +22,9 @@ js/
   auth.js            - Username/password UX; Firebase Auth production default; emergency qc_force_legacy_auth → RTDB hashes
   admin.js           - Admin foundation: isAdmin(username), getPlayer, setPlayerData, listPlayers
   player.js          - Player CRUD, inventory, packs, stats
-  cards.js           - Card DB, CRUD, seed data (40 starter science cards), Phase 3 schema
+  cards.js           - Resolved card catalog (bundled BASE_CARD_DEFINITIONS ⊕ Firebase /cards overrides); CRUD; D1 export; seed gated
+  card-data.js       - Bundled 125 base card definitions (Batch D2; from D1 export) — do not runtime-fetch root JSON
+  card-override.js   - Pure applyCardOverride / buildCardOverride / resolveAllCards (Batch D2)
   packs.js           - Pack types, weighted rarity rolling, acknowledged batched pack opening
   pack-art.js        - Static pack card-back resolution (local WebP → emoji fallback)
   db-metrics.js      - Opt-in RTDB diagnostics (root + scoped path snapshots, subscription registry)
@@ -71,7 +73,7 @@ js/
 - `/players/{username}` - username, password (SHA-256 hash), createdAt, xp, level, isAdmin, **isTradeRestricted**, **isTradeProfileHidden**, group, subgroup, inventory{cardId:qty}, packs{packId:qty}, stats, badges, achievements, progression, lastLogin, **researchPoints, seasonalResearchPoints, researchStats{...}**, **lastDirectTradeAt**, **lastListingCreatedAt**, **lastListingAcceptAt**, **currencies{currentResearchPoints}**, **cosmetics{owned{...}, equipped{aura,border,title,profileBanner}}**, **items{reroll_token,cosmetic_reroll_token,aura_reroll_token,border_reroll_token,discount_chip,freeze_token,research_proposal}**, **shopUsage{rerollsUsedThisRotation,frozenSlotsUsedThisRotation,extraFreezeAllowanceThisRotation}**, **shop{currentRotation{slots[{id,itemId,basePrice,currentPrice,currency,frozen,purchased,discountApplied}],generatedAt,refreshAt,generationVersion},rerollResetAt}**, **projects[]**, **lastProjectRefreshAt**, **purchaseHistory[{itemId,purchasedAt,pricePaid,currency,source}]** (max 10), **profile{equippedAura,equippedBorder,equippedBanner,equippedTitle,featuredCards[],featuredAchievements[]}**, **profileCustomization{featuredCards[],featuredAchievements[]}**, **profileVisibility{isProfileHidden,isCollectionHidden}**
 - `/trades/direct/{tradeId}` - id, offeringPlayerId, targetPlayerId, offeredCardId, requestedCardId, status(pending|processing|accepted|declined|cancelled|failed), createdAt, respondedAt, failureReason?
 - `/trades/listings/{listingId}` - id, ownerId, offeredCardId, requestedCardIds[], groupId, status(active|processing|fulfilled|cancelled|expired|failed), createdAt, expiresAt, respondedAt?, fulfilledBy?, fulfilledCardId?, failureReason?, processingBy?, processingAt?, claimId?
-- `/cards/{cardId}` - id, name, rarity, type, field, effect, image, flavor, created, **imageUrl, keyFact, auraType, enabled**, conceptType (concept cards only)
+- `/cards/{cardId}` - **Batch D2 transitional:** Firebase still holds full duplicate catalog as safety net; intended final contract is **sparse overrides + Firebase-only additions** on top of bundled `js/card-data.js` (125 base). Runtime resolves base ⊕ Firebase layer in `cards.js` (not raw cache alone). Bandwidth cleanup **not complete** until D4. Fields: id, name, rarity, type, field, effect, image, flavor, created?, **imageUrl, keyFact, auraType?, enabled**, conceptType / flavorText (concepts)
 - `/packs/{packId}` - id, name, cardsPerPack, odds{rarity:pct}, enabled
 - `/groups/{groupId}` - id, name, parent
 - `/accessCodes/{CODE}` - created, used, usedBy, usedAt, group
@@ -81,16 +83,17 @@ js/
 - **New Phase 3 fields**: `imageUrl` (= image), `keyFact` (= flavor), `auraType` (none|holographic|prismatic|shadow|radiant|cosmic), `enabled` (bool)
 - **Phase 1D**: `auraType` is a **legacy DB field** — not admin-controlled or read by the render pipeline. Legacy shell aura visuals (`aura-prismatic`, etc.) are **retired**; see Aura Tier System section.
 - `auraLevel` removed from card schema — aura tier is derived from player duplicate count at render time
-- `normalizeCard()` in cards.js ensures all fields present with safe defaults; falls back legacy→new
-- `createCard()` and `updateCard()` both keep legacy+new fields in sync
+- **Batch D2:** `BASE_CARD_DEFINITIONS` (125) in `js/card-data.js` is the bundled base SoT. `applyCardOverride` merges Firebase `/cards` children (sparse or full) onto base **before** finalize/normalize. `getCard` / `getAllCards` / `getEnabledCards` / `getCardsMap` return the **resolved** catalog. Admin edit of a bundled ID writes a **sparse** Firebase child via `buildCardOverride` (or removes the child when equal to base). Bundled IDs cannot be hard-deleted (disable instead). `seedDefaultCards` is gated when the bundle is present (empty Firebase + bundle = valid catalog). `normalizeConceptTypes` does **not** write Firebase (runtime finalize only). Batch D migration is **not** complete until D3/D4.
+- `normalizeCard()` in cards.js ensures all fields present with safe defaults on **create**; never normalize a sparse override alone
+- `createCard()` creates Firebase-only full definitions; `updateCard()` sparse-replaces for bundled IDs
 - `getEnabledCards()` filters by `enabled !== false`
 - `getAllFields()` returns unique field/category values across all cards
 
 ### Concept Type System
 - `VALID_CONCEPT_TYPES` in cards.js: array of `{label, value}` — the canonical list of allowed conceptType values
 - `isValidConceptType(value)` — validation helper
-- `normalizeConceptTypes()` — called at startup in main.js, scans all concept cards and fixes malformed conceptType values (logs `[ResearchProjects] Invalid conceptType normalized`)
-- `normalizeCard()` handles conceptType for concept cards, defaults to `researchBoost`
+- `normalizeConceptTypes()` — retained at startup but **no Firebase writeback** after D2 (resolved finalize supplies defaults)
+- `normalizeCard()` / `finalizeCompleteCard()` handle conceptType for concept cards, defaults to `researchBoost`
 - Admin card editor (create + edit) shows a controlled dropdown for conceptType when type=concept; hidden for scientist cards
 - Dropdown displays friendly labels (e.g. "Research Amplifier") but stores only internal values (e.g. "researchBoost")
 - Save validation in ui.js prevents saving concept cards with invalid conceptType
