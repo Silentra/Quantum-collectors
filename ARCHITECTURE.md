@@ -676,13 +676,23 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — S8d-4a Admin reads for derived Trade Index roots
 
-**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d4a()`.
+**Status: COMPLETE + VERIFIED.** Pasteable: `qcPersonalAudit.workflowS8d4a()`.
 
 - Admin-only parent `.read` on `playerTradeIndex` and `listingsByGroup` (`admins/{uid}`). Students cannot enumerate those parents.
 - Child `$username` / `$groupId` read and write rules **unchanged**. Any-auth PTI/LBG writes remain the accepted S8c residual (not tightened).
 - Simulator proofs in [`scripts/s8c1-rules-simulator.mjs`](scripts/s8c1-rules-simulator.mjs).
 - **Must republish** full [`database.rules.json`](database.rules.json). Rollback [`database.rules.open-rollback.json`](database.rules.open-rollback.json) unchanged.
-- **S8d-4b** Trade Index rebuild rewrite is **NOT STARTED**.
+- **S8d-4b** Trade Index rebuild rewrite follows (separate slice).
+
+### Phase — S8d-4b Safe Trade Index rebuild
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d4b()`.
+
+- Authoritative gather: `adminLoadCanonical` for players + trades/direct + trades/listings; `loadPathOnce(...,{force:true})` for groups, playerTradeIndex, listingsByGroup, tradeIndexMeta.
+- Pure `buildTradeIndexRebuildPlan` / `deriveDesiredTradeIndexes` from snapshots; path invariant (only PTI / LBG / tradeIndexMeta).
+- **Concurrency:** Admin preview is advisory; Confirm **re-gathers** and commits a **fresh** plan (never the preview plan). Soft-expiry omit matches browse; deleted groups do not resurrect LBG.
+- Schema version stays **1**. **No rules change.** Unit: `node scripts/s8d4-trade-index-planner.test.mjs`.
+- Unique Cards / season bulk rebuilds remain **unsafe** until later S8d.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
