@@ -2357,6 +2357,24 @@ body.app-mode-game #screen-game.screen.active {
   font-size: 0.68rem;
 }
 
+.shop-reroll-status {
+  margin: 0 0 0.55rem;
+  padding: 0.4rem 0.45rem;
+  border-radius: 0.45rem;
+  border: 1px solid #1e293b;
+  background: #0c1220;
+}
+
+.shop-reroll-status-line {
+  color: #94a3b8;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.shop-reroll-status-line + .shop-reroll-status-line {
+  margin-top: 0.15rem;
+}
+
 .shop-consumables-stack {
   display: flex;
   flex-direction: column;
