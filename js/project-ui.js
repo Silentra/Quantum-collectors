@@ -823,7 +823,7 @@ function renderProjectReportPanel(container, project, username) {
   panel.innerHTML = `
     <!-- Back nav -->
     <div class="rp-assign-back">
-      <button class="rp-assign-back-btn" id="rp-report-btn-back">← Back to Projects</button>
+      <button class="shop-btn rp-assign-back-btn" id="rp-report-btn-back">← Back to Projects</button>
       <span class="text-xs text-surface-500">${isClaimed ? 'Claimed — read only' : 'Project complete — claim your rewards'}</span>
     </div>
 
@@ -977,7 +977,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     ${_reservationStatusBannerHtml(reservationSource)}
     <!-- Back nav -->
     <div class="rp-assign-back">
-      <button class="rp-assign-back-btn" id="rp-btn-back">← Back to Projects</button>
+      <button class="shop-btn rp-assign-back-btn" id="rp-btn-back">← Back to Projects</button>
       <span class="text-xs text-surface-500">Assign cards to start this project</span>
     </div>
 

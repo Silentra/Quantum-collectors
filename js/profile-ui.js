@@ -19,6 +19,11 @@ import * as groups from './groups.js';
 import * as toast from './toast.js';
 import { getCosmeticDefinition, getItemDefinition, isCosmeticDefinitionActive } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
+import { listAchievementDefinitions } from './achievement-config.js';
+import {
+  formatTitleAchievementSourceLine,
+  getAchievementSourcesForCosmetic,
+} from './player-facing-display.js';
 import {
   equipCosmetic,
   setFeaturedCards,
@@ -339,6 +344,8 @@ function renderCompactCosmetics(p) {
     groupsByCategory.get(key).push(entry);
   }
 
+  const achievementDefs = listAchievementDefinitions();
+
   const dropdowns = COSMETIC_CATEGORY_ORDER
     .filter(category => groupsByCategory.has(category))
     .map(category => {
@@ -349,6 +356,14 @@ function renderCompactCosmetics(p) {
 
       const options = items.map(({ itemId, definition }) => {
         const equipped = equippedId === itemId;
+        const sourceLine = category === ITEM_CATEGORIES.TITLE
+          ? formatTitleAchievementSourceLine(
+            getAchievementSourcesForCosmetic(itemId, achievementDefs),
+          )
+          : '';
+        const sourceHtml = sourceLine
+          ? `<span class="profile-compact-option-source">${escapeHtml(sourceLine)}</span>`
+          : '';
         return `
           <button type="button"
             class="profile-compact-option${equipped ? ' is-equipped' : ''}"
@@ -357,6 +372,7 @@ function renderCompactCosmetics(p) {
             ${equipped ? 'aria-current="true"' : ''}>
             <span class="profile-compact-option-name">${escapeHtml(definition.name || itemId)}</span>
             <span class="profile-compact-option-meta">${escapeHtml(formatLabel(definition.rarity, 'Cosmetic'))}</span>
+            ${sourceHtml}
             ${equipped ? '<span class="profile-state-pill">Equipped</span>' : ''}
           </button>
         `;

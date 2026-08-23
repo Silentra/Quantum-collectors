@@ -16,6 +16,7 @@ import {
   toggleStarredAchievement,
 } from './achievement-preferences.js';
 import { getCosmeticDefinition, getItemDefinition } from './cosmetic-definitions.js';
+import { resolveAchievementRowIconEmoji } from './player-facing-display.js';
 
 const DEFAULT_SHOW_COUNT = 5;
 const SHOW_LIMIT_STORAGE_KEY = 'qc_profile_ach_show_limit';
@@ -146,7 +147,7 @@ function achievementRowHtml(definition, playerAchievements, username, starredIds
   const entry = getEntry(playerAchievements, definition.id);
   const unlocked = isPlayerUnlocked(playerAchievements, definition.id);
   const claimed = isPlayerClaimed(playerAchievements, definition.id);
-  const emoji = (definition.icon?.emoji || '').trim() || '🏆';
+  const emoji = resolveAchievementRowIconEmoji(unlocked, definition);
   const pct = progressPercent(entry);
   const canClaim = unlocked && !claimed && (definition.rewards?.length > 0);
   const starred = starredIds.includes(definition.id);
@@ -174,8 +175,8 @@ function achievementRowHtml(definition, playerAchievements, username, starredIds
       : (claimed ? '<span class="ach-row-status">Claimed</span>' : ''));
 
   return `
-    <article class="ach-row" data-achievement-id="${escapeHtml(definition.id)}">
-      <span class="ach-row-icon" aria-hidden="true">${escapeHtml(emoji)}</span>
+    <article class="ach-row${unlocked ? ' is-unlocked' : ' is-locked'}" data-achievement-id="${escapeHtml(definition.id)}">
+      <span class="ach-row-icon${emoji ? '' : ' is-empty'}" aria-hidden="true">${escapeHtml(emoji)}</span>
       <div class="ach-row-main">
         <span class="ach-row-title">${escapeHtml(definition.name)}</span>
         ${descLine}

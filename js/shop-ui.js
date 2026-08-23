@@ -23,13 +23,13 @@ import { getEquippedAura, getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
 import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
 import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
-import { getShopConfig } from './shop-config.js';
+import { getShopConfig, getShopItemDefinitions } from './shop-config.js';
 import {
   getItemDefinition as getRegistryItemDefinition,
-  getMergedItemDefinitions,
 } from './cosmetic-definitions.js';
 import { renderShopCardPreviewSlot, renderShopCosmeticPreview } from './cosmetic-preview.js';
 import { ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
+import { shouldDisplayConsumable } from './player-facing-display.js';
 import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
 import {
   ensureShopRotation,
@@ -338,10 +338,18 @@ function getItemIcon(item) {
   return resolveItemDisplay(source).emoji;
 }
 
-function getShopConsumables() {
-  return Object.values(getMergedItemDefinitions())
+/**
+ * Shop consumable aside list — resolved defs (overrides applied).
+ * Display filter: hide only when enabled === false AND quantity === 0.
+ */
+function getShopConsumables(snapshot) {
+  return Object.values(getShopItemDefinitions())
     .filter(definition => definition?.type === ITEM_TYPES.CONSUMABLE)
-    .filter(definition => SHOP_CONSUMABLE_BEHAVIORS.has(definition.behaviorType));
+    .filter(definition => SHOP_CONSUMABLE_BEHAVIORS.has(definition.behaviorType))
+    .filter(definition => shouldDisplayConsumable(
+      definition,
+      getItemQuantity(snapshot, definition.id),
+    ));
 }
 
 function renderTargetButton(index, disabled) {
@@ -376,7 +384,7 @@ function renderSlotActions(index, state) {
 }
 
 function renderConsumables(snapshot) {
-  const rows = getShopConsumables().map(definition => {
+  const rows = getShopConsumables(snapshot).map(definition => {
     const itemId = definition.id;
     const quantity = getItemQuantity(snapshot, itemId);
     const disabled = quantity <= 0;
