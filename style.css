@@ -5,28 +5,46 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; }
 
 /* ===================== APPLICATION SHELL (S1–S4.5) ===================== */
 
-/* Viewport-owned game shell: flex height chain, single gameplay scroll region */
+/*
+ * Viewport-owned game shell: flex height chain, single gameplay scroll region.
+ * Batch A: harden remaining-height + touch scroll on #game-content-scroll so
+ * short tablet viewports can reach bottom tab controls (esp. Trading).
+ */
 html.app-mode-game {
   height: 100%;
-  overflow: hidden;
-}
-
-body.app-mode-game {
-  height: 100vh;
   height: 100dvh;
   overflow: hidden;
 }
 
-body.app-mode-game #app.app-mode-game {
+body.app-mode-game {
   height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100%;
+  max-height: 100dvh;
+  overflow: hidden;
+  /* Prefer dynamic viewport when browser chrome collapses/expands */
   min-height: 0;
+}
+
+body.app-mode-game #app.app-mode-game {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  height: 100%;
+  max-height: 100%;
+  /* Override Tailwind min-h-screen so the shell cannot grow past the viewport */
+  min-height: 0 !important;
   overflow: hidden;
 }
 
 body.app-mode-game #screen-game.screen.active {
+  display: flex !important;
+  flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
+  max-height: 100%;
   overflow: hidden;
   position: relative;
 }
@@ -1212,7 +1230,14 @@ body.app-mode-game #screen-game.screen.active {
 #game-content-scroll {
   flex: 1 1 auto;
   min-height: 0;
+  /* Authoritative vertical scroller — keep overflow on this node (also Tailwind) */
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: 1.5rem;
+  /* Reach final controls without large empty dead space */
+  padding-bottom: 1.25rem;
   position: relative;
   z-index: 1;
 }
@@ -2752,21 +2777,11 @@ body.app-mode-game #screen-game.screen.active {
   }
 }
 
-@media (max-width: 768px) {
-  .profile-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .profile-layout-main {
-    display: contents;
-  }
-
-  #profile-summary-card { order: 1; }
-  #profile-info-panel { order: 2; }
-  .profile-achievements-aside { order: 3; }
-  .profile-layout-cosmetics { order: 4; }
-  .profile-layout-appearance { order: 5; }
-
+/*
+ * Tablet + phone: Show All achievements use page-level scroll instead of a
+ * height-capped nested list (wide-tablet trap). Desktop (>1024) keeps the cap.
+ */
+@media (max-width: 1024px) {
   .profile-achievements-aside.is-show-all {
     align-self: start;
     height: auto;
@@ -2787,6 +2802,22 @@ body.app-mode-game #screen-game.screen.active {
     min-height: 0;
     overflow: visible;
   }
+}
+
+@media (max-width: 768px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-layout-main {
+    display: contents;
+  }
+
+  #profile-summary-card { order: 1; }
+  #profile-info-panel { order: 2; }
+  .profile-achievements-aside { order: 3; }
+  .profile-layout-cosmetics { order: 4; }
+  .profile-layout-appearance { order: 5; }
 
   .profile-summary-layout {
     grid-template-columns: 1fr;
@@ -5993,6 +6024,11 @@ body.app-mode-game #screen-game.screen.active {
     min-width: 0;
     position: static;
   }
+  /* Prefer page-level scroll on stacked tablet/phone — avoid nested-scroll traps */
+  .rp-cards-panel-body {
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 /* LEFT column — projects list area: constrained width, doesn't stretch excessively */
@@ -6033,8 +6069,11 @@ body.app-mode-game #screen-game.screen.active {
 
 .rp-cards-panel-body {
   padding: 0.6rem 0.7rem;
-  max-height: 70vh;
+  /* Cap to remaining shell viewport so sticky panel does not invent a second full-page scroller */
+  max-height: min(70vh, calc(100dvh - 11rem));
   overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
