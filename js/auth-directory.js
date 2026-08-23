@@ -23,7 +23,7 @@ export const AUTH_DIRECTORY_ROOT = 'authDirectory';
 export const AUTH_EMAIL_DOMAIN = 'scicards.local';
 
 /** Freshness / feature proof for live C-a.1 builds (per-user backfill fix). */
-export const OPTION_CA_FOUNDATION_VERSION = 'option-c-a-1.1';
+export const OPTION_CA_FOUNDATION_VERSION = 'option-c-a-1.1.1';
 
 /**
  * Admin-browser-only localStorage toggle (NOT production-global).
@@ -530,15 +530,17 @@ export async function backfillAuthDirectory(options = {}) {
 export function getOptionCaStatus() {
   return {
     optionCaFoundationVersion: OPTION_CA_FOUNDATION_VERSION,
-    release: 'C-a.1',
+    release: 'C-a.1.1',
     migrationCompatDefault: true,
     authDirectoryStrictLocalOnly: isAuthDirectoryStrict(),
     authDirectoryRoot: AUTH_DIRECTORY_ROOT,
     backfillGather: 'per-username child force-reads (no authDirectory parent)',
+    registrationLbUsername: true,
     note:
-      'C-a.1 migration-compat release. Backfill then verify logins. '
-      + 'C-a.2 = production-default strict micro-deploy (not enableAuthDirectoryStrict localStorage). '
-      + 'qc_auth_directory_strict is Admin-browser-only and is NOT the final global production gate.',
+      'C-a.1.1 registration blocker fix: live LB summary entries include username '
+      + '(required by leaderboards create-rule during registration multipath). '
+      + 'No rules republish. C-a.2 = production-default strict micro-deploy '
+      + '(not enableAuthDirectoryStrict localStorage).',
   };
 }
 
@@ -563,13 +565,15 @@ function _installWindowApi() {
     disableAuthDirectoryStrict,
     isAuthDirectoryStrict,
     help() {
-      console.info(`Option C-a.1 authDirectory (migration compat)
+      console.info(`Option C-a.1.1 authDirectory + registration LB username
 Freshness: qcAuth.getOptionCaStatus()
   → optionCaFoundationVersion === '${OPTION_CA_FOUNDATION_VERSION}'
   → migrationCompatDefault === true
+  → registrationLbUsername === true
 Backfill (Admin Auth): await qcAuth.backfillAuthDirectory()
   (per-username child reads; never authDirectory parent)
-After backfill + login verify → deploy C-a.2 strict-default (separate micro-deploy)
+Registration fix: live LB rows include username (no rules republish)
+After live register verify → C-a.2 strict-default (separate micro-deploy)
 Do NOT treat qcAuth.enableAuthDirectoryStrict() as production-global rollout
 Schema: ${AUTH_DIRECTORY_ROOT}/{u} = { loginEmail, authUid, generation }
 Ownership remains players/{u}/authUid`);

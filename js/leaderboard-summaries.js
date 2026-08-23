@@ -4,8 +4,9 @@
  * players/{username} remains canonical for stats. leaderboards/{statKey}/{username}
  * is a derived projection for student live boards (no full players scan).
  *
- * Entry shape: { value, groupId, subgroupId, updatedAt }
- * Username is the leaf key. No displayName / eligibility flags.
+ * Entry shape: { username, value, groupId, subgroupId, updatedAt }
+ * Username is both the leaf key and a field (required for registration create-rule).
+ * No displayName / eligibility flags.
  *
  * Firebase path segment = Firebase-safe `statKey` (no ".").
  * Player value source = separate `playerPath` (may use "." nesting).
@@ -213,11 +214,13 @@ export function resolveLeaderboardGroupFields(playerLike) {
  * @param {object} playerLike
  * @param {string} statInput
  * @param {number} [now]
- * @returns {{ value: number, groupId: string|null, subgroupId: string|null, updatedAt: number }}
+ * @returns {{ username: string, value: number, groupId: string|null, subgroupId: string|null, updatedAt: number }}
  */
 export function buildLeaderboardSummaryEntry(username, playerLike, statInput, now = Date.now()) {
   const { groupId, subgroupId } = resolveLeaderboardGroupFields(playerLike);
+  const user = String(username || '').trim();
   return {
+    username: user,
     value: resolveLeaderboardStatValue(playerLike, statInput),
     groupId,
     subgroupId,
@@ -344,21 +347,25 @@ export function buildLeaderboardSummaryDeletePaths(username) {
 /**
  * Semantic normalize for equality (Firebase may omit null group keys).
  * updatedAt is not part of equality and is omitted here.
+ * username participates so legacy rows missing username repair once via S8d-3.
  *
  * @param {object|null|undefined} entryLike
- * @returns {{ value: number, groupId: string|null, subgroupId: string|null }}
+ * @returns {{ username: string|null, value: number, groupId: string|null, subgroupId: string|null }}
  */
 export function normalizeLeaderboardEntry(entryLike) {
   const e = entryLike && typeof entryLike === 'object' ? entryLike : {};
   const rawVal = e.value;
   const value = typeof rawVal === 'number' && Number.isFinite(rawVal) ? rawVal : 0;
+  const username = e.username != null && e.username !== ''
+    ? String(e.username)
+    : null;
   const groupId = e.groupId != null && e.groupId !== ''
     ? String(e.groupId)
     : null;
   const subgroupId = e.subgroupId != null && e.subgroupId !== ''
     ? String(e.subgroupId)
     : null;
-  return { value, groupId, subgroupId };
+  return { username, value, groupId, subgroupId };
 }
 
 /**
@@ -372,7 +379,8 @@ export function leaderboardEntriesEqual(a, b) {
   if (a == null || b == null) return false;
   const na = normalizeLeaderboardEntry(a);
   const nb = normalizeLeaderboardEntry(b);
-  return na.value === nb.value
+  return na.username === nb.username
+    && na.value === nb.value
     && na.groupId === nb.groupId
     && na.subgroupId === nb.subgroupId;
 }
@@ -731,7 +739,7 @@ function _installWindowApi() {
     buildTradesCompletedLeaderboardIncrementPaths,
     help() {
       console.info(`Leaderboard summaries (S5d + S8d-3 safe rebuild)
-Root: ${LEADERBOARDS_ROOT}/{statKey}/{username} = { value, groupId, subgroupId, updatedAt }
+Root: ${LEADERBOARDS_ROOT}/{statKey}/{username} = { username, value, groupId, subgroupId, updatedAt }
 statKeys: ${LIVE_LEADERBOARD_STAT_KEYS.join(', ')}
 Safe rebuild: await qcLeaderboardSummaries.prepareLeaderboardRebuild()
   then commitLeaderboardRebuildPlan(plan) — or rebuildLeaderboardSummaries()

@@ -2409,47 +2409,52 @@ STOP: no new implementation from this workflow paste; no Option C planning here.
  */
 export function workflowOptionCa() {
   console.info(`
-=== Option C-a.1 authDirectory (migration compat) ===
+=== Option C-a.1.1 authDirectory + registration LB username ===
 
-Status: IMPLEMENTED — AWAITING DEPLOYMENT / BACKFILL VERIFICATION
-C-a.1 = temporary migration-compat client (directory present → use; missing → gen0 fallback).
+Status: C-a.1.1 IMPLEMENTED — AWAITING LIVE REGISTRATION VERIFICATION
+C-a.1 = migration-compat client (directory present → use; missing → gen0 fallback).
+C-a.1.1 = registration blocker fix: buildLeaderboardSummaryEntry includes username
+  (leaderboards create-rule requires username when players/{u} not yet in pre-write root).
 C-a.2 = later production-default strict micro-deploy (NOT localStorage enableAuthDirectoryStrict).
-No password reset / Delete Player Auth changes (C-b).
+No password reset / Delete Player Auth changes (C-b). No rules change for C-a.1.1.
 
 Schema: authDirectory/{username} = { loginEmail, authUid, generation }
   gen0 loginEmail = "{u}@scicards.local" (synthetic — not a real inbox)
   players/{u}.authUid remains ownership authority
+  Live LB: leaderboards/{stat}/{u} = { username, value, groupId, subgroupId, updatedAt }
   Backfill gather: per-username public child force-reads (NEVER authDirectory parent)
 
-Sequence:
-  1) Republish C-a rules if not already published
-       (authDirectory/$username .read true; create self gen0; admin update)
-       NO parent .read on authDirectory
-  2) Deploy C-a.1 client
+Failed register notes:
+  Prior failed attempts likely rolled back Auth via deleteUser after RTDB deny.
+  Orphan Auth users remain possible if rollback delete failed.
+  Retest with a NEW disposable username + unused access code.
+  If synthetic email later says email-already-in-use, clean that Auth user manually.
+
+Existing LB rows missing username: safe S8d-3 Rebuild Leaderboards will backfill once
+  (username participates in equality). Do NOT auto-run rebuild; optional Admin maintenance.
+
+Live retest (client deploy only — NO rules republish):
+  1) Deploy C-a.1.1 client
+  2) Hard refresh
   3) Freshness:
        qcAuth.getOptionCaStatus()
-       // PASS: optionCaFoundationVersion === 'option-c-a-1.1'
+       // PASS: optionCaFoundationVersion === 'option-c-a-1.1.1'
+       // PASS: registrationLbUsername === true
        // PASS: migrationCompatDefault === true
-       // PASS: backfillGather mentions per-username
-  4) Admin (Auth on):
-       const r = await qcAuth.backfillAuthDirectory()
-       // expect ok; created/unchanged; conflicts===0; missingAuthUid===0
+  4) Register NEW disposable username + unused access code
+  5) Confirm registration succeeds
+  6) Inspect authDirectory/{u}, players/{u}.authUid, playerDirectory/{u},
+     playerTradeIndex/{u}/_meta, leaderboards/*/{u}
+  7) Verify each LB leaf has username === path key
+  8) Logout / login / reload restore
+  9) Confirm no unexpected permission errors
 
-*** STOP HERE — DO NOT TEST LOGINS UNTIL BACKFILL RESULT IS REVIEWED ***
-
-  5) Inspect authDirectory/{eachUsername} (gen0; authUid matches players)
-  6) Login/logout/restore under migration compat
-  7) Disposable register → gen0 authDirectory; restore works
-  8) After successful verification ONLY:
-       implement/deploy C-a.2 strict-default flip
-       (do NOT call enableAuthDirectoryStrict as the final production gate —
-        that flag is this-browser localStorage only)
+*** STOP GATE — verify live registration before C-a.2 strict flip ***
 
 Legacy: qc_force_legacy_auth path does not require authDirectory.
-
 Unit: node scripts/option-c-a-auth-directory.test.mjs
-
-STOP GATE: finish C-a.1 verify → C-a.2 → then Option C-b. Do not begin C-b now.
+     node scripts/s8d3-leaderboard-planner.test.mjs
+STOP GATE: finish C-a.1.1 live register verify → C-a.2 → then Option C-b.
 `);
 }
 
