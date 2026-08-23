@@ -575,6 +575,7 @@ API:
   qcPersonalAudit.workflowS8d1()   // S8d-1 admin canonical parent reads
   qcPersonalAudit.workflowS8d2()   // S8d-2 Player Directory rebuild (COMPLETE + VERIFIED)
   qcPersonalAudit.workflowS8d3()   // S8d-3 safe live leaderboard rebuild
+  qcPersonalAudit.workflowS8d4a()  // S8d-4a admin PTI/LBG parent reads (rules)
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -1822,7 +1823,9 @@ SPLIT tracks (see docs/DATABASE_SCOPING_ROADMAP.md §8):
   S8d-1 IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d1)
   S8d-2 COMPLETE + VERIFIED (workflowS8d2; directory rebuild safe)
   S8d-3 IMPLEMENTED — AWAITING VERIFICATION (workflowS8d3; live LB rebuild safe)
-  Trade Index / Unique Cards / season bulk rebuilds still UNSAFE until later S8d
+  S8d-4a IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION (workflowS8d4a; admin PTI/LBG parent reads)
+  S8d-4b Trade Index rebuild rewrite — NOT STARTED (still unsafe under scoped cache)
+  Unique Cards / season bulk rebuilds still UNSAFE until later S8d
 
   S8b migration preference (planning only):
   Nearly all accounts disposable. Preserve at most bobby, one teacher, optional bobby2.
@@ -2237,6 +2240,42 @@ STOP: no Trade Index / Unique Cards / season reset rewrites; no rules changes.
 }
 
 /**
+ * Pasteable S8d-4a admin parent reads for derived Trade Index roots.
+ */
+export function workflowS8d4a() {
+  console.info(`
+=== S8d-4a Admin reads for derived Trade Index roots ===
+
+Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / VERIFICATION
+Must republish full database.rules.json (Console).
+Rollback file database.rules.open-rollback.json unchanged.
+S8d-4b Trade Index rebuild rewrite — NOT STARTED (do not treat rebuild as safe yet).
+
+Rules (narrow read-only broaden for admins):
+  playerTradeIndex parent .read → auth + admins/{uid}
+  listingsByGroup parent .read → auth + admins/{uid}
+  Child $username / $groupId read+write rules UNCHANGED
+  Any-auth PTI/LBG writes remain accepted S8c residual (NOT tightened)
+
+Local proof:
+  npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
+
+Live (after rules publish; Admin teacher Auth + admins/{uid}):
+  1) Student: await qcDbHydration.loadPathOnce('playerTradeIndex',{force:true}) → fail
+  2) Admin:   await qcDbHydration.loadPathOnce('playerTradeIndex',{force:true})
+       → ok && mode==='firebase' (may enumerate PTI usernames)
+  3) Student: loadPathOnce('listingsByGroup',{force:true}) → fail
+  4) Admin:   loadPathOnce('listingsByGroup',{force:true}) → ok && mode==='firebase'
+  5) Student known child still works:
+       loadPathOnce('playerTradeIndex/'+me,{force:true}) → ok
+  6) Trading still works (writes residual unchanged)
+  7) Do NOT run Rebuild Trade Indexes as "safe" yet — that is S8d-4b
+
+STOP: no S8d-4b rebuild rewrite; no write tighten; no Directory/LB/Auth changes.
+`);
+}
+
+/**
  * Pasteable S8b+ P0 Trusted Teacher Functions foundation status.
  * No password reset / delete / promote. No S8c rules.
  */
@@ -2421,6 +2460,7 @@ function _installWindowApi() {
     workflowS8d1,
     workflowS8d2,
     workflowS8d3,
+    workflowS8d4a,
     enableAudit,
     disableAudit,
     enableIsolation,
