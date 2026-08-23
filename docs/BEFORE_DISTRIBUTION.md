@@ -29,13 +29,10 @@ Planned approach: disposable Auth identities + `authDirectory` rebind (Option C)
 **Option C-a (foundation):** `authDirectory/{username} = { loginEmail, authUid, generation }` with public pre-auth **child** read; production Firebase Auth login/register/restore resolve `loginEmail` via `authDirectory`. Gen0 emails remain `{username}@scicards.local`. Ownership stays `players/{username}.authUid`.
 
 - **C-a.1 / C-a.1.1:** LIVE VERIFIED (backfill, existing logins, disposable registration + LB `username`). Migration-compat was temporary.
-- **C-a.2:** production-default strict — `authDirectory` required for login/restore (`option-c-a-2`). Fresh browsers are strict with **no** Admin localStorage rollout. Developer emergency only: `qc_auth_directory_compat=true` permits temporary gen0 fallback. Separate: `qc_force_legacy_auth` for full legacy RTDB-hash path. Obsolete: do not treat `enableAuthDirectoryStrict()` as a teacher rollout step.
-- **C-b** (reset/delete rotation) must not start until C-a.2 is live-verified.
+- **C-a.2:** LIVE VERIFIED — production-default strict (`option-c-a-2`).
+- **C-b:** Admin Reset Password = secondary Auth **identity rotation** (teacher session intact). Delete Player clears `authDirectory` (Auth orphans may remain). Same-username reuse may need developer Auth cleanup — **not** a product guarantee. Future orphan Auth report is docs-only / deferred. Freshness: `qcAuth.getOptionCbStatus()`.
 
-Until C-b:
-
-- Auth password reset → `scripts/s8b-auth-admin.mjs set-password` (developer)
-- Delete Player → RTDB only; Auth orphan optional `delete-auth-user` cleanup
+Repair Game / Admin cleanup / first-admin bootstrap remain deferred distribution items.
 
 **Distribution:** Option C (C-a + C-b, or equivalent Spark-native lifecycle) is required before claiming teacher self-sufficiency.
 

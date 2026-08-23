@@ -716,11 +716,21 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — Option C-a authDirectory foundation
 
-**Status: C-a.2 IMPLEMENTED — AWAITING LIVE VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
+**Status: C-a.2 COMPLETE + LIVE VERIFIED.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
 
 - Schema: `authDirectory/{username} = { loginEmail, authUid, generation }` (public **child** read; student create gen0 only; admin update/delete). **No parent enumerate read.**
 - **C-a.1 / C-a.1.1:** LIVE VERIFIED (migration-compat + registration LB `username` fix).
-- **C-a.2:** production-default strict (`option-c-a-2`). Login/restore require `authDirectory`. Developer emergency: `qc_auth_directory_compat=true` → temporary gen0 fallback. Separate: `qc_force_legacy_auth`. Do not treat `enableAuthDirectoryStrict()` as a teacher rollout step.
+- **C-a.2:** production-default strict (`option-c-a-2`). Login/restore require `authDirectory`. Developer emergency: `qc_auth_directory_compat=true`.
+
+### Phase — Option C-b identity rotation + delete unbind
+
+**Status: C-b IMPLEMENTED — AWAITING LIVE VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCb()`.
+
+- **Reset Password:** secondary named Firebase App/Auth (`Persistence.NONE`) creates replacement identity; Admin multipath rebinds `authDirectory/{u}` + `players/{u}.authUid` and clears `activeSession`. Teacher primary session untouched. Email shape: `{u}.g{generation}.{token}@scicards.local`.
+- **Delete Player:** refuses self/Admin/`__admin__`; requires directory↔player UID match; same multipath clears `authDirectory/{u}`. Browser does **not** delete Firebase Auth users (orphans OK after unbind).
+- Same-username re-register after delete is **not** guaranteed (gen0 Auth email may remain). Future read-only Admin SDK orphan report is deferred (year-end housekeeping).
+- No rules/schema changes. Mid-trade `tradeGrants`/`claimerAuthUid` residual accepted — do not rewrite Trading.
+- Freshness: `qcAuth.getOptionCbStatus()` → `option-c-b-1`.
 - **No** password rotation / Delete Player Auth changes (Option C-b). Unit: `node scripts/option-c-a-auth-directory.test.mjs`.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration

@@ -1316,10 +1316,46 @@ async function main() {
     );
     pass('C-a.1: malicious authDirectory create for another UID still fails');
 
+    // --- Option C-b: Admin identity rebind multipath (no rules change) ---
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const dbx = ctx.database();
+      await set(ref(dbx, 'authDirectory/rotateme'), {
+        loginEmail: 'rotateme@scicards.local',
+        authUid: 'rotateOldUid',
+        generation: 0,
+      });
+      await set(ref(dbx, 'players/rotateme'), {
+        authUid: 'rotateOldUid',
+        isAdmin: false,
+        activeSession: { id: 'old-sess', issuedAt: now },
+      });
+    });
+
+    await assertSucceeds(
+      update(ref(teacherCa.database()), {
+        'authDirectory/rotateme': {
+          loginEmail: 'rotateme.g1.aabbccddeeff@scicards.local',
+          authUid: 'rotateNewUid',
+          generation: 1,
+        },
+        'players/rotateme/authUid': 'rotateNewUid',
+        'players/rotateme/activeSession': null,
+      }),
+    );
+    pass('C-b: admin reset rebind multipath (directory + authUid + activeSession) allowed');
+
+    await assertSucceeds(
+      update(ref(teacherCa.database()), {
+        'authDirectory/rotateme': null,
+        'players/rotateme': null,
+      }),
+    );
+    pass('C-b: admin delete may null authDirectory with player');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1 rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1+C-b rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();

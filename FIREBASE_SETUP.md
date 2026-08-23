@@ -112,7 +112,7 @@ Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
 
 ### Future (post Auth-default verify)
 
-Legacy hash retirement after post-launch confidence. **Option C-a** authDirectory is **C-a.2 production-default strict** (`option-c-a-2`: login/restore require directory; developer emergency `qc_auth_directory_compat=true` only — verify with `qcAuth.getOptionCaStatus()` / `qcPersonalAudit.workflowOptionCa()`). **Option C-b** in-panel Auth password reset / delete rotation remains deferred until C-a.2 is live-verified ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
+Legacy hash retirement after post-launch confidence. **Option C-a** authDirectory is **C-a.2 production-default strict** (live verified). **Option C-b** Admin Reset Password uses secondary Firebase Auth identity rotation (`qcAuth.getOptionCbStatus()` / `qcPersonalAudit.workflowOptionCb()`); Delete Player unbinds `authDirectory` but does not delete Auth users in-browser. Same-username re-register after delete may require `scripts/s8b-auth-admin.mjs delete-auth-user` (or Console). Future read-only orphan Auth report is deferred year-end housekeeping. ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
 Authoritative S8 plan: [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md) §8.
 

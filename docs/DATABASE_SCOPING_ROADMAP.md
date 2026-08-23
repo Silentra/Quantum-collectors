@@ -71,7 +71,7 @@ Infrastructure through **S5c-D**, Hybrid C+, and **S5d** is live beside the lega
 | S8d-5b Season/Snapshot class operations | **COMPLETE + VERIFIED** (`workflowS8d5b`) |
 | **S8d (Admin maintenance umbrella)** | **COMPLETE** |
 
-**What remains (outside S8d):** Option C Auth lifecycle ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)) — **C-a authDirectory foundation** implemented (awaiting rules publish / backfill / verify); **C-b** reset/delete deferred until C-a verified. First-admin bootstrap (distribution). Future Admin UX / Repair Game tab (deferred polish). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
+**What remains (outside S8d):** Option C Auth lifecycle ([`docs/BEFORE_DISTRIBUTION.md`](BEFORE_DISTRIBUTION.md)) — **C-a** live verified (strict); **C-b** identity rotation + delete unbind implemented (awaiting live verify). First-admin bootstrap (distribution). Future Admin UX / Repair Game tab (deferred polish). Future read-only Auth orphan report (year-end). PTI/`listingsByGroup` any-auth writes remain **accepted residuals**. S6c remains deferred (not a blocker). Foreign-PTI readiness warnings = **diagnostic noise** (not index corruption).
 
 ```mermaid
 flowchart LR
