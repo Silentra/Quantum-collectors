@@ -1105,10 +1105,104 @@ async function main() {
     );
     pass('S8d-4a: listingsByGroup still auth-writable (accepted residual unchanged)');
 
+    // --- Option C-a: authDirectory foundation ---
+    const teacherCa = testEnv.authenticatedContext('teacherUid');
+    const anonCa = testEnv.unauthenticatedContext();
+    const studentCa = testEnv.authenticatedContext('offererUid');
+    const otherCa = testEnv.authenticatedContext('targetUid');
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const dbx = ctx.database();
+      await set(ref(dbx, 'authDirectory/bobby'), {
+        loginEmail: 'bobby@scicards.local',
+        authUid: 'bobbyUid',
+        generation: 0,
+      });
+      await set(ref(dbx, 'players/offerer/authUid'), 'offererUid');
+    });
+
+    await assertSucceeds(get(ref(anonCa.database(), 'authDirectory/bobby')));
+    pass('C-a: unauthenticated authDirectory/{u} read allowed');
+
+    await assertFails(
+      set(ref(anonCa.database(), 'authDirectory/bobby'), {
+        loginEmail: 'x@scicards.local',
+        authUid: 'hack',
+        generation: 1,
+      }),
+    );
+    pass('C-a: unauthenticated authDirectory write denied');
+
+    await assertFails(
+      update(ref(studentCa.database(), 'authDirectory/bobby'), { generation: 9 }),
+    );
+    pass('C-a: student cannot overwrite existing authDirectory');
+
+    await assertFails(
+      set(ref(studentCa.database(), 'authDirectory/bobby'), null),
+    );
+    pass('C-a: student cannot delete authDirectory');
+
+    await assertFails(
+      set(ref(studentCa.database(), 'authDirectory/newuser'), {
+        loginEmail: 'newuser@scicards.local',
+        authUid: 'someoneElse',
+        generation: 0,
+      }),
+    );
+    pass('C-a: student cannot create authDirectory for another uid');
+
+    await assertSucceeds(
+      set(ref(studentCa.database(), 'authDirectory/freshofferer'), {
+        loginEmail: 'freshofferer@scicards.local',
+        authUid: 'offererUid',
+        generation: 0,
+      }),
+    );
+    pass('C-a: student can create own missing authDirectory gen0');
+
+    await assertFails(
+      set(ref(studentCa.database(), 'authDirectory/freshofferer2'), {
+        loginEmail: 'freshofferer2@scicards.local',
+        authUid: 'offererUid',
+        generation: 1,
+      }),
+    );
+    pass('C-a: student create with generation!==0 denied');
+
+    await assertSucceeds(
+      set(ref(teacherCa.database(), 'authDirectory/bobby'), {
+        loginEmail: 'bobby.g1.tok@scicards.local',
+        authUid: 'newBobbyUid',
+        generation: 1,
+      }),
+    );
+    pass('C-a: admin can update authDirectory (rotation-ready)');
+
+    await assertSucceeds(
+      set(ref(teacherCa.database(), 'authDirectory/tempdel'), {
+        loginEmail: 'tempdel@scicards.local',
+        authUid: 'x',
+        generation: 0,
+      }),
+    );
+    await assertSucceeds(set(ref(teacherCa.database(), 'authDirectory/tempdel'), null));
+    pass('C-a: admin can delete authDirectory');
+
+    await assertFails(
+      set(ref(otherCa.database(), 'players/offerer/authUid'), 'targetUid'),
+    );
+    pass('C-a: student still cannot rewrite foreign players.authUid');
+
+    await assertSucceeds(
+      set(ref(teacherCa.database(), 'players/offerer/authUid'), 'offererUid'),
+    );
+    pass('C-a: admin may still rewrite players.authUid');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();

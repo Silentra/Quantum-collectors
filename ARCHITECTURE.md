@@ -714,6 +714,15 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Live QA credited: Tier 2 Start New Season preview (5 players) cancelled with zero writes; Tier 3 disposable Packs Opened snapshot-only created/verified/deleted; historical isolation confirmed after a live pack open. No resetAfter live test; no real Start New Season (intentional).
 - Future Admin UX / Repair Game tab remains deferred ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
+### Phase — Option C-a authDirectory foundation
+
+**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / BACKFILL / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
+
+- Schema: `authDirectory/{username} = { loginEmail, authUid, generation }` (public pre-auth read; student create gen0 only; admin update/delete).
+- Firebase Auth login/register/restore resolve `loginEmail` via authoritative `authDirectory` load. Ownership remains `players/{u}/authUid`.
+- Gen0 emails stay `{username}@scicards.local`. Backfill: `await qcAuth.backfillAuthDirectory()`. Explicit compat until `qcAuth.enableAuthDirectoryStrict()`.
+- **No** password rotation / Delete Player Auth changes (Option C-b). Unit: `node scripts/option-c-a-auth-directory.test.mjs`.
+
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
 **Status: COMPLETE + VERIFIED.** Cold Accept/Cancel (listing) and Respond/Cancel/Confirm paths no longer false-`NOT_FOUND` under scoped cold cache.

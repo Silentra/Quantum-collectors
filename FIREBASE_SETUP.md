@@ -112,7 +112,7 @@ Pasteable: `qcPersonalAudit.workflowS8bPlusP0()`
 
 ### Future (post Auth-default verify)
 
-Legacy hash retirement after post-launch confidence. Option C password-reset path deferred ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
+Legacy hash retirement after post-launch confidence. **Option C-a** authDirectory foundation is implemented (awaiting rules publish / backfill / verify — `qcPersonalAudit.workflowOptionCa()`). **Option C-b** in-panel Auth password reset / delete rotation remains deferred until C-a is verified ([`docs/BEFORE_DISTRIBUTION.md`](docs/BEFORE_DISTRIBUTION.md)).
 
 Authoritative S8 plan: [`docs/DATABASE_SCOPING_ROADMAP.md`](docs/DATABASE_SCOPING_ROADMAP.md) §8.
 

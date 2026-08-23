@@ -24,12 +24,16 @@ Teachers must eventually reset passwords and finish account deletion **from the 
 - no terminal / Console for routine use
 - no real student emails
 
-Planned approach (investigated; **not implemented**): disposable Auth identities + `authDirectory` rebind (Option C). Until then:
+Planned approach: disposable Auth identities + `authDirectory` rebind (Option C).
+
+**Option C-a (foundation):** `authDirectory/{username} = { loginEmail, authUid, generation }` with public pre-auth read; production Firebase Auth login/register/restore resolve `loginEmail` via `authDirectory`. Gen0 emails remain `{username}@scicards.local`. Ownership stays `players/{username}.authUid`. Backfill existing users before enabling strict mode (`qcAuth.enableAuthDirectoryStrict()`). **C-b (reset/delete rotation) must not start until C-a is verified.**
+
+Until C-b:
 
 - Auth password reset → `scripts/s8b-auth-admin.mjs set-password` (developer)
 - Delete Player → RTDB only; Auth orphan optional `delete-auth-user` cleanup
 
-**Distribution:** Option C (or equivalent Spark-native lifecycle) is required before claiming teacher self-sufficiency.
+**Distribution:** Option C (C-a + C-b, or equivalent Spark-native lifecycle) is required before claiming teacher self-sufficiency.
 
 ## Out of scope for this file
 
