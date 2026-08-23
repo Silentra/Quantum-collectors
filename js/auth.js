@@ -1,7 +1,8 @@
 /**
  * Auth Module - Username/Password Authentication via Firebase RTDB
  *
- * Production default: Firebase Auth (synthetic {username}@scicards.local).
+ * Production default: Firebase Auth (synthetic emails via authDirectory).
+ * Option C-a: login/register/restore resolve loginEmail from authDirectory/{username}.
  * Emergency developer rollback: localStorage.qc_force_legacy_auth='true' → RTDB SHA-256
  * hashes at players/{username}.password (Auth-native accounts without a hash cannot log in).
  * Stale qc_firebase_auth is ignored and does not control mode.
@@ -58,7 +59,16 @@ import {
   loadAdminRegistryEntryOnce,
   buildAdminRegistryUpdates,
 } from './admin-registry.js';
+import {
+  AUTH_DIRECTORY_ROOT,
+  usernameToAuthEmail,
+  resolveAuthLoginTarget,
+  loadAuthDirectoryEntry,
+  authDirectoryPathsForRegistration,
+  isAuthDirectoryStrict,
+} from './auth-directory.js';
 
+export { usernameToAuthEmail, AUTH_DIRECTORY_ROOT };
 const SESSION_KEY = 'scicards_session';
 const AUTH_MESSAGE_KEY = 'scicards_auth_message';
 
@@ -135,7 +145,6 @@ function simpleHash(str) {
 
 /** Developer-only emergency rollback to legacy RTDB hash auth. Students never set this. */
 const FORCE_LEGACY_AUTH_LS_KEY = 'qc_force_legacy_auth';
-const AUTH_EMAIL_DOMAIN = 'scicards.local';
 
 /**
  * True when Firebase Auth is authoritative for student login/register/restore.
@@ -149,12 +158,6 @@ export function isFirebaseAuthEnabled() {
   } catch {
     return true; // fail open to Auth if localStorage throws
   }
-}
-
-/** Internal synthetic email — never collected from / shown to students. */
-export function usernameToAuthEmail(username) {
-  const u = String(username || '').trim().toLowerCase();
-  return `${u}@${AUTH_EMAIL_DOMAIN}`;
 }
 
 function waitForFirebaseAuthUser() {
@@ -701,9 +704,57 @@ export async function initAuth() {
 
   if (isFirebaseAuthEnabled()) {
     const fbUser = await waitForFirebaseAuthUser();
-    const expectedEmail = usernameToAuthEmail(session.username);
-    if (!fbUser || String(fbUser.email || '').toLowerCase() !== expectedEmail) {
-      console.warn('[Auth] Stale session cleared (Firebase Auth user missing/mismatch)');
+    if (!fbUser) {
+      console.warn('[Auth] Stale session cleared (Firebase Auth user missing)');
+      await signOutFirebaseBestEffort();
+      releaseAuthOwnedScopes();
+      clearLocalSessionOnly();
+      setPendingAuthMessage(MSG_SESSION_INVALID);
+      return;
+    }
+
+    const dirLoad = await loadAuthDirectoryEntry(session.username, { force: true });
+    if (dirLoad.ok && !dirLoad.missing && dirLoad.parsed) {
+      const expectedUid = dirLoad.parsed.authUid;
+      if (String(fbUser.uid) !== String(expectedUid)) {
+        console.warn('[Auth] Stale session cleared (authDirectory uid mismatch)');
+        await signOutFirebaseBestEffort();
+        releaseAuthOwnedScopes();
+        clearLocalSessionOnly();
+        setPendingAuthMessage(MSG_SESSION_INVALID);
+        return;
+      }
+      const dirEmail = String(dirLoad.parsed.loginEmail || '').toLowerCase();
+      const fbEmail = String(fbUser.email || '').toLowerCase();
+      if (dirEmail && fbEmail && dirEmail !== fbEmail) {
+        console.warn('[Auth] Stale session cleared (authDirectory email mismatch)');
+        await signOutFirebaseBestEffort();
+        releaseAuthOwnedScopes();
+        clearLocalSessionOnly();
+        setPendingAuthMessage(MSG_SESSION_INVALID);
+        return;
+      }
+    } else if (dirLoad.missing || (dirLoad.ok && !dirLoad.parsed)) {
+      // Migration window: allow gen0 email match only when not strict
+      if (isAuthDirectoryStrict()) {
+        console.warn('[Auth] Stale session cleared (authDirectory missing, strict mode)');
+        await signOutFirebaseBestEffort();
+        releaseAuthOwnedScopes();
+        clearLocalSessionOnly();
+        setPendingAuthMessage(MSG_SESSION_INVALID);
+        return;
+      }
+      const expectedEmail = usernameToAuthEmail(session.username);
+      if (String(fbUser.email || '').toLowerCase() !== expectedEmail) {
+        console.warn('[Auth] Stale session cleared (gen0 compat email mismatch)');
+        await signOutFirebaseBestEffort();
+        releaseAuthOwnedScopes();
+        clearLocalSessionOnly();
+        setPendingAuthMessage(MSG_SESSION_INVALID);
+        return;
+      }
+    } else {
+      console.warn('[Auth] Stale session cleared (authDirectory load failed)', dirLoad.error);
       await signOutFirebaseBestEffort();
       releaseAuthOwnedScopes();
       clearLocalSessionOnly();
@@ -800,10 +851,21 @@ export async function login(username, password) {
   let player = null;
 
   if (useFirebase) {
+    const target = await resolveAuthLoginTarget(username);
+    if (!target.ok) {
+      return { success: false, error: target.error || 'Could not resolve account login.' };
+    }
+
     try {
-      await getAuth().signInWithEmailAndPassword(usernameToAuthEmail(username), password);
+      await getAuth().signInWithEmailAndPassword(target.loginEmail, password);
     } catch (err) {
       return { success: false, error: mapFirebaseAuthError(err) };
+    }
+
+    const fbUid = getAuth().currentUser?.uid;
+    if (!fbUid) {
+      await signOutFirebaseBestEffort();
+      return { success: false, error: 'Could not verify account. Please try again.' };
     }
 
     // Shared defs need Auth; load after sign-in (cards/config for post-login gameplay).
@@ -822,6 +884,33 @@ export async function login(username, password) {
     if (!player) {
       await signOutFirebaseBestEffort();
       return { success: false, error: 'Account not found. Please register first.' };
+    }
+
+    // Binding check: authDirectory.authUid (preferred) or players.authUid (gen0 compat)
+    const expectedUid = target.expectedAuthUid
+      || (typeof player.authUid === 'string' ? player.authUid : null);
+    if (!expectedUid || String(fbUid) !== String(expectedUid)) {
+      console.warn('[Auth] Login aborted: Auth uid binding mismatch', {
+        source: target.source,
+        fbUid,
+        expectedUid,
+      });
+      await signOutFirebaseBestEffort();
+      return {
+        success: false,
+        error: 'Account identity binding mismatch. Ask a teacher for help.',
+      };
+    }
+    if (
+      typeof player.authUid === 'string'
+      && player.authUid
+      && String(player.authUid) !== String(fbUid)
+    ) {
+      await signOutFirebaseBestEffort();
+      return {
+        success: false,
+        error: 'Account identity binding mismatch. Ask a teacher for help.',
+      };
     }
   } else {
     // Legacy: ID-specific once-load only — do not use hydrateCurrentPlayer here.
@@ -964,6 +1053,17 @@ export async function register(username, password, accessCode) {
     if (useFirebase) await rollbackFirebaseAuthUser('authUid-taken');
     return { success: false, error: 'Username already taken.' };
   }
+  if (useFirebase) {
+    const authDirLoad = await loadAuthDirectoryEntry(username, { force: true });
+    if (!authDirLoad.ok && !authDirLoad.missing) {
+      await rollbackFirebaseAuthUser('authDirectory-load');
+      return { success: false, error: 'Could not verify username availability. Please try again.' };
+    }
+    if (authDirLoad.ok && !authDirLoad.missing) {
+      await rollbackFirebaseAuthUser('authDirectory-taken');
+      return { success: false, error: 'Username already taken.' };
+    }
+  }
 
   // S6a: scoped once-load of this code leaf only (not all accessCodes; no subscribe).
   const codeLoad = await loadAccessCodeOnce(accessCode);
@@ -1019,6 +1119,9 @@ export async function register(username, password, accessCode) {
     ...directoryPathsForPlayer(username, buildDirectoryEntry(username, playerRecord)),
     ...emptyPlayerTradeIndexPaths(username),
     ...buildLeaderboardSummaryPathsForPlayer(username, playerRecord, { now: issuedAt }),
+    ...(useFirebase && authUid
+      ? authDirectoryPathsForRegistration(username, authUid)
+      : {}),
   });
 
   if (!ack.ok) {

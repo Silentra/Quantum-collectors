@@ -579,6 +579,7 @@ API:
   qcPersonalAudit.workflowS8d4b()  // S8d-4b safe Trade Index rebuild
   qcPersonalAudit.workflowS8d5a()  // S8d-5a safe Unique Cards repair
   qcPersonalAudit.workflowS8d5b()  // S8d-5b safe Season + Lifetime Snapshot class ops
+  qcPersonalAudit.workflowOptionCa() // Option C-a authDirectory foundation
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -2329,8 +2330,8 @@ export function workflowS8d5a() {
   console.info(`
 === S8d-5a Unique Cards Owned repair (safe under scoped) ===
 
-Status: COMPLETE + VERIFIED. S8d umbrella: COMPLETE (see workflowS8d5b).
-No rules change.
+Status: COMPLETE + VERIFIED. S8d umbrella: COMPLETE.
+No rules change. Option C-a authDirectory: see workflowOptionCa().
 
 Definition (unchanged): Number(qty)>0 AND card in catalog AND enabled!==false
   orphans/disabled ignored; inventory never mutated; achievements not touched
@@ -2400,6 +2401,61 @@ Deferred (not S8d blockers): Repair Game Admin tab / Admin UX cleanup /
   Option C / first-admin bootstrap — same file.
 
 STOP: no new implementation from this workflow paste; no Option C planning here.
+`);
+}
+
+/**
+ * Pasteable Option C-a authDirectory foundation (pre C-b reset/delete).
+ */
+export function workflowOptionCa() {
+  console.info(`
+=== Option C-a authDirectory foundation ===
+
+Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / BACKFILL / VERIFICATION
+No password reset / Delete Player Auth changes yet (those are C-b).
+
+Schema: authDirectory/{username} = { loginEmail, authUid, generation }
+  gen0 loginEmail = "{u}@scicards.local" (synthetic — not a real inbox)
+  players/{u}.authUid remains ownership authority in Security Rules
+
+Rollout (GitHub Pages — critical order):
+  1) REPUBLISH FULL database.rules.json (authDirectory public read; create self gen0; admin update)
+  2) Deploy/refresh client so qcAuth.getOptionCaStatus() shows optionCaFoundationVersion==='option-c-a-1'
+  3) Default COMPAT: missing authDirectory may still login via gen0 email until strict enabled
+  4) Admin backfill authDirectory for all current players
+  5) Verify entries → enable strict → re-test logins
+  6) *** STOP — do not begin Option C-b until C-a verified ***
+
+Freshness:
+  qcAuth.getOptionCaStatus()
+  // PASS: optionCaFoundationVersion === 'option-c-a-1'
+
+Backfill (signed in as Admin with Auth on):
+  const r = await qcAuth.backfillAuthDirectory()
+  // expect: ok, created≈N, unchanged, conflicts===0, missingAuthUid===0
+  // If conflicts>0: DO NOT enable strict; inspect r.conflictDetails
+
+*** STOP HERE — DO NOT TEST LOGINS UNTIL BACKFILL RESULT IS REVIEWED ***
+
+Inspect:
+  // DevTools / Firebase Console: authDirectory/{eachUsername}
+  // loginEmail, authUid match players/{u}.authUid, generation===0
+
+Live:
+  A) Login/logout/restore each test account (or reasoned subset)
+  B) Unauth/read: authDirectory readable; student cannot update/delete
+  C) New disposable register → authDirectory gen0 + matching authUid; restore works
+  D) Optional: qcAuth.enableAuthDirectoryStrict(); re-test login
+     (missing directory must fail closed after strict)
+
+Legacy: qc_force_legacy_auth='true' still uses RTDB hash path; does NOT require authDirectory.
+
+Unit: node scripts/option-c-a-auth-directory.test.mjs
+Rules: npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
+
+Emergency Auth password until C-b: scripts/s8b-auth-admin.mjs set-password
+
+STOP GATE: OPTION C-a MUST BE VERIFIED BEFORE OPTION C-b RESET/DELETE WORK
 `);
 }
 
@@ -2592,6 +2648,7 @@ function _installWindowApi() {
     workflowS8d4b,
     workflowS8d5a,
     workflowS8d5b,
+    workflowOptionCa,
     enableAudit,
     disableAudit,
     enableIsolation,
