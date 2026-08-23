@@ -2,12 +2,14 @@
  * auth-directory.js — Option C-a authDirectory foundation
  *
  * Schema: authDirectory/{username} = { loginEmail, authUid, generation }
- * Pre-auth public read for login email resolution.
+ * Pre-auth public read for login email resolution (child paths only — no parent enumerate).
  * players/{u}.authUid remains RTDB ownership authority (Security Rules).
  *
- * Rollout: until localStorage.qc_auth_directory_strict === 'true', Firebase Auth
- * login/restore may use gen0 hardcoded email ONLY when authDirectory is missing
- * (explicit migration window). Final verified state must enable strict mode.
+ * C-a.1 (this release): migration compatibility DEFAULT —
+ *   directory present → use it; missing → temporary gen0 email fallback.
+ *   Backfill uses per-username child force-reads (never authDirectory parent).
+ * C-a.2 (later micro-deploy): production-default strict; do not treat
+ *   enableAuthDirectoryStrict() / qc_auth_directory_strict as the final global gate.
  */
 
 import * as db from './database.js';
@@ -20,10 +22,14 @@ import {
 export const AUTH_DIRECTORY_ROOT = 'authDirectory';
 export const AUTH_EMAIL_DOMAIN = 'scicards.local';
 
-/** Freshness / feature proof for live C-a builds. */
-export const OPTION_CA_FOUNDATION_VERSION = 'option-c-a-1';
+/** Freshness / feature proof for live C-a.1 builds (per-user backfill fix). */
+export const OPTION_CA_FOUNDATION_VERSION = 'option-c-a-1.1';
 
-/** After backfill verified: set to 'true' for strict authDirectory-only Auth login. */
+/**
+ * Admin-browser-only localStorage toggle (NOT production-global).
+ * C-a.1 default remains migration compat for all browsers until C-a.2.
+ * Do not treat enableAuthDirectoryStrict() as the final production rollout step.
+ */
 export const AUTH_DIRECTORY_STRICT_LS_KEY = 'qc_auth_directory_strict';
 
 const EXCLUDED_PLAYER_KEYS = Object.freeze(['__admin__']);
@@ -49,14 +55,14 @@ export function isAuthDirectoryStrict() {
   }
 }
 
-/** Call after backfill + login verify to end gen0 missing-directory compat. */
+/** Admin-browser localStorage only — NOT production-global. Prefer C-a.2 deploy for strict default. */
 export function enableAuthDirectoryStrict() {
   try {
     localStorage.setItem(AUTH_DIRECTORY_STRICT_LS_KEY, 'true');
   } catch (e) {
     console.warn('[AuthDirectory] enableAuthDirectoryStrict failed:', e?.message || e);
   }
-  return { ok: true, strict: true };
+  return { ok: true, strict: true, scope: 'localStorage-this-browser-only' };
 }
 
 /** Developer: re-open migration compat window. */
@@ -352,8 +358,60 @@ export function buildAuthDirectoryBackfillPlan(input) {
 }
 
 /**
+ * Force-load authDirectory/{username} for each username (public child reads).
+ * Never loads authDirectory parent — child .read does not grant parent enumerate.
+ *
+ * Fail-closed: any child with ok!==true or mode!=='firebase' aborts (caller must not write).
+ *
+ * @param {string[]} usernames
+ * @param {{ timeoutMs?: number, loadPathOnce?: Function }} [options]
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   error?: string,
+ *   failedUsername?: string,
+ *   path?: string,
+ *   authDirectorySnapshot?: Record<string, object>,
+ * }>}
+ */
+export async function gatherAuthDirectorySnapshotByUsernames(usernames, options = {}) {
+  const loadFn = typeof options.loadPathOnce === 'function'
+    ? options.loadPathOnce
+    : (path, opts) => db.loadPathOnce(path, opts);
+
+  /** @type {Record<string, object>} */
+  const authDirectorySnapshot = {};
+  const list = Array.isArray(usernames) ? usernames : [];
+
+  for (const raw of list) {
+    const username = String(raw || '').trim().toLowerCase();
+    if (!username) continue;
+    const path = `${AUTH_DIRECTORY_ROOT}/${username}`;
+    const load = await loadFn(path, {
+      force: true,
+      timeoutMs: options.timeoutMs,
+    });
+    if (!load || load.ok !== true || load.mode !== 'firebase') {
+      return {
+        ok: false,
+        error: load?.error || 'AUTH_DIRECTORY_CHILD_LOAD_FAILED',
+        failedUsername: username,
+        path,
+      };
+    }
+    // Confirmed null / undefined = missing entry (omit key)
+    const value = load.value;
+    if (value != null && typeof value === 'object') {
+      authDirectorySnapshot[username] = value;
+    }
+  }
+
+  return { ok: true, authDirectorySnapshot };
+}
+
+/**
  * Gather + plan authDirectory backfill (admin).
- * @param {{ timeoutMs?: number }} [options]
+ * Uses per-username child force-reads only — never authDirectory parent.
+ * @param {{ timeoutMs?: number, loadPathOnce?: Function }} [options]
  */
 export async function prepareAuthDirectoryBackfill(options = {}) {
   const playersLoad = await adminLoadCanonical('players', options);
@@ -364,28 +422,32 @@ export async function prepareAuthDirectoryBackfill(options = {}) {
     };
   }
 
-  const dirLoad = await db.loadPathOnce(AUTH_DIRECTORY_ROOT, {
-    force: true,
-    timeoutMs: options.timeoutMs,
+  const playerEntries = canonicalChildEntries(playersLoad.value, {
+    exclude: [...EXCLUDED_PLAYER_KEYS],
   });
-  if (!dirLoad || dirLoad.ok !== true || dirLoad.mode !== 'firebase') {
+  const usernames = playerEntries.map((e) => e.key);
+
+  const gathered = await gatherAuthDirectorySnapshotByUsernames(usernames, options);
+  if (!gathered.ok) {
     return {
       ok: false,
-      error: dirLoad?.error || 'AUTH_DIRECTORY_ROOT_LOAD_INCOMPLETE',
+      error: gathered.error || 'AUTH_DIRECTORY_CHILD_LOAD_FAILED',
+      failedUsername: gathered.failedUsername,
+      path: gathered.path,
+      written: 0,
     };
   }
 
   const plan = buildAuthDirectoryBackfillPlan({
     playersSnapshot: playersLoad.value,
-    authDirectorySnapshot: dirLoad.value && typeof dirLoad.value === 'object'
-      ? dirLoad.value
-      : {},
+    authDirectorySnapshot: gathered.authDirectorySnapshot || {},
   });
 
   return {
     ok: true,
     plan,
     advisory: true,
+    authDirectorySnapshot: gathered.authDirectorySnapshot,
   };
 }
 
@@ -468,10 +530,15 @@ export async function backfillAuthDirectory(options = {}) {
 export function getOptionCaStatus() {
   return {
     optionCaFoundationVersion: OPTION_CA_FOUNDATION_VERSION,
-    authDirectoryStrict: isAuthDirectoryStrict(),
+    release: 'C-a.1',
+    migrationCompatDefault: true,
+    authDirectoryStrictLocalOnly: isAuthDirectoryStrict(),
     authDirectoryRoot: AUTH_DIRECTORY_ROOT,
+    backfillGather: 'per-username child force-reads (no authDirectory parent)',
     note:
-      'C-a: authDirectory foundation. Enable strict after backfill: qcAuth.enableAuthDirectoryStrict()',
+      'C-a.1 migration-compat release. Backfill then verify logins. '
+      + 'C-a.2 = production-default strict micro-deploy (not enableAuthDirectoryStrict localStorage). '
+      + 'qc_auth_directory_strict is Admin-browser-only and is NOT the final global production gate.',
   };
 }
 
@@ -488,6 +555,7 @@ function _installWindowApi() {
     parseAuthDirectoryEntry,
     loadAuthDirectoryEntry,
     resolveAuthLoginTarget,
+    gatherAuthDirectorySnapshotByUsernames,
     prepareAuthDirectoryBackfill,
     commitAuthDirectoryBackfill,
     backfillAuthDirectory,
@@ -495,12 +563,14 @@ function _installWindowApi() {
     disableAuthDirectoryStrict,
     isAuthDirectoryStrict,
     help() {
-      console.info(`Option C-a authDirectory
+      console.info(`Option C-a.1 authDirectory (migration compat)
 Freshness: qcAuth.getOptionCaStatus()
   → optionCaFoundationVersion === '${OPTION_CA_FOUNDATION_VERSION}'
-Backfill (Admin Auth session): await qcAuth.backfillAuthDirectory()
-Strict after verify: qcAuth.enableAuthDirectoryStrict()
-Compat window (missing directory → gen0 email): default until strict
+  → migrationCompatDefault === true
+Backfill (Admin Auth): await qcAuth.backfillAuthDirectory()
+  (per-username child reads; never authDirectory parent)
+After backfill + login verify → deploy C-a.2 strict-default (separate micro-deploy)
+Do NOT treat qcAuth.enableAuthDirectoryStrict() as production-global rollout
 Schema: ${AUTH_DIRECTORY_ROOT}/{u} = { loginEmail, authUid, generation }
 Ownership remains players/{u}/authUid`);
     },

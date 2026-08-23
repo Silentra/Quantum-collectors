@@ -2405,57 +2405,51 @@ STOP: no new implementation from this workflow paste; no Option C planning here.
 }
 
 /**
- * Pasteable Option C-a authDirectory foundation (pre C-b reset/delete).
+ * Pasteable Option C-a authDirectory foundation (C-a.1 migration release).
  */
 export function workflowOptionCa() {
   console.info(`
-=== Option C-a authDirectory foundation ===
+=== Option C-a.1 authDirectory (migration compat) ===
 
-Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / BACKFILL / VERIFICATION
-No password reset / Delete Player Auth changes yet (those are C-b).
+Status: IMPLEMENTED — AWAITING DEPLOYMENT / BACKFILL VERIFICATION
+C-a.1 = temporary migration-compat client (directory present → use; missing → gen0 fallback).
+C-a.2 = later production-default strict micro-deploy (NOT localStorage enableAuthDirectoryStrict).
+No password reset / Delete Player Auth changes (C-b).
 
 Schema: authDirectory/{username} = { loginEmail, authUid, generation }
   gen0 loginEmail = "{u}@scicards.local" (synthetic — not a real inbox)
-  players/{u}.authUid remains ownership authority in Security Rules
+  players/{u}.authUid remains ownership authority
+  Backfill gather: per-username public child force-reads (NEVER authDirectory parent)
 
-Rollout (GitHub Pages — critical order):
-  1) REPUBLISH FULL database.rules.json (authDirectory public read; create self gen0; admin update)
-  2) Deploy/refresh client so qcAuth.getOptionCaStatus() shows optionCaFoundationVersion==='option-c-a-1'
-  3) Default COMPAT: missing authDirectory may still login via gen0 email until strict enabled
-  4) Admin backfill authDirectory for all current players
-  5) Verify entries → enable strict → re-test logins
-  6) *** STOP — do not begin Option C-b until C-a verified ***
-
-Freshness:
-  qcAuth.getOptionCaStatus()
-  // PASS: optionCaFoundationVersion === 'option-c-a-1'
-
-Backfill (signed in as Admin with Auth on):
-  const r = await qcAuth.backfillAuthDirectory()
-  // expect: ok, created≈N, unchanged, conflicts===0, missingAuthUid===0
-  // If conflicts>0: DO NOT enable strict; inspect r.conflictDetails
+Sequence:
+  1) Republish C-a rules if not already published
+       (authDirectory/$username .read true; create self gen0; admin update)
+       NO parent .read on authDirectory
+  2) Deploy C-a.1 client
+  3) Freshness:
+       qcAuth.getOptionCaStatus()
+       // PASS: optionCaFoundationVersion === 'option-c-a-1.1'
+       // PASS: migrationCompatDefault === true
+       // PASS: backfillGather mentions per-username
+  4) Admin (Auth on):
+       const r = await qcAuth.backfillAuthDirectory()
+       // expect ok; created/unchanged; conflicts===0; missingAuthUid===0
 
 *** STOP HERE — DO NOT TEST LOGINS UNTIL BACKFILL RESULT IS REVIEWED ***
 
-Inspect:
-  // DevTools / Firebase Console: authDirectory/{eachUsername}
-  // loginEmail, authUid match players/{u}.authUid, generation===0
+  5) Inspect authDirectory/{eachUsername} (gen0; authUid matches players)
+  6) Login/logout/restore under migration compat
+  7) Disposable register → gen0 authDirectory; restore works
+  8) After successful verification ONLY:
+       implement/deploy C-a.2 strict-default flip
+       (do NOT call enableAuthDirectoryStrict as the final production gate —
+        that flag is this-browser localStorage only)
 
-Live:
-  A) Login/logout/restore each test account (or reasoned subset)
-  B) Unauth/read: authDirectory readable; student cannot update/delete
-  C) New disposable register → authDirectory gen0 + matching authUid; restore works
-  D) Optional: qcAuth.enableAuthDirectoryStrict(); re-test login
-     (missing directory must fail closed after strict)
-
-Legacy: qc_force_legacy_auth='true' still uses RTDB hash path; does NOT require authDirectory.
+Legacy: qc_force_legacy_auth path does not require authDirectory.
 
 Unit: node scripts/option-c-a-auth-directory.test.mjs
-Rules: npx firebase emulators:exec --only database "node scripts/s8c1-rules-simulator.mjs"
 
-Emergency Auth password until C-b: scripts/s8b-auth-admin.mjs set-password
-
-STOP GATE: OPTION C-a MUST BE VERIFIED BEFORE OPTION C-b RESET/DELETE WORK
+STOP GATE: finish C-a.1 verify → C-a.2 → then Option C-b. Do not begin C-b now.
 `);
 }
 
