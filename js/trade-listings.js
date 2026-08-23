@@ -15,6 +15,7 @@
  */
 
 import * as db from './database.js';
+import * as cards from './cards.js';
 import * as config from './config.js';
 import * as metrics from './db-metrics.js';
 import { validateListingTrade, isCardTradable, isTradingEnabled, isListingsEnabled, isDetailedLogging } from './trading.js';
@@ -340,7 +341,7 @@ function _validateCreateListing(ownerId, offeredCardId, requestedCardIds) {
     return { ok: false, reason: 'MAX_ACTIVE_LISTINGS_REACHED' };
   }
 
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
 
   const offeredCard = allCards[offeredCardId];
   if (!offeredCard) return { ok: false, reason: 'OFFERED_CARD_NOT_FOUND' };

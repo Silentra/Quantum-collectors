@@ -16,6 +16,7 @@
  */
 
 import * as db from './database.js';
+import * as cards from './cards.js';
 import * as config from './config.js';
 import * as metrics from './db-metrics.js';
 import { getSession } from './auth.js';
@@ -543,7 +544,7 @@ export async function createTradeOffer(offeringPlayerId, targetPlayerId, offered
 
   const freshOffering = db.get(`players/${offeringPlayerId}`);
   const freshTarget = targetCtx.player;
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
 
   const players = {
     [offeringPlayerId]: _normalizePlayer(freshOffering),
@@ -664,7 +665,7 @@ export async function respondToTrade(tradeId, targetPlayerId, requestedCardId) {
 
   const freshOffering = offererCtx.player;
   const freshTarget = db.get(`players/${targetPlayerId}`);
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
 
   const players = {
     [trade.offeringPlayerId]: _normalizePlayer(freshOffering),

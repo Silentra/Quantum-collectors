@@ -1663,15 +1663,32 @@ function renderAdminCards() {
     btn.addEventListener('click', () => openEditCardModal(btn.dataset.cardId));
   });
 
-  // Delete card — DESTRUCTIVE (requires confirmation)
+  // Delete card — bundled base cannot be hard-deleted (would reappear from bundle)
   list.querySelectorAll('.btn-delete-card').forEach(btn => {
     btn.addEventListener('click', async () => {
       const cardId = btn.dataset.cardId;
       const c = cards.getCard(cardId);
       const cardName = c ? c.name : cardId;
+
+      if (cards.isBundledBaseCard(cardId)) {
+        const confirmed = await confirmAction(
+          `Bundled base cards cannot be deleted. Disable "${cardName}" instead? (Players who own it keep copies; it will no longer appear in packs/new awards.)`,
+          `Disable bundled card "${cardName}"?`,
+        );
+        if (!confirmed) return;
+        const result = cards.deleteCard(cardId, { asDisable: true });
+        if (!result.ok) {
+          toast.error('Could not disable card');
+          return;
+        }
+        toast.info(`Card "${cardName}" disabled`);
+        renderAdminCards();
+        return;
+      }
+
       const confirmed = await confirmAction(
         `This will permanently delete the card "${cardName}" from the database. Players who own it will keep copies in inventory.`,
-        `Delete card "${cardName}"?`
+        `Delete card "${cardName}"?`,
       );
       if (!confirmed) return;
       cards.deleteCard(cardId);
@@ -1905,7 +1922,10 @@ function setupEditCardModal() {
     }
 
     cards.updateCard(cardId, updates);
-    toast.success(`Card "${name}" updated`);
+    const sparseNote = cards.isBundledBaseCard(cardId)
+      ? ' (bundled base — sparse Firebase override)'
+      : '';
+    toast.success(`Card "${name}" updated${sparseNote}`);
     document.getElementById('edit-card-modal').classList.add('hidden');
     renderAdminCards();
   });

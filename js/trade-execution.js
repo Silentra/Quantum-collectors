@@ -15,6 +15,7 @@
  */
 
 import * as db from './database.js';
+import * as cards from './cards.js';
 import * as config from './config.js';
 import * as metrics from './db-metrics.js';
 import { validateDirectTrade, isDetailedLogging } from './trading.js';
@@ -289,7 +290,7 @@ async function classifyPermissionDeniedForDirect({
     [offeringPlayerId]: _normalizePlayerForValidation(offeringCtx.player),
     [targetPlayerId]: _normalizePlayerForValidation(targetCtx.player),
   };
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
   const excludeIds = tradeId ? [tradeId] : [];
 
   const offeringSnapshot = buildCounterpartyAvailabilitySnapshot(offeringPlayerId, offeringCtx, {
@@ -554,7 +555,7 @@ export async function executeDirectTrade(trade) {
   }
 
   // ── 3. Card defs + T-1 validation (exclude this trade from reservation math) ─
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
   const players = {
     [resolvedOffering]: _normalizePlayerForValidation(freshOffering),
     [resolvedTarget]: _normalizePlayerForValidation(freshTarget),
@@ -612,6 +613,12 @@ export async function executeDirectTrade(trade) {
   }
 
   // ── 5. Relative plan (no absolute inventory quantities) ────────────────────
+  // Hydrate claimer achievements (+ stats) so unlock planning cannot clobber claimed state.
+  if (typeof db.loadPathOnce === 'function') {
+    await db.loadPathOnce(`players/${resolvedOffering}/achievements`, { force: true });
+    await db.loadPathOnce(`players/${resolvedOffering}/stats`, { force: true });
+  }
+
   const now = Date.now();
   const plan = buildDirectTradeAcceptPlan({
     tradeId,

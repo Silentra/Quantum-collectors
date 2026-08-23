@@ -129,7 +129,7 @@ function buildPackOpenPlan(username, packId, packType) {
     return { error: "You don't have this pack." };
   }
 
-  const allCards = cards.getAllCards();
+  const allCards = cards.getEnabledCards();
   if (allCards.length === 0) {
     return { error: 'No cards in the database.' };
   }

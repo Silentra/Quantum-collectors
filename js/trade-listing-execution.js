@@ -17,6 +17,7 @@
  */
 
 import * as db from './database.js';
+import * as cards from './cards.js';
 import * as config from './config.js';
 import * as metrics from './db-metrics.js';
 import { validateListingTrade, isDetailedLogging } from './trading.js';
@@ -252,7 +253,7 @@ async function classifyPermissionDeniedForListing({
     [ownerId]: _normalizePlayer(ownerCtx.player),
     [accepterId]: _normalizePlayer(freshAccepter),
   };
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
   const excludeIds = listingId ? [listingId] : [];
 
   const ownerSnapshot = buildCounterpartyAvailabilitySnapshot(ownerId, ownerCtx, {
@@ -504,7 +505,7 @@ export async function executeListingTrade(listing, accepterId, chosenCardId) {
     });
   }
 
-  const allCards = db.get('cards') || {};
+  const allCards = cards.getCardsMap();
   const players = {
     [ownerId]: _normalizePlayer(freshOwner),
     [accepterId]: _normalizePlayer(freshAccepter),

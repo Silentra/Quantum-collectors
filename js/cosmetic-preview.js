@@ -4,7 +4,6 @@
  */
 
 import * as cards from './cards.js';
-import * as db from './database.js';
 import { renderCollectionCard } from './card-render.js';
 import { COSMETIC_GLOW_EFFECT_IDS } from './card-glow.js';
 import { COSMETIC_SHIMMER_EFFECT_IDS } from './card-shimmer.js';
@@ -47,7 +46,9 @@ const CARD_FACE_PREVIEW_CATEGORIES = new Set([
  * @returns {object|null}
  */
 export function resolveCosmeticPreviewCard() {
-  const enabled = db.getChildren('cards').filter(({ value }) => value?.enabled !== false);
+  const enabled = cards.getEnabledCards()
+    .map((value) => ({ key: value.id, value }))
+    .filter(({ value }) => value?.enabled !== false);
 
   for (const rarity of PREVIEW_CARD_RARITIES) {
     const tierMatches = enabled

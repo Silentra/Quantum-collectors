@@ -21,10 +21,24 @@
  */
 
 import * as db from './database.js';
+import { BASE_CARD_COUNT, BASE_CARD_DEFINITIONS } from './card-data.js';
+import {
+  applyCardOverride,
+  buildCardOverride,
+  resolveAllCards,
+} from './card-override.js';
+
+export { BASE_CARD_COUNT, BASE_CARD_DEFINITIONS };
+export { applyCardOverride, buildCardOverride, resolveAllCards };
 
 export const RARITIES = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 export const CARD_TYPES = ['scientist', 'concept'];
 export const AURA_TYPES = ['none', 'holographic', 'prismatic', 'shadow', 'radiant', 'cosmic'];
+
+/** @type {ReadonlyMap<string, object>} */
+const BASE_CARD_BY_ID = new Map(
+  BASE_CARD_DEFINITIONS.map((card) => [card.id, card]),
+);
 
 // ─── Legacy shell aura visuals (RETIRED) ─────────────────────────────────────
 // Preserved as compatibility stubs only. Do not use for new rendering.
@@ -176,7 +190,7 @@ function normalizeCard(data) {
 }
 
 /**
- * Create a new card in the database
+ * Create a new Firebase-only card (not part of bundled base).
  * Returns the card ID
  */
 export function createCard(data) {
@@ -186,22 +200,80 @@ export function createCard(data) {
     ...normalizeCard(data),
     created: Date.now()
   };
+  if (data.type === 'concept' && typeof data.flavorText === 'string') {
+    card.flavorText = data.flavorText;
+  }
   db.set(`cards/${id}`, card);
   return id;
 }
 
 /**
- * Get a card by ID
+ * Bundled base card by exact ID, or null.
+ * @param {string} id
+ * @returns {object|null}
  */
-export function getCard(id) {
-  return db.get(`cards/${id}`);
+export function getBaseCard(id) {
+  if (!id) return null;
+  return BASE_CARD_BY_ID.get(id) || null;
 }
 
 /**
- * Get all cards
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function isBundledBaseCard(id) {
+  return !!id && BASE_CARD_BY_ID.has(id);
+}
+
+/**
+ * All bundled base definitions (frozen catalog order).
+ * @returns {ReadonlyArray<object>}
+ */
+export function getBaseCards() {
+  return BASE_CARD_DEFINITIONS;
+}
+
+/**
+ * Raw Firebase /cards layer (overrides + Firebase-only). Not the resolved catalog.
+ * @returns {object}
+ */
+function getFirebaseCardLayer() {
+  const layer = db.get('cards');
+  if (layer == null || typeof layer !== 'object' || Array.isArray(layer)) return {};
+  return layer;
+}
+
+/**
+ * Resolve one card: base ⊕ Firebase child (merge-before-normalize).
+ * @param {string} id
+ * @returns {object|null}
+ */
+export function getCard(id) {
+  if (!id) return null;
+  const base = getBaseCard(id);
+  const layer = getFirebaseCardLayer();
+  const raw = Object.prototype.hasOwnProperty.call(layer, id) ? layer[id] : undefined;
+  return applyCardOverride(base, raw);
+}
+
+/**
+ * All resolved cards (bundled base ∪ Firebase-only), sorted by id.
+ * @returns {object[]}
  */
 export function getAllCards() {
-  return db.getChildren('cards').map(c => c.value);
+  return resolveAllCards(BASE_CARD_DEFINITIONS, getFirebaseCardLayer());
+}
+
+/**
+ * id → resolved card map (Trading validators).
+ * @returns {Object.<string, object>}
+ */
+export function getCardsMap() {
+  const map = {};
+  for (const card of getAllCards()) {
+    map[card.id] = card;
+  }
+  return map;
 }
 
 /**
@@ -209,6 +281,67 @@ export function getAllCards() {
  */
 export function getEnabledCards() {
   return getAllCards().filter(c => c.enabled !== false);
+}
+
+/**
+ * Update a card definition.
+ * Bundled base IDs → sparse override replace (or remove if empty).
+ * Firebase-only → shallow update of full node (legacy).
+ */
+export function updateCard(id, updates) {
+  if (!id || !updates || typeof updates !== 'object') return;
+
+  if (isBundledBaseCard(id)) {
+    const base = getBaseCard(id);
+    const current = getCard(id) || applyCardOverride(base, null);
+    const edited = { ...current, ...updates, id };
+    const override = buildCardOverride(base, edited);
+    if (Object.keys(override).length === 0) {
+      db.remove(`cards/${id}`);
+    } else {
+      // Replace full duplicate with sparse override only (explicit Admin edit)
+      db.set(`cards/${id}`, override);
+    }
+    return;
+  }
+
+  db.update(`cards/${id}`, updates);
+}
+
+/**
+ * Delete a Firebase-only card, or refuse / disable bundled base.
+ * @param {string} id
+ * @param {{ asDisable?: boolean }} [opts] - when asDisable, write {enabled:false} for bundled
+ * @returns {{ ok: boolean, action?: string, error?: string }}
+ */
+export function deleteCard(id, opts = {}) {
+  if (!id) return { ok: false, error: 'missing_id' };
+
+  if (isBundledBaseCard(id)) {
+    if (opts.asDisable) {
+      updateCard(id, { enabled: false });
+      return { ok: true, action: 'disabled' };
+    }
+    return {
+      ok: false,
+      error: 'bundled_base_cannot_delete',
+      action: 'refused',
+    };
+  }
+
+  db.remove(`cards/${id}`);
+  return { ok: true, action: 'deleted' };
+}
+
+/**
+ * Clear Firebase override for a bundled base card (restore base).
+ * @param {string} id
+ * @returns {boolean}
+ */
+export function clearCardOverride(id) {
+  if (!isBundledBaseCard(id)) return false;
+  db.remove(`cards/${id}`);
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -478,21 +611,7 @@ export function getAllFields() {
 }
 
 /**
- * Update a card (partial update — shallow merge)
- */
-export function updateCard(id, updates) {
-  db.update(`cards/${id}`, updates);
-}
-
-/**
- * Delete a card
- */
-export function deleteCard(id) {
-  db.remove(`cards/${id}`);
-}
-
-/**
- * Get card count
+ * Get card count (resolved catalog)
  */
 export function getCardCount() {
   return getAllCards().length;
@@ -566,30 +685,34 @@ export function isValidConceptType(value) {
 }
 
 /**
- * Load-time normalization: scan all existing cards and fix malformed conceptType values.
- * Safe to call at startup — never crashes, logs fixes.
+ * Boot-time conceptType normalization (Batch D2).
+ * Bundled base cards: conceptType is corrected only in resolved runtime (finalizeCompleteCard).
+ * No Firebase writeback — prevents materializing base cards / expanding sparse overrides.
+ * Firebase-only malformed conceptTypes: also left to runtime resolve + Admin validation
+ * (safer than boot writes that could rematerialize full nodes during the transitional duplicate era).
  */
 export function normalizeConceptTypes() {
-  try {
-    const allCards = getAllCards();
-    for (const card of allCards) {
-      if (card.type !== 'concept') continue;
-      if (!card.conceptType || !VALID_CONCEPT_TYPE_VALUES.includes(card.conceptType)) {
-        const oldVal = card.conceptType;
-        const fixedVal = 'researchBoost';
-        console.warn(`[ResearchProjects] Invalid conceptType normalized: "${oldVal}" → "${fixedVal}" (card: ${card.name || card.id})`);
-        updateCard(card.id, { conceptType: fixedVal });
-      }
-    }
-  } catch (e) {
-    console.warn('[ResearchProjects] conceptType normalization failed gracefully:', e);
-  }
+  // Intentionally no Firebase writes. Runtime applyCardOverride/finalizeCompleteCard
+  // supplies researchBoost for missing/invalid conceptType on resolved cards.
+  return;
 }
 
 /**
- * Seed the database with starter science cards
+ * Legacy Firebase seed of ~40 starter cards.
+ * Batch D2: ordinary production must NOT repopulate /cards when bundled base exists.
+ * Empty Firebase + BASE_CARD_DEFINITIONS = valid 125-card catalog (no writes).
+ * Function retained for explicit/dev bootstrap only when BASE_CARD_COUNT === 0.
  */
 export function seedDefaultCards() {
+  if (BASE_CARD_COUNT > 0) {
+    console.info(
+      '[Cards] Skipping seedDefaultCards — bundled BASE_CARD_DEFINITIONS present (' +
+        BASE_CARD_COUNT +
+        ')',
+    );
+    return;
+  }
+
   if (getAllCards().length > 0) return; // Already seeded
 
   const starterCards = [
