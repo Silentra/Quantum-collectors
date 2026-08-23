@@ -36,3 +36,13 @@ Planned approach (investigated; **not implemented**): disposable Auth identities
 Ordinary bugs, polish, tradeGrants (S8c-1), scoped-loading history, Auth production-default flip (students need no localStorage; emergency `qc_force_legacy_auth` is developer-only), and optional Console Auth tidy-up are **not** listed here.
 
 **Classroom Auth note:** With Auth as production default, a fresh browser can open the site and log in/register without DevTools. That is a launch requirement for the shared classroom deploy — not a distribution (independent Firebase) blocker.
+
+## Future Admin UX (not a distribution blocker)
+
+- Add dedicated “Repair Game” Admin tab.
+- Move maintenance/rebuild tools there.
+- Add short plain-language explanation beside each repair action.
+- Review Admin tab organization for obsolete/redundant sections.
+- Review whether Config should be removed or repurposed now that settings live in purpose-specific tabs.
+
+Do **not** treat the above as a shipping blocker for classroom or independent installs; it is deferred product polish only.

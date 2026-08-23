@@ -692,7 +692,7 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Pure `buildTradeIndexRebuildPlan` / `deriveDesiredTradeIndexes` from snapshots; path invariant (only PTI / LBG / tradeIndexMeta).
 - **Concurrency:** Admin preview is advisory; Confirm **re-gathers** and commits a **fresh** plan (never the preview plan). Soft-expiry omit matches browse; deleted groups do not resurrect LBG.
 - Schema version stays **1**. **No rules change.** Unit: `node scripts/s8d4-trade-index-planner.test.mjs`.
-- Season/Snapshot class ops remain **unsafe** until S8d-5b.
+- Season/Snapshot class ops: **S8d-5b IMPLEMENTED — AWAITING VERIFICATION** (`workflowS8d5b`).
 
 ### Phase — S8d-5a Unique Cards Owned repair
 
@@ -702,7 +702,16 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 - Definition unchanged: `Number(qty)>0` + catalog card + `enabled !== false`. Inventories/achievements/historical archives untouched.
 - Writes only `players/{u}/stats/uniqueCardsOwned` and `leaderboards/uniqueCardsOwned/{u}` when the stored stat needs repair. LB-only drift → S8d-3.
 - Unit: `node scripts/s8d5a-unique-cards-repair.test.mjs`. **No rules change.**
-- **S8d-5b** Season/Snapshot class operations still **NOT STARTED**.
+
+### Phase — S8d-5b Safe Season + Lifetime Snapshot class operations
+
+**Status: IMPLEMENTED — AWAITING VERIFICATION.** Pasteable: `qcPersonalAudit.workflowS8d5b()`.
+
+- Authoritative `adminLoadCanonical('players')` + forced season/snapshot metadata; Confirm **re-gathers** (never commits preview plan). Empty class refused.
+- Start New Season: awaited Phase A archive → B rotate → C seasonal reset; activeSeasonId recheck abort.
+- Lifetime Snapshot: awaited snapshot write then optional resetAfter; seasonal RP never a Lifetime reset category.
+- Pure planners in [`js/season-class-ops.js`](js/season-class-ops.js) + [`js/leaderboard-snapshots.js`](js/leaderboard-snapshots.js). Unit: `node scripts/s8d5b-season-snapshot.test.mjs`. **No rules / schema change.**
+- Live QA: Tier 2 previews + optional disposable snapshot-only; real Start New Season only when teacher intends it.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
 
