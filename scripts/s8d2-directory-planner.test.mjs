@@ -7,6 +7,7 @@
 import {
   buildPlayerDirectoryRebuildPlan,
   getDirectoryDriftReportFromSnapshots,
+  diffDirectoryRebuildRows,
   DIRECTORY_ROOT,
 } from '../js/player-directory.js';
 
@@ -371,6 +372,117 @@ function assertEq(a, b, msg) {
   assertEq(pass2.removed, 0, 'two-pass: second removed');
   assertEq(pass2.unchanged, 5, 'two-pass: second unchanged');
   assertEq(Object.keys(pass2.updates).length, 0, 'two-pass: second empty updates');
+}
+
+// Diagnostic: real field difference reported
+{
+  const players = {
+    alice: { groupId: 'g1', isAdmin: false },
+  };
+  const directory = {
+    alice: {
+      username: 'alice',
+      groupId: 'g2',
+      isAdmin: false,
+      isTradeRestricted: false,
+      isTradeProfileHidden: false,
+    },
+  };
+  const beforePlayers = JSON.stringify(players);
+  const beforeDir = JSON.stringify(directory);
+  const diff = diffDirectoryRebuildRows(players, directory);
+  assert(diff.readOnly === true, 'diag real-diff: readOnly');
+  assertEq(diff.updatedCount, 1, 'diag real-diff: updatedCount');
+  assertEq(diff.updated.length, 1, 'diag real-diff: updated rows');
+  assertEq(diff.updated[0].username, 'alice', 'diag real-diff: username');
+  assert(diff.updated[0].differences.groupId != null, 'diag real-diff: groupId difference');
+  assertEq(diff.updated[0].differences.groupId.desiredNormalized, 'g1', 'diag real-diff: desired groupId');
+  assertEq(diff.updated[0].differences.groupId.actualNormalized, 'g2', 'diag real-diff: actual groupId');
+  assertEq(JSON.stringify(players), beforePlayers, 'diag real-diff: players snapshot unchanged');
+  assertEq(JSON.stringify(directory), beforeDir, 'diag real-diff: directory snapshot unchanged');
+}
+
+// Diagnostic: null/missing group equivalence → no updated rows / no differences
+{
+  const diff = diffDirectoryRebuildRows(
+    { alice: {} },
+    {
+      alice: {
+        username: 'alice',
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+      },
+    },
+  );
+  assertEq(diff.updatedCount, 0, 'diag null-group: updatedCount');
+  assertEq(diff.updated.length, 0, 'diag null-group: no updated rows');
+  assertEq(diff.unchanged, 1, 'diag null-group: unchanged');
+}
+
+// Diagnostic: missing false booleans → no difference
+{
+  const diff = diffDirectoryRebuildRows(
+    { bob: { groupId: 'g1' } },
+    {
+      bob: {
+        username: 'bob',
+        groupId: 'g1',
+      },
+    },
+  );
+  assertEq(diff.updatedCount, 0, 'diag missing-bool: updatedCount');
+  assertEq(diff.updated.length, 0, 'diag missing-bool: no updated rows');
+}
+
+// Diagnostic: extra irrelevant keys do not create false drift
+{
+  const diff = diffDirectoryRebuildRows(
+    {
+      cara: {
+        groupId: 'g1',
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+      },
+    },
+    {
+      cara: {
+        username: 'cara',
+        groupId: 'g1',
+        subgroupId: null,
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+        legacyNoise: 'ignore-me',
+        score: 99,
+      },
+    },
+  );
+  assertEq(diff.updatedCount, 0, 'diag extra-keys: updatedCount');
+  assertEq(diff.updated.length, 0, 'diag extra-keys: no false drift');
+}
+
+// Diagnostic: when drift exists, extra keys reported separately (not as projected differences)
+{
+  const diff = diffDirectoryRebuildRows(
+    { dave: { groupId: 'newG' } },
+    {
+      dave: {
+        username: 'dave',
+        groupId: 'oldG',
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+        noise: 1,
+      },
+    },
+  );
+  assertEq(diff.updatedCount, 1, 'diag extra+drift: updatedCount');
+  assert(diff.updated[0].differences.groupId != null, 'diag extra+drift: groupId in differences');
+  assert(diff.updated[0].differences.noise == null, 'diag extra+drift: noise not in differences');
+  assert(diff.updated[0].extraActualKeys.includes('noise'), 'diag extra+drift: noise in extraActualKeys');
+  assert(diff.readOnly === true, 'diag extra+drift: readOnly');
 }
 
 if (failed) {
