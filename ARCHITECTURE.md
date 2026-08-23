@@ -716,11 +716,11 @@ Dev verification: `window.qcDbHydration.getSharedHydrationReport()` / `getHydrat
 
 ### Phase — Option C-a authDirectory foundation
 
-**Status: IMPLEMENTED — AWAITING RULE DEPLOYMENT / BACKFILL / VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
+**Status: C-a.1 IMPLEMENTED — AWAITING DEPLOYMENT / BACKFILL VERIFICATION.** Pasteable: `qcPersonalAudit.workflowOptionCa()`.
 
-- Schema: `authDirectory/{username} = { loginEmail, authUid, generation }` (public pre-auth read; student create gen0 only; admin update/delete).
-- Firebase Auth login/register/restore resolve `loginEmail` via authoritative `authDirectory` load. Ownership remains `players/{u}/authUid`.
-- Gen0 emails stay `{username}@scicards.local`. Backfill: `await qcAuth.backfillAuthDirectory()`. Explicit compat until `qcAuth.enableAuthDirectoryStrict()`.
+- Schema: `authDirectory/{username} = { loginEmail, authUid, generation }` (public **child** read; student create gen0 only; admin update/delete). **No parent enumerate read.**
+- **C-a.1:** migration-compat default (missing directory → temporary gen0 email fallback). Backfill: per-username `loadPathOnce('authDirectory/{u}')` only. Version: `option-c-a-1.1`.
+- **C-a.2 (not yet):** production-default strict micro-deploy after backfill/login verify. Do not treat `enableAuthDirectoryStrict()` localStorage as global production.
 - **No** password rotation / Delete Player Auth changes (Option C-b). Unit: `node scripts/option-c-a-auth-directory.test.mjs`.
 
 ### Phase — Scoped trade/listing canonical-by-ID hydration
