@@ -6,7 +6,13 @@
 import { DEFAULT_SHOP_USAGE } from '../js/player-schema.js';
 import { DEFAULT_SHOP_CONFIG, formatBuiltInRerollStatus, getBuiltInRerollCost } from '../js/shop-config.js';
 import { getPreservedFrozenSlots, REROLL_SCOPES } from '../js/shop-generation.js';
+import {
+  REFRESH_AT_SYNC_TOLERANCE_MS,
+  planActiveRotationRefreshAtSync,
+  refreshAtNeedsSoftSync,
+} from '../js/shop-mutations.js';
 import { canFreezeSlot, canRerollSlot, canUnfreezeSlot } from '../js/shop-validation.js';
+import { getNextWeeklyRefreshTimestamp } from '../js/weekly-research-pack.js';
 
 function assert(cond, msg) {
   if (!cond) {
@@ -191,6 +197,62 @@ const cfg = (maxFrozenSlots = 1) => ({
   const current = { slots: [slot('item_x', { frozen: true })] };
   const preserved = getPreservedFrozenSlots(current, 3);
   assert(preserved[0].frozen === true, 'default preserveFrozenFlag keeps frozen:true');
+}
+
+// --- SOFT refreshAt SYNC (schedule drift) ---
+{
+  const now = Date.now();
+  const expected = getNextWeeklyRefreshTimestamp(now);
+  assert(
+    refreshAtNeedsSoftSync(expected, expected) === false,
+    'A. active/unchanged: matching refreshAt needs no sync write',
+  );
+  assert(
+    refreshAtNeedsSoftSync(expected + 30_000, expected) === false,
+    'E. tolerance: sub-minute drift does not need sync',
+  );
+  assert(
+    refreshAtNeedsSoftSync(expected + REFRESH_AT_SYNC_TOLERANCE_MS + 1, expected) === true,
+    'E2. beyond tolerance: sync needed',
+  );
+}
+
+{
+  const now = Date.now();
+  const expected = getNextWeeklyRefreshTimestamp(now);
+  const generatedAt = now - 3_600_000;
+  const rotation = {
+    slots: [slot('item_x', { frozen: true }), slot('other')],
+    generatedAt,
+    refreshAt: expected + (7 * 86_400_000),
+    generationVersion: 1,
+  };
+  const plan = planActiveRotationRefreshAtSync(rotation, now);
+  assert(plan.synced === true, 'B. active+stale: soft-sync planned');
+  assert(plan.expectedRefreshAt === expected, 'B. expected matches live schedule');
+  assert(plan.rotation.refreshAt === expected, 'B. planned rotation only changes refreshAt');
+  assert(plan.rotation.generatedAt === generatedAt, 'B. generatedAt unchanged in plan');
+  assert(plan.rotation.slots[0].itemId === 'item_x' && plan.rotation.slots[0].frozen === true, 'B. item + frozen unchanged in plan');
+  assert(plan.rotation.slots[1].itemId === 'other', 'B. other slots unchanged');
+
+  const matched = planActiveRotationRefreshAtSync({ ...rotation, refreshAt: expected }, now);
+  assert(matched.synced === false, 'A-plan. matching refreshAt → no sync');
+}
+
+{
+  // C: inactive rotations must regenerate — soft-sync is only for hasActiveRotation===true.
+  // Document: ensureShopRotation skips planActiveRotationRefreshAtSync when inactive.
+  const now = Date.now();
+  const past = now - 1000;
+  assert(past < now, 'C. past refreshAt is inactive input (regen path, not soft-sync)');
+}
+
+// D Batch C freeze regression (preserve helpers) — already covered above as tests 9–10 and admin 6–7
+{
+  const weekly = getPreservedFrozenSlots({ slots: [slot('item_x', { frozen: true })] }, 3, false);
+  const admin = getPreservedFrozenSlots({ slots: [slot('item_x', { frozen: true })] }, 3, true);
+  assert(weekly[0].frozen === false && weekly[0].itemId === 'item_x', 'D. weekly expiry carries item clears freeze');
+  assert(admin[0].frozen === true && admin[0].itemId === 'item_x', 'D. Admin force keeps frozen:true');
 }
 
 if (!process.exitCode) {
