@@ -136,15 +136,22 @@ export function getShopRotationSlots(currentRotation) {
   return normalizeExistingSlots(currentRotation?.slots);
 }
 
-function getPreservedFrozenSlots(currentRotation, maxSlots) {
+/**
+ * Carry currently frozen eligible slots into a new rotation.
+ * @param {Object} currentRotation
+ * @param {number} maxSlots
+ * @param {boolean} [preserveFrozenFlag=true] When false (weekly expiry), keep item but clear freeze.
+ */
+export function getPreservedFrozenSlots(currentRotation, maxSlots, preserveFrozenFlag = true) {
   const rawSlots = normalizeExistingSlots(currentRotation?.slots);
+  const keepFrozen = preserveFrozenFlag !== false;
   return rawSlots
     .filter(slot => slot?.frozen === true && slot?.purchased !== true && slot?.itemId)
     .slice(0, maxSlots)
     .map((slot, index) => createShopSlot({
       ...slot,
       id: slot.id ?? `slot_${index}`,
-      frozen: true,
+      frozen: keepFrozen,
       purchased: false,
     }));
 }
@@ -347,6 +354,8 @@ export function weightedSelectWithoutReplacement(pool = [], count = 0, rng = Mat
  * @param {number} [options.now]
  * @param {Function} [options.rng]
  * @param {Object} [options.currentRotation]
+ * @param {boolean} [options.preserveFrozenFlag=true] Admin force refresh keeps true;
+ *   weekly/expired regen should pass false (carry item, clear freeze).
  * @returns {Object}
  */
 export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, options = {}) {
@@ -356,7 +365,8 @@ export function generateShopRotation(player = {}, config = DEFAULT_SHOP_CONFIG, 
   const slotCount = clamp(toNonNegativeInteger(effectiveConfig.shopSlotCount, DEFAULT_SHOP_CONFIG.shopSlotCount), 3, 9);
   const currentRotation = options.currentRotation || player?.shop?.currentRotation;
   const catalog = options.catalog || null;
-  const preservedSlots = getPreservedFrozenSlots(currentRotation, slotCount);
+  const preserveFrozenFlag = options.preserveFrozenFlag !== false;
+  const preservedSlots = getPreservedFrozenSlots(currentRotation, slotCount, preserveFrozenFlag);
   const preservedItems = preservedSlots
     .map(slot => resolveCatalogItem(slot.itemId, catalog))
     .filter(Boolean);

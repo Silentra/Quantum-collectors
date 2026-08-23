@@ -151,6 +151,27 @@ export function getBuiltInRerollCost(config, rerollsUsed) {
   return Number.isFinite(Number(cost)) && Number(cost) >= 0 ? Number(cost) : null;
 }
 
+/**
+ * Pure built-in reroll status for Shop UI / tests (no balance ownership).
+ * @param {number} used
+ * @param {Object} [config]
+ * @returns {{ used: number, max: number, nextCost: number|null, nextLabel: string, exhausted: boolean }}
+ */
+export function formatBuiltInRerollStatus(used, config = DEFAULT_SHOP_CONFIG) {
+  const builtIn = resolveBuiltInRerolls(config);
+  const usedSafe = Math.max(0, Math.floor(Number(used) || 0));
+  const max = builtIn.total;
+  const nextCost = getBuiltInRerollCost(config, usedSafe);
+  const exhausted = nextCost === null || usedSafe >= max;
+  return {
+    used: usedSafe,
+    max,
+    nextCost: exhausted ? null : nextCost,
+    nextLabel: exhausted ? 'Exhausted' : `${nextCost} RP`,
+    exhausted,
+  };
+}
+
 function mergeShopConfig(overrides = {}) {
   return {
     ...DEFAULT_SHOP_CONFIG,

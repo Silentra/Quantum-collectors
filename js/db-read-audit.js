@@ -581,6 +581,7 @@ API:
   qcPersonalAudit.workflowS8d5b()  // S8d-5b safe Season + Lifetime Snapshot class ops
   qcPersonalAudit.workflowOptionCa() // Option C-a authDirectory foundation
   qcPersonalAudit.workflowOptionCb() // Option C-b identity rotation + delete
+  qcPersonalAudit.workflowBatchCShopFreeze() // Batch C shop freeze / undo / reroll status
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -2479,6 +2480,58 @@ Unit: node scripts/option-c-b-auth-rotation.test.mjs
 }
 
 /**
+ * Batch C — shop freeze lifecycle / undo / reroll status (live checklist).
+ * Does NOT mutate Firebase. Prefer a disposable test player.
+ */
+export function workflowBatchCShopFreeze() {
+  console.info(`
+=== Batch C — Shop freeze / Undo Freeze / reroll status ===
+
+Status: IMPLEMENTED — awaiting live verification.
+Weekly/expired regen: carry frozen item, clear frozen flag (preserveFrozenFlag:false).
+Admin Refresh Now: keep frozen:true (force path).
+Undo Freeze: clears flag only; frozenSlotsUsedThisRotation NOT refunded.
+Gating: effectiveUsed = max(liveFrozen, spentUses) < capacity.
+Rerolls UI near Consumables: used/max + Next cost / Exhausted.
+
+Unit: node scripts/batch-c-shop-freeze.test.mjs
+
+--- DevTools: simulate WEEKLY expiry (NOT Admin Refresh) ---
+Replace USERNAME. Then leave Shop tab and reopen Shop.
+
+  // Firebase RTDB console or:
+  // db.set('players/USERNAME/shop/currentRotation/refreshAt', Date.now() - 1000)
+  // Optional stronger cycle fail:
+  // db.set('players/USERNAME/shop/currentRotation/generatedAt', 0)
+
+Do NOT click Admin "Refresh Now" for weekly semantics.
+
+--- Live phases ---
+PHASE A — MID-WEEK FREEZE
+1. Freeze item X
+2. Player slot reroll refused / X protected
+3. Admin Refresh Now → X still present AND frozen
+*** STOP — review before Undo ***
+
+PHASE B — UNDO
+5. Undo Freeze (confirm)
+6. X remains, frozen=false; spent still used
+7. Freeze again when exhausted → denied
+8. Normal reroll may replace X
+
+PHASE C — WEEKLY EXPIRY
+9. Freeze an item
+10. Set refreshAt = Date.now()-1000; leave/reopen Shop
+11. Item survives; frozen=false; usage reset; may freeze again
+
+PHASE D — REROLL UI
+12. Built-in reroll → used/max + next cost advance
+13. At max → Exhausted
+14. Token reroll does not bump built-in used
+`);
+}
+
+/**
  * Pasteable S8b+ P0 Trusted Teacher Functions foundation status.
  * No password reset / delete / promote. No S8c rules.
  */
@@ -2669,6 +2722,7 @@ function _installWindowApi() {
     workflowS8d5b,
     workflowOptionCa,
     workflowOptionCb,
+    workflowBatchCShopFreeze,
     enableAudit,
     disableAudit,
     enableIsolation,

@@ -23,7 +23,7 @@ import { getEquippedAura, getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
 import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
 import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
-import { getShopConfig, getShopItemDefinitions } from './shop-config.js';
+import { getShopConfig, getShopItemDefinitions, formatBuiltInRerollStatus } from './shop-config.js';
 import {
   getItemDefinition as getRegistryItemDefinition,
 } from './cosmetic-definitions.js';
@@ -38,7 +38,9 @@ import {
   refreshShopRotation,
   rerollShopRotation,
   rerollShopSlot,
+  unfreezeShopSlot,
 } from './shop-mutations.js';
+import { canFreezeSlot } from './shop-validation.js';
 import { useConsumable } from './shop-consumables.js';
 
 const SHOP_CONSUMABLE_BEHAVIORS = Object.freeze(new Set([
@@ -189,6 +191,9 @@ function getReasonMessage(reason) {
     slot_purchased: 'That slot has already been purchased.',
     slot_already_purchased: 'That slot has already been purchased.',
     slot_frozen: 'Frozen slots cannot be rerolled.',
+    slot_already_frozen: 'That slot is already frozen.',
+    slot_not_frozen: 'That slot is not frozen.',
+    max_frozen_slots_reached: 'No freeze uses remaining this rotation.',
     unsupported_behavior: 'That item cannot be used here.',
     WRITE_FAILED: 'Could not save the purchase. Check your connection and try again.',
   };
@@ -328,7 +333,13 @@ function renderSlot(slot, index, snapshot) {
         ${ownedCosmetic ? '<span class="shop-state-badge shop-state-owned">OWNED</span>' : ''}
       </div>
       <div class="shop-slot-price">${renderPrice(slot)}</div>
-      ${targetMode ? renderTargetButton(index, targetDisabled) : renderSlotActions(index, { purchased, frozen, discounted, ownedCosmetic })}
+      ${targetMode ? renderTargetButton(index, targetDisabled) : renderSlotActions(index, {
+        purchased,
+        frozen,
+        discounted,
+        ownedCosmetic,
+        canFreeze: !purchased && !frozen && canFreezeSlot(snapshot, index, getShopConfig()).allowed,
+      })}
     </article>
   `;
 }
@@ -366,7 +377,13 @@ function renderSlotActions(index, state) {
   const locked = state.purchased;
   const canBuy = !locked && !state.ownedCosmetic;
   const canReroll = !locked && !state.frozen;
-  const canFreeze = !locked && !state.frozen;
+  const freezeControl = state.frozen
+    ? `<button class="shop-btn" data-shop-action="unfreeze-slot" data-slot-index="${index}">
+        Undo Freeze
+      </button>`
+    : `<button class="shop-btn" data-shop-action="freeze-slot" data-slot-index="${index}" ${state.canFreeze ? '' : 'disabled'}>
+        Freeze
+      </button>`;
 
   return `
     <div class="shop-slot-actions">
@@ -376,9 +393,18 @@ function renderSlotActions(index, state) {
       <button class="shop-btn" data-shop-action="reroll-slot" data-slot-index="${index}" ${canReroll ? '' : 'disabled'}>
         Reroll
       </button>
-      <button class="shop-btn" data-shop-action="freeze-slot" data-slot-index="${index}" ${canFreeze ? '' : 'disabled'}>
-        Freeze
-      </button>
+      ${freezeControl}
+    </div>
+  `;
+}
+
+function renderBuiltInRerollStatus(snapshot) {
+  const used = Number(snapshot?.shopUsage?.rerollsUsedThisRotation || 0);
+  const status = formatBuiltInRerollStatus(used, getShopConfig());
+  return `
+    <div class="shop-reroll-status" aria-live="polite">
+      <div class="shop-reroll-status-line">Rerolls: ${status.used}/${status.max}</div>
+      <div class="shop-reroll-status-line">Next reroll: ${escapeHtml(status.nextLabel)}</div>
     </div>
   `;
 }
@@ -405,12 +431,15 @@ function renderConsumables(snapshot) {
     `;
   }).join('');
 
+  const rerollStatus = renderBuiltInRerollStatus(snapshot);
+
   if (!rows) {
     return `
       <aside class="shop-consumables-aside">
         <div class="shop-consumables-aside-header">
           <h3>Consumables</h3>
         </div>
+        ${rerollStatus}
         <p class="shop-consumables-empty">None owned</p>
       </aside>
     `;
@@ -422,6 +451,7 @@ function renderConsumables(snapshot) {
         <h3>Consumables</h3>
         <span class="shop-consumables-aside-note">Use on slots</span>
       </div>
+      ${rerollStatus}
       <div class="shop-consumables-stack">${rows}</div>
     </aside>
   `;
@@ -603,6 +633,19 @@ async function handleShopAction(username, action, { slotIndex, itemId }) {
     if (action === 'freeze-slot') {
       const result = freezeShopSlot(username, slotIndex);
       showResult(result, 'Slot frozen.');
+      if (result.success) targetMode = null;
+      renderShop();
+      return;
+    }
+
+    if (action === 'unfreeze-slot') {
+      const confirmed = await confirmShopAction(
+        'Undo this freeze? The item will no longer be protected from rerolls. The freeze use will not be refunded.',
+        'Undo Freeze',
+      );
+      if (!confirmed) return;
+      const result = unfreezeShopSlot(username, slotIndex);
+      showResult(result, 'Freeze removed.');
       if (result.success) targetMode = null;
       renderShop();
       return;

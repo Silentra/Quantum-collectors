@@ -68,6 +68,7 @@ import {
   canUnequipCosmetic,
   canUnfeatureAchievement,
   canUnfeatureCard,
+  canUnfreezeSlot,
 } from './shop-validation.js';
 import {
   normalizeIdentityAccent,
@@ -330,6 +331,8 @@ function hasActiveRotation(player, config, now) {
  * Phase 2C scope:
  * - Generates and persists full rotations only.
  * - Preserves eligible frozen slots through generateShopRotation().
+ * - Weekly/expired regen (!force): preserveFrozenFlag false (carry item, clear freeze).
+ * - Admin force refresh: preserveFrozenFlag true (keep frozen).
  * - Resets rotation-scoped usage only when a new full rotation is written.
  * - Does NOT update or derive rerollResetAt behavior.
  *
@@ -363,12 +366,15 @@ export function ensureShopRotation(username, options = {}) {
   }
 
   const catalog = getShopCatalogForConfig(config);
+  // force/Admin Refresh → keep freeze; weekly/expired → carry item, clear freeze
+  const preserveFrozenFlag = options.force === true;
   const rotation = generateShopRotation(player, config, {
     now,
     rng: options.rng,
     currentRotation: getCurrentRotation(player),
     catalog,
     pool: catalog.pool,
+    preserveFrozenFlag,
   });
 
   db.set(`players/${username}/shop/currentRotation`, rotation);
@@ -378,6 +384,7 @@ export function ensureShopRotation(username, options = {}) {
     success: true,
     generated: true,
     rotation,
+    preserveFrozenFlag,
   };
 }
 
@@ -754,6 +761,58 @@ export function freezeShopSlot(username, slotIndex, options = {}) {
     success: true,
     slotIndex: index,
     slot: nextSlots[index],
+    rotation: {
+      ...currentRotation,
+      slots: nextSlots,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// unfreezeShopSlot
+// ---------------------------------------------------------------------------
+/**
+ * Clears freeze on a shop slot without refunding spent freeze uses.
+ * Item / price / purchased / usage counters are unchanged.
+ *
+ * @param {string} username
+ * @param {number} slotIndex
+ * @param {Object} [options]
+ * @returns {Object}
+ */
+export function unfreezeShopSlot(username, slotIndex, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const player = getShopPlayerSnapshot(username);
+  if (!player) return { success: false, reason: 'player_not_found' };
+
+  const config = resolveShopRuntimeConfig(options.config);
+  const validation = canUnfreezeSlot(player, slotIndex, config);
+  if (!validation.allowed) {
+    return { success: false, reason: validation.reason, validation };
+  }
+
+  const currentRotation = getCurrentRotation(player);
+  const slots = getShopRotationSlots(currentRotation);
+  const index = Number(slotIndex);
+  const previousSlot = slots[index];
+  const nextSlots = [...slots];
+  nextSlots[index] = {
+    ...nextSlots[index],
+    frozen: false,
+  };
+
+  // Shop slots only — do not touch shopUsage / currencies / inventory
+  db.set(`players/${username}/shop/currentRotation/slots`, nextSlots);
+
+  return {
+    success: true,
+    slotIndex: index,
+    slot: nextSlots[index],
+    previousItemId: previousSlot?.itemId ?? null,
+    frozenSlotsUsedThisRotation: Number(player.shopUsage?.frozenSlotsUsedThisRotation || 0),
     rotation: {
       ...currentRotation,
       slots: nextSlots,

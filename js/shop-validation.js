@@ -386,11 +386,10 @@ export function canRerollRotation(player, scope = REROLL_SCOPES.ALL, config = DE
 /**
  * Checks whether a player can freeze a specific shop slot.
  *
- * Phase 3 checks:
- * - Slot is not already purchased (purchased slots cannot be frozen).
- * - Total frozen slots has not reached maxFrozenSlots limit.
- * - Phase 3 does not require or consume freeze tokens.
- * - Slot is not already frozen (no double-freeze).
+ * Capacity uses spent freeze uses (and live frozen count) so Undo Freeze
+ * does not refund allowance, and Admin Refresh cannot over-cap via usage reset:
+ *   capacity = floor(maxFrozenSlots) + extraFreezeAllowanceThisRotation
+ *   effectiveUsed = max(countFrozenSlots, frozenSlotsUsedThisRotation)
  *
  * @returns {Object}
  */
@@ -408,13 +407,58 @@ export function canFreezeSlot(player, slotIndex, config = DEFAULT_SHOP_CONFIG) {
   if (slot?.purchased === true) return { allowed: false, reason: 'slot_purchased' };
   if (slot?.frozen === true) return { allowed: false, reason: 'slot_already_frozen' };
 
-  const maxFrozenSlots = Math.max(0, Math.floor(Number(effectiveConfig.maxFrozenSlots || 0))) +
-    getExtraFreezeAllowance(player);
-  if (countFrozenSlots(slots) >= maxFrozenSlots) {
-    return { allowed: false, reason: 'max_frozen_slots_reached', maxFrozenSlots };
+  const baseMax = Math.max(0, Math.floor(Number(effectiveConfig.maxFrozenSlots || 0)));
+  const extra = getExtraFreezeAllowance(player);
+  const capacity = baseMax + extra;
+  const spent = Math.max(0, Math.floor(Number(player?.shopUsage?.frozenSlotsUsedThisRotation || 0)));
+  const live = countFrozenSlots(slots);
+  const effectiveUsed = Math.max(live, spent);
+
+  if (effectiveUsed >= capacity) {
+    return {
+      allowed: false,
+      reason: 'max_frozen_slots_reached',
+      maxFrozenSlots: capacity,
+      effectiveUsed,
+      spent,
+      live,
+    };
   }
 
-  return { allowed: true, reason: null, maxFrozenSlots };
+  return {
+    allowed: true,
+    reason: null,
+    maxFrozenSlots: capacity,
+    effectiveUsed,
+    spent,
+    live,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// canUnfreezeSlot
+// ---------------------------------------------------------------------------
+/**
+ * Checks whether a player can clear freeze on a shop slot (no capacity/refund checks).
+ *
+ * @returns {Object}
+ */
+export function canUnfreezeSlot(player, slotIndex, config = DEFAULT_SHOP_CONFIG) {
+  normalizeConfig(config);
+  if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
+
+  const slots = getShopRotationSlots(getRotation(player));
+  const index = Number(slotIndex);
+  if (!Number.isInteger(index) || index < 0 || index >= slots.length) {
+    return { allowed: false, reason: 'invalid_slot_index' };
+  }
+
+  const slot = slots[index];
+  if (slot?.frozen !== true) {
+    return { allowed: false, reason: 'slot_not_frozen' };
+  }
+
+  return { allowed: true, reason: null };
 }
 
 // ---------------------------------------------------------------------------
