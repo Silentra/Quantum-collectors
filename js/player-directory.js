@@ -57,6 +57,27 @@ export function buildDirectoryEntry(usernameKey, playerLike) {
 }
 
 /**
+ * Normalize a directory-shaped object for semantic comparison.
+ * Firebase RTDB drops null keys on write, so stored rows often omit groupId/subgroupId
+ * while buildDirectoryEntry emits explicit null — treat those as equal.
+ * Missing boolean keys are equivalent to false (same as === true projection).
+ *
+ * @param {string} usernameKey
+ * @param {object|null|undefined} entryLike
+ * @returns {{
+ *   username: string,
+ *   groupId: string|null,
+ *   subgroupId: string|null,
+ *   isAdmin: boolean,
+ *   isTradeRestricted: boolean,
+ *   isTradeProfileHidden: boolean
+ * }}
+ */
+export function normalizeDirectoryEntry(usernameKey, entryLike) {
+  return buildDirectoryEntry(usernameKey, entryLike);
+}
+
+/**
  * @param {string} usernameKey
  * @param {object} entry - full directory entry from buildDirectoryEntry
  * @returns {Record<string, object>}
@@ -92,13 +113,15 @@ export function resolvePlayerDirectoryKey(usernameOrKey) {
  */
 export function directoryEntriesEqual(a, b) {
   if (!a || !b) return false;
+  const na = normalizeDirectoryEntry(a.username != null ? a.username : b.username, a);
+  const nb = normalizeDirectoryEntry(b.username != null ? b.username : a.username, b);
   return (
-    a.username === b.username
-    && a.groupId === b.groupId
-    && a.subgroupId === b.subgroupId
-    && a.isAdmin === b.isAdmin
-    && a.isTradeRestricted === b.isTradeRestricted
-    && a.isTradeProfileHidden === b.isTradeProfileHidden
+    na.username === nb.username
+    && na.groupId === nb.groupId
+    && na.subgroupId === nb.subgroupId
+    && na.isAdmin === nb.isAdmin
+    && na.isTradeRestricted === nb.isTradeRestricted
+    && na.isTradeProfileHidden === nb.isTradeProfileHidden
   );
 }
 

@@ -2166,10 +2166,13 @@ Gather (fail-closed):
   loadPathOnce('playerDirectory',{force:true}) → ok && mode==='firebase'
 Plan: buildPlayerDirectoryRebuildPlan({ playersSnapshot, directorySnapshot })
   Pure — no db.getChildren / cache as player universe
+  Idempotent compare: null/missing groupId|subgroupId and missing false booleans are equal
+    (Firebase drops null keys on write — directoryEntriesEqual normalizes both sides)
 Commit: one updateAcknowledged(updates); UI previews counts then commits same plan
 
 Unit proof:
   node scripts/s8d2-directory-planner.test.mjs
+  After a successful rebuild, second preview should show Update:0 / Unchanged:N
 
 Live (Admin teacher):
   1) Admin → Players → Rebuild Directory
