@@ -2613,24 +2613,24 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 /*
- * Show All: cap right column to left-stack height without expanding the grid.
- * height:0 + min-height:100% zeroes the aside's max-content contribution so the
- * left column alone sizes the row; stretch fills that height; list scrolls.
+ * Show All: grow with content and use page-level (#game-content-scroll) scroll.
+ * Do NOT height-cap the aside (former height:0 + min-height:100% + nested flex
+ * list caused .ach-row flex children to shrink/compress instead of scrolling).
+ * Show 5 / Show 10 never set .is-show-all — unchanged.
  */
 .profile-achievements-aside.is-show-all {
-  align-self: stretch;
-  height: 0;
-  min-height: 100%;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+  align-self: start;
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+  display: block;
 }
 
 .profile-achievements-aside.is-show-all .profile-achievements-panel {
-  flex: 1 1 auto;
+  flex: none;
+  height: auto;
   min-height: 0;
-  height: 100%;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .profile-achievements-aside.is-show-all .ach-show-more {
@@ -2638,9 +2638,9 @@ body.app-mode-game #screen-game.screen.active {
 }
 
 .profile-achievements-aside.is-show-all .ach-profile-list {
-  flex: 1 1 auto;
+  flex: none;
   min-height: 0;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .profile-info-panel {
@@ -2730,6 +2730,11 @@ body.app-mode-game #screen-game.screen.active {
   gap: 0.5rem;
 }
 
+.ach-profile-list > .ach-row {
+  /* Never compress rows to fit a parent — scroll the page/list instead */
+  flex-shrink: 0;
+}
+
 .profile-consumables-hint,
 .profile-consumables-empty {
   color: #64748b;
@@ -2786,33 +2791,6 @@ body.app-mode-game #screen-game.screen.active {
     padding-top: 0.75rem;
     border-left: none;
     border-top: 1px solid #1e293b;
-  }
-}
-
-/*
- * Tablet + phone: Show All achievements use page-level scroll instead of a
- * height-capped nested list (wide-tablet trap). Desktop (>1024) keeps the cap.
- */
-@media (max-width: 1024px) {
-  .profile-achievements-aside.is-show-all {
-    align-self: start;
-    height: auto;
-    min-height: 0;
-    overflow: visible;
-    display: block;
-  }
-
-  .profile-achievements-aside.is-show-all .profile-achievements-panel {
-    flex: none;
-    height: auto;
-    min-height: 0;
-    overflow: visible;
-  }
-
-  .profile-achievements-aside.is-show-all .ach-profile-list {
-    flex: none;
-    min-height: 0;
-    overflow: visible;
   }
 }
 
@@ -9149,8 +9127,9 @@ body.app-mode-game #screen-game.screen.active {
   border-radius: 0.5rem;
   padding: 0.55rem 0.55rem;
   font-size: 0.72rem;
-  /* Content-driven height — no fixed taller cards */
-  min-height: 0;
+  /* Content-driven height; do not allow flex parents to squash rows */
+  flex-shrink: 0;
+  min-height: auto;
 }
 .ach-row-icon {
   flex-shrink: 0;
