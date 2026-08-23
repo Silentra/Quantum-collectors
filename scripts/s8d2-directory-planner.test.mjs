@@ -250,6 +250,129 @@ function assertEq(a, b, msg) {
   assert(plan.ok && plan.created === 1, 'purity: plans without directory object');
 }
 
+// Idempotency: desired null group vs stored missing keys → unchanged
+{
+  const plan = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: {
+      alice: {}, // no group → desired groupId/subgroupId null
+    },
+    directorySnapshot: {
+      // Firebase-style: null fields omitted after write
+      alice: {
+        username: 'alice',
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+      },
+    },
+  });
+  assertEq(plan.updated, 0, 'idempotency null-group: updated');
+  assertEq(plan.unchanged, 1, 'idempotency null-group: unchanged');
+  assertEq(Object.keys(plan.updates).length, 0, 'idempotency null-group: no writes');
+}
+
+// Idempotency: desired null subgroup vs stored missing subgroupId
+{
+  const plan = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: {
+      bob: { groupId: 'g1' }, // subgroup null
+    },
+    directorySnapshot: {
+      bob: {
+        username: 'bob',
+        groupId: 'g1',
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+      },
+    },
+  });
+  assertEq(plan.updated, 0, 'idempotency null-subgroup: updated');
+  assertEq(plan.unchanged, 1, 'idempotency null-subgroup: unchanged');
+}
+
+// Idempotency: desired false booleans vs stored missing booleans
+{
+  const plan = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: {
+      cara: { groupId: 'g1', subgroupId: 's1' },
+    },
+    directorySnapshot: {
+      cara: {
+        username: 'cara',
+        groupId: 'g1',
+        subgroupId: 's1',
+        // booleans omitted
+      },
+    },
+  });
+  assertEq(plan.updated, 0, 'idempotency missing-bools: updated');
+  assertEq(plan.unchanged, 1, 'idempotency missing-bools: unchanged');
+}
+
+// Real group drift still updates
+{
+  const plan = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: {
+      dana: { groupId: 'gNew' },
+    },
+    directorySnapshot: {
+      dana: {
+        username: 'dana',
+        groupId: 'gOld',
+        isAdmin: false,
+        isTradeRestricted: false,
+        isTradeProfileHidden: false,
+      },
+    },
+  });
+  assertEq(plan.updated, 1, 'real drift: updated');
+  assertEq(plan.updates[`${DIRECTORY_ROOT}/dana`].groupId, 'gNew', 'real drift: groupId');
+}
+
+// Two-pass Firebase-style: write strips null keys, second plan is no-op
+{
+  const players = {
+    p1: {},
+    p2: { groupId: 'g1' },
+    p3: { groupId: 'g1', subgroupId: 's1', isAdmin: true },
+    p4: { isTradeRestricted: true },
+    p5: { group: 'legacyG' },
+  };
+  let directory = {};
+
+  const pass1 = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: players,
+    directorySnapshot: directory,
+  });
+  assertEq(pass1.created, 5, 'two-pass: first creates 5');
+
+  // Apply like RTDB: delete null-valued keys from written objects; null path deletes leaf
+  directory = { ...directory };
+  for (const [path, value] of Object.entries(pass1.updates)) {
+    const key = path.slice(`${DIRECTORY_ROOT}/`.length);
+    if (value == null) {
+      delete directory[key];
+      continue;
+    }
+    const stored = {};
+    for (const [fk, fv] of Object.entries(value)) {
+      if (fv !== null && fv !== undefined) stored[fk] = fv;
+    }
+    directory[key] = stored;
+  }
+
+  const pass2 = buildPlayerDirectoryRebuildPlan({
+    playersSnapshot: players,
+    directorySnapshot: directory,
+  });
+  assertEq(pass2.created, 0, 'two-pass: second created');
+  assertEq(pass2.updated, 0, 'two-pass: second updated');
+  assertEq(pass2.removed, 0, 'two-pass: second removed');
+  assertEq(pass2.unchanged, 5, 'two-pass: second unchanged');
+  assertEq(Object.keys(pass2.updates).length, 0, 'two-pass: second empty updates');
+}
+
 if (failed) {
   console.error(`\nS8d-2 planner tests: ${failed} FAILED`);
   process.exitCode = 1;
