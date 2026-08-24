@@ -583,6 +583,7 @@ API:
   qcPersonalAudit.workflowOptionCb() // Option C-b identity rotation + delete
   qcPersonalAudit.workflowBatchCShopFreeze() // Batch C shop freeze / undo / reroll status
   qcPersonalAudit.workflowBatchD3() // Batch D3 card conversion preview + raw backup (no D4)
+  qcPersonalAudit.workflowBatchD4() // Batch D4 convert Firebase /cards (fresh plan commit)
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -2562,14 +2563,46 @@ Unit: node scripts/batch-d3-card-migration-preview.test.mjs
 8. Optionally verify Firebase /cards child count unchanged
 9. Send preview summary for review
 
-*** STOP — DO NOT RUN D4. ***
+*** STOP — DO NOT RUN D4 until backup is saved and preview reviewed. ***
 
-D4 (future): re-gather /cards, rebuild fresh plan, validate readyForD4, THEN commit.
-Never commit a stale D3 preview plan (Admin may have edited cards).
+D4 (separate Admin button): Convert Firebase Cards to Overrides
+  → confirms → re-gathers /cards → rebuilds FRESH plan → validates → commits
+  Never commits a stale D3 preview plan.
 
 Rollback artifacts:
 - D1: quantum-collectors-card-data.json (normalized base)
 - D3: quantum-collectors-cards-pre-migration-backup.json (raw Firebase /cards)
+`);
+}
+
+/**
+ * Batch D4 — Firebase /cards sparse conversion (destructive; fresh plan only).
+ */
+export function workflowBatchD4() {
+  console.info(`
+=== Batch D4 — Convert Firebase Cards to Overrides ===
+
+Status: IMPLEMENTED — awaiting live verification.
+Requires saved D3 raw backup first.
+
+Unit: node scripts/batch-d4-card-conversion.test.mjs
+
+--- Live workflow ---
+1. Deploy / hard refresh Admin
+2. Run D3 Preview again; confirm safe counts (expect ~124 redundant, 0 override/custom)
+3. Ensure backup file is saved
+4. Admin → Cards → Convert Firebase Cards to Overrides
+5. Confirm warning → wait for fresh gather
+6. Confirm fresh plan counts → wait for acknowledged write
+7. Inspect Firebase /cards (expect empty for current live state)
+8. Hard refresh Admin → Cards still 125
+9. Student: Collection / Packs / Research / Trading
+10. Confirm no automatic Firebase card repopulation
+
+*** STOP after live verification. ***
+
+Rollback: import quantum-collectors-cards-pre-migration-backup.json into Firebase /cards
+(or Console restore). Bundled base remains local even if /cards is empty.
 `);
 }
 
@@ -2766,6 +2799,7 @@ function _installWindowApi() {
     workflowOptionCb,
     workflowBatchCShopFreeze,
     workflowBatchD3,
+    workflowBatchD4,
     enableAudit,
     disableAudit,
     enableIsolation,

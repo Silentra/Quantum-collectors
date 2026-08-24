@@ -13,6 +13,8 @@ import {
   downloadRawCardsPreMigrationBackup,
   formatCardConversionPlanSummary,
   CARD_PRE_MIGRATION_BACKUP_FILENAME,
+  validateFreshPlanForD4Commit,
+  commitCardFirebaseConversionPlan,
 } from './card-migration.js';
 import { initCardDetailModal, openCardDetailModal } from './card-detail-modal.js';
 import { initCosmeticPreviewModal } from './cosmetic-preview-modal.js';
@@ -1694,6 +1696,122 @@ function downloadCardConversionPreviewBackup() {
   }
 }
 
+/**
+ * Batch D4 — convert Firebase /cards to sparse overrides (fresh gather+plan; acknowledged write).
+ * Never commits a stale D3 preview plan.
+ */
+async function handleAdminCardConversionCommit() {
+  if (!auth.isAdmin()) {
+    toast.error('Admin only.');
+    return;
+  }
+
+  const convertBtn = document.getElementById('btn-convert-firebase-cards');
+  if (convertBtn) convertBtn.disabled = true;
+
+  try {
+    const warned = await confirmAction(
+      'This will convert Firebase /cards to the new sparse override/addition format.\n\n'
+        + 'Bundled base cards remain in the game.\n\n'
+        + 'Redundant Firebase copies will be removed.\n'
+        + 'Intentional overrides and Firebase-only cards will be preserved.\n\n'
+        + 'A pre-migration backup should already be saved '
+        + `(${CARD_PRE_MIGRATION_BACKUP_FILENAME}).\n\n`
+        + 'On confirm, Firebase /cards will be re-gathered and a FRESH plan built '
+        + '(the D3 preview plan is never committed).\n\n'
+        + 'Continue?',
+      'Convert Firebase Cards to Overrides?',
+    );
+    if (!warned) return;
+
+    const gather = await cards.gatherAuthoritativeCardsForExport();
+    if (!gather.ok) {
+      toast.error(`D4 aborted: ${gather.error || 'authoritative read unavailable'}`);
+      console.warn('[D4 Convert] gather failed', gather);
+      return;
+    }
+
+    const freshPlan = buildCardFirebaseConversionPlan({
+      baseCards: cards.BASE_CARD_DEFINITIONS,
+      firebaseSnapshot: gather.snapshot,
+    });
+    console.info('[D4 Convert] fresh plan', freshPlan);
+
+    const gate = validateFreshPlanForD4Commit(freshPlan);
+    if (!gate.ok) {
+      toast.error(
+        `D4 aborted (${gate.error}): ${gate.reason || 'fresh plan not safe'}. `
+          + 'Re-run Preview and review before converting.',
+      );
+      console.error('[D4 Convert] gate failed', gate, freshPlan);
+      return;
+    }
+
+    const confirmFresh = await confirmAction(
+      `Fresh plan (re-gathered — not the D3 preview):\n\n`
+        + `Firebase records: ${freshPlan.firebaseCount}\n`
+        + `Redundant to remove: ${freshPlan.redundantCount}\n`
+        + `Overrides to keep sparse: ${freshPlan.overrideCount}\n`
+        + `Customs to preserve: ${freshPlan.customCount}\n`
+        + `Expected Firebase records after: ${freshPlan.finalFirebaseRecordCount}\n`
+        + `Bundled absent (no action): ${freshPlan.bundledAbsentFromFirebaseCount}\n\n`
+        + 'Commit this fresh plan now?',
+      'Confirm fresh conversion plan?',
+    );
+    if (!confirmFresh) return;
+
+    const commit = await commitCardFirebaseConversionPlan(freshPlan, {
+      updateAcknowledged: (updates) => db.updateAcknowledged(updates),
+      allowOverridesAndCustoms: false,
+    });
+
+    if (!commit.ok) {
+      toast.error(`D4 write failed: ${commit.error || 'unknown'}`);
+      console.error('[D4 Convert] commit failed', commit);
+      return;
+    }
+
+    if (commit.skipped) {
+      toast.info(commit.message || 'No card updates needed.');
+    } else {
+      toast.success(
+        `Converted Firebase cards — removed ${commit.deletes} redundant, `
+          + `wrote ${commit.sparseSets} sparse override(s) (${commit.pathCount} paths).`,
+      );
+    }
+
+    // Post-commit force-read verification
+    const verify = await cards.gatherAuthoritativeCardsForExport();
+    if (verify.ok) {
+      const remaining = Object.keys(verify.snapshot || {}).length;
+      const verifyPlan = buildCardFirebaseConversionPlan({
+        baseCards: cards.BASE_CARD_DEFINITIONS,
+        firebaseSnapshot: verify.snapshot,
+      });
+      console.info('[D4 Convert] post-verify', {
+        firebaseRecordCount: remaining,
+        overrideCount: verifyPlan.overrideCount,
+        customCount: verifyPlan.customCount,
+        resolvedCatalog: cards.getAllCards().length,
+      });
+      toast.info(
+        `Post-verify: Firebase /cards = ${remaining} record(s); `
+          + `resolved catalog = ${cards.getAllCards().length}.`,
+      );
+    } else {
+      console.warn('[D4 Convert] post-verify gather failed', verify);
+      toast.info(`Resolved catalog = ${cards.getAllCards().length} (post-verify gather failed).`);
+    }
+
+    renderAdminCards();
+  } catch (err) {
+    toast.error('D4 conversion failed unexpectedly.');
+    console.error('[D4 Convert]', err);
+  } finally {
+    if (convertBtn) convertBtn.disabled = false;
+  }
+}
+
 function setupCardConversionPreviewModal() {
   document.getElementById('btn-close-card-conversion-preview')?.addEventListener('click', closeCardConversionPreviewModal);
   document.getElementById('btn-dismiss-card-conversion-preview')?.addEventListener('click', closeCardConversionPreviewModal);
@@ -1800,6 +1918,12 @@ function renderAdminCards() {
   const previewConversionBtn = document.getElementById('btn-preview-card-conversion');
   if (previewConversionBtn) {
     previewConversionBtn.onclick = () => { void handleAdminCardConversionPreview(); };
+  }
+
+  // Batch D4 — convert (fresh gather+plan; never commits stale D3 preview)
+  const convertCardsBtn = document.getElementById('btn-convert-firebase-cards');
+  if (convertCardsBtn) {
+    convertCardsBtn.onclick = () => { void handleAdminCardConversionCommit(); };
   }
 
   // Wire up type dropdown to show/hide conceptType in create form

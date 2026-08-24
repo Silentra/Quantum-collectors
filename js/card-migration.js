@@ -348,3 +348,195 @@ export function formatCardConversionPlanSummary(plan) {
   );
   return lines.join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Batch D4 — commit helpers (writes only via injected updateAcknowledged)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build multipath Firebase updates from a conversion plan (pure).
+ * A → cards/{id}: null
+ * B → cards/{id}: sparse override
+ * C → no write
+ *
+ * @param {object} plan - from buildCardFirebaseConversionPlan
+ * @returns {{ ok: boolean, updates: Object.<string, *>, error?: string, pathCount?: number }}
+ */
+export function buildCardConversionFirebaseUpdates(plan) {
+  if (!plan || typeof plan !== 'object') {
+    return { ok: false, updates: {}, error: 'PLAN_MISSING' };
+  }
+  if (plan.readyForD4 !== true) {
+    return { ok: false, updates: {}, error: 'PLAN_NOT_READY_FOR_D4' };
+  }
+  if (plan.malformedCount > 0) {
+    return { ok: false, updates: {}, error: 'PLAN_HAS_MALFORMED' };
+  }
+
+  const updates = {};
+  const deletes = plan.updates?.deletes || [];
+  const sparseSets = plan.updates?.sparseSets || {};
+
+  for (const id of deletes) {
+    if (!id || typeof id !== 'string') {
+      return { ok: false, updates: {}, error: 'INVALID_DELETE_ID' };
+    }
+    updates[`cards/${id}`] = null;
+  }
+
+  for (const [id, override] of Object.entries(sparseSets)) {
+    if (!id || typeof id !== 'string') {
+      return { ok: false, updates: {}, error: 'INVALID_OVERRIDE_ID' };
+    }
+    if (updates[`cards/${id}`] !== undefined) {
+      return { ok: false, updates: {}, error: `DELETE_AND_SPARSE_CONFLICT:${id}` };
+    }
+    updates[`cards/${id}`] = deepCloneJson(override);
+  }
+
+  const pathCheck = assertCardConversionUpdatePaths(updates);
+  if (!pathCheck.ok) {
+    return { ok: false, updates: {}, error: pathCheck.error };
+  }
+
+  return { ok: true, updates, pathCount: Object.keys(updates).length };
+}
+
+/**
+ * Every write path must be exactly under cards/{id} (no other roots).
+ * @param {object} updates
+ * @returns {{ ok: boolean, error?: string, paths?: string[] }}
+ */
+export function assertCardConversionUpdatePaths(updates) {
+  if (!updates || typeof updates !== 'object' || Array.isArray(updates)) {
+    return { ok: false, error: 'UPDATES_INVALID' };
+  }
+  const paths = Object.keys(updates);
+  for (const path of paths) {
+    if (typeof path !== 'string' || !path.startsWith('cards/')) {
+      return { ok: false, error: `PATH_NOT_UNDER_CARDS:${path}` };
+    }
+    const rest = path.slice('cards/'.length);
+    if (!rest || rest.includes('/') || rest.includes('.')) {
+      return { ok: false, error: `PATH_NOT_SINGLE_CARD_CHILD:${path}` };
+    }
+    // Forbidden roots must never appear as prefixes
+    for (const forbidden of [
+      'players',
+      'trades',
+      'config',
+      'packs',
+      'authDirectory',
+      'admins',
+      'groups',
+      'accessCodes',
+      'leaderboards',
+    ]) {
+      if (path === forbidden || path.startsWith(`${forbidden}/`)) {
+        return { ok: false, error: `FORBIDDEN_ROOT:${path}` };
+      }
+    }
+  }
+  return { ok: true, paths };
+}
+
+/**
+ * Fail-closed gate for live D4 after a FRESH plan (not the stale D3 preview).
+ * Aborts if overrides/customs appeared (unexpected vs clean D3 live state) unless allowed.
+ *
+ * @param {object} plan
+ * @param {{ allowOverridesAndCustoms?: boolean }} [opts]
+ * @returns {{ ok: boolean, error?: string, reason?: string }}
+ */
+export function validateFreshPlanForD4Commit(plan, opts = {}) {
+  if (!plan || plan.readyForD4 !== true) {
+    return { ok: false, error: 'PLAN_NOT_READY_FOR_D4', reason: 'readyForD4 !== true' };
+  }
+  if (plan.bundledCount !== EXPECTED_BUNDLED_CARD_COUNT) {
+    return { ok: false, error: 'BUNDLED_COUNT_MISMATCH', reason: `bundledCount=${plan.bundledCount}` };
+  }
+  if (plan.malformedCount > 0) {
+    return { ok: false, error: 'PLAN_HAS_MALFORMED', reason: `malformedCount=${plan.malformedCount}` };
+  }
+  if (!opts.allowOverridesAndCustoms) {
+    if (plan.overrideCount > 0) {
+      return {
+        ok: false,
+        error: 'UNEXPECTED_OVERRIDES',
+        reason: `${plan.overrideCount} override(s) — review Preview before convert`,
+      };
+    }
+    if (plan.customCount > 0) {
+      return {
+        ok: false,
+        error: 'UNEXPECTED_CUSTOMS',
+        reason: `${plan.customCount} custom(s) — review Preview before convert`,
+      };
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Commit a FRESH conversion plan via injected acknowledged multipath update.
+ * Does not gather or rebuild — caller must supply a fresh plan.
+ *
+ * @param {object} plan
+ * @param {{ updateAcknowledged: Function, allowOverridesAndCustoms?: boolean }} options
+ * @returns {Promise<object>}
+ */
+export async function commitCardFirebaseConversionPlan(plan, options = {}) {
+  const updateFn = options.updateAcknowledged;
+  if (typeof updateFn !== 'function') {
+    return { ok: false, error: 'UPDATE_ACK_MISSING', wrote: false };
+  }
+
+  const gate = validateFreshPlanForD4Commit(plan, {
+    allowOverridesAndCustoms: options.allowOverridesAndCustoms === true,
+  });
+  if (!gate.ok) {
+    return { ok: false, error: gate.error, reason: gate.reason, wrote: false };
+  }
+
+  const built = buildCardConversionFirebaseUpdates(plan);
+  if (!built.ok) {
+    return { ok: false, error: built.error, wrote: false };
+  }
+
+  if (built.pathCount === 0) {
+    return {
+      ok: true,
+      wrote: false,
+      skipped: true,
+      pathCount: 0,
+      plan,
+      message: 'No Firebase card updates required (already sparse/empty).',
+    };
+  }
+
+  const pathCheck = assertCardConversionUpdatePaths(built.updates);
+  if (!pathCheck.ok) {
+    return { ok: false, error: pathCheck.error, wrote: false };
+  }
+
+  const result = await updateFn(built.updates);
+  if (!result || result.ok !== true) {
+    return {
+      ok: false,
+      error: result?.error || 'UPDATE_ACKNOWLEDGED_FAILED',
+      wrote: false,
+      pathCount: built.pathCount,
+    };
+  }
+
+  return {
+    ok: true,
+    wrote: true,
+    skipped: false,
+    pathCount: built.pathCount,
+    mode: result.mode,
+    deletes: plan.updates.deletes.length,
+    sparseSets: Object.keys(plan.updates.sparseSets).length,
+    plan,
+  };
+}
