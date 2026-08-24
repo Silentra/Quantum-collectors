@@ -569,6 +569,11 @@
                       title="Temporary migration tooling — read-only Firebase /cards export">
                       Export Card Data
                     </button>
+                    <button type="button" id="btn-preview-card-conversion"
+                      class="bg-surface-700 hover:bg-surface-600 border border-sky-700/60 text-sky-200 px-2.5 py-1 rounded-lg text-xs font-medium transition"
+                      title="Temporary Batch D3 tooling — read-only Firebase /cards conversion preview + raw backup">
+                      Preview Firebase Card Conversion
+                    </button>
                     <select id="admin-card-filter-rarity" class="bg-surface-800 border border-surface-600 rounded-lg px-2 py-1 text-xs">
                       <option value="all">All Rarities</option>
                       <option value="common">Common</option>
@@ -1005,6 +1010,37 @@
       <div id="featured-card-picker-footer" class="px-5 py-3 border-t border-surface-800 flex-shrink-0 hidden">
         <button type="button" id="btn-clear-featured-slot" class="w-full bg-surface-800 hover:bg-surface-700 border border-surface-600 text-surface-200 py-2.5 rounded-lg font-semibold text-sm transition">
           Clear Featured Slot
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Batch D3 — Card conversion preview (read-only; no D4 execute) -->
+  <div id="card-conversion-preview-modal" class="hidden fixed inset-0 bg-black/80 z-[110] flex items-start justify-center p-4 overflow-y-auto">
+    <div class="bg-surface-900 rounded-2xl max-w-lg w-full border border-sky-800/60 shadow-xl my-8">
+      <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-surface-700">
+        <h3 class="text-lg font-bold text-sky-200">Firebase Card Conversion Preview</h3>
+        <button type="button" id="btn-close-card-conversion-preview" class="text-surface-400 hover:text-white text-sm px-2 py-1">Close</button>
+      </div>
+      <div class="px-5 py-4 space-y-3">
+        <p id="card-conversion-preview-banner" class="text-sm text-amber-200/90 font-medium">
+          This is a preview only. Firebase cards have not been changed.
+        </p>
+        <pre id="card-conversion-preview-body" class="text-xs text-surface-300 whitespace-pre-wrap bg-surface-950/80 border border-surface-700 rounded-lg p-3 max-h-[50vh] overflow-y-auto font-mono"></pre>
+        <p class="text-[11px] text-surface-500">
+          Download the raw pre-migration backup before any future D4. D4 is not available in this build.
+          Rollback artifact: quantum-collectors-cards-pre-migration-backup.json (raw Firebase /cards).
+          D4 confirm must re-gather and rebuild a fresh plan — never commit this preview.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2 px-5 pb-5">
+        <button type="button" id="btn-download-cards-pre-migration-backup"
+          class="flex-1 min-w-[10rem] bg-sky-700 hover:bg-sky-600 text-white py-2.5 rounded-lg text-sm font-semibold transition">
+          Download Backup
+        </button>
+        <button type="button" id="btn-dismiss-card-conversion-preview"
+          class="flex-1 min-w-[8rem] bg-surface-700 hover:bg-surface-600 py-2.5 rounded-lg text-sm font-semibold transition">
+          Close
         </button>
       </div>
     </div>
