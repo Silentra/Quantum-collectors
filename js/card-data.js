@@ -132,7 +132,7 @@ export const BASE_CARD_DEFINITIONS = Object.freeze(
     "name": "Carl Sagan",
     "rarity": "rare",
     "type": "scientist",
-    "field": "Astronomy & Science Communication",
+    "field": "Astronomy & Communication",
     "effect": "Induction Field",
     "image": "",
     "flavor": "Carl Sagan inspired millions through science communication and helped popularize humanity’s cosmic exploration.",
@@ -1561,9 +1561,9 @@ export const BASE_CARD_DEFINITIONS = Object.freeze(
     "field": "Cosmology",
     "effect": "",
     "image": "",
-    "flavor": "Lemaître proposed that the universe began from a tiny, dense state and later expanded, helping lay the foundation for modern Big Bang theory.",
+    "flavor": "Lemaître proposed that the universe began as a tiny, dense state and later expanded, laying the foundation for modern Big Bang theory.",
     "imageUrl": "",
-    "keyFact": "Lemaître proposed that the universe began from a tiny, dense state and later expanded, helping lay the foundation for modern Big Bang theory.",
+    "keyFact": "Lemaître proposed that the universe began as a tiny, dense state and later expanded, laying the foundation for modern Big Bang theory.",
     "enabled": true
   },
   {

@@ -28,6 +28,7 @@ import {
   declineTrade,
   cancelTrade,
   getPendingTrades,
+  isDetailedLogging,
 } from './trading.js';
 import {
   getDirectTradeCooldown,
@@ -114,6 +115,13 @@ let _tradingTabGeneration = 0;
 let _lastPickerHash = '';
 /** True while a Trading group-listings switch is awaiting ensure (coalesced in hydration). */
 let _groupListingsSwitchPending = false;
+/** Partner still selected but no longer eligible (trusted directory) — composer stays open. */
+let _directPartnerInvalidReason = null;
+/**
+ * Listing create draft — survives passive My Listings section rebuilds (not Firebase).
+ * @type {{ offeredCardId: string, requestedCardIds: string[] }}
+ */
+let _listingComposerDraft = { offeredCardId: '', requestedCardIds: [] };
 
 /**
  * Shared filter/sort state for trading card selection views.
@@ -132,6 +140,161 @@ const _tradeFilters = {
   dupeOnly: false,
   sort: 'default',
 };
+
+// ─── Composer preservation helpers (pure + DOM wrappers) ─────────────────────
+
+/**
+ * Decide UI action after listingsByGroup scope sync.
+ * Same-group successful re-ensure must NOT clear composers / full-render.
+ * @param {{ previousGroup: string|null, myGroup: string|null }} args
+ * @returns {{ clearComposer: boolean, fullRender: boolean, reason: string }}
+ */
+export function decideGroupListingsScopeUiAction({ previousGroup, myGroup }) {
+  if (!myGroup) {
+    return { clearComposer: true, fullRender: true, reason: 'group-null' };
+  }
+  if (previousGroup !== myGroup) {
+    return { clearComposer: true, fullRender: true, reason: 'group-change' };
+  }
+  return { clearComposer: false, fullRender: false, reason: 'same-group-reensure' };
+}
+
+/**
+ * Pure Direct Trade composer-active evaluation (no DOM).
+ * @param {{
+ *   selectedTarget?: string|null,
+ *   offeredCardId?: string|null,
+ *   pickersVisible?: boolean,
+ *   offeredSelectValue?: string,
+ *   confirmVisible?: boolean,
+ * }} s
+ * @returns {boolean}
+ */
+export function evaluateDirectTradeComposerActive(s = {}) {
+  if (s.selectedTarget) return true;
+  if (s.offeredCardId) return true;
+  if (s.pickersVisible) return true;
+  if (s.offeredSelectValue) return true;
+  if (s.confirmVisible) return true;
+  return false;
+}
+
+/**
+ * Pure Listing composer-active evaluation (no DOM).
+ * @param {{
+ *   offeredCardId?: string,
+ *   requestedCardIds?: string[],
+ *   filterSearch?: string,
+ *   filterType?: string,
+ *   filterRarity?: string,
+ *   filterDupeOnly?: boolean,
+ *   filterSort?: string,
+ * }} s
+ * @returns {boolean}
+ */
+export function evaluateListingComposerActive(s = {}) {
+  if (s.offeredCardId) return true;
+  if (Array.isArray(s.requestedCardIds) && s.requestedCardIds.length > 0) return true;
+  if (typeof s.filterSearch === 'string' && s.filterSearch.trim()) return true;
+  if (s.filterType) return true;
+  if (s.filterRarity) return true;
+  if (s.filterDupeOnly === true) return true;
+  if (s.filterSort && s.filterSort !== 'default') return true;
+  return false;
+}
+
+function _tradingUiDebug(payload) {
+  if (!isDetailedLogging()) return;
+  console.debug('[TradingUI]', payload);
+}
+
+function _isDirectTradeComposerActive() {
+  const pickerArea = document.getElementById('trade-card-pickers');
+  const offeredSelect = document.getElementById('trade-offered-card');
+  const confirmSection = document.getElementById('trade-confirm-section');
+  return evaluateDirectTradeComposerActive({
+    selectedTarget: _selectedTarget,
+    offeredCardId: _offeredCardId,
+    pickersVisible: !!(pickerArea && !pickerArea.classList.contains('hidden')),
+    offeredSelectValue: offeredSelect?.value || '',
+    confirmVisible: !!(confirmSection && !confirmSection.classList.contains('hidden')),
+  });
+}
+
+function _syncListingDraftFromDom() {
+  const offered = document.getElementById('listing-offered-card')?.value || '';
+  const checked = [...document.querySelectorAll('#listing-requested-checkboxes .listing-req-checkbox:checked')]
+    .map((el) => el.value)
+    .filter(Boolean);
+  _listingComposerDraft = {
+    offeredCardId: offered,
+    requestedCardIds: checked,
+  };
+}
+
+function _clearListingComposerDraft() {
+  _listingComposerDraft = { offeredCardId: '', requestedCardIds: [] };
+}
+
+function _isListingComposerActive() {
+  _syncListingDraftFromDom();
+  return evaluateListingComposerActive({
+    offeredCardId: _listingComposerDraft.offeredCardId,
+    requestedCardIds: _listingComposerDraft.requestedCardIds,
+    filterSearch: _tradeFilters.search,
+    filterType: _tradeFilters.type,
+    filterRarity: _tradeFilters.rarity,
+    filterDupeOnly: _tradeFilters.dupeOnly,
+    filterSort: _tradeFilters.sort,
+  });
+}
+
+function _clearDirectComposerState() {
+  _selectedTarget = null;
+  _offeredCardId = null;
+  _directPartnerInvalidReason = null;
+}
+
+/**
+ * Keep composer shell; disable Send and show invalidation message.
+ * @param {string} reason
+ */
+function _setDirectPartnerInvalid(reason) {
+  _directPartnerInvalidReason = reason || 'Selected partner is no longer available to trade.';
+  const sendBtn = document.getElementById('trade-send-btn');
+  if (sendBtn) sendBtn.disabled = true;
+  let banner = document.getElementById('trade-partner-status-banner');
+  const host = document.getElementById('trade-new-section') || document.getElementById('trade-card-pickers');
+  if (host && !banner) {
+    banner = document.createElement('div');
+    banner.id = 'trade-partner-status-banner';
+    banner.className = 'mb-2 p-2 rounded bg-amber-900/40 border border-amber-700 text-amber-200 text-xs';
+    host.insertBefore(banner, host.firstChild);
+  }
+  if (banner) banner.textContent = _directPartnerInvalidReason;
+  _tradingUiDebug({ reason: 'partner-invalidated', action: 'keep-composer', message: _directPartnerInvalidReason });
+}
+
+function _clearDirectPartnerInvalidBanner() {
+  _directPartnerInvalidReason = null;
+  document.getElementById('trade-partner-status-banner')?.remove();
+}
+
+/**
+ * Batch A (UI-only): after progressive form expansion, keep the newest action
+ * control reachable inside #game-content-scroll. Does not change trade state.
+ * @param {Element|null|undefined} el
+ */
+function _scrollTradingActionIntoView(el) {
+  if (!el || typeof el.scrollIntoView !== 'function') return;
+  requestAnimationFrame(() => {
+    try {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch {
+      el.scrollIntoView(false);
+    }
+  });
+}
 
 // ─── Filter / Sort Pipeline ──────────────────────────────────────────────────
 
@@ -354,7 +517,8 @@ export function renderTrading() {
   _tradeFilters.rarity = '';
   _tradeFilters.dupeOnly = false;
   _tradeFilters.sort = 'default';
-
+  _clearListingComposerDraft();
+  _directPartnerInvalidReason = null;
   const isHidden = me.isTradeProfileHidden === true;
 
   let html = '';
@@ -414,6 +578,8 @@ export function cleanupTrading() {
     clearInterval(_cooldownTimer);
     _cooldownTimer = null;
   }
+  _clearDirectComposerState();
+  _clearListingComposerDraft();
 }
 
 // ─── Availability helpers (UI) ──────────────────────────────────────────────
@@ -955,6 +1121,7 @@ function _renderPlayerPicker(username, myGroup) {
 /**
  * S5c-D2: refresh target-picker options from trusted directory without full renderTrading.
  * Preserves card-pickers / offered card when selected target remains eligible.
+ * Active composer is not destroyed on temporary untrusted/empty directory flaps.
  * @param {string} username
  */
 function refreshTradePlayerPicker(username) {
@@ -966,10 +1133,19 @@ function refreshTradePlayerPicker(username) {
   const myGroup = me.groupId || me.group || null;
   if (!myGroup) return;
 
+  const composerActive = _isDirectTradeComposerActive();
+
+  // B) Temporary untrusted directory — do not wipe an active composer
   if (!_isTradeDirectoryTrusted()) {
+    if (composerActive) {
+      _setDirectPartnerInvalid(
+        'Player directory is temporarily unavailable. Your selection is kept — try Send again shortly, or leave and re-open Trading.',
+      );
+      _tradingUiDebug({ reason: 'directory-untrusted', action: 'preserve-composer', composerActive: true });
+      return;
+    }
     if (newSection.querySelector('[data-picker-state="unavailable"]')) return;
-    _selectedTarget = null;
-    _offeredCardId = null;
+    _clearDirectComposerState();
     newSection.innerHTML = _renderPlayerPickerUnavailable();
     return;
   }
@@ -981,25 +1157,56 @@ function refreshTradePlayerPicker(username) {
   const wasUnavailable = !!newSection.querySelector('[data-picker-state="unavailable"]');
   const wasEmpty = !!newSection.querySelector('[data-picker-state="empty"]');
 
+  // Empty peer list
+  if (peers.length === 0) {
+    if (composerActive && _selectedTarget) {
+      _setDirectPartnerInvalid('No eligible trade partners in your group right now. Your draft is kept.');
+      _tradingUiDebug({ reason: 'directory-empty', action: 'preserve-composer', composerActive: true });
+      return;
+    }
+    _clearDirectComposerState();
+    newSection.innerHTML = _renderPlayerPicker(username, myGroup);
+    return;
+  }
+
   // Structural rebuild when transitioning unavailable/empty ↔ ready
-  if (wasUnavailable || wasEmpty || !select || peers.length === 0) {
+  if (wasUnavailable || wasEmpty || !select) {
     const prevTarget = _selectedTarget;
     const keepTarget = prevTarget && eligibleKeys.has(prevTarget);
     const keepCardPickers = keepTarget && pickerArea && !pickerArea.classList.contains('hidden');
     const savedCardHtml = keepCardPickers ? pickerArea.innerHTML : null;
+    const savedOffered = _offeredCardId;
 
     newSection.innerHTML = _renderPlayerPicker(username, myGroup);
-
-    if (peers.length === 0) {
-      _selectedTarget = null;
-      _offeredCardId = null;
-      return;
-    }
 
     const newSelect = document.getElementById('trade-target-select');
     const newPickerArea = document.getElementById('trade-card-pickers');
     if (keepTarget && newSelect) {
       newSelect.value = prevTarget;
+      _selectedTarget = prevTarget;
+      _clearDirectPartnerInvalidBanner();
+      if (savedCardHtml && newPickerArea) {
+        newPickerArea.innerHTML = savedCardHtml;
+        newPickerArea.classList.remove('hidden');
+        _wirePickerFilterEvents(username);
+        _wireCardSelectionEvents(username);
+        if (savedOffered) {
+          const offeredSelect = document.getElementById('trade-offered-card');
+          if (offeredSelect && offeredSelect.querySelector(`option[value="${savedOffered}"]`)) {
+            offeredSelect.value = savedOffered;
+            _offeredCardId = savedOffered;
+            offeredSelect.dispatchEvent(new Event('change'));
+          }
+        }
+      }
+    } else if (prevTarget && !keepTarget && composerActive) {
+      // C) Trusted update: partner no longer eligible — keep shell, mark invalid
+      if (newSelect) {
+        newSelect.innerHTML = `<option value="">— Choose a player —</option>${
+          peers.map(({ key }) => `<option value="${key}">${key}</option>`).join('')
+        }<option value="${prevTarget}">${prevTarget} (unavailable)</option>`;
+        newSelect.value = prevTarget;
+      }
       _selectedTarget = prevTarget;
       if (savedCardHtml && newPickerArea) {
         newPickerArea.innerHTML = savedCardHtml;
@@ -1007,9 +1214,11 @@ function refreshTradePlayerPicker(username) {
         _wirePickerFilterEvents(username);
         _wireCardSelectionEvents(username);
       }
+      _setDirectPartnerInvalid(
+        `"${prevTarget}" is no longer available to trade. Choose another player or cancel.`,
+      );
     } else if (prevTarget && !keepTarget) {
-      _selectedTarget = null;
-      _offeredCardId = null;
+      _clearDirectComposerState();
     }
 
     // Re-wire target select only (hide-toggle / subtabs live outside #trade-new-section)
@@ -1017,13 +1226,17 @@ function refreshTradePlayerPicker(username) {
       newSelect.addEventListener('change', () => {
         _selectedTarget = newSelect.value || null;
         _offeredCardId = null;
+        _clearDirectPartnerInvalidBanner();
         const area = document.getElementById('trade-card-pickers');
         if (area) {
-          if (_selectedTarget) {
+          if (_selectedTarget && !String(_selectedTarget).includes('(unavailable)')) {
+            // strip unavailable option if user picks a real peer
             area.innerHTML = _renderCardPickers(username, _selectedTarget);
             area.classList.remove('hidden');
             _wirePickerFilterEvents(username);
             _wireCardSelectionEvents(username);
+          } else if (_selectedTarget) {
+            // still on unavailable sentinel — leave pickers
           } else {
             area.innerHTML = '';
             area.classList.add('hidden');
@@ -1044,16 +1257,22 @@ function refreshTradePlayerPicker(username) {
   if (previousValue && eligibleKeys.has(previousValue)) {
     select.value = previousValue;
     _selectedTarget = previousValue;
+    _clearDirectPartnerInvalidBanner();
     // Leave #trade-card-pickers and offered-card state untouched
-  } else {
+  } else if (previousValue && composerActive) {
+    // Keep selection visually; partner no longer eligible
+    select.innerHTML = `${optionsHtml}<option value="${previousValue}">${previousValue} (unavailable)</option>`;
+    select.value = previousValue;
+    _selectedTarget = previousValue;
+    _setDirectPartnerInvalid(
+      `"${previousValue}" is no longer available to trade. Choose another player or cancel.`,
+    );
+  } else if (_selectedTarget) {
     select.value = '';
-    if (_selectedTarget) {
-      _selectedTarget = null;
-      _offeredCardId = null;
-      if (pickerArea) {
-        pickerArea.innerHTML = '';
-        pickerArea.classList.add('hidden');
-      }
+    _clearDirectComposerState();
+    if (pickerArea) {
+      pickerArea.innerHTML = '';
+      pickerArea.classList.add('hidden');
     }
   }
 }
@@ -1172,6 +1391,7 @@ function _wireTradeEvents(username) {
     targetSelect.addEventListener('change', () => {
       _selectedTarget = targetSelect.value || null;
       _offeredCardId = null;
+      _clearDirectPartnerInvalidBanner();
       const pickerArea = document.getElementById('trade-card-pickers');
       if (pickerArea) {
         if (_selectedTarget) {
@@ -1550,15 +1770,19 @@ function _updateListingRequestedSection(offeredCardId, username) {
       if (createBtn) {
         if (count >= 1 && count <= 3) {
           createBtn.classList.remove('hidden');
+          _scrollTradingActionIntoView(createBtn);
         } else {
           createBtn.classList.add('hidden');
         }
       }
+      _syncListingDraftFromDom();
     });
   });
 
   if (countEl) countEl.textContent = '0 / 3 selected';
   if (createBtn) createBtn.classList.add('hidden');
+  _scrollTradingActionIntoView(section);
+  _syncListingDraftFromDom();
 }
 
 async function _handleCreateListing(username) {
@@ -1625,6 +1849,7 @@ async function _handleCreateListing(username) {
     const result = await createListing(username, offeredCardId, requestedCardIds);
     if (result.success) {
       toast.success('Listing posted!');
+      _clearListingComposerDraft();
     } else {
       const reason = result.reason || 'Unknown error';
       toast.error(_friendlyError(reason));
@@ -1740,6 +1965,9 @@ function _wireCardSelectionEvents(username) {
         newBtn.addEventListener('click', () => {
           _handleSendTrade(username);
         });
+        _scrollTradingActionIntoView(newBtn);
+      } else {
+        _scrollTradingActionIntoView(confirmSection);
       }
     }
   };
@@ -1753,6 +1981,11 @@ async function _handleSendTrade(username) {
     return;
   }
 
+  if (_directPartnerInvalidReason) {
+    toast.error(_directPartnerInvalidReason);
+    return;
+  }
+
   const offeredCard = cards.getCard(_offeredCardId);
   const sendSnapshot = buildTradingSelfAvailabilitySnapshot(username);
   if (_isSelfReservationUntrusted(sendSnapshot)) {
@@ -1761,6 +1994,10 @@ async function _handleSendTrade(username) {
         ? 'TRADE_RESERVATION_DATA_LOADING'
         : 'TRADE_RESERVATION_DATA_UNAVAILABLE',
     ));
+    return;
+  }
+  if (!canOfferCardInTrade(sendSnapshot, _offeredCardId)) {
+    toast.error(_friendlyError('INSUFFICIENT_AVAILABLE_COPIES'));
     return;
   }
   const isLast = isLastAvailableCopy(sendSnapshot, _offeredCardId);
@@ -1781,8 +2018,7 @@ async function _handleSendTrade(username) {
   const result = await createTradeOffer(username, _selectedTarget, _offeredCardId);
   if (result.success) {
     toast.success(`Offer sent to ${_selectedTarget}.`);
-    _selectedTarget = null;
-    _offeredCardId = null;
+    _clearDirectComposerState();
   } else {
     toast.error(_friendlyError(result.reason));
   }
@@ -2047,10 +2283,8 @@ export function refreshAvailableListingsSection(username) {
  * Replaces #my-listings-section innerHTML.
  * Does NOT touch the available listings section or the direct trade form.
  *
- * IMPORTANT: Only call this when the user is NOT actively filling the create-listing form.
- * The create-listing form is rebuilt as part of this section, so any in-progress
- * selection in the form would be lost. This helper is only used by the passive
- * reactive ticker when the listing create form is not visible (i.e. user is at max listings).
+ * When the listing create composer is active, selections are snapshotted and
+ * restored after rebuild so passive index updates do not erase in-progress work.
  */
 export function refreshMyListingsSection(username) {
   if (!username) {
@@ -2061,6 +2295,23 @@ export function refreshMyListingsSection(username) {
 
   const section = document.getElementById('my-listings-section');
   if (!section) return;
+
+  const composerActive = _isListingComposerActive();
+  const draftSnapshot = composerActive
+    ? {
+        offeredCardId: _listingComposerDraft.offeredCardId,
+        requestedCardIds: [..._listingComposerDraft.requestedCardIds],
+        filters: { ..._tradeFilters },
+      }
+    : null;
+
+  if (composerActive) {
+    _tradingUiDebug({
+      reason: 'my-listings-refresh',
+      action: 'rebuild-with-restore',
+      composerActive: true,
+    });
+  }
 
   const { listings: ownedListings, source: myListingsSource, trusted: myListingsTrusted } =
     getMyActiveListings(username);
@@ -2113,6 +2364,7 @@ export function refreshMyListingsSection(username) {
   if (offeredSelect) {
     offeredSelect.addEventListener('change', () => {
       _updateListingRequestedSection(offeredSelect.value, username);
+      _syncListingDraftFromDom();
     });
   }
   const createBtn = section.querySelector('#listing-create-btn');
@@ -2124,6 +2376,70 @@ export function refreshMyListingsSection(username) {
 
   // Re-wire listing filter bar (rendered as part of the create form)
   _wireListingFilterEvents(username);
+
+  if (draftSnapshot) {
+    _restoreListingComposerAfterRefresh(username, draftSnapshot);
+  }
+}
+
+/**
+ * Restore listing create selections after a My Listings section rebuild.
+ * @param {string} username
+ * @param {{ offeredCardId: string, requestedCardIds: string[], filters: object }} snap
+ */
+function _restoreListingComposerAfterRefresh(username, snap) {
+  if (!snap) return;
+  Object.assign(_tradeFilters, snap.filters || {});
+
+  const searchEl = document.getElementById('listing-filter-search');
+  const typeEl = document.getElementById('listing-filter-type');
+  const rarityEl = document.getElementById('listing-filter-rarity');
+  const sortEl = document.getElementById('listing-filter-sort');
+  const dupesEl = document.getElementById('listing-filter-dupes');
+  if (searchEl) searchEl.value = _tradeFilters.search || '';
+  if (typeEl) typeEl.value = _tradeFilters.type || '';
+  if (rarityEl) rarityEl.value = _tradeFilters.rarity || '';
+  if (sortEl) sortEl.value = _tradeFilters.sort || 'default';
+  if (dupesEl) dupesEl.checked = !!_tradeFilters.dupeOnly;
+
+  // Re-apply filters to rebuild offered options, then restore offered + requested
+  const filterEvent = new Event('change');
+  if (typeEl) typeEl.dispatchEvent(filterEvent);
+  else if (rarityEl) rarityEl.dispatchEvent(filterEvent);
+
+  const offeredSelect = document.getElementById('listing-offered-card');
+  if (!offeredSelect || !snap.offeredCardId) {
+    _listingComposerDraft = {
+      offeredCardId: snap.offeredCardId || '',
+      requestedCardIds: [...(snap.requestedCardIds || [])],
+    };
+    return;
+  }
+
+  if (offeredSelect.querySelector(`option[value="${snap.offeredCardId}"]`)) {
+    offeredSelect.value = snap.offeredCardId;
+    _updateListingRequestedSection(snap.offeredCardId, username);
+    const want = new Set(snap.requestedCardIds || []);
+    document.querySelectorAll('#listing-requested-checkboxes .listing-req-checkbox').forEach((cb) => {
+      cb.checked = want.has(cb.value);
+    });
+    // Re-run count / Post visibility
+    document.querySelector('#listing-requested-checkboxes')
+      ?.dispatchEvent(new Event('change', { bubbles: true }));
+    // Manually sync count if checkbox change handler needs click on each
+    const checked = document.querySelectorAll('#listing-requested-checkboxes .listing-req-checkbox:checked');
+    const countEl = document.getElementById('listing-requested-count');
+    if (countEl) countEl.textContent = `${checked.length} / 3 selected`;
+    const createBtn = document.getElementById('listing-create-btn');
+    if (createBtn && checked.length >= 1 && checked.length <= 3) {
+      createBtn.classList.remove('hidden');
+    }
+  } else {
+    // Offered card no longer in pool — keep form visible; leave empty for validation
+    offeredSelect.value = '';
+    toast.info('Your previously selected listing card is no longer available to offer.');
+  }
+  _syncListingDraftFromDom();
 }
 
 /**
@@ -2166,7 +2482,8 @@ function _hashArray(arr) {
 /**
  * S5c-D5b: sync Trading-owned listingsByGroup scope to current player group.
  * At most one switch in flight (hydration coalesces duplicate ensures).
- * On confirmed group change: clear group-dependent form state and full renderTrading.
+ * Full renderTrading + composer clear ONLY on true group change / group-null —
+ * never merely because ensure() returned ok on the same group.
  * @param {string} username
  * @returns {Promise<boolean>} true if a group-change rerender was performed
  */
@@ -2195,10 +2512,16 @@ async function _syncTradingGroupListingsScope(username) {
     if (!myGroup) {
       releaseGroupListingsScope();
       if (switchGen !== _tradingTabGeneration) return false;
-      _selectedTarget = null;
-      _offeredCardId = null;
-      renderTrading();
-      return true;
+      const decision = decideGroupListingsScopeUiAction({ previousGroup, myGroup: null });
+      _tradingUiDebug({
+        reason: 'group-scope-sync',
+        action: decision.fullRender ? 'full-render' : 'skip',
+        decision: decision.reason,
+        composerActive: _isDirectTradeComposerActive(),
+      });
+      if (decision.clearComposer) _clearDirectComposerState();
+      if (decision.fullRender) renderTrading();
+      return decision.fullRender;
     }
 
     const result = await ensureGroupListingsScope(myGroup);
@@ -2210,17 +2533,29 @@ async function _syncTradingGroupListingsScope(username) {
     if (g2 !== myGroup) return false;
     if (result.cancelled) return false;
 
-    // Confirmed desired group — reset group-dependent forms and full-rerender
-    if (previousGroup !== myGroup || result.ok) {
-      _selectedTarget = null;
-      _offeredCardId = null;
+    const decision = decideGroupListingsScopeUiAction({ previousGroup, myGroup });
+    _tradingUiDebug({
+      reason: 'group-scope-sync',
+      action: decision.fullRender ? 'full-render' : 'sectional-refresh',
+      decision: decision.reason,
+      resultOk: result.ok === true,
+      composerActive: _isDirectTradeComposerActive(),
+    });
+
+    if (decision.fullRender) {
+      if (decision.clearComposer) _clearDirectComposerState();
       renderTrading();
       return true;
     }
+
+    // Same-group re-ensure: refresh passive Available listings only — never wipe composers
+    if (result.ok) {
+      refreshAvailableListingsSection(username);
+    }
+    return false;
   } finally {
     _groupListingsSwitchPending = false;
   }
-  return false;
 }
 
 function _startCooldownTimer(username) {
@@ -2233,8 +2568,7 @@ function _startCooldownTimer(username) {
     _reactiveTickCounter++;
     if (_reactiveTickCounter % 5 !== 0) return;
 
-    const listingOfferedSelect = document.getElementById('listing-offered-card');
-    const userFillingListingForm = listingOfferedSelect && listingOfferedSelect.value !== '';
+    const userFillingListingForm = _isListingComposerActive();
     // Preserve B's return-card form: skip incoming refresh while a return select has focus/value mid-edit
     // (we still refresh but restore selection via _returnCardSelections)
 
@@ -2309,22 +2643,28 @@ function _startCooldownTimer(username) {
           }
         }
 
-        if (!userFillingListingForm) {
-          const mySection = document.getElementById('my-listings-section');
-          if (mySection) {
-            const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
-            if (!myTrusted) {
-              const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
-              if (untrustedHash !== _lastMyListingsHash) {
-                _lastMyListingsHash = untrustedHash;
-                refreshMyListingsSection(username);
+        // My Listings may refresh while create form is active — restore draft after rebuild
+        const mySection = document.getElementById('my-listings-section');
+        if (mySection) {
+          const { listings: owned, source: mySource, trusted: myTrusted } = getMyActiveListings(username);
+          if (!myTrusted) {
+            const untrustedHash = `__untrusted__:${mySource || 'unavailable'}`;
+            if (untrustedHash !== _lastMyListingsHash) {
+              _lastMyListingsHash = untrustedHash;
+              refreshMyListingsSection(username);
+            }
+          } else {
+            const newHash = _hashArray(owned);
+            if (newHash !== _lastMyListingsHash) {
+              _lastMyListingsHash = newHash;
+              if (userFillingListingForm) {
+                _tradingUiDebug({
+                  reason: 'my-listings-hash-change',
+                  action: 'refresh-with-composer-restore',
+                  composerActive: true,
+                });
               }
-            } else {
-              const newHash = _hashArray(owned);
-              if (newHash !== _lastMyListingsHash) {
-                _lastMyListingsHash = newHash;
-                refreshMyListingsSection(username);
-              }
+              refreshMyListingsSection(username);
             }
           }
         }
@@ -2333,9 +2673,8 @@ function _startCooldownTimer(username) {
       const cooldownNow = getListingCooldown(username).onCooldown;
       if (cooldownNow !== _lastListingCooldownState) {
         _lastListingCooldownState = cooldownNow;
-        if (!userFillingListingForm) {
-          refreshMyListingsSection(username);
-        }
+        // Cooldown transition may replace create form with cooldown message — still restore if possible
+        refreshMyListingsSection(username);
       }
     });
   }, 1000);
