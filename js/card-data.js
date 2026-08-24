@@ -135,9 +135,9 @@ export const BASE_CARD_DEFINITIONS = Object.freeze(
     "field": "Astronomy & Science Communication",
     "effect": "Induction Field",
     "image": "",
-    "flavor": "Carl Sagan inspired millions through science communication and helped popularize humanity’s exploration of the cosmos.",
+    "flavor": "Carl Sagan inspired millions through science communication and helped popularize humanity’s cosmic exploration.",
     "imageUrl": "",
-    "keyFact": "Carl Sagan inspired millions through science communication and helped popularize humanity’s exploration of the cosmos.",
+    "keyFact": "Carl Sagan inspired millions through science communication and helped popularize humanity’s cosmic exploration.",
     "enabled": true
   },
   {
@@ -1561,9 +1561,9 @@ export const BASE_CARD_DEFINITIONS = Object.freeze(
     "field": "Cosmology",
     "effect": "",
     "image": "",
-    "flavor": "Georges Lemaître proposed that the universe began from a tiny, dense state and later expanded, helping lay the foundation for modern Big Bang theory.",
+    "flavor": "Lemaître proposed that the universe began from a tiny, dense state and later expanded, helping lay the foundation for modern Big Bang theory.",
     "imageUrl": "",
-    "keyFact": "Georges Lemaître proposed that the universe began from a tiny, dense state and later expanded, helping lay the foundation for modern Big Bang theory.",
+    "keyFact": "Lemaître proposed that the universe began from a tiny, dense state and later expanded, helping lay the foundation for modern Big Bang theory.",
     "enabled": true
   },
   {
