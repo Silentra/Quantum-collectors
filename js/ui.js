@@ -8,6 +8,12 @@ import * as auth from './auth.js';
 import { resetPlayerPassword, isFirebaseAuthEnabled } from './auth.js';
 import * as player from './player.js';
 import * as cards from './cards.js';
+import {
+  buildCardFirebaseConversionPlan,
+  downloadRawCardsPreMigrationBackup,
+  formatCardConversionPlanSummary,
+  CARD_PRE_MIGRATION_BACKUP_FILENAME,
+} from './card-migration.js';
 import { initCardDetailModal, openCardDetailModal } from './card-detail-modal.js';
 import { initCosmeticPreviewModal } from './cosmetic-preview-modal.js';
 import {
@@ -1613,6 +1619,87 @@ async function handleAdminCardCatalogExport() {
   }
 }
 
+/** @type {{ snapshot: object, plan: object }|null} */
+let _d3CardConversionPreviewState = null;
+
+/**
+ * Batch D3 — Admin-only Firebase /cards conversion preview + raw backup (ZERO writes).
+ */
+async function handleAdminCardConversionPreview() {
+  if (!auth.isAdmin()) {
+    toast.error('Admin only.');
+    return;
+  }
+
+  const previewBtn = document.getElementById('btn-preview-card-conversion');
+  if (previewBtn) previewBtn.disabled = true;
+
+  try {
+    const gather = await cards.gatherAuthoritativeCardsForExport();
+    if (!gather.ok) {
+      toast.error(`Card conversion preview failed: ${gather.error || 'authoritative read unavailable'}`);
+      console.warn('[D3 Preview]', gather);
+      return;
+    }
+
+    const plan = buildCardFirebaseConversionPlan({
+      baseCards: cards.BASE_CARD_DEFINITIONS,
+      firebaseSnapshot: gather.snapshot,
+    });
+
+    _d3CardConversionPreviewState = {
+      snapshot: gather.snapshot,
+      plan,
+    };
+
+    const body = document.getElementById('card-conversion-preview-body');
+    const banner = document.getElementById('card-conversion-preview-banner');
+    if (banner) banner.textContent = plan.message;
+    if (body) body.textContent = formatCardConversionPlanSummary(plan);
+
+    document.getElementById('card-conversion-preview-modal')?.classList.remove('hidden');
+
+    toast.info(
+      plan.readyForD4
+        ? `Preview ready — ${plan.firebaseCount} Firebase records. Download backup before any D4.`
+        : `Preview ready — review issues (readyForD4=${plan.readyForD4}).`,
+    );
+    console.info('[D3 Preview]', plan);
+  } catch (err) {
+    toast.error('Card conversion preview failed unexpectedly.');
+    console.error('[D3 Preview]', err);
+  } finally {
+    if (previewBtn) previewBtn.disabled = false;
+  }
+}
+
+function closeCardConversionPreviewModal() {
+  document.getElementById('card-conversion-preview-modal')?.classList.add('hidden');
+}
+
+function downloadCardConversionPreviewBackup() {
+  if (!_d3CardConversionPreviewState?.snapshot) {
+    toast.error('No preview snapshot — run Preview first.');
+    return;
+  }
+  try {
+    downloadRawCardsPreMigrationBackup(_d3CardConversionPreviewState.snapshot);
+    toast.success(`Downloaded ${CARD_PRE_MIGRATION_BACKUP_FILENAME}`);
+    console.info('[D3 Backup] downloaded', CARD_PRE_MIGRATION_BACKUP_FILENAME, {
+      keys: Object.keys(_d3CardConversionPreviewState.snapshot).length,
+    });
+  } catch (err) {
+    toast.error('Backup download failed.');
+    console.error('[D3 Backup]', err);
+  }
+}
+
+function setupCardConversionPreviewModal() {
+  document.getElementById('btn-close-card-conversion-preview')?.addEventListener('click', closeCardConversionPreviewModal);
+  document.getElementById('btn-dismiss-card-conversion-preview')?.addEventListener('click', closeCardConversionPreviewModal);
+  document.getElementById('btn-download-cards-pre-migration-backup')?.addEventListener('click', downloadCardConversionPreviewBackup);
+}
+
 function renderAdminCards() {
   const allCards = cards.getAllCards();
   document.getElementById('card-count').textContent = allCards.length;
@@ -1707,6 +1794,12 @@ function renderAdminCards() {
   const exportBtn = document.getElementById('btn-export-card-data');
   if (exportBtn) {
     exportBtn.onclick = () => { void handleAdminCardCatalogExport(); };
+  }
+
+  // Batch D3 — temporary read-only conversion preview (no D4 execute)
+  const previewConversionBtn = document.getElementById('btn-preview-card-conversion');
+  if (previewConversionBtn) {
+    previewConversionBtn.onclick = () => { void handleAdminCardConversionPreview(); };
   }
 
   // Wire up type dropdown to show/hide conceptType in create form
@@ -3439,6 +3532,7 @@ export function init() {
 
   // Edit Card modal wiring
   setupEditCardModal();
+  setupCardConversionPreviewModal();
 
   // Edit Pack modal wiring
   setupEditPackModal();

@@ -582,6 +582,7 @@ API:
   qcPersonalAudit.workflowOptionCa() // Option C-a authDirectory foundation
   qcPersonalAudit.workflowOptionCb() // Option C-b identity rotation + delete
   qcPersonalAudit.workflowBatchCShopFreeze() // Batch C shop freeze / undo / reroll status
+  qcPersonalAudit.workflowBatchD3() // Batch D3 card conversion preview + raw backup (no D4)
 
 Never logs values/passwords/sessions/inventories. Root listener unchanged in historical S4 notes.
 S8a is docs-only — no Auth / no authz rule deploy.
@@ -2538,6 +2539,41 @@ PHASE D — REROLL UI
 }
 
 /**
+ * Batch D3 — Firebase /cards conversion preview + raw backup (ZERO writes).
+ * Does NOT run D4. Does not modify Firebase.
+ */
+export function workflowBatchD3() {
+  console.info(`
+=== Batch D3 — Card conversion preview + raw Firebase backup ===
+
+Status: IMPLEMENTED — awaiting live preview.
+ZERO Firebase writes. D4 NOT implemented in this build.
+
+Unit: node scripts/batch-d3-card-migration-preview.test.mjs
+
+--- Live workflow ---
+1. Deploy / hard refresh Admin
+2. Admin → Cards
+3. Click "Preview Firebase Card Conversion"
+4. Review counts (bundled 125; Firebase ~124 if Acceleration absent)
+5. Confirm Acceleration (card_mpouka18pbhk) is NOT scheduled for delete/override
+6. Click "Download Backup" → save quantum-collectors-cards-pre-migration-backup.json
+7. Confirm banner: "This is a preview only. Firebase cards have not been changed."
+8. Optionally verify Firebase /cards child count unchanged
+9. Send preview summary for review
+
+*** STOP — DO NOT RUN D4. ***
+
+D4 (future): re-gather /cards, rebuild fresh plan, validate readyForD4, THEN commit.
+Never commit a stale D3 preview plan (Admin may have edited cards).
+
+Rollback artifacts:
+- D1: quantum-collectors-card-data.json (normalized base)
+- D3: quantum-collectors-cards-pre-migration-backup.json (raw Firebase /cards)
+`);
+}
+
+/**
  * Pasteable S8b+ P0 Trusted Teacher Functions foundation status.
  * No password reset / delete / promote. No S8c rules.
  */
@@ -2729,6 +2765,7 @@ function _installWindowApi() {
     workflowOptionCa,
     workflowOptionCb,
     workflowBatchCShopFreeze,
+    workflowBatchD3,
     enableAudit,
     disableAudit,
     enableIsolation,
