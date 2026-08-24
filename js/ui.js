@@ -91,6 +91,10 @@ import {
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
 import { getEquippedAura, getEquippedShimmer, initFeaturedCardPicker, renderProfile } from './profile-ui.js';
 import { renderShop, cleanupShop } from './shop-ui.js';
+import { confirmAction } from './confirm-modal.js';
+
+// Shared #confirm-modal — re-export for existing importers (project-ui, etc.)
+export { confirmAction } from './confirm-modal.js';
 
 // ===================== ADMIN TELEMETRY HELPER =====================
 
@@ -103,36 +107,6 @@ function _isPersistentAdmin() {
   const s = auth.getSession();
   return s && s.isAdmin === true && s.username !== '__admin__';
 }
-
-// ===================== CONFIRM MODAL =====================
-
-/**
- * Show a confirmation modal before a destructive action.
- * Returns a Promise that resolves to true (confirm) or false (cancel).
- */
-export function confirmAction(message, title = 'Are you sure?') {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('confirm-modal');
-    document.getElementById('confirm-title').textContent = title;
-    document.getElementById('confirm-message').textContent = message;
-    modal.classList.remove('hidden');
-
-    const okBtn = document.getElementById('btn-confirm-ok');
-    const cancelBtn = document.getElementById('btn-confirm-cancel');
-
-    function cleanup() {
-      modal.classList.add('hidden');
-      okBtn.removeEventListener('click', onOk);
-      cancelBtn.removeEventListener('click', onCancel);
-    }
-    function onOk() { cleanup(); resolve(true); }
-    function onCancel() { cleanup(); resolve(false); }
-
-    okBtn.addEventListener('click', onOk);
-    cancelBtn.addEventListener('click', onCancel);
-  });
-}
-
 // ===================== SCREEN MANAGEMENT =====================
 
 export function showScreen(screenId) {
@@ -1357,12 +1331,15 @@ async function showPlayerDetail(username) {
 
   // Delete player — DESTRUCTIVE (requires confirmation); clears directory + authDirectory
   content.querySelector('#pd-delete-player').addEventListener('click', async () => {
-    const confirmed = await confirmAction(
-      `This will permanently delete "${username}" and all their game data. `
-      + 'Deleted usernames may require administrator cleanup before being reused. '
-      + 'This cannot be undone.',
-      `Delete player "${username}"?`
-    );
+    const confirmed = await confirmAction({
+      title: `Delete player "${username}"?`,
+      message:
+        `This will permanently delete "${username}" and all their game data. `
+        + 'Deleted usernames may require administrator cleanup before being reused. '
+        + 'This cannot be undone.',
+      confirmText: '🗑 Delete Permanently',
+      destructive: true,
+    });
     if (!confirmed) return;
     const result = await player.deletePlayer(username);
     if (!result.ok) {
@@ -1396,10 +1373,12 @@ async function showPlayerDetail(username) {
   const promoteBtn = content.querySelector('#pd-promote-admin');
   if (promoteBtn) {
     promoteBtn.addEventListener('click', async () => {
-      const confirmed = await confirmAction(
-        `Grant admin access to "${username}"? They will have full admin panel access.`,
-        'Promote to admin?'
-      );
+      const confirmed = await confirmAction({
+        title: 'Promote to admin?',
+        message: `Grant admin access to "${username}"? They will have full admin panel access.`,
+        confirmText: 'Promote to Admin',
+        destructive: false,
+      });
       if (!confirmed) return;
       const playerKey = resolvePlayerDirectoryKey(username);
       const playerData = player.getPlayer(playerKey) || {};
@@ -1432,10 +1411,12 @@ async function showPlayerDetail(username) {
   const removeAdminBtn = content.querySelector('#pd-remove-admin');
   if (removeAdminBtn) {
     removeAdminBtn.addEventListener('click', async () => {
-      const confirmed = await confirmAction(
-        `Remove admin access from "${username}"? They will lose all admin panel access.`,
-        'Remove admin access?'
-      );
+      const confirmed = await confirmAction({
+        title: 'Remove admin access?',
+        message: `Remove admin access from "${username}"? They will lose all admin panel access.`,
+        confirmText: 'Remove Admin',
+        destructive: true,
+      });
       if (!confirmed) return;
       const playerKey = resolvePlayerDirectoryKey(username);
       const playerData = player.getPlayer(playerKey) || {};

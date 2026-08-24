@@ -20,6 +20,7 @@
 import * as auth from './auth.js';
 import * as toast from './toast.js';
 import * as groups from './groups.js';
+import { confirmAction } from './confirm-modal.js';
 import {
   getActiveSeason,
   getAllSeasons,
@@ -617,80 +618,27 @@ function _doSaveVisibility(list, seasonId) {
  * @returns {Promise<boolean>}
  */
 function _confirmLeaderboardRebuild(message, title = 'Are you sure?') {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('confirm-modal');
-    const titleEl = document.getElementById('confirm-title');
-    const msgEl = document.getElementById('confirm-message');
-    const okBtn = document.getElementById('btn-confirm-ok');
-    const cancelBtn = document.getElementById('btn-confirm-cancel');
-
-    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-      toast.error('Confirmation modal not available. Rebuild aborted.');
-      resolve(false);
-      return;
-    }
-
-    titleEl.textContent = title;
-    msgEl.textContent = message;
-    okBtn.className = 'flex-1 bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm';
-    okBtn.textContent = 'Confirm Rebuild';
-
-    const newOk = okBtn.cloneNode(true);
-    const newCancel = cancelBtn.cloneNode(true);
-    okBtn.parentNode.replaceChild(newOk, okBtn);
-    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-
-    const closeModal = () => modal.classList.add('hidden');
-
-    newOk.addEventListener('click', () => {
-      closeModal();
-      resolve(true);
-    });
-    newCancel.addEventListener('click', () => {
-      closeModal();
-      resolve(false);
-    });
-
-    modal.classList.remove('hidden');
+  return confirmAction({
+    title,
+    message,
+    confirmText: 'Confirm Rebuild',
+    destructive: false,
   });
 }
 
 // ─── Delete archive ────────────────────────────────────────────────────────
 
-function _confirmDeleteArchive(seasonId, seasonName) {
-  const modal     = document.getElementById('confirm-modal');
-  const titleEl   = document.getElementById('confirm-title');
-  const msgEl     = document.getElementById('confirm-message');
-  const okBtn     = document.getElementById('btn-confirm-ok');
-  const cancelBtn = document.getElementById('btn-confirm-cancel');
-
-  if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-    // No modal available — skip (don't delete without confirmation)
-    toast.error('Confirmation modal not available. Deletion aborted.');
-    return;
-  }
-
-  titleEl.textContent = 'Delete Archived Season?';
-  msgEl.textContent   = `"${seasonName}" will be permanently removed. Leaderboard snapshots will be lost. Player stats and lifetime RP are unaffected. This cannot be undone.`;
-
-  okBtn.className     = 'flex-1 bg-red-700 hover:bg-red-600 py-3 rounded-lg font-semibold transition text-sm';
-  okBtn.textContent   = '🗑 Delete Permanently';
-
-  // Clone to remove old listeners
-  const newOk     = okBtn.cloneNode(true);
-  const newCancel = cancelBtn.cloneNode(true);
-  okBtn.parentNode.replaceChild(newOk, okBtn);
-  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-
-  const closeModal = () => modal.classList.add('hidden');
-
-  newOk.addEventListener('click', () => {
-    closeModal();
-    _doDeleteArchive(seasonId, seasonName);
+async function _confirmDeleteArchive(seasonId, seasonName) {
+  const confirmed = await confirmAction({
+    title: 'Delete Archived Season?',
+    message:
+      `"${seasonName}" will be permanently removed. Leaderboard snapshots will be lost. `
+      + 'Player stats and lifetime RP are unaffected. This cannot be undone.',
+    confirmText: '🗑 Delete Permanently',
+    destructive: true,
   });
-  newCancel.addEventListener('click', closeModal);
-
-  modal.classList.remove('hidden');
+  if (!confirmed) return;
+  _doDeleteArchive(seasonId, seasonName);
 }
 
 function _doDeleteArchive(seasonId, seasonName) {
@@ -710,26 +658,15 @@ function _doDeleteArchive(seasonId, seasonName) {
  * @returns {Promise<boolean>}
  */
 function _confirmStartSeasonPreview(prepared) {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('confirm-modal');
-    const titleEl   = document.getElementById('confirm-title');
-    const msgEl     = document.getElementById('confirm-message');
-    const okBtn     = document.getElementById('btn-confirm-ok');
-    const cancelBtn = document.getElementById('btn-confirm-cancel');
+  const n = prepared.playersScanned;
+  const cur = prepared.currentSeasonName
+    ? `${prepared.currentSeasonName} (${prepared.currentSeasonId})`
+    : '(none)';
+  const next = prepared.proposedNewSeasonName;
 
-    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-      resolve(true);
-      return;
-    }
-
-    const n = prepared.playersScanned;
-    const cur = prepared.currentSeasonName
-      ? `${prepared.currentSeasonName} (${prepared.currentSeasonId})`
-      : '(none)';
-    const next = prepared.proposedNewSeasonName;
-
-    titleEl.textContent = 'Start New Season?';
-    msgEl.textContent = [
+  return confirmAction({
+    title: 'Start New Season?',
+    message: [
       `Players included: ${n}`,
       `Current season: ${cur}`,
       `New season: ${next}`,
@@ -739,28 +676,10 @@ function _confirmStartSeasonPreview(prepared) {
       '',
       'Confirm refreshes current values from Firebase before writing.',
       'This cannot be undone from the game.',
-    ].join('\n');
-
-    okBtn.className = 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm';
-    okBtn.textContent = 'Start Season';
-
-    const newOk = okBtn.cloneNode(true);
-    okBtn.parentNode.replaceChild(newOk, okBtn);
-    const newCancel = cancelBtn.cloneNode(true);
-    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-
-    const closeModal = () => modal.classList.add('hidden');
-
-    newOk.addEventListener('click', () => {
-      closeModal();
-      resolve(true);
-    });
-    newCancel.addEventListener('click', () => {
-      closeModal();
-      resolve(false);
-    });
-
-    modal.classList.remove('hidden');
+    ].join('\n'),
+    confirmText: 'Start Season',
+    destructive: false,
+    okButtonClass: 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm',
   });
 }
 
@@ -1047,25 +966,14 @@ function _wireSnapshotEvents(panel) {
  * @returns {Promise<boolean>}
  */
 function _confirmCreateSnapshotPreview(prepared) {
-  return new Promise((resolve) => {
-    const modal = document.getElementById('confirm-modal');
-    const titleEl = document.getElementById('confirm-title');
-    const msgEl = document.getElementById('confirm-message');
-    const okBtn = document.getElementById('btn-confirm-ok');
-    const cancelBtn = document.getElementById('btn-confirm-cancel');
+  const catLabel = SNAPSHOT_STAT_LABELS[prepared.category] ?? prepared.category;
+  const n = prepared.playersScanned;
+  const resetAfter = prepared.resetAfter === true;
 
-    if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-      resolve(true);
-      return;
-    }
-
-    const catLabel = SNAPSHOT_STAT_LABELS[prepared.category] ?? prepared.category;
-    const n = prepared.playersScanned;
-    const resetAfter = prepared.resetAfter === true;
-
-    titleEl.textContent = resetAfter ? 'Snapshot & Reset?' : 'Create Snapshot?';
-    if (resetAfter) {
-      msgEl.textContent = [
+  if (resetAfter) {
+    return confirmAction({
+      title: 'Snapshot & Reset?',
+      message: [
         `Category: ${catLabel}`,
         `Players included: ${n}`,
         'Reset afterward: YES',
@@ -1073,31 +981,24 @@ function _confirmCreateSnapshotPreview(prepared) {
         'Current values will be saved, then this stat will be reset for all players.',
         '',
         'Confirm refreshes Firebase first.',
-      ].join('\n');
-      okBtn.className = 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm';
-      okBtn.textContent = 'Snapshot & Reset';
-    } else {
-      msgEl.textContent = [
-        `Category: ${catLabel}`,
-        `Players included: ${n}`,
-        'Reset afterward: No',
-        '',
-        'Confirm refreshes Firebase first.',
-      ].join('\n');
-      okBtn.className = 'flex-1 bg-primary-600 hover:bg-primary-500 py-3 rounded-lg font-semibold transition text-sm';
-      okBtn.textContent = 'Create Snapshot';
-    }
+      ].join('\n'),
+      confirmText: 'Snapshot & Reset',
+      destructive: false,
+      okButtonClass: 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm',
+    });
+  }
 
-    const newOk = okBtn.cloneNode(true);
-    const newCancel = cancelBtn.cloneNode(true);
-    okBtn.parentNode.replaceChild(newOk, okBtn);
-    cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-
-    const closeModal = () => modal.classList.add('hidden');
-    newOk.addEventListener('click', () => { closeModal(); resolve(true); });
-    newCancel.addEventListener('click', () => { closeModal(); resolve(false); });
-
-    modal.classList.remove('hidden');
+  return confirmAction({
+    title: 'Create Snapshot?',
+    message: [
+      `Category: ${catLabel}`,
+      `Players included: ${n}`,
+      'Reset afterward: No',
+      '',
+      'Confirm refreshes Firebase first.',
+    ].join('\n'),
+    confirmText: 'Create Snapshot',
+    destructive: false,
   });
 }
 
@@ -1111,34 +1012,17 @@ function _doSnapshotHide(snapId, hide) {
   }
 }
 
-function _confirmDeleteSnapshot(snapId, snapTitle) {
-  const modal     = document.getElementById('confirm-modal');
-  const titleEl   = document.getElementById('confirm-title');
-  const msgEl     = document.getElementById('confirm-message');
-  const okBtn     = document.getElementById('btn-confirm-ok');
-  const cancelBtn = document.getElementById('btn-confirm-cancel');
-
-  if (!modal || !titleEl || !msgEl || !okBtn || !cancelBtn) {
-    toast.error('Confirmation modal not available. Deletion aborted.');
-    return;
-  }
-
-  titleEl.textContent = 'Delete Snapshot?';
-  msgEl.textContent   = `"${snapTitle}" will be permanently removed. Player stats and lifetime RP are unaffected. This cannot be undone.`;
-
-  okBtn.className   = 'flex-1 bg-red-700 hover:bg-red-600 py-3 rounded-lg font-semibold transition text-sm';
-  okBtn.textContent = '🗑 Delete Permanently';
-
-  const newOk     = okBtn.cloneNode(true);
-  const newCancel = cancelBtn.cloneNode(true);
-  okBtn.parentNode.replaceChild(newOk, okBtn);
-  cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-
-  const closeModal = () => modal.classList.add('hidden');
-  newOk.addEventListener('click', () => { closeModal(); _doDeleteSnapshot(snapId, snapTitle); });
-  newCancel.addEventListener('click', closeModal);
-
-  modal.classList.remove('hidden');
+async function _confirmDeleteSnapshot(snapId, snapTitle) {
+  const confirmed = await confirmAction({
+    title: 'Delete Snapshot?',
+    message:
+      `"${snapTitle}" will be permanently removed. Player stats and lifetime RP are unaffected. `
+      + 'This cannot be undone.',
+    confirmText: '🗑 Delete Permanently',
+    destructive: true,
+  });
+  if (!confirmed) return;
+  _doDeleteSnapshot(snapId, snapTitle);
 }
 
 function _doDeleteSnapshot(snapId, snapTitle) {

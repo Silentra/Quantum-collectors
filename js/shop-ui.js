@@ -22,6 +22,7 @@ import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { getEquippedAura, getEquippedShimmer } from './profile-ui.js';
 import { openCardDetailModal } from './card-detail-modal.js';
 import { openCosmeticPreviewModal } from './cosmetic-preview-modal.js';
+import { confirmAction } from './confirm-modal.js';
 import { buildShopCatalog, parseShopItemId } from './shop-catalog.js';
 import { getShopConfig, getShopItemDefinitions, formatBuiltInRerollStatus } from './shop-config.js';
 import {
@@ -702,33 +703,11 @@ function handleConsumableSelection(username, itemId) {
 }
 
 function confirmShopAction(message, title = 'Confirm Action') {
-  return new Promise(resolve => {
-    const modal = document.getElementById('confirm-modal');
-    const titleEl = document.getElementById('confirm-title');
-    const messageEl = document.getElementById('confirm-message');
-    const okBtn = document.getElementById('btn-confirm-ok');
-    const cancelBtn = document.getElementById('btn-confirm-cancel');
-
-    if (!modal || !titleEl || !messageEl || !okBtn || !cancelBtn) {
-      resolve(false);
-      return;
-    }
-
-    titleEl.textContent = title;
-    messageEl.textContent = message;
-    modal.classList.remove('hidden');
-
-    function cleanup(result) {
-      modal.classList.add('hidden');
-      okBtn.removeEventListener('click', onOk);
-      cancelBtn.removeEventListener('click', onCancel);
-      resolve(result);
-    }
-    function onOk() { cleanup(true); }
-    function onCancel() { cleanup(false); }
-
-    okBtn.addEventListener('click', onOk);
-    cancelBtn.addEventListener('click', onCancel);
+  return confirmAction({
+    title,
+    message,
+    confirmText: 'Confirm',
+    destructive: false,
   });
 }
 

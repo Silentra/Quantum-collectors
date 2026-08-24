@@ -22,6 +22,7 @@ import {
   listCosmeticDefinitions,
 } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
+import { confirmAction } from './confirm-modal.js';
 
 let editingId = null;
 
@@ -59,29 +60,11 @@ function statLabel(key) {
 }
 
 function confirmDialog(message, title = 'Confirm') {
-  return new Promise(resolve => {
-    const modal = document.getElementById('confirm-modal');
-    if (!modal) {
-      resolve(window.confirm(message));
-      return;
-    }
-    document.getElementById('confirm-title').textContent = title;
-    document.getElementById('confirm-message').textContent = message;
-    modal.classList.remove('hidden');
-
-    const okBtn = document.getElementById('btn-confirm-ok');
-    const cancelBtn = document.getElementById('btn-confirm-cancel');
-
-    function cleanup() {
-      modal.classList.add('hidden');
-      okBtn?.removeEventListener('click', onOk);
-      cancelBtn?.removeEventListener('click', onCancel);
-    }
-    function onOk() { cleanup(); resolve(true); }
-    function onCancel() { cleanup(); resolve(false); }
-
-    okBtn?.addEventListener('click', onOk);
-    cancelBtn?.addEventListener('click', onCancel);
+  return confirmAction({
+    title,
+    message,
+    confirmText: 'Confirm',
+    destructive: true,
   });
 }
 
