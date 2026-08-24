@@ -246,6 +246,8 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
       container.appendChild(bar);
     }
   }
+  // List path always shows the global status chrome
+  bar.classList.remove('hidden');
 
   const capCount = projects.filter(p =>
     p.state === PROJECT_STATES.AVAILABLE || p.state === PROJECT_STATES.ACTIVE
@@ -413,6 +415,8 @@ export function renderResearchProjects() {
       list.classList.add('hidden');
       empty.classList.add('hidden');
       document.getElementById('rp-cards-panel')?.classList.add('hidden');
+      // Stale list chrome: Proposal / Weekly / count live in .rp-status-bar — hide for focused assign UI
+      container.querySelector('.rp-status-bar')?.classList.add('hidden');
       renderProjectAssignmentPanel(container, project, p, session.username);
       return;
     }
@@ -428,6 +432,7 @@ export function renderResearchProjects() {
       list.classList.add('hidden');
       empty.classList.add('hidden');
       document.getElementById('rp-cards-panel')?.classList.add('hidden');
+      container.querySelector('.rp-status-bar')?.classList.add('hidden');
       renderProjectReportPanel(container, project, session.username);
       return;
     }
