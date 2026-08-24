@@ -1574,9 +1574,9 @@ export const BASE_CARD_DEFINITIONS = Object.freeze(
     "field": "Quantum Physics",
     "effect": "",
     "image": "",
-    "flavor": "Freeman Dyson helped unify different approaches to quantum electrodynamics, improving our understanding of how light and matter interact.",
+    "flavor": "Dyson helped unify approaches to quantum electrodynamics, improving understanding of how light and matter interact.",
     "imageUrl": "",
-    "keyFact": "Freeman Dyson helped unify different approaches to quantum electrodynamics, improving our understanding of how light and matter interact.",
+    "keyFact": "Dyson helped unify approaches to quantum electrodynamics, improving understanding of how light and matter interact.",
     "enabled": true
   },
   {
