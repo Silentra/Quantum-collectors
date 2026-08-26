@@ -1042,13 +1042,16 @@ function renderAdminPlayers() {
     const subgroupLabel = p?.subgroupId ? ` / ${groups.getSubgroupName(p.groupId, p.subgroupId)}` : '';
     const safeKey = String(key).replace(/"/g, '&quot;');
     return `
-      <div class="p-3 flex items-center justify-between hover:bg-surface-800 cursor-pointer player-row" data-username="${safeKey}">
-        <div>
+      <div class="p-3 flex flex-wrap items-center justify-between gap-2 hover:bg-surface-800 player-row" data-username="${safeKey}">
+        <div class="min-w-0">
           <span class="font-medium">${visibleLabel}</span>${adminBadge}${tradeBadge}
           <span class="text-xs text-surface-500 ml-2">${groupLabel}${subgroupLabel}</span>
         </div>
-        <div class="flex items-center gap-3 text-xs text-surface-400">
-          <button class="btn-admin-player-detail bg-surface-700 hover:bg-surface-600 px-2 py-1 rounded text-white" data-username="${safeKey}">
+        <div class="flex flex-wrap items-center gap-2 text-xs text-surface-400">
+          <button type="button" class="btn-admin-quick-give-packs bg-green-700 hover:bg-green-600 px-2 py-1 rounded text-white" data-username="${safeKey}">
+            Give Packs
+          </button>
+          <button type="button" class="btn-admin-player-detail bg-surface-700 hover:bg-surface-600 px-2 py-1 rounded text-white" data-username="${safeKey}">
             Manage
           </button>
         </div>
@@ -1063,6 +1066,100 @@ function renderAdminPlayers() {
       e.stopPropagation();
       void showPlayerDetail(btn.dataset.username);
     });
+  });
+  list.querySelectorAll('.btn-admin-quick-give-packs').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openAdminQuickGivePacksModal(btn.dataset.username);
+    });
+  });
+}
+
+/** Stable username for the open Quick Give Packs modal (cleared on close). */
+let _aqgpUsername = null;
+
+function closeAdminQuickGivePacksModal() {
+  _aqgpUsername = null;
+  const modal = document.getElementById('admin-quick-give-packs-modal');
+  modal?.classList.add('hidden');
+  const err = document.getElementById('aqgp-error');
+  if (err) {
+    err.textContent = '';
+    err.classList.add('hidden');
+  }
+}
+
+/**
+ * Open Quick Give Packs for a directory/player key (stable login username).
+ * @param {string} usernameKey
+ */
+function openAdminQuickGivePacksModal(usernameKey) {
+  const username = resolvePlayerDirectoryKey(String(usernameKey || '').trim());
+  if (!username) {
+    toast.error('Player identity missing.');
+    return;
+  }
+
+  const modal = document.getElementById('admin-quick-give-packs-modal');
+  const packSelect = document.getElementById('aqgp-pack-select');
+  const qtyInput = document.getElementById('aqgp-pack-qty');
+  const displayEl = document.getElementById('aqgp-display-name');
+  const loginEl = document.getElementById('aqgp-login-username');
+  const errEl = document.getElementById('aqgp-error');
+  if (!modal || !packSelect || !qtyInput) {
+    toast.error('Give Packs dialog is unavailable.');
+    return;
+  }
+
+  _aqgpUsername = username;
+  const dirEntry = db.get(`${DIRECTORY_ROOT}/${username}`);
+  const visible = getPlayerDisplayName(dirEntry || player.getPlayer(username), username);
+  if (displayEl) displayEl.textContent = `Give Packs to ${visible}`;
+  if (loginEl) loginEl.textContent = `Login Username: ${username}`;
+
+  const allPackTypes = packs.getAllPackTypes();
+  packSelect.innerHTML = allPackTypes.length
+    ? allPackTypes.map(p => `<option value="${p.id}">${p.name}</option>`).join('')
+    : '<option value="">No pack types available</option>';
+  qtyInput.value = '1';
+  if (errEl) {
+    errEl.textContent = '';
+    errEl.classList.add('hidden');
+  }
+  modal.classList.remove('hidden');
+  packSelect.focus();
+}
+
+function setupAdminQuickGivePacksModal() {
+  document.getElementById('aqgp-cancel')?.addEventListener('click', () => {
+    closeAdminQuickGivePacksModal();
+  });
+  document.getElementById('admin-quick-give-packs-modal')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeAdminQuickGivePacksModal();
+  });
+  document.getElementById('aqgp-confirm')?.addEventListener('click', () => {
+    const username = _aqgpUsername;
+    if (!username) {
+      toast.error('No player selected.');
+      closeAdminQuickGivePacksModal();
+      return;
+    }
+    const packId = document.getElementById('aqgp-pack-select')?.value;
+    const qtyRaw = document.getElementById('aqgp-pack-qty')?.value;
+    const errEl = document.getElementById('aqgp-error');
+    const result = player.adminGrantPacks(username, packId, qtyRaw);
+    if (!result.ok) {
+      if (errEl) {
+        errEl.textContent = result.error || 'Could not give packs.';
+        errEl.classList.remove('hidden');
+      }
+      toast.error(result.error || 'Could not give packs.');
+      return;
+    }
+    const dirEntry = db.get(`${DIRECTORY_ROOT}/${username}`);
+    const visible = getPlayerDisplayName(dirEntry || player.getPlayer(username), username);
+    toast.success(`Gave ${result.quantity} pack(s) to ${visible}`);
+    closeAdminQuickGivePacksModal();
   });
 }
 
@@ -1651,9 +1748,13 @@ async function showPlayerDetail(username) {
 
   content.querySelector('#pd-give-pack').addEventListener('click', () => {
     const packId = content.querySelector('#pd-pack-select').value;
-    const qty = parseInt(content.querySelector('#pd-pack-qty').value) || 1;
-    player.addPack(username, packId, qty);
-    toast.success(`Gave ${qty} pack(s) to ${visibleName}`);
+    const qtyRaw = content.querySelector('#pd-pack-qty').value;
+    const result = player.adminGrantPacks(username, packId, qtyRaw);
+    if (!result.ok) {
+      toast.error(result.error || 'Could not give packs.');
+      return;
+    }
+    toast.success(`Gave ${result.quantity} pack(s) to ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -4008,6 +4109,7 @@ export function init() {
     document.getElementById('player-detail-modal').classList.add('hidden');
     releaseAdminSelectedPlayerScope();
   });
+  setupAdminQuickGivePacksModal();
 
   // Edit Card modal wiring
   setupEditCardModal();

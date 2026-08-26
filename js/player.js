@@ -131,6 +131,33 @@ export function addPack(username, packId, quantity = 1) {
 }
 
 /**
+ * Parse pack grant quantity the same way Admin Player Details does.
+ * @param {unknown} raw
+ * @returns {number} integer >= 1
+ */
+export function parseAdminPackGrantQuantity(raw) {
+  const qty = parseInt(raw, 10);
+  return Number.isFinite(qty) && qty >= 1 ? qty : 1;
+}
+
+/**
+ * Canonical Admin pack grant (Player Details + Quick Give Packs).
+ * @param {string} username - stable login / players key
+ * @param {string} packId
+ * @param {unknown} quantityRaw
+ * @returns {{ ok: true, username: string, packId: string, quantity: number } | { ok: false, error: string }}
+ */
+export function adminGrantPacks(username, packId, quantityRaw) {
+  const key = String(username || '').trim();
+  const id = String(packId || '').trim();
+  if (!key) return { ok: false, error: 'Player identity missing.' };
+  if (!id) return { ok: false, error: 'Select a pack type.' };
+  const quantity = parseAdminPackGrantQuantity(quantityRaw);
+  addPack(key, id, quantity);
+  return { ok: true, username: key, packId: id, quantity };
+}
+
+/**
  * Remove a pack from player (after opening)
  */
 export function removePack(username, packId) {
