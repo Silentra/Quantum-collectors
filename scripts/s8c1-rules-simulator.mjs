@@ -1352,10 +1352,70 @@ async function main() {
     );
     pass('C-b: admin delete may null authDirectory with player');
 
+    // ─── Slice A: displayName leaf protection ─────────────────────────────
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, 'players/dnowner'), {
+        authUid: 'dnOwnerUid',
+        username: 'dnowner',
+        isAdmin: false,
+      });
+      await set(ref(db, 'players/dnpeer'), {
+        authUid: 'dnPeerUid',
+        username: 'dnpeer',
+        isAdmin: false,
+      });
+      await set(ref(db, 'admins/dnAdminUid'), true);
+    });
+
+    const dnOwner = testEnv.authenticatedContext('dnOwnerUid');
+    const dnPeer = testEnv.authenticatedContext('dnPeerUid');
+    const dnAdmin = testEnv.authenticatedContext('dnAdminUid');
+
+    await assertSucceeds(
+      update(ref(dnAdmin.database()), {
+        'players/dnowner/displayName': 'GJ_QuantumDuck',
+      }),
+    );
+    pass('displayName: admin can set target displayName');
+
+    await assertFails(
+      update(ref(dnOwner.database()), {
+        'players/dnowner/displayName': 'HackerRename',
+      }),
+    );
+    pass('displayName: owner cannot freely set own displayName (Slice A)');
+
+    await assertFails(
+      update(ref(dnPeer.database()), {
+        'players/dnowner/displayName': 'PeerRename',
+      }),
+    );
+    pass('displayName: peer cannot set another player displayName');
+
+    await assertFails(
+      update(ref(dnAdmin.database()), {
+        'players/dnowner/displayName': 'ab',
+      }),
+    );
+    pass('displayName: admin write still validates min length');
+
+    await assertSucceeds(
+      update(ref(dnOwner.database()), {
+        'players/dnowner/isTradeProfileHidden': true,
+      }),
+    );
+    pass('displayName: unrelated owner write still allowed');
+
+    await assertSucceeds(
+      get(ref(dnOwner.database(), 'players/dnowner/displayName')),
+    );
+    pass('displayName: owner can read own displayName');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1+C-b rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1+C-b+displayName rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();

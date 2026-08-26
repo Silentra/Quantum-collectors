@@ -93,6 +93,11 @@
           ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)"
         },
+        "displayName": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^[A-Za-z0-9_]{3,20}$/))"
+        },
         "$other": {
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || (!root.child('players').child($username).exists() && newData.parent().child('authUid').val() === auth.uid))"
         }
