@@ -48,8 +48,14 @@ import {
 import {
   getPlayerDisplayName,
   validateDisplayName,
+  validateDisplayNameChangeMessage,
+  playerRequiresDisplayNameChange,
+  getDisplayNameChangeMessage,
   buildAdminSetDisplayNamePlayerPaths,
+  buildAdminRequireDisplayNameChangePaths,
+  buildStudentAuthorizedDisplayNameChangePaths,
   DISPLAY_NAME_MAX_LENGTH,
+  DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH,
 } from './player-display-name.js';
 import {
   prepareTradeIndexRebuild,
@@ -270,11 +276,159 @@ function clearLoginMessage() {
 
 // ===================== GAME SCREEN =====================
 
+/**
+ * Slice C — blocking display-name form. Resolves true after successful rename.
+ * Resolves false if the user logs out (does not unlock gameplay).
+ * @param {string} username
+ * @returns {Promise<boolean>}
+ */
+function presentMandatoryDisplayNameChange(username) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById('display-name-required-modal');
+    const loginEl = document.getElementById('dn-required-login-username');
+    const teacherBlock = document.getElementById('dn-required-teacher-block');
+    const teacherMsgEl = document.getElementById('dn-required-teacher-message');
+    const input = document.getElementById('dn-required-input');
+    const errEl = document.getElementById('dn-required-error');
+    const saveBtn = document.getElementById('dn-required-save');
+    const logoutBtn = document.getElementById('dn-required-logout');
+
+    if (!modal || !saveBtn || !input) {
+      resolve(false);
+      return;
+    }
+
+    const p = player.getPlayer(username) || {};
+    if (loginEl) loginEl.textContent = username;
+    const teacherMsg = getDisplayNameChangeMessage(p);
+    if (teacherBlock && teacherMsgEl) {
+      if (teacherMsg) {
+        teacherMsgEl.textContent = teacherMsg;
+        teacherBlock.classList.remove('hidden');
+      } else {
+        teacherMsgEl.textContent = '';
+        teacherBlock.classList.add('hidden');
+      }
+    }
+    input.value = '';
+    if (errEl) {
+      errEl.textContent = '';
+      errEl.classList.add('hidden');
+    }
+    saveBtn.disabled = false;
+
+    modal.classList.remove('hidden');
+
+    let settled = false;
+    function finish(ok) {
+      if (settled) return;
+      settled = true;
+      modal.classList.add('hidden');
+      saveBtn.removeEventListener('click', onSave);
+      logoutBtn?.removeEventListener('click', onLogout);
+      input.removeEventListener('keydown', onKey);
+      resolve(ok);
+    }
+
+    async function onSave() {
+      const validated = validateDisplayName(input.value);
+      if (!validated.ok) {
+        if (errEl) {
+          errEl.textContent = validated.error;
+          errEl.classList.remove('hidden');
+        }
+        toast.error(validated.error);
+        return;
+      }
+
+      const current = player.getPlayer(username) || {};
+      if (typeof current.displayName === 'string'
+        && current.displayName.trim() === validated.displayName) {
+        if (errEl) {
+          errEl.textContent = 'Choose a different display name than your current one.';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      saveBtn.disabled = true;
+      if (errEl) errEl.classList.add('hidden');
+
+      const playerKey = resolvePlayerDirectoryKey(username);
+      const playerData = player.getPlayer(playerKey) || current;
+      const result = await db.updateAcknowledged({
+        ...buildStudentAuthorizedDisplayNameChangePaths(playerKey, validated.displayName),
+        ...syncDirectoryUpdateFromPlayer(playerKey, {
+          ...playerData,
+          displayName: validated.displayName,
+          requiresDisplayNameChange: false,
+          displayNameChangeMessage: null,
+        }),
+      });
+
+      if (!result.ok) {
+        saveBtn.disabled = false;
+        const msg = result.error || 'Could not save display name. Try again.';
+        if (errEl) {
+          errEl.textContent = msg;
+          errEl.classList.remove('hidden');
+        }
+        toast.error(msg);
+        return;
+      }
+
+      toast.success(`Display name set to "${validated.displayName}"`);
+      finish(true);
+    }
+
+    async function onLogout() {
+      cleanupTrading();
+      await auth.logout();
+      finish(false);
+      location.reload();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        void onSave();
+      }
+    }
+
+    saveBtn.addEventListener('click', onSave);
+    logoutBtn?.addEventListener('click', onLogout);
+    input.addEventListener('keydown', onKey);
+    input.focus();
+  });
+}
+
 export function enterGame() {
+  void _enterGameAsync();
+}
+
+async function _enterGameAsync() {
   metrics.mark('enterGame');
-  showScreen('game');
   const session = auth.getSession();
   if (!session) return;
+
+  // Slice C gate: must complete before unlocking game shell (covers login/register/restore)
+  if (session.username && session.username !== '__admin__') {
+    let p = player.getPlayer(session.username);
+    if (!p) {
+      await db.loadPathOnce(`players/${session.username}`, { force: true });
+      p = player.getPlayer(session.username);
+    }
+    while (playerRequiresDisplayNameChange(p)) {
+      const ok = await presentMandatoryDisplayNameChange(session.username);
+      if (!ok) return;
+      p = player.getPlayer(session.username);
+      if (playerRequiresDisplayNameChange(p)) {
+        toast.error('Display name change is still required.');
+      }
+    }
+  }
+
+  showScreen('game');
 
   // Phase 5A — derive admin status from persistent player flag OR session flag
   let isAdminUser = session.isAdmin === true;
@@ -1103,6 +1257,36 @@ async function showPlayerDetail(username) {
             <span class="font-mono text-sm text-surface-300">${username}</span>
             <p class="text-xs text-surface-500 mt-1">Stable account login — not changed by display name.</p>
           </div>
+          <div class="border-t border-surface-700 pt-3">
+            <h5 class="text-xs font-semibold text-surface-300 mb-2">Require Display Name Change</h5>
+            ${playerRequiresDisplayNameChange(p) ? `
+              <p class="text-xs text-amber-400 mb-2">Pending — student must choose a new display name before playing.</p>
+              ${getDisplayNameChangeMessage(p) ? `
+                <p class="text-xs text-surface-400 mb-1">Current teacher message:</p>
+                <p class="text-xs text-surface-200 mb-2 whitespace-pre-wrap">${getDisplayNameChangeMessage(p).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+              ` : '<p class="text-xs text-surface-500 mb-2">No teacher message set.</p>'}
+              <button type="button" id="pd-clear-require-display-name" class="bg-surface-600 hover:bg-surface-500 px-3 py-1 rounded text-xs font-medium mb-2">
+                Clear Requirement
+              </button>
+            ` : `
+              <p class="text-xs text-surface-500 mb-2">No outstanding name-change requirement.</p>
+            `}
+            <button type="button" id="pd-require-display-name" class="bg-amber-700 hover:bg-amber-600 px-3 py-1 rounded text-xs font-medium">
+              Require Name Change
+            </button>
+            <div id="pd-require-display-name-form" class="hidden mt-2 space-y-2">
+              <label class="text-xs text-surface-400 block" for="pd-require-message">Message to student (optional)</label>
+              <textarea id="pd-require-message" rows="3" maxlength="${DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH}"
+                placeholder="Example: Use last initial + first initial + nickname"
+                class="admin-input w-full text-sm"></textarea>
+              <p class="text-xs text-surface-500">${DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH} characters max. Plain text only.</p>
+              <p id="pd-require-msg" class="text-xs text-surface-500 hidden"></p>
+              <div class="flex gap-2">
+                <button type="button" id="pd-confirm-require-display-name" class="bg-amber-700 hover:bg-amber-600 px-3 py-1 rounded text-xs">Continue</button>
+                <button type="button" id="pd-cancel-require-display-name" class="bg-surface-700 hover:bg-surface-600 px-3 py-1 rounded text-xs">Cancel</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1348,6 +1532,79 @@ async function showPlayerDetail(username) {
       return;
     }
     toast.success(`Display name updated to "${nextName}"`);
+    renderAdminPlayers();
+    void showPlayerDetail(username);
+  });
+
+  // Require Name Change (Slice C)
+  const requireDnForm = content.querySelector('#pd-require-display-name-form');
+  const requireMsgInput = content.querySelector('#pd-require-message');
+  const requireMsgEl = content.querySelector('#pd-require-msg');
+  content.querySelector('#pd-require-display-name')?.addEventListener('click', () => {
+    requireDnForm?.classList.remove('hidden');
+    if (requireMsgInput) {
+      requireMsgInput.value = getDisplayNameChangeMessage(p) || '';
+      requireMsgInput.focus();
+    }
+    if (requireMsgEl) {
+      requireMsgEl.classList.add('hidden');
+      requireMsgEl.textContent = '';
+    }
+  });
+  content.querySelector('#pd-cancel-require-display-name')?.addEventListener('click', () => {
+    requireDnForm?.classList.add('hidden');
+  });
+  content.querySelector('#pd-confirm-require-display-name')?.addEventListener('click', async () => {
+    const msgValidated = validateDisplayNameChangeMessage(requireMsgInput?.value);
+    if (!msgValidated.ok) {
+      if (requireMsgEl) {
+        requireMsgEl.textContent = msgValidated.error;
+        requireMsgEl.className = 'text-xs text-red-400';
+        requireMsgEl.classList.remove('hidden');
+      }
+      toast.error(msgValidated.error);
+      return;
+    }
+    const label = getPlayerDisplayName(p, username);
+    const confirmed = await confirmAction({
+      title: 'Require Name Change?',
+      message: `Require "${label}" to choose a new display name the next time they enter the game?`,
+      confirmText: 'Require Name Change',
+      destructive: false,
+    });
+    if (!confirmed) return;
+
+    const playerKey = resolvePlayerDirectoryKey(username);
+    const result = await db.updateAcknowledged(
+      buildAdminRequireDisplayNameChangePaths(playerKey, msgValidated.message),
+    );
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to require name change');
+      return;
+    }
+    toast.success(`Name change required for "${label}"`);
+    renderAdminPlayers();
+    void showPlayerDetail(username);
+  });
+  content.querySelector('#pd-clear-require-display-name')?.addEventListener('click', async () => {
+    const label = getPlayerDisplayName(p, username);
+    const confirmed = await confirmAction({
+      title: 'Clear Name Change Requirement?',
+      message: `Clear the pending display-name requirement for "${label}"? They will not be asked to rename.`,
+      confirmText: 'Clear Requirement',
+      destructive: false,
+    });
+    if (!confirmed) return;
+    const playerKey = resolvePlayerDirectoryKey(username);
+    const result = await db.updateAcknowledged({
+      [`players/${playerKey}/requiresDisplayNameChange`]: null,
+      [`players/${playerKey}/displayNameChangeMessage`]: null,
+    });
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to clear requirement');
+      return;
+    }
+    toast.success('Name-change requirement cleared');
     renderAdminPlayers();
     void showPlayerDetail(username);
   });

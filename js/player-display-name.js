@@ -1,15 +1,20 @@
 /**
- * Player display-name foundation (Slice A).
+ * Player display-name foundation (Slice A + Slice C).
  *
  * Login username remains the stable identity key.
  * displayName is a mutable visible label only.
  *
  * visibleName = valid/non-empty displayName || username
+ *
+ * Slice C: teacher-required rename is single-use and rules-enforced.
  */
 
 /** Max length for NEW login usernames and NEW display-name submissions. */
 export const DISPLAY_NAME_MAX_LENGTH = 20;
 export const DISPLAY_NAME_MIN_LENGTH = 3;
+
+/** Teacher instruction for required rename (plain text). */
+export const DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH = 200;
 
 /** Approved V1 display-name pattern (case preserved; no spaces). */
 export const DISPLAY_NAME_RE = /^[A-Za-z0-9_]{3,20}$/;
@@ -56,6 +61,42 @@ export function validateDisplayName(raw) {
 }
 
 /**
+ * Optional teacher instruction for Require Name Change.
+ * @param {unknown} raw
+ * @returns {{ ok: true, message: string|null } | { ok: false, error: string }}
+ */
+export function validateDisplayNameChangeMessage(raw) {
+  const message = trimDisplayNameInput(raw);
+  if (!message) return { ok: true, message: null };
+  if (message.length > DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH) {
+    return {
+      ok: false,
+      error: `Message must be at most ${DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH} characters.`,
+    };
+  }
+  return { ok: true, message };
+}
+
+/**
+ * @param {object|null|undefined} playerLike
+ * @returns {boolean}
+ */
+export function playerRequiresDisplayNameChange(playerLike) {
+  return !!(playerLike && typeof playerLike === 'object' && playerLike.requiresDisplayNameChange === true);
+}
+
+/**
+ * @param {object|null|undefined} playerLike
+ * @returns {string|null}
+ */
+export function getDisplayNameChangeMessage(playerLike) {
+  if (!playerLike || typeof playerLike !== 'object') return null;
+  if (typeof playerLike.displayNameChangeMessage !== 'string') return null;
+  const trimmed = playerLike.displayNameChangeMessage.trim();
+  return trimmed || null;
+}
+
+/**
  * Tolerant render-time resolver. Never throws on legacy/bad data.
  *
  * @param {object|string|null|undefined} source - player-like, directory-like, or raw displayName string
@@ -99,8 +140,8 @@ export function projectDisplayNameForDirectory(value) {
 
 /**
  * Admin direct-rename multipath fragment for players/{key} only.
- * Clears future Slice C require-change fields when present (null no-ops if absent).
- * Caller must also merge syncDirectoryUpdateFromPlayer(playerKey, { ...playerData, displayName }).
+ * Clears require-change fields (cancels outstanding Require Name Change).
+ * Caller must also merge syncDirectoryUpdateFromPlayer(...).
  *
  * @param {string} playerKey
  * @param {string} displayName - already validated
@@ -111,7 +152,40 @@ export function buildAdminSetDisplayNamePlayerPaths(playerKey, displayName) {
   if (!key) return {};
   return {
     [`players/${key}/displayName`]: displayName,
-    // Slice C–ready: direct rename cancels any outstanding required-name-change request
+    [`players/${key}/requiresDisplayNameChange`]: null,
+    [`players/${key}/displayNameChangeMessage`]: null,
+  };
+}
+
+/**
+ * Admin Require Name Change multipath (players only; no directory mirror).
+ *
+ * @param {string} playerKey
+ * @param {string|null} message - already validated (null = clear/absent)
+ * @returns {Record<string, boolean|string|null>}
+ */
+export function buildAdminRequireDisplayNameChangePaths(playerKey, message = null) {
+  const key = String(playerKey || '').trim();
+  if (!key) return {};
+  return {
+    [`players/${key}/requiresDisplayNameChange`]: true,
+    [`players/${key}/displayNameChangeMessage`]: message == null || message === '' ? null : String(message),
+  };
+}
+
+/**
+ * Flagged-student authorized rename multipath (players only).
+ * Caller merges syncDirectoryUpdateFromPlayer with the new displayName.
+ *
+ * @param {string} playerKey
+ * @param {string} displayName - already validated
+ * @returns {Record<string, string|null>}
+ */
+export function buildStudentAuthorizedDisplayNameChangePaths(playerKey, displayName) {
+  const key = String(playerKey || '').trim();
+  if (!key) return {};
+  return {
+    [`players/${key}/displayName`]: displayName,
     [`players/${key}/requiresDisplayNameChange`]: null,
     [`players/${key}/displayNameChangeMessage`]: null,
   };
