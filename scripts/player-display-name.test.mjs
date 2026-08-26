@@ -1,14 +1,20 @@
 /**
- * Display-name foundation unit tests (Slice A).
+ * Display-name foundation unit tests (Slice A + Slice C).
  * Run: node scripts/player-display-name.test.mjs
  */
 
 import {
   validateDisplayName,
+  validateDisplayNameChangeMessage,
   getPlayerDisplayName,
+  getDisplayNameChangeMessage,
+  playerRequiresDisplayNameChange,
   projectDisplayNameForDirectory,
   buildAdminSetDisplayNamePlayerPaths,
+  buildAdminRequireDisplayNameChangePaths,
+  buildStudentAuthorizedDisplayNameChangePaths,
   DISPLAY_NAME_MAX_LENGTH,
+  DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH,
   DISPLAY_NAME_RE,
 } from '../js/player-display-name.js';
 import { buildDirectoryEntry, directoryEntriesEqual } from '../js/player-directory.js';
@@ -52,6 +58,21 @@ assert(validateDisplayName('').ok === false, 'rejects empty');
 assert(DISPLAY_NAME_RE.test('Physics_2026'), 'regex accepts Physics_2026');
 assert(DISPLAY_NAME_MAX_LENGTH === 20, 'max length constant 20');
 
+// Slice C — teacher message
+assert(DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH === 200, 'teacher message max 200');
+assert(validateDisplayNameChangeMessage('').ok && validateDisplayNameChangeMessage('').message === null, 'blank message → null');
+assert(validateDisplayNameChangeMessage('  Use initials  ').message === 'Use initials', 'message trims');
+assert(validateDisplayNameChangeMessage('x'.repeat(200)).ok === true, 'message accepts 200');
+assert(validateDisplayNameChangeMessage('x'.repeat(201)).ok === false, 'message rejects 201');
+
+// Slice C — require flag helpers
+assert(playerRequiresDisplayNameChange({ requiresDisplayNameChange: true }) === true, 'require true');
+assert(playerRequiresDisplayNameChange({ requiresDisplayNameChange: false }) === false, 'require false');
+assert(playerRequiresDisplayNameChange({}) === false, 'require absent');
+assert(getDisplayNameChangeMessage({ displayNameChangeMessage: ' Hi ' }) === 'Hi', 'get message trims');
+assert(getDisplayNameChangeMessage({ displayNameChangeMessage: '   ' }) === null, 'whitespace message → null');
+assert(getDisplayNameChangeMessage({}) === null, 'missing message → null');
+
 // Directory projection
 const entry = buildDirectoryEntry('badname94', { displayName: 'GJ_QuantumDuck', groupId: 'g1' });
 assert(entry.displayName === 'GJ_QuantumDuck', 'directory projects displayName');
@@ -74,21 +95,54 @@ assert(paths['players/badname94/displayName'] === 'GJ_QuantumDuck', 'admin path 
 assert(paths['players/badname94/requiresDisplayNameChange'] === null, 'admin path clears require flag');
 assert(paths['players/badname94/displayNameChangeMessage'] === null, 'admin path clears message');
 
+const requirePaths = buildAdminRequireDisplayNameChangePaths('bobby', 'Use initials');
+assert(requirePaths['players/bobby/requiresDisplayNameChange'] === true, 'require path sets flag');
+assert(requirePaths['players/bobby/displayNameChangeMessage'] === 'Use initials', 'require path sets message');
+assert(!Object.prototype.hasOwnProperty.call(requirePaths, 'players/bobby/displayName'), 'require does not touch displayName');
+
+const requireBlank = buildAdminRequireDisplayNameChangePaths('bobby', null);
+assert(requireBlank['players/bobby/displayNameChangeMessage'] === null, 'blank message stored as null');
+
+const studentPaths = buildStudentAuthorizedDisplayNameChangePaths('bobby', 'NewName');
+assert(studentPaths['players/bobby/displayName'] === 'NewName', 'student path sets displayName');
+assert(studentPaths['players/bobby/requiresDisplayNameChange'] === null, 'student path clears flag');
+assert(studentPaths['players/bobby/displayNameChangeMessage'] === null, 'student path clears message');
+
 // Register maxlength in authoritative index.html
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const regBlock = html.slice(html.indexOf('id="register-username"'), html.indexOf('id="register-username"') + 350);
 assert(regBlock.includes('maxlength="20"'), 'register username maxlength=20');
 
+// Mandatory modal markup (Slice C gate UI)
+assert(html.includes('id="display-name-required-modal"'), 'mandatory modal present');
+assert(html.includes('id="dn-required-login-username"'), 'modal shows login username element');
+assert(html.includes('id="dn-required-teacher-message"'), 'modal has teacher message element');
+assert(html.includes('id="dn-required-save"'), 'modal has save button');
+assert(html.includes('id="dn-required-logout"'), 'modal allows logout');
+assert(!html.includes('id="dn-required-cancel"'), 'modal has no cancel-into-game control');
+assert(!html.includes('id="dn-required-close"'), 'modal has no close-into-game control');
+
 // Rules carve-out present
 const rules = fs.readFileSync(path.join(root, 'database.rules.json'), 'utf8');
 assert(rules.includes('"displayName"'), 'rules include displayName leaf');
+assert(rules.includes('"requiresDisplayNameChange"'), 'rules include require flag leaf');
+assert(rules.includes('"displayNameChangeMessage"'), 'rules include message leaf');
 assert(rules.includes('^[A-Za-z0-9_]{3,20}$'), 'rules validate displayName charset/length');
 
-// Hosting prod untouched by this feature work (no sync required) — folder may exist; assert we did not change sync script for this feature
 assert(fs.existsSync(path.join(root, 'js', 'player-display-name.js')), 'helper module exists');
+
+// firebase-hosting-prod must not be the edit target for this work — assert root source owns modal
+const prodIndex = path.join(root, 'firebase-hosting-prod', 'index.html');
+if (fs.existsSync(prodIndex)) {
+  const prodHtml = fs.readFileSync(prodIndex, 'utf8');
+  assert(
+    !prodHtml.includes('id="display-name-required-modal"'),
+    'firebase-hosting-prod index does not yet include Slice C modal (unsynced — correct)',
+  );
+}
 
 if (failed > 0) {
   console.error(`\n${failed} failure(s)`);
   process.exit(1);
 }
-console.log('\nAll player-display-name Slice A tests passed.');
+console.log('\nAll player-display-name Slice A+C tests passed.');

@@ -95,8 +95,18 @@
         },
         "displayName": {
           ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
-          ".write": "auth != null && root.child('admins').child(auth.uid).val() === true",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (root.child('players').child($username).child('authUid').val() === auth.uid && data.parent().child('requiresDisplayNameChange').val() === true && !newData.parent().child('requiresDisplayNameChange').exists() && !newData.parent().child('displayNameChangeMessage').exists()))",
           ".validate": "!newData.exists() || (newData.isString() && newData.val().matches(/^[A-Za-z0-9_]{3,20}$/))"
+        },
+        "requiresDisplayNameChange": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (root.child('players').child($username).child('authUid').val() === auth.uid && data.val() === true && !newData.exists() && newData.parent().child('displayName').isString() && newData.parent().child('displayName').val().matches(/^[A-Za-z0-9_]{3,20}$/) && newData.parent().child('displayName').val() !== data.parent().child('displayName').val() && !newData.parent().child('displayNameChangeMessage').exists()))",
+          ".validate": "!newData.exists() || newData.isBoolean()"
+        },
+        "displayNameChangeMessage": {
+          ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid)",
+          ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || (root.child('players').child($username).child('authUid').val() === auth.uid && !newData.exists() && data.parent().child('requiresDisplayNameChange').val() === true && !newData.parent().child('requiresDisplayNameChange').exists() && newData.parent().child('displayName').isString() && newData.parent().child('displayName').val().matches(/^[A-Za-z0-9_]{3,20}$/) && newData.parent().child('displayName').val() !== data.parent().child('displayName').val()))",
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length > 0 && newData.val().length <= 200)"
         },
         "$other": {
           ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || root.child('players').child($username).child('authUid').val() === auth.uid || (!root.child('players').child($username).exists() && newData.parent().child('authUid').val() === auth.uid))"

@@ -1069,6 +1069,37 @@
     </div>
   </div>
 
+  <!-- Mandatory display-name change (Slice C) — not dismissible into gameplay -->
+  <div id="display-name-required-modal" class="hidden fixed inset-0 bg-black/90 z-[120] flex items-center justify-center p-4">
+    <div class="bg-surface-900 rounded-2xl p-6 max-w-md w-full border border-surface-700" role="dialog" aria-modal="true" aria-labelledby="dn-required-title">
+      <h3 id="dn-required-title" class="text-lg font-bold mb-2 text-center">Choose a New Display Name</h3>
+      <p class="text-sm text-surface-300 mb-3 text-center">Your teacher has asked you to choose a new display name.</p>
+      <div id="dn-required-teacher-block" class="hidden mb-4 p-3 rounded-lg bg-surface-800 border border-surface-700">
+        <p class="text-xs text-surface-400 mb-1">Teacher message</p>
+        <p id="dn-required-teacher-message" class="text-sm text-surface-200 whitespace-pre-wrap"></p>
+      </div>
+      <div class="mb-4 p-3 rounded-lg bg-amber-950/40 border border-amber-800/60">
+        <p class="text-xs font-semibold text-amber-200 mb-1">Your login is not changing.</p>
+        <p class="text-xs text-amber-100/90 mb-2">Continue logging in with:</p>
+        <p id="dn-required-login-username" class="font-mono text-sm text-amber-50"></p>
+        <p class="text-xs text-surface-400 mt-2">Your new display name is what other players will see.</p>
+      </div>
+      <label class="text-xs text-surface-400 block mb-1" for="dn-required-input">New Display Name</label>
+      <input id="dn-required-input" type="text" maxlength="20" autocomplete="off"
+        class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-2 focus:outline-none focus:border-primary-500 text-white"
+        placeholder="3–20 letters, numbers, underscore">
+      <p id="dn-required-error" class="text-xs text-red-400 mb-3 hidden"></p>
+      <button type="button" id="dn-required-save"
+        class="w-full bg-primary-600 hover:bg-primary-500 text-white font-semibold py-3 rounded-lg transition text-sm mb-2">
+        Save Display Name
+      </button>
+      <button type="button" id="dn-required-logout"
+        class="w-full bg-surface-700 hover:bg-surface-600 text-surface-200 py-2 rounded-lg transition text-xs">
+        Log out
+      </button>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toast-container" class="fixed bottom-4 left-4 z-[100] flex flex-col gap-2"></div>
 

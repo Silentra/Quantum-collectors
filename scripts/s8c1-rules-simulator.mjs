@@ -26,6 +26,11 @@ import {
 import { buildDirectoryEntry, directoryPathsForPlayer } from '../js/player-directory.js';
 import { emptyPlayerTradeIndexPaths } from '../js/trade-index.js';
 import { authDirectoryPathsForRegistration } from '../js/auth-directory.js';
+import {
+  buildAdminRequireDisplayNameChangePaths,
+  buildAdminSetDisplayNamePlayerPaths,
+  buildStudentAuthorizedDisplayNameChangePaths,
+} from '../js/player-display-name.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, '..');
@@ -1412,10 +1417,201 @@ async function main() {
     );
     pass('displayName: owner can read own displayName');
 
+    // ─── Slice C: require-change + flagged student single-use transition ───
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.database();
+      await set(ref(db, 'players/bobby'), {
+        authUid: 'bobbyUid',
+        username: 'bobby',
+        displayName: 'OldBobby',
+        isAdmin: false,
+      });
+      await set(ref(db, 'players/alicepeer'), {
+        authUid: 'alicePeerUid',
+        username: 'alicepeer',
+        isAdmin: false,
+      });
+      await set(ref(db, 'playerDirectory/bobby'), buildDirectoryEntry('bobby', {
+        displayName: 'OldBobby',
+        isAdmin: false,
+      }));
+      await set(ref(db, 'admins/sliceCAdminUid'), true);
+    });
+
+    const bobby = testEnv.authenticatedContext('bobbyUid');
+    const alicePeer = testEnv.authenticatedContext('alicePeerUid');
+    const sliceCAdmin = testEnv.authenticatedContext('sliceCAdminUid');
+
+    // 1–2 Admin sets require + message
+    await assertSucceeds(
+      update(ref(sliceCAdmin.database()), buildAdminRequireDisplayNameChangePaths(
+        'bobby',
+        'Use your initials followed by a nickname.',
+      )),
+    );
+    pass('SliceC: admin can set requiresDisplayNameChange + message');
+
+    // 5 Unflagged student cannot change displayName (still flagged after require — use alice)
+    await assertFails(
+      update(ref(alicePeer.database()), {
+        'players/alicepeer/displayName': 'AliceRename',
+      }),
+    );
+    pass('SliceC: unflagged student cannot change own displayName');
+
+    // 6–7 Unflagged cannot set require / message
+    await assertFails(
+      update(ref(alicePeer.database()), {
+        'players/alicepeer/requiresDisplayNameChange': true,
+      }),
+    );
+    pass('SliceC: unflagged student cannot set requiresDisplayNameChange');
+
+    await assertFails(
+      update(ref(alicePeer.database()), {
+        'players/alicepeer/displayNameChangeMessage': 'spoof',
+      }),
+    );
+    pass('SliceC: unflagged student cannot set teacher message');
+
+    // 8 Peer cannot change bobby fields
+    await assertFails(
+      update(ref(alicePeer.database()), {
+        'players/bobby/displayName': 'Hijack',
+        'players/bobby/requiresDisplayNameChange': null,
+        'players/bobby/displayNameChangeMessage': null,
+      }),
+    );
+    pass('SliceC: peer cannot rename another player');
+
+    // 13 Cannot rename without clearing requirement
+    await assertFails(
+      update(ref(bobby.database()), {
+        'players/bobby/displayName': 'KeepFlagged',
+      }),
+    );
+    pass('SliceC: flagged student cannot rename while leaving requirement true');
+
+    // 14 Cannot clear requirement without valid rename
+    await assertFails(
+      update(ref(bobby.database()), {
+        'players/bobby/requiresDisplayNameChange': null,
+        'players/bobby/displayNameChangeMessage': null,
+      }),
+    );
+    pass('SliceC: flagged student cannot clear requirement without rename');
+
+    // 16 Cannot change message to arbitrary text during transition
+    await assertFails(
+      update(ref(bobby.database()), {
+        ...buildStudentAuthorizedDisplayNameChangePaths('bobby', 'ValidNewName'),
+        'players/bobby/displayNameChangeMessage': 'I edited the teacher note',
+      }),
+    );
+    pass('SliceC: flagged student cannot rewrite teacher message during transition');
+
+    // 17 Invalid displayName rejected
+    await assertFails(
+      update(ref(bobby.database()), buildStudentAuthorizedDisplayNameChangePaths('bobby', 'ab')),
+    );
+    pass('SliceC: flagged student invalid displayName rejected');
+
+    // 18 Cannot modify protected identity during rename
+    await assertFails(
+      update(ref(bobby.database()), {
+        ...buildStudentAuthorizedDisplayNameChangePaths('bobby', 'ValidNewName'),
+        'players/bobby/authUid': 'evilUid',
+      }),
+    );
+    pass('SliceC: flagged student cannot change authUid during rename');
+
+    // 9–12 Valid transition + directory
+    const newDn = 'GJ_QuantumDuck';
+    await assertSucceeds(
+      update(ref(bobby.database()), {
+        ...buildStudentAuthorizedDisplayNameChangePaths('bobby', newDn),
+        ...directoryPathsForPlayer('bobby', buildDirectoryEntry('bobby', {
+          displayName: newDn,
+          isAdmin: false,
+        })),
+      }),
+    );
+    pass('SliceC: flagged student valid rename transition succeeds');
+
+    const bobbyAfter = await get(ref(bobby.database(), 'players/bobby'));
+    const bobbyVal = bobbyAfter.val() || {};
+    if (bobbyVal.displayName !== newDn) fail('SliceC: displayName not updated after transition');
+    else pass('SliceC: transition sets displayName');
+    if (bobbyVal.requiresDisplayNameChange === true) fail('SliceC: requirement not cleared');
+    else pass('SliceC: transition clears requirement');
+    if (bobbyVal.displayNameChangeMessage) fail('SliceC: message not cleared');
+    else pass('SliceC: transition clears message');
+
+    const dirAfter = await get(ref(bobby.database(), 'playerDirectory/bobby/displayName'));
+    if (dirAfter.val() !== newDn) fail('SliceC: directory displayName not synced');
+    else pass('SliceC: directory projection matches displayName');
+
+    // 15 / 20 Post-transition cannot rename again
+    await assertFails(
+      update(ref(bobby.database()), {
+        ...buildStudentAuthorizedDisplayNameChangePaths('bobby', 'SecondRename'),
+        ...directoryPathsForPlayer('bobby', buildDirectoryEntry('bobby', {
+          displayName: 'SecondRename',
+          isAdmin: false,
+        })),
+      }),
+    );
+    pass('SliceC: post-transition student cannot rename again');
+
+    // 3 Admin clears requirement (re-set then clear)
+    await assertSucceeds(
+      update(ref(sliceCAdmin.database()), buildAdminRequireDisplayNameChangePaths('bobby', 'Again')),
+    );
+    await assertSucceeds(
+      update(ref(sliceCAdmin.database()), {
+        'players/bobby/requiresDisplayNameChange': null,
+        'players/bobby/displayNameChangeMessage': null,
+      }),
+    );
+    pass('SliceC: admin can clear requirement');
+
+    // 4 / 21–22 Admin direct rename cancels pending require
+    await assertSucceeds(
+      update(ref(sliceCAdmin.database()), buildAdminRequireDisplayNameChangePaths(
+        'bobby',
+        'Use initials',
+      )),
+    );
+    await assertSucceeds(
+      update(ref(sliceCAdmin.database()), {
+        ...buildAdminSetDisplayNamePlayerPaths('bobby', 'TeacherSetName'),
+        ...directoryPathsForPlayer('bobby', buildDirectoryEntry('bobby', {
+          displayName: 'TeacherSetName',
+          isAdmin: false,
+        })),
+      }),
+    );
+    const afterDirect = (await get(ref(sliceCAdmin.database(), 'players/bobby'))).val() || {};
+    if (afterDirect.displayName !== 'TeacherSetName') fail('SliceC: admin direct rename displayName');
+    else pass('SliceC: admin direct rename still works');
+    if (afterDirect.requiresDisplayNameChange === true) fail('SliceC: direct rename left require true');
+    else pass('SliceC: admin direct rename clears pending require');
+    if (afterDirect.displayNameChangeMessage) fail('SliceC: direct rename left message');
+    else pass('SliceC: admin direct rename clears message');
+
+    // Same-name rename while flagged denied (single-use / must actually change)
+    await assertSucceeds(
+      update(ref(sliceCAdmin.database()), buildAdminRequireDisplayNameChangePaths('bobby', null)),
+    );
+    await assertFails(
+      update(ref(bobby.database()), buildStudentAuthorizedDisplayNameChangePaths('bobby', 'TeacherSetName')),
+    );
+    pass('SliceC: cannot consume require by rewriting the same displayName');
+
     if (process.exitCode) {
       console.error('\nS8c-1 rules simulator: FAILED — do not weaken inventory rules; fix before deploy.');
     } else {
-      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1+C-b+displayName rules simulator: ALL REQUIRED PROOFS PASSED');
+      console.log('\nS8c-1+S8c-2+S8d-1+S8d-4a+C-a+C-a.1+C-b+displayName+SliceC rules simulator: ALL REQUIRED PROOFS PASSED');
     }
   } finally {
     await testEnv.cleanup();
