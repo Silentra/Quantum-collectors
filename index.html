@@ -859,6 +859,24 @@
     </div>
   </div>
 
+  <!-- Admin Quick Give Packs (Players list) — same player.addPack mutation as Player Details -->
+  <div id="admin-quick-give-packs-modal" class="global-modal-overlay hidden fixed inset-0 bg-black/80 z-[105] flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="aqgp-title">
+    <div class="bg-surface-900 rounded-2xl max-w-md w-full border border-surface-700 shadow-xl p-6">
+      <h3 id="aqgp-title" class="text-lg font-bold mb-1">Give Packs</h3>
+      <p id="aqgp-display-name" class="text-sm text-surface-200 mb-1"></p>
+      <p id="aqgp-login-username" class="text-xs text-surface-500 mb-4"></p>
+      <label class="text-xs text-surface-400 block mb-1" for="aqgp-pack-select">Pack Type</label>
+      <select id="aqgp-pack-select" class="admin-input w-full mb-3"></select>
+      <label class="text-xs text-surface-400 block mb-1" for="aqgp-pack-qty">Quantity</label>
+      <input id="aqgp-pack-qty" type="number" value="1" min="1" class="admin-input w-full mb-2">
+      <p id="aqgp-error" class="text-xs text-red-400 mb-3 hidden"></p>
+      <div class="flex gap-2 justify-end">
+        <button type="button" id="aqgp-cancel" class="bg-surface-700 hover:bg-surface-600 px-4 py-2 rounded-lg text-sm">Cancel</button>
+        <button type="button" id="aqgp-confirm" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg text-sm font-medium">Give Packs</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Pack Opening Modal (global — must live outside tab-packs so it shows from any tab) -->
   <div id="pack-opening-overlay" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
     <div class="pack-opening-panel bg-surface-900 rounded-2xl p-6 w-full max-h-[90vh] overflow-y-auto border border-surface-700">
