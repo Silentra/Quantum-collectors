@@ -41,10 +41,16 @@ import {
 import {
   preparePlayerDirectoryRebuild,
   commitPlayerDirectoryRebuildPlan,
-  resolvePlayerDirectoryKey,
   syncDirectoryUpdateFromPlayer,
+  resolvePlayerDirectoryKey,
   DIRECTORY_ROOT,
 } from './player-directory.js';
+import {
+  getPlayerDisplayName,
+  validateDisplayName,
+  buildAdminSetDisplayNamePlayerPaths,
+  DISPLAY_NAME_MAX_LENGTH,
+} from './player-display-name.js';
 import {
   prepareTradeIndexRebuild,
   commitTradeIndexRebuildFresh,
@@ -845,8 +851,9 @@ function renderAdminPlayers() {
   let filtered = allDirectory;
   if (search) {
     filtered = filtered.filter(({ key, value: p }) => {
-      const name = (p?.username || key || '').toLowerCase();
-      return name.includes(search);
+      const login = (p?.username || key || '').toLowerCase();
+      const visible = getPlayerDisplayName(p, key).toLowerCase();
+      return login.includes(search) || visible.includes(search);
     });
   }
   if (filterGroupId) {
@@ -870,7 +877,7 @@ function renderAdminPlayers() {
   }
 
   list.innerHTML = filtered.map(({ key, value: p }) => {
-    const displayName = p?.username || key;
+    const visibleLabel = getPlayerDisplayName(p, key);
     const adminBadge = p?.isAdmin === true ? '<span class="ml-2 px-1.5 py-0.5 text-[10px] font-bold bg-yellow-600 text-white rounded uppercase">Admin</span>' : '';
     const tradeBadge = p?.isTradeRestricted === true ? '<span class="ml-1 px-1.5 py-0.5 text-[10px] font-bold bg-red-700 text-white rounded uppercase">Trade Locked</span>' : '';
     const groupLabel = groups.getGroupName(p?.groupId);
@@ -879,7 +886,7 @@ function renderAdminPlayers() {
     return `
       <div class="p-3 flex items-center justify-between hover:bg-surface-800 cursor-pointer player-row" data-username="${safeKey}">
         <div>
-          <span class="font-medium">${displayName}</span>${adminBadge}${tradeBadge}
+          <span class="font-medium">${visibleLabel}</span>${adminBadge}${tradeBadge}
           <span class="text-xs text-surface-500 ml-2">${groupLabel}${subgroupLabel}</span>
         </div>
         <div class="flex items-center gap-3 text-xs text-surface-400">
@@ -1046,6 +1053,9 @@ async function showPlayerDetail(username) {
     return;
   }
 
+  const visibleName = getPlayerDisplayName(p, username);
+  if (nameEl) nameEl.textContent = visibleName;
+
   const allCardsList = cards.sortCardsByRarityAndName([...cards.getAllCards()]);
   const allPackTypes = packs.getAllPackTypes();
   const allGroupsList = groups.getAllGroups();
@@ -1065,6 +1075,37 @@ async function showPlayerDetail(username) {
   if (!content) return;
   content.innerHTML = `
     <div class="space-y-4">
+      <!-- Display Name vs Login Username -->
+      <div class="bg-surface-800 rounded-lg p-4">
+        <h4 class="font-semibold text-sm mb-3">Player Identity</h4>
+        <div class="space-y-3">
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Display Name</label>
+            <div class="flex flex-wrap items-center gap-2">
+              <span id="pd-display-name-value" class="font-medium text-sm">${visibleName}</span>
+              <button type="button" id="pd-change-display-name" class="bg-primary-600 hover:bg-primary-500 px-3 py-1 rounded text-xs font-medium">
+                Change Display Name
+              </button>
+            </div>
+            <div id="pd-change-display-name-form" class="hidden mt-2 space-y-2">
+              <input id="pd-new-display-name" type="text" maxlength="${DISPLAY_NAME_MAX_LENGTH}"
+                placeholder="New display name (3–${DISPLAY_NAME_MAX_LENGTH} letters, numbers, _)"
+                class="admin-input w-full" autocomplete="off">
+              <p id="pd-display-name-msg" class="text-xs text-surface-500 hidden"></p>
+              <div class="flex gap-2">
+                <button type="button" id="pd-save-display-name" class="bg-primary-600 hover:bg-primary-500 px-3 py-1 rounded text-xs">Save</button>
+                <button type="button" id="pd-cancel-display-name" class="bg-surface-700 hover:bg-surface-600 px-3 py-1 rounded text-xs">Cancel</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-surface-400 block mb-1">Login Username</label>
+            <span class="font-mono text-sm text-surface-300">${username}</span>
+            <p class="text-xs text-surface-500 mt-1">Stable account login — not changed by display name.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Group & Subgroup Assignment -->
       <div class="bg-surface-800 rounded-lg p-4">
         <h4 class="font-semibold text-sm mb-3">Group &amp; Subgroup</h4>
@@ -1241,6 +1282,76 @@ async function showPlayerDetail(username) {
   `;
 
   // Dynamic subgroup population when group changes
+  // Display name — Admin direct change (Slice A)
+  const changeDnBtn = content.querySelector('#pd-change-display-name');
+  const changeDnForm = content.querySelector('#pd-change-display-name-form');
+  const newDnInput = content.querySelector('#pd-new-display-name');
+  const dnMsg = content.querySelector('#pd-display-name-msg');
+  changeDnBtn?.addEventListener('click', () => {
+    if (!changeDnForm) return;
+    changeDnForm.classList.remove('hidden');
+    if (newDnInput) {
+      newDnInput.value = getPlayerDisplayName(p, username);
+      newDnInput.focus();
+      newDnInput.select();
+    }
+    if (dnMsg) {
+      dnMsg.classList.add('hidden');
+      dnMsg.textContent = '';
+    }
+  });
+  content.querySelector('#pd-cancel-display-name')?.addEventListener('click', () => {
+    changeDnForm?.classList.add('hidden');
+    if (dnMsg) {
+      dnMsg.classList.add('hidden');
+      dnMsg.textContent = '';
+    }
+  });
+  content.querySelector('#pd-save-display-name')?.addEventListener('click', async () => {
+    const validated = validateDisplayName(newDnInput?.value);
+    if (!validated.ok) {
+      if (dnMsg) {
+        dnMsg.textContent = validated.error;
+        dnMsg.className = 'text-xs text-red-400';
+        dnMsg.classList.remove('hidden');
+      }
+      toast.error(validated.error);
+      return;
+    }
+    const oldLabel = getPlayerDisplayName(p, username);
+    const nextName = validated.displayName;
+    if (oldLabel === nextName && typeof p.displayName === 'string' && p.displayName.trim() === nextName) {
+      changeDnForm?.classList.add('hidden');
+      return;
+    }
+    const confirmed = await confirmAction({
+      title: 'Change Display Name?',
+      message: `Change display name from "${oldLabel}" to "${nextName}"?`,
+      confirmText: 'Change Display Name',
+      destructive: false,
+    });
+    if (!confirmed) return;
+
+    const playerKey = resolvePlayerDirectoryKey(username);
+    const playerData = player.getPlayer(playerKey) || p;
+    const result = await db.updateAcknowledged({
+      ...buildAdminSetDisplayNamePlayerPaths(playerKey, nextName),
+      ...syncDirectoryUpdateFromPlayer(playerKey, {
+        ...playerData,
+        displayName: nextName,
+        requiresDisplayNameChange: false,
+        displayNameChangeMessage: null,
+      }),
+    });
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to update display name');
+      return;
+    }
+    toast.success(`Display name updated to "${nextName}"`);
+    renderAdminPlayers();
+    void showPlayerDetail(username);
+  });
+
   content.querySelector('#pd-group-select').addEventListener('change', () => {
     const grpId = content.querySelector('#pd-group-select').value;
     const subSel = content.querySelector('#pd-subgroup-select');

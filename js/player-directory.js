@@ -19,6 +19,7 @@ import {
   assertCanonicalComplete,
   canonicalChildEntries,
 } from './admin-maintenance.js';
+import { projectDisplayNameForDirectory } from './player-display-name.js';
 
 export const DIRECTORY_ROOT = 'playerDirectory';
 
@@ -30,6 +31,7 @@ export const DIRECTORY_EXCLUDED_PLAYER_KEYS = Object.freeze(['__admin__']);
  * @param {object|null|undefined} playerLike
  * @returns {{
  *   username: string,
+ *   displayName: string|null,
  *   groupId: string|null,
  *   subgroupId: string|null,
  *   isAdmin: boolean,
@@ -48,6 +50,7 @@ export function buildDirectoryEntry(usernameKey, playerLike) {
 
   return {
     username: String(usernameKey),
+    displayName: projectDisplayNameForDirectory(p.displayName),
     groupId,
     subgroupId,
     isAdmin: p.isAdmin === true,
@@ -66,6 +69,7 @@ export function buildDirectoryEntry(usernameKey, playerLike) {
  * @param {object|null|undefined} entryLike
  * @returns {{
  *   username: string,
+ *   displayName: string|null,
  *   groupId: string|null,
  *   subgroupId: string|null,
  *   isAdmin: boolean,
@@ -117,6 +121,7 @@ export function directoryEntriesEqual(a, b) {
   const nb = normalizeDirectoryEntry(b.username != null ? b.username : a.username, b);
   return (
     na.username === nb.username
+    && projectDisplayNameForDirectory(na.displayName) === projectDisplayNameForDirectory(nb.displayName)
     && na.groupId === nb.groupId
     && na.subgroupId === nb.subgroupId
     && na.isAdmin === nb.isAdmin
@@ -128,6 +133,7 @@ export function directoryEntriesEqual(a, b) {
 /** Projected directory fields used by equality / rebuild. */
 export const DIRECTORY_PROJECTED_FIELDS = Object.freeze([
   'username',
+  'displayName',
   'groupId',
   'subgroupId',
   'isAdmin',
@@ -152,6 +158,7 @@ function _playerSourceFields(playerLike) {
     isTradeProfileHidden: Object.prototype.hasOwnProperty.call(p, 'isTradeProfileHidden')
       ? p.isTradeProfileHidden
       : undefined,
+    displayName: Object.prototype.hasOwnProperty.call(p, 'displayName') ? p.displayName : undefined,
   };
 }
 
