@@ -54,6 +54,8 @@ import {
   buildAdminSetDisplayNamePlayerPaths,
   buildAdminRequireDisplayNameChangePaths,
   buildStudentAuthorizedDisplayNameChangePaths,
+  formatAdminIdentityLabel,
+  getDirectoryDisplayName,
   DISPLAY_NAME_MAX_LENGTH,
   DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH,
 } from './player-display-name.js';
@@ -446,7 +448,9 @@ async function _enterGameAsync() {
   // Persistent admins use normal session enforcement; only __admin__ is exempt.
   auth.ensureSessionGuard();
 
-  document.getElementById('nav-username').textContent = isStandaloneAdmin ? '\u2699\uFE0F Admin' : session.username;
+  document.getElementById('nav-username').textContent = isStandaloneAdmin
+    ? '\u2699\uFE0F Admin'
+    : getPlayerDisplayName(player.getPlayer(session.username), session.username);
 
   if (isAdminUser) {
     document.getElementById('admin-tab-btn')?.classList.remove('hidden');
@@ -1176,7 +1180,7 @@ async function showPlayerDetail(username) {
   const modal = document.getElementById('player-detail-modal');
   const content = document.getElementById('player-detail-content');
   const nameEl = document.getElementById('player-detail-name');
-  if (nameEl) nameEl.textContent = username;
+  if (nameEl) nameEl.textContent = 'Loading…';
   if (modal) modal.classList.remove('hidden');
   if (content) {
     content.innerHTML = '<div class="p-4 text-surface-500 text-center text-sm">Loading player…</div>';
@@ -1632,7 +1636,7 @@ async function showPlayerDetail(username) {
       toast.error(result.error || 'Failed to update group assignment');
       return;
     }
-    toast.success(`Group assignment updated for ${username}`);
+    toast.success(`Group assignment updated for ${visibleName}`);
     renderAdminPlayers();
     void showPlayerDetail(username);
   });
@@ -1641,7 +1645,7 @@ async function showPlayerDetail(username) {
     const cardId = content.querySelector('#pd-card-select').value;
     const qty = parseInt(content.querySelector('#pd-card-qty').value) || 1;
     player.addCard(username, cardId, qty);
-    toast.success(`Gave ${qty} card(s) to ${username}`);
+    toast.success(`Gave ${qty} card(s) to ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -1649,7 +1653,7 @@ async function showPlayerDetail(username) {
     const packId = content.querySelector('#pd-pack-select').value;
     const qty = parseInt(content.querySelector('#pd-pack-qty').value) || 1;
     player.addPack(username, packId, qty);
-    toast.success(`Gave ${qty} pack(s) to ${username}`);
+    toast.success(`Gave ${qty} pack(s) to ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -1660,7 +1664,7 @@ async function showPlayerDetail(username) {
       toast.error('Could not grant RP');
       return;
     }
-    toast.success(`Gave ${result.amount} RP to ${username}`);
+    toast.success(`Gave ${result.amount} RP to ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -1672,7 +1676,7 @@ async function showPlayerDetail(username) {
       toast.error('Could not grant consumable');
       return;
     }
-    toast.success(`Granted ${qty} item(s) to ${username}`);
+    toast.success(`Granted ${qty} item(s) to ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -1687,7 +1691,7 @@ async function showPlayerDetail(username) {
       toast.error('Could not unlock cosmetic');
       return;
     }
-    toast.success(`Cosmetic unlocked for ${username}`);
+    toast.success(`Cosmetic unlocked for ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -1699,10 +1703,11 @@ async function showPlayerDetail(username) {
 
   // Delete player — DESTRUCTIVE (requires confirmation); clears directory + authDirectory
   content.querySelector('#pd-delete-player').addEventListener('click', async () => {
+    const identityLabel = formatAdminIdentityLabel(p, username);
     const confirmed = await confirmAction({
-      title: `Delete player "${username}"?`,
+      title: `Delete player ${identityLabel}?`,
       message:
-        `This will permanently delete "${username}" and all their game data. `
+        `This will permanently delete ${identityLabel} and all their game data. `
         + 'Deleted usernames may require administrator cleanup before being reused. '
         + 'This cannot be undone.',
       confirmText: '🗑 Delete Permanently',
@@ -1714,7 +1719,7 @@ async function showPlayerDetail(username) {
       toast.error(result.error || 'Failed to delete player');
       return;
     }
-    toast.info(`Player "${username}" deleted`);
+    toast.info(`Player ${identityLabel} deleted`);
     document.getElementById('player-detail-modal').classList.add('hidden');
     releaseAdminSelectedPlayerScope();
     renderAdminPlayers();
@@ -1727,12 +1732,12 @@ async function showPlayerDetail(username) {
       const c = cards.getCard(cardId);
       const cardName = c ? c.name : cardId;
       const confirmed = await confirmAction(
-        `Remove "${cardName}" from ${username}'s inventory?`,
+        `Remove "${cardName}" from ${visibleName}'s inventory?`,
         'Remove inventory item?'
       );
       if (!confirmed) return;
       player.removeCard(username, cardId);
-      toast.info(`Removed card from ${username}`);
+      toast.info(`Removed card from ${visibleName}`);
       void showPlayerDetail(username);
     });
   });
@@ -1743,7 +1748,7 @@ async function showPlayerDetail(username) {
     promoteBtn.addEventListener('click', async () => {
       const confirmed = await confirmAction({
         title: 'Promote to admin?',
-        message: `Grant admin access to "${username}"? They will have full admin panel access.`,
+        message: `Grant admin access to "${visibleName}"? They will have full admin panel access.`,
         confirmText: 'Promote to Admin',
         destructive: false,
       });
@@ -1769,7 +1774,7 @@ async function showPlayerDetail(username) {
         return;
       }
       await loadAdminRegistryEntryOnce(targetUid, { force: true });
-      toast.success(`${username} promoted to admin`);
+      toast.success(`${visibleName} promoted to admin`);
       void showPlayerDetail(username);
       renderAdminPlayers();
     });
@@ -1781,7 +1786,7 @@ async function showPlayerDetail(username) {
     removeAdminBtn.addEventListener('click', async () => {
       const confirmed = await confirmAction({
         title: 'Remove admin access?',
-        message: `Remove admin access from "${username}"? They will lose all admin panel access.`,
+        message: `Remove admin access from "${visibleName}"? They will lose all admin panel access.`,
         confirmText: 'Remove Admin',
         destructive: true,
       });
@@ -1805,7 +1810,7 @@ async function showPlayerDetail(username) {
         return;
       }
       await loadAdminRegistryEntryOnce(targetUid, { force: true });
-      toast.success(`Admin access removed from ${username}`);
+      toast.success(`Admin access removed from ${visibleName}`);
       void showPlayerDetail(username);
       renderAdminPlayers();
     });
@@ -1820,7 +1825,7 @@ async function showPlayerDetail(username) {
       const isRestricted = currentPlayer && currentPlayer.isTradeRestricted === true;
       const action = isRestricted ? 'Remove' : 'Enable';
       const confirmed = await confirmAction(
-        `${action} trade restriction for "${username}"?${!isRestricted ? ' They will not be able to trade.' : ' They will be able to trade again.'}`,
+        `${action} trade restriction for "${visibleName}"?${!isRestricted ? ' They will not be able to trade.' : ' They will be able to trade again.'}`,
         `${action} trade restriction?`
       );
       if (!confirmed) return;
@@ -1833,7 +1838,7 @@ async function showPlayerDetail(username) {
         toast.error(result.error || 'Failed to update trade restriction');
         return;
       }
-      toast.success(`Trade restriction ${isRestricted ? 'removed from' : 'enabled for'} ${username}`);
+      toast.success(`Trade restriction ${isRestricted ? 'removed from' : 'enabled for'} ${visibleName}`);
       void showPlayerDetail(username);
       renderAdminPlayers();
     });
@@ -1878,10 +1883,11 @@ async function showPlayerDetail(username) {
         return;
       }
 
+      const identityLabel = formatAdminIdentityLabel(p, username);
       const confirmed = await confirmAction(
         isFirebaseAuthEnabled()
-          ? `Reset login for "${username}"? Their password will change, their current session will be invalidated, and inventory/progress stay the same.`
-          : `Reset the password for "${username}"? They will need to use the new password on next login.`,
+          ? `Reset login for ${identityLabel}? Their password will change, their current session will be invalidated, and inventory/progress stay the same.`
+          : `Reset the password for ${identityLabel}? They will need to use the new password on next login.`,
         'Reset player password?'
       );
       if (!confirmed) return;
@@ -1903,7 +1909,7 @@ async function showPlayerDetail(username) {
           resetPwMsg.textContent = 'Password reset successfully.';
           resetPwMsg.className = 'text-xs mt-1 text-green-400';
           resetPwMsg.classList.remove('hidden');
-          toast.success(`Password reset for ${username}`);
+          toast.success(`Password reset for ${formatAdminIdentityLabel(p, username)}`);
         } else {
           if (result.code) {
             console.warn('[Admin] Password reset failed:', result.code, result.detail || result.error);
@@ -2930,7 +2936,7 @@ async function renderAdminAccess(options = {}) {
       <div class="font-mono font-bold">${key}</div>
       <div class="flex items-center gap-3 text-xs">
         ${value.group ? `<span class="text-surface-400">${groups.getGroupName(value.group)}</span>` : ''}
-        ${value.used ? `<span class="text-red-400">Used by ${value.usedBy}</span>` : '<span class="text-green-400">Available</span>'}
+        ${value.used ? `<span class="text-red-400">Used by ${getDirectoryDisplayName(db.get(`${DIRECTORY_ROOT}/${value.usedBy}`), value.usedBy || '')}</span>` : '<span class="text-green-400">Available</span>'}
       </div>
     </div>
   `).join('');

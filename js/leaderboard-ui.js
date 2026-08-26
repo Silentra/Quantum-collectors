@@ -37,6 +37,7 @@ import {
   hydrateLeaderboardArchivesOnce,
 } from './db-hydration.js';
 import { DIRECTORY_ROOT } from './player-directory.js';
+import { getDirectoryDisplayName } from './player-display-name.js';
 
 // ─── Category config ───────────────────────────────────────────────────────
 
@@ -380,7 +381,7 @@ function _renderTable(currentUsername, groupId) {
     return `<tr class="lb-row ${rowClass} transition">
       <td class="lb-rank px-3 py-2.5 text-center w-12 font-mono text-sm ${row.rank <= 3 ? 'text-amber-400 font-bold' : 'text-surface-400'}">${rankDisplay}</td>
       <td class="lb-name px-3 py-2.5 text-sm ${isMe ? 'text-primary-300 font-semibold' : 'text-surface-200'}">
-        ${_escHtml(row.username)}${isMe ? ' <span class="text-xs text-primary-500">(you)</span>' : ''}
+        ${_escHtml(getDirectoryDisplayName(db.get(`${DIRECTORY_ROOT}/${row.username}`), row.username))}${isMe ? ' <span class="text-xs text-primary-500">(you)</span>' : ''}
       </td>
       <td class="lb-value px-3 py-2.5 text-right font-mono text-sm font-medium ${isMe ? 'text-primary-300' : 'text-surface-300'}">${valueDisplay}</td>
     </tr>`;

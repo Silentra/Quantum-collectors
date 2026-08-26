@@ -22,6 +22,10 @@ import {
   DIRECTORY_ROOT,
 } from './player-directory.js';
 import {
+  getDirectoryDisplayName,
+  buildTradePartnerPickerLabels,
+} from './player-display-name.js';
+import {
   createTradeOffer,
   respondToTrade,
   confirmTrade,
@@ -922,12 +926,28 @@ function _renderAvailableListing(listing, myUsername) {
 
 // ─── Direct Trade Render Helpers ────────────────────────────────────────────
 
+/** Cache-only peer label (Trading-owned playerDirectory). No network reads. */
+function _peerDisplayName(username) {
+  const key = String(username || '').trim();
+  if (!key) return '';
+  return getDirectoryDisplayName(db.get(`${DIRECTORY_ROOT}/${key}`), key);
+}
+
+/** Build <option> list: value=username, label=displayName (dup-aware). */
+function _peerPickerOptionsHtml(peers) {
+  const labels = buildTradePartnerPickerLabels(peers);
+  return labels
+    .map(({ username, label }) => `<option value="${username}">${label}</option>`)
+    .join('');
+}
+
 function _renderIncomingTrade(trade, myUsername) {
   const offeredCard = cards.getCard(trade.offeredCardId);
   const offeredName = offeredCard ? offeredCard.name : trade.offeredCardId;
   const offeredRarity = offeredCard ? offeredCard.rarity : 'common';
   const ago = _timeAgo(trade.createdAt);
   const myCd = getDirectTradeCooldown(myUsername);
+  const fromLabel = _peerDisplayName(trade.offeringPlayerId);
 
   // Incoming for B: awaiting their response (pick a return card)
   if (trade.status === 'awaiting_target_response') {
@@ -944,11 +964,11 @@ function _renderIncomingTrade(trade, myUsername) {
 
     return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700" data-trade-id="${trade.id}">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm text-surface-400">From: <strong class="text-white">${trade.offeringPlayerId}</strong></span>
+        <span class="text-sm text-surface-400">From: <strong class="text-white">${fromLabel}</strong></span>
         <span class="text-xs text-surface-500">${ago}</span>
       </div>
       <div class="mb-3 p-3 rounded bg-surface-900 border border-surface-600 text-center">
-        <div class="text-xs text-surface-500 mb-1">${trade.offeringPlayerId} is offering</div>
+        <div class="text-xs text-surface-500 mb-1">${fromLabel} is offering</div>
         <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
         <div class="text-xs text-surface-500 capitalize">Rarity: ${offeredRarity}</div>
       </div>
@@ -989,12 +1009,13 @@ function _renderOutgoingTrade(trade, myUsername) {
   const ago = _timeAgo(trade.createdAt);
 
   if (trade.status === 'awaiting_target_response') {
+    const toLabel = _peerDisplayName(trade.targetPlayerId);
     return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-surface-700" data-trade-id="${trade.id}">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm text-surface-400">To: <strong class="text-white">${trade.targetPlayerId}</strong></span>
+        <span class="text-sm text-surface-400">To: <strong class="text-white">${toLabel}</strong></span>
         <span class="text-xs px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-300 border border-amber-700">Waiting for response</span>
       </div>
-      <p class="text-xs text-surface-500 mb-3">Waiting for ${trade.targetPlayerId} to respond · ${ago}</p>
+      <p class="text-xs text-surface-500 mb-3">Waiting for ${toLabel} to respond · ${ago}</p>
       <div class="mb-3 p-3 rounded bg-surface-900 border border-surface-600 text-center">
         <div class="text-xs text-surface-500 mb-1">You offered</div>
         <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
@@ -1016,7 +1037,7 @@ function _renderOutgoingTrade(trade, myUsername) {
 
     return `<div class="bg-surface-800 rounded-lg p-4 mb-2 border border-primary-700/50" data-trade-id="${trade.id}">
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm text-surface-400">With: <strong class="text-white">${trade.targetPlayerId}</strong></span>
+        <span class="text-sm text-surface-400">With: <strong class="text-white">${_peerDisplayName(trade.targetPlayerId)}</strong></span>
         <span class="text-xs px-2 py-0.5 rounded-full bg-primary-900/50 text-primary-300 border border-primary-600">Response received — your confirmation is required</span>
       </div>
       <div class="text-center text-sm mb-2 text-surface-400 font-medium">Trade Proposal</div>
@@ -1112,7 +1133,7 @@ function _renderPlayerPicker(username, myGroup) {
     <label class="text-sm text-surface-400 block mb-1">Select a player</label>
     <select id="trade-target-select" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
       <option value="">— Choose a player —</option>
-      ${groupPlayers.map(({ key }) => `<option value="${key}">${key}</option>`).join('')}
+      ${_peerPickerOptionsHtml(groupPlayers)}
     </select>
   </div>
   <div id="trade-card-pickers" class="hidden"></div>`;
@@ -1203,8 +1224,8 @@ function refreshTradePlayerPicker(username) {
       // C) Trusted update: partner no longer eligible — keep shell, mark invalid
       if (newSelect) {
         newSelect.innerHTML = `<option value="">— Choose a player —</option>${
-          peers.map(({ key }) => `<option value="${key}">${key}</option>`).join('')
-        }<option value="${prevTarget}">${prevTarget} (unavailable)</option>`;
+          _peerPickerOptionsHtml(peers)
+        }<option value="${prevTarget}">${_peerDisplayName(prevTarget)} (unavailable)</option>`;
         newSelect.value = prevTarget;
       }
       _selectedTarget = prevTarget;
@@ -1215,7 +1236,7 @@ function refreshTradePlayerPicker(username) {
         _wireCardSelectionEvents(username);
       }
       _setDirectPartnerInvalid(
-        `"${prevTarget}" is no longer available to trade. Choose another player or cancel.`,
+        `"${_peerDisplayName(prevTarget)}" is no longer available to trade. Choose another player or cancel.`,
       );
     } else if (prevTarget && !keepTarget) {
       _clearDirectComposerState();
@@ -1250,7 +1271,7 @@ function refreshTradePlayerPicker(username) {
   // In-place options update (ready → ready)
   const previousValue = select.value || _selectedTarget || '';
   const optionsHtml = `<option value="">— Choose a player —</option>${
-    peers.map(({ key }) => `<option value="${key}">${key}</option>`).join('')
+    _peerPickerOptionsHtml(peers)
   }`;
   select.innerHTML = optionsHtml;
 
@@ -1261,11 +1282,11 @@ function refreshTradePlayerPicker(username) {
     // Leave #trade-card-pickers and offered-card state untouched
   } else if (previousValue && composerActive) {
     // Keep selection visually; partner no longer eligible
-    select.innerHTML = `${optionsHtml}<option value="${previousValue}">${previousValue} (unavailable)</option>`;
+    select.innerHTML = `${optionsHtml}<option value="${previousValue}">${_peerDisplayName(previousValue)} (unavailable)</option>`;
     select.value = previousValue;
     _selectedTarget = previousValue;
     _setDirectPartnerInvalid(
-      `"${previousValue}" is no longer available to trade. Choose another player or cancel.`,
+      `"${_peerDisplayName(previousValue)}" is no longer available to trade. Choose another player or cancel.`,
     );
   } else if (_selectedTarget) {
     select.value = '';
@@ -1298,7 +1319,7 @@ function _renderCardPickers(username, targetUsername) {
       ${myCards.length} of ${myCardsAll.length} card${myCardsAll.length !== 1 ? 's' : ''} shown
     </div>
     <div class="mt-1">
-      <label class="text-sm text-surface-400 block mb-1">Card you offer to ${targetUsername}</label>
+      <label class="text-sm text-surface-400 block mb-1">Card you offer to ${_peerDisplayName(targetUsername)}</label>
       <p class="trade-availability-hint text-xs text-surface-500 mt-0.5 mb-1">${TRADE_PROJECT_IN_USE_HINT}</p>
       <select id="trade-offered-card" class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white">
         <option value="">— Select a card —</option>
@@ -1948,7 +1969,7 @@ function _wireCardSelectionEvents(username) {
       const preview = document.getElementById('trade-confirm-preview');
       if (preview && offeredCard) {
         preview.innerHTML = `
-          <div class="text-center text-sm mb-2 text-surface-400">Offer to <strong class="text-white">${_selectedTarget}</strong></div>
+          <div class="text-center text-sm mb-2 text-surface-400">Offer to <strong class="text-white">${_peerDisplayName(_selectedTarget)}</strong></div>
           <div class="text-center p-2 rounded bg-surface-800 border border-surface-600">
             <div class="text-xs text-surface-500 mb-1">You offer</div>
             <div class="font-semibold text-sm rarity-text-${offeredCard.rarity}">${offeredCard.name}</div>
@@ -2004,10 +2025,11 @@ async function _handleSendTrade(username) {
 
   let msg = `You offer: ${offeredCard ? offeredCard.name : _offeredCardId}`;
   if (offeredCard) msg += ` [${offeredCard.rarity}]`;
-  msg += `\n\n${_selectedTarget} will choose one of their own cards of the same rarity to propose in return.`;
+  const targetLabel = _peerDisplayName(_selectedTarget);
+  msg += `\n\n${targetLabel} will choose one of their own cards of the same rarity to propose in return.`;
 
   const confirmed = await showTradeConfirmModal({
-    title: `Send Offer to ${_selectedTarget}?`,
+    title: `Send Offer to ${targetLabel}?`,
     message: msg,
     confirmText: 'Send Offer',
     cancelText: 'Cancel',
@@ -2017,7 +2039,7 @@ async function _handleSendTrade(username) {
 
   const result = await createTradeOffer(username, _selectedTarget, _offeredCardId);
   if (result.success) {
-    toast.success(`Offer sent to ${_selectedTarget}.`);
+    toast.success(`Offer sent to ${targetLabel}.`);
     _clearDirectComposerState();
   } else {
     toast.error(_friendlyError(result.reason));

@@ -126,6 +126,64 @@ export function getPlayerDisplayName(source, usernameFallback = '') {
 }
 
 /**
+ * Resolve a visible label from an already-cached directory entry (or null).
+ * Never triggers a network read — caller passes what is already in memory.
+ * Missing/invalid entry → username fallback (never blank if username provided).
+ *
+ * @param {object|null|undefined} directoryEntry
+ * @param {string} username
+ * @returns {string}
+ */
+export function getDirectoryDisplayName(directoryEntry, username) {
+  const key = String(username || '').trim();
+  return getPlayerDisplayName(directoryEntry, key) || key;
+}
+
+/**
+ * Build picker labels for a peer list. Option values must remain usernames.
+ * When two or more peers share the same resolved display label, append
+ * `(username)` to those labels only. Unique labels stay clean.
+ *
+ * @param {Array<{ username: string, directoryEntry?: object|null }|{ key: string, value?: object|null }>} peers
+ * @returns {Array<{ username: string, label: string }>}
+ */
+export function buildTradePartnerPickerLabels(peers) {
+  const list = Array.isArray(peers) ? peers : [];
+  const resolved = list.map((peer) => {
+    const username = String(
+      (peer && (peer.username != null ? peer.username : peer.key)) || '',
+    ).trim();
+    const entry = peer && (peer.directoryEntry !== undefined ? peer.directoryEntry : peer.value);
+    const baseLabel = getDirectoryDisplayName(entry, username);
+    return { username, baseLabel };
+  }).filter((p) => p.username);
+
+  const counts = new Map();
+  for (const p of resolved) {
+    counts.set(p.baseLabel, (counts.get(p.baseLabel) || 0) + 1);
+  }
+
+  return resolved.map(({ username, baseLabel }) => ({
+    username,
+    label: (counts.get(baseLabel) || 0) > 1 ? `${baseLabel} (${username})` : baseLabel,
+  }));
+}
+
+/**
+ * Admin copy for destructive / login-sensitive actions.
+ * @param {object|null|undefined} playerOrDirectoryLike
+ * @param {string} username
+ * @returns {string} e.g. `"BJ_Quantum" (login: bobby)`
+ */
+export function formatAdminIdentityLabel(playerOrDirectoryLike, username) {
+  const key = String(username || '').trim();
+  const visible = getPlayerDisplayName(playerOrDirectoryLike, key) || key;
+  if (!key) return `"${visible}"`;
+  if (visible === key) return `"${visible}" (login: ${key})`;
+  return `"${visible}" (login: ${key})`;
+}
+
+/**
  * Normalize displayName for directory projection / equality.
  * Empty / missing → null (Firebase omits nulls on write).
  *

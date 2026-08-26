@@ -37,6 +37,7 @@ import { renderProfileAchievements } from './achievements-ui.js';
 import { buildCardRenderModel, renderDetailFrame } from './card-render.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { renderMiniCardArtHtml } from './card-art.js';
+import { getPlayerDisplayName } from './player-display-name.js';
 
 const PROFILE_FEATURED_CARD_LIMIT = 3;
 
@@ -501,7 +502,21 @@ function renderFeaturedShowcase(p, username) {
 }
 
 function renderProfileSummary(p) {
-  document.getElementById('profile-username').textContent = p.username;
+  const loginUsername = String(p?.username || auth.getSession()?.username || '').trim();
+  const displayEl = document.getElementById('profile-username');
+  const loginEl = document.getElementById('profile-login-username');
+  if (displayEl) {
+    displayEl.textContent = getPlayerDisplayName(p, loginUsername) || loginUsername;
+  }
+  if (loginEl) {
+    if (loginUsername) {
+      loginEl.textContent = `Login Username: ${loginUsername}`;
+      loginEl.classList.remove('hidden');
+    } else {
+      loginEl.textContent = '';
+      loginEl.classList.add('hidden');
+    }
+  }
   const groupEl = document.getElementById('profile-group');
   const groupName = p.group ? groups.getGroupName(p.group) : null;
   if (groupName) {
