@@ -126,6 +126,24 @@ export function getPlayerDisplayName(source, usernameFallback = '') {
 }
 
 /**
+ * Admin Players list sort: primary = resolved display label (case-insensitive),
+ * secondary = stable username key. Presentation order only.
+ *
+ * @param {{ key?: string, value?: object|null }} a
+ * @param {{ key?: string, value?: object|null }} b
+ * @returns {number}
+ */
+export function compareDirectoryPlayersByDisplayName(a, b) {
+  const aKey = String(a?.key ?? '');
+  const bKey = String(b?.key ?? '');
+  const aLabel = getPlayerDisplayName(a?.value, aKey).toLocaleLowerCase();
+  const bLabel = getPlayerDisplayName(b?.value, bKey).toLocaleLowerCase();
+  const primary = aLabel.localeCompare(bLabel);
+  if (primary !== 0) return primary;
+  return aKey.toLocaleLowerCase().localeCompare(bKey.toLocaleLowerCase());
+}
+
+/**
  * Resolve a visible label from an already-cached directory entry (or null).
  * Never triggers a network read — caller passes what is already in memory.
  * Missing/invalid entry → username fallback (never blank if username provided).

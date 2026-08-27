@@ -56,6 +56,7 @@ import {
   buildStudentAuthorizedDisplayNameChangePaths,
   formatAdminIdentityLabel,
   getDirectoryDisplayName,
+  compareDirectoryPlayersByDisplayName,
   DISPLAY_NAME_MAX_LENGTH,
   DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH,
 } from './player-display-name.js';
@@ -1033,6 +1034,9 @@ function renderAdminPlayers() {
     list.innerHTML = '<div class="p-4 text-surface-500 text-center">No players found</div>';
     return;
   }
+
+  // Presentation order: resolved displayName (fallback username), then login key
+  filtered = [...filtered].sort(compareDirectoryPlayersByDisplayName);
 
   list.innerHTML = filtered.map(({ key, value: p }) => {
     const visibleLabel = getPlayerDisplayName(p, key);
