@@ -1632,6 +1632,59 @@ body.app-mode-game #screen-game.screen.active {
 .admin-tab-content { display: none; }
 .admin-tab-content.active { display: block; }
 
+/* Admin Players card: allow Filter popover to paint over the list (not clipped by roster height) */
+.admin-players-card {
+  overflow: visible;
+}
+
+.admin-player-filter-anchor {
+  z-index: 30;
+}
+
+/*
+ * Filter panel: viewport-bounded flex column.
+ * Options scroll in .admin-player-filter-panel-body; Clear/Apply stay in the footer.
+ * --admin-filter-max-h is set from JS to available viewport space when open.
+ */
+#admin-player-filter-panel:not(.hidden) {
+  display: flex;
+  flex-direction: column;
+  top: calc(100% + 0.5rem);
+  bottom: auto;
+  margin-top: 0;
+  max-height: var(--admin-filter-max-h, min(28rem, calc(100dvh - 6rem)));
+  overflow: hidden;
+}
+
+#admin-player-filter-panel.admin-player-filter-panel--above:not(.hidden) {
+  top: auto;
+  bottom: calc(100% + 0.5rem);
+}
+
+.admin-player-filter-panel-header {
+  flex: 0 0 auto;
+  padding: 1rem 1rem 0.5rem;
+}
+
+.admin-player-filter-panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 1rem 0.5rem;
+}
+
+.admin-player-filter-panel-footer {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #334155;
+  background: #0f172a; /* surface-900 */
+}
+
 /* ===================== SHOP UI — PLAYER-FACING TAB ===================== */
 
 .shop-shell {

@@ -486,7 +486,8 @@
 
             <!-- Admin Players -->
             <div id="admin-players" class="admin-tab-content">
-              <div class="bg-surface-900 rounded-xl border border-surface-700 overflow-hidden">
+              <!-- overflow-visible: filter popover must not clip when roster shrinks -->
+              <div class="admin-players-card bg-surface-900 rounded-xl border border-surface-700">
                 <div class="p-4 border-b border-surface-700 flex flex-wrap items-center gap-3">
                   <h3 class="font-semibold mr-auto">Players</h3>
                   <button id="btn-rebuild-player-directory" type="button"
@@ -501,24 +502,29 @@
                   </button>
                   <input id="admin-player-search" type="text" placeholder="Search players..."
                     class="bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm">
-                  <div class="relative">
+                  <div class="relative admin-player-filter-anchor">
                     <button type="button" id="admin-player-filter-btn"
                       class="bg-surface-800 border border-surface-600 hover:bg-surface-700 rounded-lg px-3 py-2 text-sm text-white"
                       aria-expanded="false" aria-controls="admin-player-filter-panel">
                       Filter
                     </button>
                     <div id="admin-player-filter-panel"
-                      class="hidden absolute right-0 mt-2 z-20 w-72 max-w-[90vw] bg-surface-900 border border-surface-600 rounded-xl shadow-xl p-4">
-                      <h4 class="text-xs font-semibold uppercase tracking-wide text-surface-400 mb-3">Filter Players</h4>
-                      <div class="mb-3">
-                        <p class="text-xs font-medium text-surface-300 mb-2">Groups</p>
-                        <div id="admin-player-filter-groups" class="max-h-36 overflow-y-auto space-y-1.5 text-sm"></div>
+                      class="hidden absolute right-0 z-40 w-72 max-w-[90vw] bg-surface-900 border border-surface-600 rounded-xl shadow-xl"
+                      role="dialog" aria-label="Filter players">
+                      <div class="admin-player-filter-panel-header">
+                        <h4 class="text-xs font-semibold uppercase tracking-wide text-surface-400">Filter Players</h4>
                       </div>
-                      <div class="mb-4">
-                        <p class="text-xs font-medium text-surface-300 mb-2">Subgroups</p>
-                        <div id="admin-player-filter-subgroups" class="max-h-40 overflow-y-auto space-y-1.5 text-sm"></div>
+                      <div class="admin-player-filter-panel-body">
+                        <div class="mb-3">
+                          <p class="text-xs font-medium text-surface-300 mb-2">Groups</p>
+                          <div id="admin-player-filter-groups" class="space-y-1.5 text-sm"></div>
+                        </div>
+                        <div>
+                          <p class="text-xs font-medium text-surface-300 mb-2">Subgroups</p>
+                          <div id="admin-player-filter-subgroups" class="space-y-1.5 text-sm"></div>
+                        </div>
                       </div>
-                      <div class="flex gap-2 justify-end">
+                      <div class="admin-player-filter-panel-footer">
                         <button type="button" id="admin-player-filter-clear"
                           class="bg-surface-700 hover:bg-surface-600 px-3 py-1.5 rounded-lg text-xs">Clear Filters</button>
                         <button type="button" id="admin-player-filter-apply"
@@ -527,7 +533,7 @@
                     </div>
                   </div>
                 </div>
-                <div id="admin-players-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto"></div>
+                <div id="admin-players-list" class="divide-y divide-surface-700 max-h-[60vh] overflow-y-auto rounded-b-xl"></div>
               </div>
             </div>
 
