@@ -61,6 +61,12 @@ import {
   DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH,
 } from './player-display-name.js';
 import {
+  filterAndSortAdminDirectoryPlayers,
+  buildAdminPlayersSubgroupFilterOptions,
+  pruneDraftSubgroupIds,
+  countAdminPlayersActiveFilters,
+} from './admin-players-filter.js';
+import {
   prepareTradeIndexRebuild,
   commitTradeIndexRebuildFresh,
 } from './trade-index.js';
@@ -788,6 +794,8 @@ function cleanupAdmin() {
   releaseAdminSelectedPlayerScope();
   releaseAdminDirectoryScope();
   document.getElementById('player-detail-modal')?.classList.add('hidden');
+  _resetAdminPlayersFilterState();
+  _setAdminPlayersFilterPanelOpen(false);
 }
 
 function renderAdmin() {
@@ -799,6 +807,10 @@ function renderAdmin() {
 }
 
 async function renderAdminSubTab(tab) {
+  if (tab !== 'players') {
+    _resetAdminPlayersFilterState();
+    _setAdminPlayersFilterPanelOpen(false);
+  }
   switch (tab) {
     case 'overview': renderAdminOverview(); break;
     case 'players': _setupPlayerFilters(); renderAdminPlayers(); break;
@@ -857,31 +869,184 @@ function renderAdminOverview() {
 
 // ===================== ADMIN PLAYERS =====================
 
+/** Module-local Admin Players filter state (presentation only; not persisted). */
+const _adminPlayersFilter = {
+  selectedGroupIds: [],
+  selectedSubgroupIds: [],
+  includeNoSubgroup: false,
+  draftGroupIds: [],
+  draftSubgroupIds: [],
+  draftIncludeNoSubgroup: false,
+  panelOpen: false,
+  wired: false,
+};
+
+function _resetAdminPlayersFilterState() {
+  _adminPlayersFilter.selectedGroupIds = [];
+  _adminPlayersFilter.selectedSubgroupIds = [];
+  _adminPlayersFilter.includeNoSubgroup = false;
+  _adminPlayersFilter.draftGroupIds = [];
+  _adminPlayersFilter.draftSubgroupIds = [];
+  _adminPlayersFilter.draftIncludeNoSubgroup = false;
+  _updateAdminPlayersFilterButton();
+}
+
+function _copyIds(ids) {
+  return [...new Set((ids || []).map((id) => String(id)).filter(Boolean))];
+}
+
+function _setAdminPlayersFilterPanelOpen(open) {
+  _adminPlayersFilter.panelOpen = !!open;
+  const panel = document.getElementById('admin-player-filter-panel');
+  const btn = document.getElementById('admin-player-filter-btn');
+  if (panel) panel.classList.toggle('hidden', !_adminPlayersFilter.panelOpen);
+  if (btn) btn.setAttribute('aria-expanded', _adminPlayersFilter.panelOpen ? 'true' : 'false');
+}
+
+function _updateAdminPlayersFilterButton() {
+  const btn = document.getElementById('admin-player-filter-btn');
+  if (!btn) return;
+  const count = countAdminPlayersActiveFilters({
+    groupIds: _adminPlayersFilter.selectedGroupIds,
+    subgroupIds: _adminPlayersFilter.selectedSubgroupIds,
+    includeNoSubgroup: _adminPlayersFilter.includeNoSubgroup,
+  });
+  btn.textContent = count > 0 ? `Filter (${count})` : 'Filter';
+  btn.classList.toggle('border-primary-500', count > 0);
+  btn.classList.toggle('text-primary-300', count > 0);
+}
+
+function _syncDraftFromCommitted() {
+  _adminPlayersFilter.draftGroupIds = _copyIds(_adminPlayersFilter.selectedGroupIds);
+  _adminPlayersFilter.draftSubgroupIds = _copyIds(_adminPlayersFilter.selectedSubgroupIds);
+  _adminPlayersFilter.draftIncludeNoSubgroup = _adminPlayersFilter.includeNoSubgroup === true;
+}
+
+function _readDraftFromPanel() {
+  const groupIds = [...document.querySelectorAll('#admin-player-filter-groups input[type="checkbox"]:checked')]
+    .map((el) => el.value)
+    .filter(Boolean);
+  const subgroupIds = [...document.querySelectorAll('#admin-player-filter-subgroups input[data-subgroup-id]:checked')]
+    .map((el) => el.getAttribute('data-subgroup-id') || el.value)
+    .filter(Boolean);
+  const includeNoSubgroup = !!document.getElementById('admin-player-filter-no-subgroup')?.checked;
+  _adminPlayersFilter.draftGroupIds = _copyIds(groupIds);
+  _adminPlayersFilter.draftSubgroupIds = _copyIds(subgroupIds);
+  _adminPlayersFilter.draftIncludeNoSubgroup = includeNoSubgroup;
+}
+
+function _renderAdminPlayersFilterPanelOptions() {
+  const groupsEl = document.getElementById('admin-player-filter-groups');
+  const subsEl = document.getElementById('admin-player-filter-subgroups');
+  if (!groupsEl || !subsEl) return;
+
+  const allGroups = groups.getAllGroups();
+  const draftGroups = _copyIds(_adminPlayersFilter.draftGroupIds);
+  const draftSubs = _copyIds(_adminPlayersFilter.draftSubgroupIds);
+
+  groupsEl.innerHTML = allGroups.length
+    ? allGroups.map((g) => {
+      const checked = draftGroups.includes(String(g.id)) ? 'checked' : '';
+      const safeId = String(g.id).replace(/"/g, '&quot;');
+      const safeName = String(g.name || g.id)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/"/g, '&quot;');
+      return `<label class="flex items-center gap-2 text-surface-200 cursor-pointer">
+        <input type="checkbox" class="admin-player-filter-group-cb accent-primary-500" value="${safeId}" ${checked}>
+        <span>${safeName}</span>
+      </label>`;
+    }).join('')
+    : '<p class="text-xs text-surface-500">No groups configured.</p>';
+
+  const subOptions = buildAdminPlayersSubgroupFilterOptions(allGroups, draftGroups);
+  const prunedSubs = pruneDraftSubgroupIds(draftSubs, subOptions);
+  _adminPlayersFilter.draftSubgroupIds = prunedSubs;
+
+  const noSubChecked = _adminPlayersFilter.draftIncludeNoSubgroup ? 'checked' : '';
+  const subRows = [
+    `<label class="flex items-center gap-2 text-surface-200 cursor-pointer">
+      <input type="checkbox" id="admin-player-filter-no-subgroup" class="accent-primary-500" ${noSubChecked}>
+      <span>No Subgroup</span>
+    </label>`,
+  ];
+  for (const opt of subOptions) {
+    const checked = prunedSubs.includes(opt.id) ? 'checked' : '';
+    const safeId = String(opt.id).replace(/"/g, '&quot;');
+    const safeLabel = String(opt.label)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/"/g, '&quot;');
+    subRows.push(`<label class="flex items-center gap-2 text-surface-200 cursor-pointer">
+      <input type="checkbox" class="admin-player-filter-sub-cb accent-primary-500" data-subgroup-id="${safeId}" value="${safeId}" ${checked}>
+      <span>${safeLabel}</span>
+    </label>`);
+  }
+  subsEl.innerHTML = subRows.join('');
+
+  groupsEl.querySelectorAll('.admin-player-filter-group-cb').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      _readDraftFromPanel();
+      _renderAdminPlayersFilterPanelOptions();
+    });
+  });
+}
+
+function _openAdminPlayersFilterPanel() {
+  _syncDraftFromCommitted();
+  _renderAdminPlayersFilterPanelOptions();
+  _setAdminPlayersFilterPanelOpen(true);
+}
+
 function _setupPlayerFilters() {
-  const groupSel = document.getElementById('admin-player-filter-group');
-  const subSel = document.getElementById('admin-player-filter-subgroup');
-  if (!groupSel || !subSel) return;
+  _updateAdminPlayersFilterButton();
 
-  // Populate group dropdown
-  const allGroupsList = groups.getAllGroups();
-  groupSel.innerHTML = `<option value="">All Groups</option>` +
-    allGroupsList.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+  const searchEl = document.getElementById('admin-player-search');
+  if (searchEl && !searchEl.dataset.filterWired) {
+    searchEl.dataset.filterWired = '1';
+    searchEl.addEventListener('input', () => renderAdminPlayers());
+  }
 
-  groupSel.onchange = () => {
-    const selectedGroupId = groupSel.value;
-    if (selectedGroupId) {
-      const subs = groups.getSubgroups(selectedGroupId);
-      subSel.innerHTML = `<option value="">All Subgroups</option>` +
-        subs.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-      subSel.disabled = false;
-    } else {
-      subSel.innerHTML = `<option value="">All Subgroups</option>`;
-      subSel.disabled = true;
-    }
-    renderAdminPlayers();
-  };
-
-  subSel.onchange = () => renderAdminPlayers();
+  if (!_adminPlayersFilter.wired) {
+    _adminPlayersFilter.wired = true;
+    const filterBtn = document.getElementById('admin-player-filter-btn');
+    filterBtn?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (_adminPlayersFilter.panelOpen) {
+        _setAdminPlayersFilterPanelOpen(false);
+      } else {
+        _openAdminPlayersFilterPanel();
+      }
+    });
+    document.getElementById('admin-player-filter-apply')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _readDraftFromPanel();
+      _adminPlayersFilter.selectedGroupIds = _copyIds(_adminPlayersFilter.draftGroupIds);
+      _adminPlayersFilter.selectedSubgroupIds = _copyIds(_adminPlayersFilter.draftSubgroupIds);
+      _adminPlayersFilter.includeNoSubgroup = _adminPlayersFilter.draftIncludeNoSubgroup === true;
+      _updateAdminPlayersFilterButton();
+      _setAdminPlayersFilterPanelOpen(false);
+      renderAdminPlayers();
+    });
+    document.getElementById('admin-player-filter-clear')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      _adminPlayersFilter.selectedGroupIds = [];
+      _adminPlayersFilter.selectedSubgroupIds = [];
+      _adminPlayersFilter.includeNoSubgroup = false;
+      _adminPlayersFilter.draftGroupIds = [];
+      _adminPlayersFilter.draftSubgroupIds = [];
+      _adminPlayersFilter.draftIncludeNoSubgroup = false;
+      _updateAdminPlayersFilterButton();
+      _renderAdminPlayersFilterPanelOptions();
+      renderAdminPlayers();
+    });
+    document.getElementById('admin-player-filter-panel')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+    document.addEventListener('click', () => {
+      if (_adminPlayersFilter.panelOpen) _setAdminPlayersFilterPanelOpen(false);
+    });
+  }
 
   const rebuildBtn = document.getElementById('btn-rebuild-player-directory');
   if (rebuildBtn && !rebuildBtn.dataset.wired) {
@@ -1003,24 +1168,7 @@ function renderAdminPlayers() {
 
   const allDirectory = db.getChildren(DIRECTORY_ROOT);
   const searchEl = document.getElementById('admin-player-search');
-  const search = (searchEl?.value || '').toLowerCase();
-  const filterGroupId = document.getElementById('admin-player-filter-group')?.value || '';
-  const filterSubgroupId = document.getElementById('admin-player-filter-subgroup')?.value || '';
-
-  let filtered = allDirectory;
-  if (search) {
-    filtered = filtered.filter(({ key, value: p }) => {
-      const login = (p?.username || key || '').toLowerCase();
-      const visible = getPlayerDisplayName(p, key).toLowerCase();
-      return login.includes(search) || visible.includes(search);
-    });
-  }
-  if (filterGroupId) {
-    filtered = filtered.filter(({ value: p }) => p?.groupId === filterGroupId);
-  }
-  if (filterSubgroupId) {
-    filtered = filtered.filter(({ value: p }) => p?.subgroupId === filterSubgroupId);
-  }
+  const search = searchEl?.value || '';
 
   if (allDirectory.length === 0) {
     list.innerHTML = `<div class="p-4 text-amber-400 text-center text-sm">
@@ -1030,13 +1178,17 @@ function renderAdminPlayers() {
     return;
   }
 
+  const filtered = filterAndSortAdminDirectoryPlayers(allDirectory, {
+    search,
+    groupIds: _adminPlayersFilter.selectedGroupIds,
+    subgroupIds: _adminPlayersFilter.selectedSubgroupIds,
+    includeNoSubgroup: _adminPlayersFilter.includeNoSubgroup,
+  });
+
   if (filtered.length === 0) {
     list.innerHTML = '<div class="p-4 text-surface-500 text-center">No players found</div>';
     return;
   }
-
-  // Presentation order: resolved displayName (fallback username), then login key
-  filtered = [...filtered].sort(compareDirectoryPlayersByDisplayName);
 
   list.innerHTML = filtered.map(({ key, value: p }) => {
     const visibleLabel = getPlayerDisplayName(p, key);
@@ -1063,7 +1215,7 @@ function renderAdminPlayers() {
     `;
   }).join('');
 
-  if (searchEl) searchEl.oninput = () => renderAdminPlayers();
+  _updateAdminPlayersFilterButton();
 
   list.querySelectorAll('.btn-admin-player-detail').forEach(btn => {
     btn.addEventListener('click', (e) => {
