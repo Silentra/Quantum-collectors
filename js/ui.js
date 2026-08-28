@@ -895,12 +895,40 @@ function _copyIds(ids) {
   return [...new Set((ids || []).map((id) => String(id)).filter(Boolean))];
 }
 
+/**
+ * Keep Filter popover inside the visible viewport so Clear/Apply stay reachable
+ * on short screens and when the Players card is short (sparse/zero results).
+ */
+function _layoutAdminPlayersFilterPanel() {
+  const panel = document.getElementById('admin-player-filter-panel');
+  const btn = document.getElementById('admin-player-filter-btn');
+  if (!panel || !btn || panel.classList.contains('hidden')) return;
+
+  const rect = btn.getBoundingClientRect();
+  const margin = 12;
+  const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - margin);
+  const spaceAbove = Math.max(0, rect.top - margin);
+  const minUsable = 160;
+  const preferBelow = spaceBelow >= minUsable || spaceBelow >= spaceAbove;
+  const available = Math.max(minUsable, preferBelow ? spaceBelow : spaceAbove);
+  const capped = Math.min(available, 28 * 16); // 28rem soft cap
+  panel.style.setProperty('--admin-filter-max-h', `${Math.round(capped)}px`);
+  panel.classList.toggle('admin-player-filter-panel--above', !preferBelow);
+}
+
 function _setAdminPlayersFilterPanelOpen(open) {
   _adminPlayersFilter.panelOpen = !!open;
   const panel = document.getElementById('admin-player-filter-panel');
   const btn = document.getElementById('admin-player-filter-btn');
-  if (panel) panel.classList.toggle('hidden', !_adminPlayersFilter.panelOpen);
+  if (panel) {
+    panel.classList.toggle('hidden', !_adminPlayersFilter.panelOpen);
+    if (!_adminPlayersFilter.panelOpen) {
+      panel.classList.remove('admin-player-filter-panel--above');
+      panel.style.removeProperty('--admin-filter-max-h');
+    }
+  }
   if (btn) btn.setAttribute('aria-expanded', _adminPlayersFilter.panelOpen ? 'true' : 'false');
+  if (_adminPlayersFilter.panelOpen) _layoutAdminPlayersFilterPanel();
 }
 
 function _updateAdminPlayersFilterButton() {
@@ -988,6 +1016,7 @@ function _renderAdminPlayersFilterPanelOptions() {
     cb.addEventListener('change', () => {
       _readDraftFromPanel();
       _renderAdminPlayersFilterPanelOptions();
+      if (_adminPlayersFilter.panelOpen) _layoutAdminPlayersFilterPanel();
     });
   });
 }
@@ -996,6 +1025,7 @@ function _openAdminPlayersFilterPanel() {
   _syncDraftFromCommitted();
   _renderAdminPlayersFilterPanelOptions();
   _setAdminPlayersFilterPanelOpen(true);
+  _layoutAdminPlayersFilterPanel();
 }
 
 function _setupPlayerFilters() {
@@ -1045,6 +1075,9 @@ function _setupPlayerFilters() {
     });
     document.addEventListener('click', () => {
       if (_adminPlayersFilter.panelOpen) _setAdminPlayersFilterPanelOpen(false);
+    });
+    window.addEventListener('resize', () => {
+      if (_adminPlayersFilter.panelOpen) _layoutAdminPlayersFilterPanel();
     });
   }
 
