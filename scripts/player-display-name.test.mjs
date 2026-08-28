@@ -16,6 +16,7 @@ import {
   buildStudentAuthorizedDisplayNameChangePaths,
   buildTradePartnerPickerLabels,
   formatAdminIdentityLabel,
+  compareDirectoryPlayersByDisplayName,
   DISPLAY_NAME_MAX_LENGTH,
   DISPLAY_NAME_CHANGE_MESSAGE_MAX_LENGTH,
   DISPLAY_NAME_RE,
@@ -99,6 +100,61 @@ assert(getDirectoryDisplayName({ displayName: 'BJ_Quantum' }, 'bobby') === 'BJ_Q
 assert(getDirectoryDisplayName({}, 'bobby') === 'bobby', 'directory missing displayName → username');
 assert(getDirectoryDisplayName(null, 'bobby') === 'bobby', 'missing directory entry → username');
 assert(getDirectoryDisplayName({ displayName: '   ' }, 'bobby') === 'bobby', 'blank directory displayName → username');
+
+// Admin Players sort by resolved display name
+const noDnSorted = [
+  { key: 'charlie', value: {} },
+  { key: 'alpha', value: {} },
+  { key: 'bravo', value: {} },
+].sort(compareDirectoryPlayersByDisplayName);
+assert(
+  noDnSorted.map((p) => p.key).join(',') === 'alpha,bravo,charlie',
+  'no displayNames → sort by username fallback',
+);
+
+const withDnSorted = [
+  { key: 'alpha', value: { displayName: 'Zebra' } },
+  { key: 'bravo', value: { displayName: 'Apple' } },
+  { key: 'charlie', value: { displayName: 'Mango' } },
+].sort(compareDirectoryPlayersByDisplayName);
+assert(
+  withDnSorted.map((p) => getPlayerDisplayName(p.value, p.key)).join(',') === 'Apple,Mango,Zebra',
+  'displayNames → Apple, Mango, Zebra',
+);
+assert(
+  withDnSorted.map((p) => p.key).join(',') === 'bravo,charlie,alpha',
+  'keys remain stable usernames after display sort',
+);
+
+const mixedSorted = [
+  { key: 'zebra_login', value: {} },
+  { key: 'mid', value: { displayName: 'Banana' } },
+  { key: 'aaa', value: { displayName: '  ' } },
+].sort(compareDirectoryPlayersByDisplayName);
+assert(
+  mixedSorted.map((p) => getPlayerDisplayName(p.value, p.key)).join(',') === 'aaa,Banana,zebra_login',
+  'mixed legacy/display resolve labels for sort',
+);
+
+const caseSorted = [
+  { key: 'u2', value: { displayName: 'mango' } },
+  { key: 'u1', value: { displayName: 'Apple' } },
+  { key: 'u3', value: { displayName: 'MANGO' } },
+].sort(compareDirectoryPlayersByDisplayName);
+assert(
+  caseSorted[0].key === 'u1'
+    && caseSorted.slice(1).map((p) => p.key).join(',') === 'u2,u3',
+  'case-insensitive primary; duplicate MANGO/mango tiebreak by username',
+);
+
+const dupSorted = [
+  { key: 'sam', value: { displayName: 'NewtonFan' } },
+  { key: 'bobby', value: { displayName: 'NewtonFan' } },
+].sort(compareDirectoryPlayersByDisplayName);
+assert(
+  dupSorted.map((p) => p.key).join(',') === 'bobby,sam',
+  'duplicate displayNames tiebreak by login username',
+);
 
 // Slice B — trade picker labels (value stays username; dups disambiguate)
 const uniquePeers = buildTradePartnerPickerLabels([
@@ -185,6 +241,11 @@ const profileUi = fs.readFileSync(path.join(root, 'js', 'profile-ui.js'), 'utf8'
 assert(profileUi.includes('getPlayerDisplayName'), 'profile-ui uses resolver');
 assert(profileUi.includes('Login Username:'), 'profile shows labeled login username');
 
+const adminUi = fs.readFileSync(path.join(root, 'js', 'ui.js'), 'utf8');
+assert(adminUi.includes('compareDirectoryPlayersByDisplayName'), 'Admin Players sorts by display-name comparator');
+assert(adminUi.includes('btn-admin-quick-give-packs'), 'Quick Give Packs button retained');
+assert(adminUi.includes('data-username="${safeKey}"'), 'Manage/Give Packs remain username-keyed');
+
 // Rules carve-out present — Slice B must not require rules edits
 const rules = fs.readFileSync(path.join(root, 'database.rules.json'), 'utf8');
 assert(rules.includes('"displayName"'), 'rules include displayName leaf');
@@ -194,17 +255,13 @@ assert(rules.includes('^[A-Za-z0-9_]{3,20}$'), 'rules validate displayName chars
 
 assert(fs.existsSync(path.join(root, 'js', 'player-display-name.js')), 'helper module exists');
 
-// firebase-hosting-prod must not be the edit target for this work — assert root source owns modal
-const prodIndex = path.join(root, 'firebase-hosting-prod', 'index.html');
-if (fs.existsSync(prodIndex)) {
-  const prodHtml = fs.readFileSync(prodIndex, 'utf8');
+// firebase-hosting-prod is generated separately — this sort fix must not be manually patched there
+const prodUi = path.join(root, 'firebase-hosting-prod', 'js', 'ui.js');
+if (fs.existsSync(prodUi)) {
+  const prodUiSrc = fs.readFileSync(prodUi, 'utf8');
   assert(
-    !prodHtml.includes('id="display-name-required-modal"'),
-    'firebase-hosting-prod index does not yet include Slice C modal (unsynced — correct)',
-  );
-  assert(
-    !prodHtml.includes('id="profile-login-username"'),
-    'firebase-hosting-prod index does not yet include Slice B profile login line (unsynced — correct)',
+    !prodUiSrc.includes('filterAndSortAdminDirectoryPlayers'),
+    'firebase-hosting-prod ui.js does not yet include multi-select filter (unsynced — correct)',
   );
 }
 
