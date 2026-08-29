@@ -998,8 +998,6 @@ export async function login(username, password) {
     }
   }
 
-  }
-
   const lockGate = await assertPlayerNotAdminLocked(username);
   if (!lockGate.ok) {
     if (useFirebase) await signOutFirebaseBestEffort();
