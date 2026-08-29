@@ -71,8 +71,14 @@ import {
 import {
   resetPasswordViaIdentityRotation,
 } from './auth-rotation.js';
+import {
+  isPlayerAdminLocked,
+  MSG_ACCOUNT_TEMPORARILY_UNAVAILABLE,
+  playerLockPath,
+} from './player-lock.js';
 
 export { usernameToAuthEmail, AUTH_DIRECTORY_ROOT };
+export { MSG_ACCOUNT_TEMPORARILY_UNAVAILABLE };
 const SESSION_KEY = 'scicards_session';
 const AUTH_MESSAGE_KEY = 'scicards_auth_message';
 
@@ -268,6 +274,7 @@ function stopSessionGuard() {
     try { _unsubSessionGuard(); } catch { /* ignore */ }
     _unsubSessionGuard = null;
   }
+  stopLockGuard();
 }
 
 /**
@@ -420,8 +427,35 @@ function armSessionGuardGrace(sessionId, ms = 4000) {
   _sessionGuardGraceUntil = sessionId ? Date.now() + ms : 0;
 }
 
+let _unsubLockGuard = null;
+
+function stopLockGuard() {
+  if (typeof _unsubLockGuard === 'function') {
+    try { _unsubLockGuard(); } catch { /* ignore */ }
+  }
+  _unsubLockGuard = null;
+}
+
+/**
+ * Secondary UX: exit when Admin locks this account. Security remains RTDB rules.
+ */
+function startLockGuard(username) {
+  stopLockGuard();
+  if (!username || username === '__admin__') return;
+  const path = playerLockPath(username);
+  _unsubLockGuard = db.onValue(path, (lockRow) => {
+    if (_exitingLocally) return;
+    const session = getSession();
+    if (!session || session.username !== username || session.username === '__admin__') return;
+    if (lockRow && lockRow.locked === true) {
+      forceLocalExit(MSG_ACCOUNT_TEMPORARILY_UNAVAILABLE);
+    }
+  });
+}
+
 function startSessionGuard(username) {
   stopSessionGuard();
+  stopLockGuard();
   if (!username || username === '__admin__') return;
 
   const path = `players/${username}/activeSession`;
@@ -448,8 +482,14 @@ function startSessionGuard(username) {
     ) {
       return;
     }
+    // Prefer lock message when Admin lock cleared the session in the same multipath.
+    if (isPlayerAdminLocked(username)) {
+      forceLocalExit(MSG_ACCOUNT_TEMPORARILY_UNAVAILABLE);
+      return;
+    }
     forceLocalExit(MSG_SIGNED_IN_ELSEWHERE);
   });
+  startLockGuard(username);
 }
 
 /** Start or refresh the in-process session guard for the current session. */
@@ -457,11 +497,27 @@ export function ensureSessionGuard() {
   const session = getSession();
   if (!session || session.username === '__admin__') {
     stopSessionGuard();
+    stopLockGuard();
     releaseAuthOwnedScopes();
     return;
   }
   if (!session.sessionId) return;
   startSessionGuard(session.username);
+}
+
+/**
+ * Load lock leaf and refuse if Admin-locked (client UX; rules enforce writes).
+ * @param {string} username
+ * @returns {Promise<{ ok: true } | { ok: false, error: string }>}
+ */
+async function assertPlayerNotAdminLocked(username) {
+  const key = String(username || '').trim();
+  if (!key || key === '__admin__') return { ok: true };
+  await db.loadPathOnce(playerLockPath(key), { force: true });
+  if (isPlayerAdminLocked(key)) {
+    return { ok: false, error: MSG_ACCOUNT_TEMPORARILY_UNAVAILABLE };
+  }
+  return { ok: true };
 }
 
 function setupCrossTabSessionWatch() {
@@ -785,6 +841,16 @@ export async function initAuth() {
     return;
   }
 
+  const lockGate = await assertPlayerNotAdminLocked(session.username);
+  if (!lockGate.ok) {
+    console.warn('[Auth] Session blocked (account admin-locked)');
+    await signOutFirebaseBestEffort();
+    releaseAuthOwnedScopes();
+    clearLocalSessionOnly();
+    setPendingAuthMessage(lockGate.error);
+    return;
+  }
+
   const activeSession = db.get(`players/${session.username}/activeSession`);
   const serverId = activeSession && activeSession.id != null ? activeSession.id : null;
   // Exact match only — no grace window on restore.
@@ -930,6 +996,14 @@ export async function login(username, password) {
     if (player.password !== hashedInput) {
       return { success: false, error: 'Incorrect password.' };
     }
+  }
+
+  }
+
+  const lockGate = await assertPlayerNotAdminLocked(username);
+  if (!lockGate.ok) {
+    if (useFirebase) await signOutFirebaseBestEffort();
+    return { success: false, error: lockGate.error };
   }
 
   const sessionId = generateSessionId();

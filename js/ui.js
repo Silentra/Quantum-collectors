@@ -101,6 +101,14 @@ import {
   adminGrantResearchPoints,
   adminGrantShopItem,
 } from './admin-player-tools.js';
+import {
+  adminLockPlayer,
+  adminUnlockPlayer,
+  isPlayerAdminLocked,
+  getPlayerLockConsistency,
+  playerLockPath,
+  playerLockByUidPath,
+} from './player-lock.js';
 
 // Project UI subsystem (extracted — Phase 1 refactor)
 import {
@@ -1497,6 +1505,25 @@ async function showPlayerDetail(username) {
     return;
   }
 
+  const authUidForLock = p.authUid != null ? String(p.authUid).trim() : '';
+  await db.loadPathOnce(playerLockPath(username), { force: true });
+  if (authUidForLock) {
+    await db.loadPathOnce(playerLockByUidPath(authUidForLock), { force: true });
+  }
+  const lockConsistency = getPlayerLockConsistency(username, authUidForLock || null);
+  const accountLocked = isPlayerAdminLocked(username) || lockConsistency.locked === true;
+  const lockStatusLabel = accountLocked ? 'Locked' : 'Unlocked';
+  const lockStatusClass = accountLocked ? 'text-red-400 font-bold' : 'text-green-400';
+  const lockMetaBits = [];
+  if (accountLocked && lockConsistency.usernameMirror?.lockedAt) {
+    try {
+      lockMetaBits.push(`Since ${new Date(lockConsistency.usernameMirror.lockedAt).toLocaleString()}`);
+    } catch { /* ignore */ }
+  }
+  if (lockConsistency.reason) {
+    lockMetaBits.push(`Mirror note: ${lockConsistency.reason}`);
+  }
+
   const visibleName = getPlayerDisplayName(p, username);
   if (nameEl) nameEl.textContent = visibleName;
 
@@ -1661,6 +1688,34 @@ async function showPlayerDetail(username) {
             </div>
             <p class="text-xs text-surface-500 mt-1">Unlocks ownership only; equipped profile state is not changed.</p>
           </div>
+        </div>
+      </div>
+
+      <!-- Account Lock (server-enforced) -->
+      <div class="bg-surface-800 rounded-lg p-4 border ${accountLocked ? 'border-red-800/60' : 'border-transparent'}">
+        <h4 class="font-semibold text-sm mb-2">Account Lock</h4>
+        <p class="text-xs text-surface-400 mb-2">
+          Server-enforced. Login username
+          <span class="font-mono text-surface-200">${username}</span>
+          is the lock identity (display name is presentation only).
+        </p>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="text-xs ${lockStatusClass}">${lockStatusLabel}</span>
+          ${lockMetaBits.length
+            ? `<span class="text-xs text-surface-500">${lockMetaBits.join(' · ')}</span>`
+            : ''}
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" id="pd-lock-account"
+            class="bg-red-700 hover:bg-red-600 px-3 py-1.5 rounded text-xs font-medium ${accountLocked ? 'opacity-40 cursor-not-allowed' : ''}"
+            ${accountLocked ? 'disabled' : ''}>
+            Lock Account
+          </button>
+          <button type="button" id="pd-unlock-account"
+            class="bg-surface-600 hover:bg-surface-500 px-3 py-1.5 rounded text-xs font-medium ${!accountLocked ? 'opacity-40 cursor-not-allowed' : ''}"
+            ${!accountLocked ? 'disabled' : ''}>
+            Unlock Account
+          </button>
         </div>
       </div>
 
@@ -1989,6 +2044,56 @@ async function showPlayerDetail(username) {
     const cat = content.querySelector('#pd-cosmetic-category').value;
     const sel = content.querySelector('#pd-cosmetic-select');
     if (sel) sel.innerHTML = _renderAdminGrantCosmeticItemOptions(cat);
+  });
+
+  content.querySelector('#pd-lock-account')?.addEventListener('click', async () => {
+    const confirmed = await confirmAction({
+      title: `Lock account ${username}?`,
+      message:
+        `Lock LOGIN USERNAME "${username}"`
+        + (visibleName !== username ? ` (display name: ${visibleName})` : '')
+        + '?\n\n'
+        + 'This ends their active session and blocks student writes until unlocked. '
+        + 'Admin can still manage this account while locked.\n\n'
+        + `Confirm you mean login username: ${username}`,
+      confirmText: 'Lock Account',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const result = await adminLockPlayer(username);
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to lock account');
+      return;
+    }
+    toast.success(`Locked ${username}`);
+    void showPlayerDetail(username);
+  });
+
+  content.querySelector('#pd-unlock-account')?.addEventListener('click', async () => {
+    const confirmed = await confirmAction({
+      title: `Unlock account ${username}?`,
+      message:
+        `Unlock LOGIN USERNAME "${username}"`
+        + (visibleName !== username ? ` (display name: ${visibleName})` : '')
+        + '?\n\n'
+        + `Confirm you mean login username: ${username}`,
+      confirmText: 'Unlock Account',
+      destructive: false,
+    });
+    if (!confirmed) return;
+    const result = await adminUnlockPlayer(username);
+    if (!result.ok) {
+      toast.error(result.error || 'Failed to unlock account');
+      return;
+    }
+    if (result.hadInconsistentMirrors) {
+      toast.info(`Unlocked ${username} (cleared inconsistent mirrors: ${(result.warnings || []).join(', ')})`);
+    } else if (result.alreadyUnlocked) {
+      toast.info(`${username} was already unlocked`);
+    } else {
+      toast.success(`Unlocked ${username}`);
+    }
+    void showPlayerDetail(username);
   });
 
   // Delete player — DESTRUCTIVE (requires confirmation); clears directory + authDirectory
