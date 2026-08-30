@@ -89,16 +89,95 @@ export function getInventory(username) {
 }
 
 /**
+ * Coerce mutation quantity to a positive integer (no silent default).
+ * Accepts numeric strings without concatenation risk.
+ * @param {unknown} raw
+ * @returns {{ ok: true, quantity: number } | { ok: false, error: string }}
+ */
+export function coercePositiveIntegerQuantity(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const n = Math.trunc(raw);
+    if (n >= 1) return { ok: true, quantity: n };
+    return { ok: false, error: 'Quantity must be a positive integer.' };
+  }
+  const n = parseInt(String(raw ?? '').trim(), 10);
+  if (!Number.isFinite(n) || n < 1) {
+    return { ok: false, error: 'Quantity must be a positive integer.' };
+  }
+  return { ok: true, quantity: n };
+}
+
+/**
+ * Read a stored count as a non-negative integer (invalid → 0).
+ * @param {unknown} raw
+ * @returns {number}
+ */
+export function readNonNegativeIntCount(raw) {
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return Math.max(0, Math.trunc(raw));
+  }
+  const n = parseInt(String(raw ?? '').trim(), 10);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return n;
+}
+
+/**
+ * Pure pack-add next-quantity planner (prevents "5"+"5"→"55").
+ * @param {unknown} currentRaw
+ * @param {unknown} quantityRaw
+ */
+export function computePackQuantityAfterAdd(currentRaw, quantityRaw) {
+  const qty = coercePositiveIntegerQuantity(quantityRaw);
+  if (!qty.ok) return qty;
+  const current = readNonNegativeIntCount(currentRaw);
+  return {
+    ok: true,
+    current,
+    quantity: qty.quantity,
+    next: current + qty.quantity,
+  };
+}
+
+/**
+ * Pure pack-remove planner.
+ * @param {unknown} currentRaw
+ * @param {unknown} quantityRaw
+ */
+export function computePackQuantityAfterRemove(currentRaw, quantityRaw) {
+  const qty = coercePositiveIntegerQuantity(quantityRaw);
+  if (!qty.ok) return qty;
+  const current = readNonNegativeIntCount(currentRaw);
+  if (current < qty.quantity) {
+    return {
+      ok: false,
+      error: 'Cannot remove more packs than owned.',
+      current,
+      quantity: qty.quantity,
+    };
+  }
+  const next = current - qty.quantity;
+  return {
+    ok: true,
+    current,
+    quantity: qty.quantity,
+    next,
+    removeLeaf: next <= 0,
+  };
+}
+
+/**
  * Add card(s) to player inventory
  */
 export function addCard(username, cardId, quantity = 1) {
-  const current = db.get(`players/${username}/inventory/${cardId}`) || 0;
-  const next = current + quantity;
+  const qty = coercePositiveIntegerQuantity(quantity);
+  if (!qty.ok) return;
+  const current = readNonNegativeIntCount(db.get(`players/${username}/inventory/${cardId}`));
+  const next = current + qty.quantity;
   db.set(`players/${username}/inventory/${cardId}`, next);
 
   // Update stats
   const stats = db.get(`players/${username}/stats`) || {};
-  stats.cardsCollected = (stats.cardsCollected || 0) + quantity;
+  stats.cardsCollected = readNonNegativeIntCount(stats.cardsCollected) + qty.quantity;
   db.set(`players/${username}/stats`, stats);
 
   recordCardCollectionGain(username, cardId, current, next);
@@ -106,16 +185,18 @@ export function addCard(username, cardId, quantity = 1) {
 
 /**
  * Remove card(s) from player inventory
- * Returns true if successful, false if insufficient
+ * Returns true if successful, false if insufficient / invalid qty
  */
 export function removeCard(username, cardId, quantity = 1) {
-  const current = db.get(`players/${username}/inventory/${cardId}`) || 0;
-  if (current < quantity) return false;
+  const qty = coercePositiveIntegerQuantity(quantity);
+  if (!qty.ok) return false;
+  const current = readNonNegativeIntCount(db.get(`players/${username}/inventory/${cardId}`));
+  if (current < qty.quantity) return false;
 
-  if (current - quantity <= 0) {
+  if (current - qty.quantity <= 0) {
     db.remove(`players/${username}/inventory/${cardId}`);
   } else {
-    db.set(`players/${username}/inventory/${cardId}`, current - quantity);
+    db.set(`players/${username}/inventory/${cardId}`, current - qty.quantity);
   }
 
   notifyCardInventoryChanged(username);
@@ -123,11 +204,17 @@ export function removeCard(username, cardId, quantity = 1) {
 }
 
 /**
- * Add pack(s) to player
+ * Add pack(s) to player. Returns false if quantity invalid (no write).
+ * @returns {boolean}
  */
 export function addPack(username, packId, quantity = 1) {
-  const current = db.get(`players/${username}/packs/${packId}`) || 0;
-  db.set(`players/${username}/packs/${packId}`, current + quantity);
+  const plan = computePackQuantityAfterAdd(
+    db.get(`players/${username}/packs/${packId}`),
+    quantity,
+  );
+  if (!plan.ok) return false;
+  db.set(`players/${username}/packs/${packId}`, plan.next);
+  return true;
 }
 
 /**
@@ -153,20 +240,65 @@ export function adminGrantPacks(username, packId, quantityRaw) {
   if (!key) return { ok: false, error: 'Player identity missing.' };
   if (!id) return { ok: false, error: 'Select a pack type.' };
   const quantity = parseAdminPackGrantQuantity(quantityRaw);
-  addPack(key, id, quantity);
+  const wrote = addPack(key, id, quantity);
+  if (!wrote) return { ok: false, error: 'Could not grant packs (invalid quantity).' };
   return { ok: true, username: key, packId: id, quantity };
 }
 
 /**
- * Remove a pack from player (after opening)
+ * Remove unopened pack(s). Does not touch packsOpened.
+ * @param {string} username
+ * @param {string} packId
+ * @param {unknown} [quantity=1]
+ * @returns {{ ok: true, username: string, packId: string, removed: number, remaining: number } | { ok: false, error: string, current?: number }}
  */
-export function removePack(username, packId) {
-  const current = db.get(`players/${username}/packs/${packId}`) || 0;
-  if (current <= 1) {
-    db.remove(`players/${username}/packs/${packId}`);
-  } else {
-    db.set(`players/${username}/packs/${packId}`, current - 1);
+export function removePack(username, packId, quantity = 1) {
+  const key = String(username || '').trim();
+  const id = String(packId || '').trim();
+  if (!key) return { ok: false, error: 'Player identity missing.' };
+  if (!id) return { ok: false, error: 'Pack type missing.' };
+
+  const plan = computePackQuantityAfterRemove(
+    db.get(`players/${key}/packs/${id}`),
+    quantity,
+  );
+  if (!plan.ok) {
+    return {
+      ok: false,
+      error: plan.error || 'Could not remove packs.',
+      current: plan.current,
+    };
   }
+
+  if (plan.removeLeaf) {
+    db.remove(`players/${key}/packs/${id}`);
+  } else {
+    db.set(`players/${key}/packs/${id}`, plan.next);
+  }
+
+  return {
+    ok: true,
+    username: key,
+    packId: id,
+    removed: plan.quantity,
+    remaining: plan.next,
+  };
+}
+
+/**
+ * Canonical Admin pack removal (Manage Player).
+ * @param {string} username
+ * @param {string} packId
+ * @param {unknown} quantityRaw
+ */
+export function adminRemovePacks(username, packId, quantityRaw) {
+  const key = String(username || '').trim();
+  const id = String(packId || '').trim();
+  if (!key) return { ok: false, error: 'Player identity missing.' };
+  if (!id) return { ok: false, error: 'Select a pack type.' };
+  const qty = coercePositiveIntegerQuantity(quantityRaw);
+  if (!qty.ok) return { ok: false, error: qty.error };
+  return removePack(key, id, qty.quantity);
 }
 
 /**

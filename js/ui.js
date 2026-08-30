@@ -121,6 +121,7 @@ import {
 import { getEquippedAura, getEquippedShimmer, initFeaturedCardPicker, renderProfile } from './profile-ui.js';
 import { renderShop, cleanupShop } from './shop-ui.js';
 import { confirmAction } from './confirm-modal.js';
+import { confirmAdminPackGrantIfNeeded } from './admin-pack-grant-confirm.js';
 
 // Shared #confirm-modal — re-export for existing importers (project-ui, etc.)
 export { confirmAction } from './confirm-modal.js';
@@ -1334,7 +1335,7 @@ function setupAdminQuickGivePacksModal() {
   document.getElementById('admin-quick-give-packs-modal')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeAdminQuickGivePacksModal();
   });
-  document.getElementById('aqgp-confirm')?.addEventListener('click', () => {
+  document.getElementById('aqgp-confirm')?.addEventListener('click', async () => {
     const username = _aqgpUsername;
     if (!username) {
       toast.error('No player selected.');
@@ -1344,7 +1345,25 @@ function setupAdminQuickGivePacksModal() {
     const packId = document.getElementById('aqgp-pack-select')?.value;
     const qtyRaw = document.getElementById('aqgp-pack-qty')?.value;
     const errEl = document.getElementById('aqgp-error');
-    const result = player.adminGrantPacks(username, packId, qtyRaw);
+    const quantity = player.parseAdminPackGrantQuantity(qtyRaw);
+    const packDef = packs.getPackType(packId);
+    const packName = packDef?.name || packId || 'pack';
+    const currentQuantity = (() => {
+      const raw = player.getPlayerPacks(username)?.[packId];
+      const n = typeof raw === 'number' ? raw : parseInt(String(raw ?? ''), 10);
+      return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+    })();
+    const dirEntry = db.get(`${DIRECTORY_ROOT}/${username}`);
+    const visible = getPlayerDisplayName(dirEntry || player.getPlayer(username), username);
+    const confirmed = await confirmAdminPackGrantIfNeeded({
+      displayName: visible,
+      loginUsername: username,
+      packName,
+      grantQuantity: quantity,
+      currentQuantity,
+    });
+    if (!confirmed) return;
+    const result = player.adminGrantPacks(username, packId, quantity);
     if (!result.ok) {
       if (errEl) {
         errEl.textContent = result.error || 'Could not give packs.';
@@ -1353,8 +1372,6 @@ function setupAdminQuickGivePacksModal() {
       toast.error(result.error || 'Could not give packs.');
       return;
     }
-    const dirEntry = db.get(`${DIRECTORY_ROOT}/${username}`);
-    const visible = getPlayerDisplayName(dirEntry || player.getPlayer(username), username);
     toast.success(`Gave ${result.quantity} pack(s) to ${visible}`);
     closeAdminQuickGivePacksModal();
   });
@@ -1543,6 +1560,22 @@ async function showPlayerDetail(username) {
 
   const pdGrantCosmeticCat = _pickInitialAdminGrantCosmeticCategory();
 
+  const ownedPackEntries = Object.entries(player.getPlayerPacks(username) || {})
+    .map(([packId, rawQty]) => {
+      const qty = typeof rawQty === 'number' && Number.isFinite(rawQty)
+        ? Math.trunc(rawQty)
+        : parseInt(String(rawQty ?? ''), 10);
+      if (!Number.isFinite(qty) || qty <= 0) return null;
+      const def = packs.getPackType(packId);
+      return {
+        packId,
+        qty,
+        label: (def && def.name) ? def.name : packId,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(a.label).localeCompare(String(b.label)));
+
   if (!content) return;
   content.innerHTML = `
     <div class="space-y-4">
@@ -1636,6 +1669,26 @@ async function showPlayerDetail(username) {
           </select>
           <input id="pd-card-qty" type="number" value="1" min="1" class="admin-input w-16">
           <button id="pd-give-card" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-sm">Give</button>
+        </div>
+      </div>
+
+      <!-- Unopened Packs -->
+      <div class="bg-surface-800 rounded-lg p-4">
+        <h4 class="font-semibold text-sm mb-2">Unopened Packs</h4>
+        <div class="space-y-2 max-h-40 overflow-y-auto">
+          ${ownedPackEntries.length === 0
+            ? '<div class="text-surface-500 text-xs">No unopened packs.</div>'
+            : ownedPackEntries.map((row) => `
+              <div class="flex flex-wrap items-center gap-2 text-xs py-1 border-b border-surface-700/60 last:border-0">
+                <span class="flex-1 min-w-[8rem]">${row.label} ×${row.qty}</span>
+                <input type="number" min="1" max="${row.qty}" value="1"
+                  class="pd-remove-pack-qty admin-input w-16" data-pack-id="${row.packId}" aria-label="Remove quantity for ${row.label}">
+                <button type="button" class="pd-remove-pack bg-surface-600 hover:bg-surface-500 px-2 py-1 rounded text-xs"
+                  data-pack-id="${row.packId}" data-pack-label="${String(row.label).replace(/"/g, '&quot;')}" data-owned="${row.qty}">
+                  Remove
+                </button>
+              </div>
+            `).join('')}
         </div>
       </div>
 
@@ -1785,9 +1838,14 @@ async function showPlayerDetail(username) {
         <div class="max-h-48 overflow-y-auto space-y-1">
           ${sortedInventoryCards.length === 0 ? '<div class="text-surface-500 text-xs">Empty</div>' :
             sortedInventoryCards.map(c => `
-                <div class="flex items-center justify-between text-xs py-1">
-                  <span><span style="color:${cards.RARITY_COLORS[c.rarity]}">●</span> ${c.name} ×${c.quantity}</span>
-                  <button class="pd-remove-card text-red-400 hover:text-red-300 px-1" data-card-id="${c.id}">✕</button>
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs py-1">
+                  <span class="min-w-0 flex-1"><span style="color:${cards.RARITY_COLORS[c.rarity]}">●</span> ${c.name} ×${c.quantity}</span>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <input type="number" min="1" max="${c.quantity}" value="1"
+                      class="pd-remove-card-qty admin-input w-14" data-card-id="${c.id}" aria-label="Remove quantity for ${c.name}">
+                    <button type="button" class="pd-remove-card text-red-400 hover:text-red-300 px-2 py-1 rounded border border-red-900/40"
+                      data-card-id="${c.id}" data-owned="${c.quantity}">Remove</button>
+                  </div>
                 </div>
               `).join('')}
         </div>
@@ -1990,16 +2048,64 @@ async function showPlayerDetail(username) {
     void showPlayerDetail(username);
   });
 
-  content.querySelector('#pd-give-pack').addEventListener('click', () => {
+  content.querySelector('#pd-give-pack').addEventListener('click', async () => {
     const packId = content.querySelector('#pd-pack-select').value;
     const qtyRaw = content.querySelector('#pd-pack-qty').value;
-    const result = player.adminGrantPacks(username, packId, qtyRaw);
+    const quantity = player.parseAdminPackGrantQuantity(qtyRaw);
+    const packDef = packs.getPackType(packId);
+    const packName = packDef?.name || packId || 'pack';
+    const currentRaw = player.getPlayerPacks(username)?.[packId];
+    const currentParsed = typeof currentRaw === 'number' && Number.isFinite(currentRaw)
+      ? Math.trunc(currentRaw)
+      : parseInt(String(currentRaw ?? ''), 10);
+    const currentQuantity = Number.isFinite(currentParsed) && currentParsed > 0 ? currentParsed : 0;
+    const confirmed = await confirmAdminPackGrantIfNeeded({
+      displayName: visibleName,
+      loginUsername: username,
+      packName,
+      grantQuantity: quantity,
+      currentQuantity,
+    });
+    if (!confirmed) return;
+    const result = player.adminGrantPacks(username, packId, quantity);
     if (!result.ok) {
       toast.error(result.error || 'Could not give packs.');
       return;
     }
     toast.success(`Gave ${result.quantity} pack(s) to ${visibleName}`);
     void showPlayerDetail(username);
+  });
+
+  content.querySelectorAll('.pd-remove-pack').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const packId = btn.dataset.packId;
+      const packLabel = btn.dataset.packLabel || packId;
+      const owned = parseInt(btn.dataset.owned, 10) || 0;
+      const qtyInput = content.querySelector(`.pd-remove-pack-qty[data-pack-id="${packId}"]`);
+      const qty = parseInt(qtyInput?.value, 10);
+      if (!Number.isFinite(qty) || qty < 1) {
+        toast.error('Enter a positive quantity to remove.');
+        return;
+      }
+      if (qty > owned) {
+        toast.error(`Cannot remove more than owned (${owned}).`);
+        return;
+      }
+      const confirmed = await confirmAction({
+        title: `Remove ${qty} ${packLabel}?`,
+        message: `Remove ${qty} unopened ${packLabel} from ${visibleName}?\n\nOwned: ${owned}\nAfter: ${owned - qty}`,
+        confirmText: 'Remove Packs',
+        destructive: true,
+      });
+      if (!confirmed) return;
+      const result = player.adminRemovePacks(username, packId, qty);
+      if (!result.ok) {
+        toast.error(result.error || 'Could not remove packs.');
+        return;
+      }
+      toast.info(`Removed ${result.removed} ${packLabel} from ${visibleName}`);
+      void showPlayerDetail(username);
+    });
   });
 
   content.querySelector('#pd-give-rp')?.addEventListener('click', () => {
@@ -2120,19 +2226,39 @@ async function showPlayerDetail(username) {
     renderAdminPlayers();
   });
 
-  // Remove card from inventory — DESTRUCTIVE (requires confirmation)
+  // Remove card from inventory — quantity-aware (canonical removeCard)
   content.querySelectorAll('.pd-remove-card').forEach(btn => {
     btn.addEventListener('click', async () => {
       const cardId = btn.dataset.cardId;
+      const owned = parseInt(btn.dataset.owned, 10) || 0;
       const c = cards.getCard(cardId);
       const cardName = c ? c.name : cardId;
-      const confirmed = await confirmAction(
-        `Remove "${cardName}" from ${visibleName}'s inventory?`,
-        'Remove inventory item?'
-      );
+      const qtyInput = content.querySelector(`.pd-remove-card-qty[data-card-id="${cardId}"]`);
+      const qty = parseInt(qtyInput?.value, 10);
+      if (!Number.isFinite(qty) || qty < 1) {
+        toast.error('Enter a positive quantity to remove.');
+        return;
+      }
+      if (qty > owned) {
+        toast.error(`Cannot remove more than owned (${owned}).`);
+        return;
+      }
+      const confirmed = await confirmAction({
+        title: `Remove ${qty}× ${cardName}?`,
+        message:
+          `Remove ${qty}× "${cardName}" from ${visibleName}'s inventory?\n\n`
+          + `Owned: ${owned}\nAfter: ${owned - qty}\n\n`
+          + 'Lifetime counters (cards collected / discovered) are not reduced.',
+        confirmText: 'Remove Cards',
+        destructive: true,
+      });
       if (!confirmed) return;
-      player.removeCard(username, cardId);
-      toast.info(`Removed card from ${visibleName}`);
+      const ok = player.removeCard(username, cardId, qty);
+      if (!ok) {
+        toast.error('Could not remove cards (insufficient quantity).');
+        return;
+      }
+      toast.info(`Removed ${qty}× ${cardName} from ${visibleName}`);
       void showPlayerDetail(username);
     });
   });
