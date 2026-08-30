@@ -44,6 +44,10 @@ assert(
   (ui.match(/player\.adminGrantPacks/g) || []).length >= 2,
   'both detail and quick paths call adminGrantPacks',
 );
+assert(
+  (ui.match(/confirmAdminPackGrantIfNeeded/g) || []).length >= 2,
+  'both grant paths use shared >10 confirmation helper',
+);
 assert(ui.includes('packs.getAllPackTypes()'), 'pack types from canonical packs module');
 assert(ui.includes('_aqgpUsername = null'), 'clears selected username on close');
 assert(ui.includes('_aqgpUsername = username'), 'stores stable username on open');
