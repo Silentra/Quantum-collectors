@@ -109,6 +109,16 @@ import {
   playerLockPath,
   playerLockByUidPath,
 } from './player-lock.js';
+import {
+  ADMIN_STAT_CORRECTION_FIELDS,
+  ADMIN_STAT_CORRECTION_FIELD_IDS,
+  MSG_LOCK_BEFORE_STAT_CORRECTION,
+  adminCorrectPlayerStat,
+  buildAdminStatCorrectionConfirmOptions,
+  previewStatCorrection,
+  readPlayerRelativeNumber,
+  isConsistentlyAdminLockedForCorrection,
+} from './admin-stat-correction.js';
 
 // Project UI subsystem (extracted — Phase 1 refactor)
 import {
@@ -1529,6 +1539,10 @@ async function showPlayerDetail(username) {
   }
   const lockConsistency = getPlayerLockConsistency(username, authUidForLock || null);
   const accountLocked = isPlayerAdminLocked(username) || lockConsistency.locked === true;
+  const correctionLockGate = authUidForLock
+    ? isConsistentlyAdminLockedForCorrection(username, authUidForLock)
+    : { ok: false, reason: 'unlocked' };
+  const correctionLockOk = correctionLockGate.ok === true;
   const lockStatusLabel = accountLocked ? 'Locked' : 'Unlocked';
   const lockStatusClass = accountLocked ? 'text-red-400 font-bold' : 'text-green-400';
   const lockMetaBits = [];
@@ -1768,6 +1782,51 @@ async function showPlayerDetail(username) {
             class="bg-surface-600 hover:bg-surface-500 px-3 py-1.5 rounded text-xs font-medium ${!accountLocked ? 'opacity-40 cursor-not-allowed' : ''}"
             ${!accountLocked ? 'disabled' : ''}>
             Unlock Account
+          </button>
+        </div>
+      </div>
+
+      <!-- Account Corrections (requires consistent Admin lock) -->
+      <div class="bg-surface-800 rounded-lg p-4 border border-amber-900/40">
+        <h4 class="font-semibold text-sm mb-1">Account Corrections</h4>
+        <p class="text-xs text-surface-400 mb-3">
+          Historical stats and resources. Requires a consistent account lock.
+          Inventory and packs use the Give/Remove tools above (no lock required).
+        </p>
+        ${correctionLockOk ? '' : `
+          <p class="text-xs text-amber-400 mb-3" id="pd-correction-lock-hint">
+            ${MSG_LOCK_BEFORE_STAT_CORRECTION}
+            Use <span class="font-medium">Lock Account</span> above, then return here.
+          </p>
+        `}
+        <div class="space-y-2">
+          <label class="text-xs text-surface-400 block" for="pd-correction-field">Field</label>
+          <select id="pd-correction-field" class="admin-input w-full" ${correctionLockOk ? '' : 'disabled'}>
+            ${ADMIN_STAT_CORRECTION_FIELD_IDS.map((id) => {
+              const f = ADMIN_STAT_CORRECTION_FIELDS[id];
+              return `<option value="${f.id}">${f.label}</option>`;
+            }).join('')}
+          </select>
+          <div class="grid grid-cols-3 gap-2 text-xs">
+            <div>
+              <span class="text-surface-500 block">Current</span>
+              <span id="pd-correction-current" class="font-mono text-surface-200">—</span>
+            </div>
+            <div>
+              <label class="text-surface-500 block" for="pd-correction-adjustment">Adjustment</label>
+              <input id="pd-correction-adjustment" type="number" step="1" value="0"
+                class="admin-input w-full" ${correctionLockOk ? '' : 'disabled'} placeholder="-20">
+            </div>
+            <div>
+              <span class="text-surface-500 block">New</span>
+              <span id="pd-correction-after" class="font-mono text-surface-200">—</span>
+            </div>
+          </div>
+          <p id="pd-correction-preview-msg" class="text-xs text-surface-500 hidden"></p>
+          <button type="button" id="pd-apply-correction"
+            class="bg-amber-700 hover:bg-amber-600 px-3 py-1.5 rounded text-xs font-medium w-full disabled:opacity-40 disabled:cursor-not-allowed"
+            ${correctionLockOk ? '' : 'disabled'}>
+            Apply Correction
           </button>
         </div>
       </div>
@@ -2201,6 +2260,93 @@ async function showPlayerDetail(username) {
     }
     void showPlayerDetail(username);
   });
+
+  // Account Corrections (Phase B) — requires consistent dual lock
+  {
+    const fieldSel = content.querySelector('#pd-correction-field');
+    const adjInput = content.querySelector('#pd-correction-adjustment');
+    const currentEl = content.querySelector('#pd-correction-current');
+    const afterEl = content.querySelector('#pd-correction-after');
+    const msgEl = content.querySelector('#pd-correction-preview-msg');
+    const applyBtn = content.querySelector('#pd-apply-correction');
+
+    const refreshCorrectionPreview = () => {
+      if (!fieldSel || !currentEl || !afterEl) return null;
+      const field = ADMIN_STAT_CORRECTION_FIELDS[fieldSel.value];
+      if (!field) return null;
+      const freshPlayer = player.getPlayer(username) || p;
+      const before = readPlayerRelativeNumber(freshPlayer, field.relativePath);
+      currentEl.textContent = String(before);
+      const preview = previewStatCorrection(before, adjInput?.value);
+      if (!preview.ok) {
+        afterEl.textContent = preview.after != null ? String(preview.after) : '—';
+        afterEl.classList.add('text-red-400');
+        afterEl.classList.remove('text-green-400');
+        if (msgEl) {
+          msgEl.textContent = preview.error || 'Invalid adjustment.';
+          msgEl.className = 'text-xs text-red-400';
+          msgEl.classList.remove('hidden');
+        }
+        if (applyBtn) applyBtn.disabled = true;
+        return preview;
+      }
+      afterEl.textContent = String(preview.after);
+      afterEl.classList.remove('text-red-400');
+      afterEl.classList.add('text-green-400');
+      if (msgEl) {
+        msgEl.textContent = '';
+        msgEl.classList.add('hidden');
+      }
+      if (applyBtn) applyBtn.disabled = !correctionLockOk;
+      return preview;
+    };
+
+    fieldSel?.addEventListener('change', () => {
+      if (adjInput) adjInput.value = '0';
+      refreshCorrectionPreview();
+    });
+    adjInput?.addEventListener('input', () => refreshCorrectionPreview());
+    refreshCorrectionPreview();
+
+    applyBtn?.addEventListener('click', async () => {
+      if (!correctionLockOk) {
+        toast.error(MSG_LOCK_BEFORE_STAT_CORRECTION);
+        content.querySelector('#pd-lock-account')?.focus();
+        return;
+      }
+      const field = ADMIN_STAT_CORRECTION_FIELDS[fieldSel?.value];
+      if (!field) {
+        toast.error('Select a field to correct.');
+        return;
+      }
+      const preview = refreshCorrectionPreview();
+      if (!preview || !preview.ok) {
+        toast.error(preview?.error || 'Invalid correction.');
+        return;
+      }
+      const confirmed = await confirmAction(buildAdminStatCorrectionConfirmOptions({
+        displayName: visibleName,
+        loginUsername: username,
+        fieldLabel: field.label,
+        before: preview.before,
+        adjustment: preview.adjustment,
+        after: preview.after,
+      }));
+      if (!confirmed) return;
+      const result = await adminCorrectPlayerStat(username, field.id, preview.adjustment);
+      if (!result.ok) {
+        toast.error(result.error || 'Correction failed.');
+        if (result.requiresLock) {
+          content.querySelector('#pd-lock-account')?.focus();
+        }
+        return;
+      }
+      toast.success(
+        `Corrected ${result.fieldLabel}: ${result.before} → ${result.after}`,
+      );
+      void showPlayerDetail(username);
+    });
+  }
 
   // Delete player — DESTRUCTIVE (requires confirmation); clears directory + authDirectory
   content.querySelector('#pd-delete-player').addEventListener('click', async () => {
