@@ -5,7 +5,7 @@
  * via one updateAcknowledged multipath. Requires consistent dual Admin lock.
  *
  * Does NOT award/re-evaluate achievements (avoids duplicate one-time rewards).
- * Phase C can attach a playerHistory leaf to the same multipath later.
+ * Attaches an atomic playerHistory leaf on the same multipath commit.
  */
 
 import * as db from './database.js';
@@ -21,6 +21,12 @@ import {
   buildLeaderboardSummaryPathsForChangedStats,
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
+import {
+  buildPlayerHistoryLeafUpdate,
+  HISTORY_EVENT_TYPES,
+  HISTORY_ACTOR_TYPES,
+  HISTORY_SOURCES,
+} from './player-history.js';
 
 export const MSG_LOCK_BEFORE_STAT_CORRECTION =
   'Lock this account before changing historical stats.';
@@ -359,6 +365,32 @@ export async function adminCorrectPlayerStat(username, fieldId, adjustmentRaw) {
     now,
   );
 
+  let actorUid = null;
+  let actorUsername = null;
+  try {
+    actorUid = getAuth().currentUser?.uid || null;
+  } catch { /* ignore */ }
+  try {
+    const authMod = await import('./auth.js');
+    actorUsername = authMod.getCurrentUsername?.() || null;
+    if (actorUsername === '__admin__') actorUsername = null;
+  } catch { /* ignore */ }
+
+  const historyLeaf = buildPlayerHistoryLeafUpdate(refreshed.username, {
+    type: HISTORY_EVENT_TYPES.ADMIN_STAT_CORRECT,
+    actorType: HISTORY_ACTOR_TYPES.ADMIN,
+    source: HISTORY_SOURCES.ADMIN_STAT_CORRECTION,
+    actorUid,
+    actorUsername,
+    payload: {
+      fieldId: field.id,
+      before: preview.before,
+      adjustment: preview.adjustment,
+      after: preview.after,
+    },
+  });
+  Object.assign(updates, historyLeaf.updates);
+
   const ack = await db.updateAcknowledged(updates);
   if (!ack.ok) {
     return {
@@ -372,7 +404,6 @@ export async function adminCorrectPlayerStat(username, fieldId, adjustmentRaw) {
     };
   }
 
-  // Phase C: attach history leaf here in the same multipath (field/before/adjustment/after/actor/ts).
   return {
     ok: true,
     username: refreshed.username,
@@ -386,5 +417,6 @@ export async function adminCorrectPlayerStat(username, fieldId, adjustmentRaw) {
     after: preview.after,
     mode: ack.mode,
     achievementsTouched: false,
+    historyEventId: historyLeaf.eventId,
   };
 }

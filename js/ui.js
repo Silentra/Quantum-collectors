@@ -1373,7 +1373,7 @@ function setupAdminQuickGivePacksModal() {
       currentQuantity,
     });
     if (!confirmed) return;
-    const result = player.adminGrantPacks(username, packId, quantity);
+    const result = await player.adminGrantPacks(username, packId, quantity);
     if (!result.ok) {
       if (errEl) {
         errEl.textContent = result.error || 'Could not give packs.';
@@ -2099,11 +2099,15 @@ async function showPlayerDetail(username) {
     void showPlayerDetail(username);
   });
 
-  content.querySelector('#pd-give-card').addEventListener('click', () => {
+  content.querySelector('#pd-give-card').addEventListener('click', async () => {
     const cardId = content.querySelector('#pd-card-select').value;
     const qty = parseInt(content.querySelector('#pd-card-qty').value) || 1;
-    player.addCard(username, cardId, qty);
-    toast.success(`Gave ${qty} card(s) to ${visibleName}`);
+    const result = await player.adminGrantCards(username, cardId, qty);
+    if (!result.ok) {
+      toast.error(result.error || 'Could not give cards.');
+      return;
+    }
+    toast.success(`Gave ${result.quantity} card(s) to ${visibleName}`);
     void showPlayerDetail(username);
   });
 
@@ -2126,7 +2130,7 @@ async function showPlayerDetail(username) {
       currentQuantity,
     });
     if (!confirmed) return;
-    const result = player.adminGrantPacks(username, packId, quantity);
+    const result = await player.adminGrantPacks(username, packId, quantity);
     if (!result.ok) {
       toast.error(result.error || 'Could not give packs.');
       return;
@@ -2157,7 +2161,7 @@ async function showPlayerDetail(username) {
         destructive: true,
       });
       if (!confirmed) return;
-      const result = player.adminRemovePacks(username, packId, qty);
+      const result = await player.adminRemovePacks(username, packId, qty);
       if (!result.ok) {
         toast.error(result.error || 'Could not remove packs.');
         return;
@@ -2399,12 +2403,12 @@ async function showPlayerDetail(username) {
         destructive: true,
       });
       if (!confirmed) return;
-      const ok = player.removeCard(username, cardId, qty);
-      if (!ok) {
-        toast.error('Could not remove cards (insufficient quantity).');
+      const result = await player.adminRemoveCards(username, cardId, qty);
+      if (!result.ok) {
+        toast.error(result.error || 'Could not remove cards (insufficient quantity).');
         return;
       }
-      toast.info(`Removed ${qty}× ${cardName} from ${visibleName}`);
+      toast.info(`Removed ${result.quantity}× ${cardName} from ${visibleName}`);
       void showPlayerDetail(username);
     });
   });

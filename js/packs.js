@@ -32,6 +32,7 @@ import {
   buildLeaderboardSummaryPathsForChangedStats,
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
+import { buildPackOpenedHistoryUpdate } from './player-history.js';
 
 /**
  * Create a new pack type
@@ -233,12 +234,21 @@ function buildPackOpenPlan(username, packId, packType) {
     ),
   );
 
+  const historyLeaf = buildPackOpenedHistoryUpdate(username, {
+    packId,
+    cardsGranted: gainsByCardId,
+    packsOpenedDelta: 1,
+    cardsCollectedDelta: rolledCards.length,
+  });
+  Object.assign(updates, historyLeaf.updates);
+
   return {
     updates,
     rolledCards,
     statKeys,
     unlocked: achPlan.unlocked,
     notified: achPlan.notified,
+    historyEventId: historyLeaf.eventId,
   };
 }
 

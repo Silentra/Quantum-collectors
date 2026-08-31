@@ -1037,6 +1037,118 @@ async function _loadPathOnceWork(normalized, options = {}) {
 }
 
 /**
+ * Bounded once-query (no realtime listener). For playerHistory pagination etc.
+ * Does not mark the parent path ready and does not merge into cache by default
+ * (avoids hydrating history into normal gameplay cache).
+ *
+ * @param {string} path
+ * @param {{
+ *   orderByKey?: boolean,
+ *   limitToLast?: number,
+ *   limitToFirst?: number,
+ *   endAt?: string,
+ *   startAt?: string,
+ * }} [queryOpts]
+ * @param {{ timeoutMs?: number, mergeCache?: boolean }} [options]
+ * @returns {Promise<{
+ *   ok: boolean,
+ *   path: string,
+ *   entries: Array<{ key: string, value: any }>,
+ *   value: object|null,
+ *   mode: 'firebase'|'local',
+ *   error?: string,
+ * }>}
+ */
+export async function loadPathQueryOnce(path, queryOpts = {}, options = {}) {
+  const normalized = _normalizePath(path);
+  const modeHint = _useFirebase ? 'firebase' : 'local';
+  if (!normalized) {
+    return { ok: false, path: '', entries: [], value: null, mode: modeHint, error: 'Invalid path' };
+  }
+  if (!_db) {
+    return { ok: false, path: normalized, entries: [], value: null, mode: modeHint, error: 'Database not initialized' };
+  }
+
+  const orderByKey = queryOpts.orderByKey !== false;
+  const limitToLast = Number.isFinite(Number(queryOpts.limitToLast))
+    ? Math.trunc(Number(queryOpts.limitToLast))
+    : null;
+  const limitToFirst = Number.isFinite(Number(queryOpts.limitToFirst))
+    ? Math.trunc(Number(queryOpts.limitToFirst))
+    : null;
+  const endAt = queryOpts.endAt != null ? String(queryOpts.endAt) : null;
+  const startAt = queryOpts.startAt != null ? String(queryOpts.startAt) : null;
+  const mergeCache = options.mergeCache === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  /** @param {object|null} raw */
+  function toEntries(raw) {
+    if (!raw || typeof raw !== 'object') return [];
+    return Object.entries(raw).map(([key, value]) => ({ key, value }));
+  }
+
+  if (!_useFirebase || !_fbDb) {
+    let entries = toEntries(get(normalized));
+    entries.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+    if (startAt != null) entries = entries.filter((e) => e.key >= startAt);
+    if (endAt != null) entries = entries.filter((e) => e.key <= endAt);
+    if (limitToLast != null && limitToLast >= 0) {
+      entries = entries.slice(Math.max(0, entries.length - limitToLast));
+    }
+    if (limitToFirst != null && limitToFirst >= 0) {
+      entries = entries.slice(0, limitToFirst);
+    }
+    const value = {};
+    for (const e of entries) value[e.key] = e.value;
+    return {
+      ok: true,
+      path: normalized,
+      entries,
+      value: entries.length ? value : null,
+      mode: 'local',
+    };
+  }
+
+  try {
+    let q = _fbDb.ref(normalized);
+    if (orderByKey) q = q.orderByKey();
+    if (startAt != null) q = q.startAt(startAt);
+    if (endAt != null) q = q.endAt(endAt);
+    if (limitToLast != null && limitToLast >= 0) q = q.limitToLast(limitToLast);
+    if (limitToFirst != null && limitToFirst >= 0) q = q.limitToFirst(limitToFirst);
+
+    const snap = await Promise.race([
+      q.once('value'),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), timeoutMs)),
+    ]);
+    const raw = snap.val();
+    const entries = toEntries(raw);
+    if (mergeCache && raw && typeof raw === 'object') {
+      for (const [childKey, childVal] of Object.entries(raw)) {
+        applyLocalOnly(`${normalized}/${childKey}`, childVal);
+      }
+    }
+    return {
+      ok: true,
+      path: normalized,
+      entries,
+      value: raw && typeof raw === 'object' ? raw : null,
+      mode: 'firebase',
+    };
+  } catch (e) {
+    console.warn('[DB] loadPathQueryOnce error:', normalized, e.message);
+    return {
+      ok: false,
+      path: normalized,
+      entries: [],
+      value: null,
+      mode: 'firebase',
+      error: e.message || 'Query failed',
+    };
+  }
+}
+
+/**
  * Own a Firebase `.on('value')` subscription for a path; merge into cache on each event.
  * Observation of cache changes should use db.onValue (separate from network ownership).
  * Duplicate subscribePath for the same path reuses the Firebase listener (refCount++).

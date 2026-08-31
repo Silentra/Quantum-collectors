@@ -23,6 +23,13 @@ import {
   preparePlayerDeleteLifecycle,
   buildAuthLifecycleDeleteUpdates,
 } from './auth-rotation.js';
+import { getAuth } from './firebase-config.js';
+import {
+  buildPlayerHistoryLeafUpdate,
+  HISTORY_EVENT_TYPES,
+  HISTORY_ACTOR_TYPES,
+  HISTORY_SOURCES,
+} from './player-history.js';
 
 /**
  * Create a new player profile
@@ -227,30 +234,307 @@ export function parseAdminPackGrantQuantity(raw) {
   return Number.isFinite(qty) && qty >= 1 ? qty : 1;
 }
 
+async function _resolveAdminActorMeta() {
+  let actorUid = null;
+  let actorUsername = null;
+  try {
+    actorUid = getAuth().currentUser?.uid || null;
+  } catch { /* ignore */ }
+  try {
+    const authMod = await import('./auth.js');
+    actorUsername = authMod.getCurrentUsername?.() || null;
+    if (actorUsername === '__admin__') actorUsername = null;
+  } catch { /* ignore */ }
+  return { actorUid, actorUsername };
+}
+
 /**
- * Canonical Admin pack grant (Player Details + Quick Give Packs).
- * @param {string} username - stable login / players key
- * @param {string} packId
- * @param {unknown} quantityRaw
- * @returns {{ ok: true, username: string, packId: string, quantity: number } | { ok: false, error: string }}
+ * Pure/planner: Admin pack grant + history leaf (no write).
  */
-export function adminGrantPacks(username, packId, quantityRaw) {
+export function buildAdminPackGrantPlan(username, packId, quantity, actorMeta = {}) {
   const key = String(username || '').trim();
   const id = String(packId || '').trim();
   if (!key) return { ok: false, error: 'Player identity missing.' };
   if (!id) return { ok: false, error: 'Select a pack type.' };
+  const qtyPlan = computePackQuantityAfterAdd(
+    db.get(`players/${key}/packs/${id}`),
+    quantity,
+  );
+  if (!qtyPlan.ok) return { ok: false, error: qtyPlan.error || 'Invalid quantity.' };
+
+  const history = buildPlayerHistoryLeafUpdate(key, {
+    type: HISTORY_EVENT_TYPES.PACK_GRANTED,
+    actorType: HISTORY_ACTOR_TYPES.ADMIN,
+    source: HISTORY_SOURCES.ADMIN_GRANT_PACKS,
+    actorUid: actorMeta.actorUid || null,
+    actorUsername: actorMeta.actorUsername || null,
+    payload: {
+      packId: id,
+      quantity: qtyPlan.quantity,
+      before: qtyPlan.current,
+      after: qtyPlan.next,
+    },
+  });
+
+  return {
+    ok: true,
+    username: key,
+    packId: id,
+    quantity: qtyPlan.quantity,
+    before: qtyPlan.current,
+    after: qtyPlan.next,
+    historyEventId: history.eventId,
+    updates: {
+      [`players/${key}/packs/${id}`]: qtyPlan.next,
+      ...history.updates,
+    },
+  };
+}
+
+/**
+ * Canonical Admin pack grant (Player Details + Quick Give Packs) — atomic + history.
+ * @returns {Promise<object>}
+ */
+export async function adminGrantPacks(username, packId, quantityRaw) {
   const quantity = parseAdminPackGrantQuantity(quantityRaw);
-  const wrote = addPack(key, id, quantity);
-  if (!wrote) return { ok: false, error: 'Could not grant packs (invalid quantity).' };
-  return { ok: true, username: key, packId: id, quantity };
+  const actorMeta = await _resolveAdminActorMeta();
+  const plan = buildAdminPackGrantPlan(username, packId, quantity, actorMeta);
+  if (!plan.ok) return plan;
+  const ack = await db.updateAcknowledged(plan.updates);
+  if (!ack.ok) {
+    return { ok: false, error: ack.error || 'Could not grant packs.', mode: ack.mode };
+  }
+  return {
+    ok: true,
+    username: plan.username,
+    packId: plan.packId,
+    quantity: plan.quantity,
+    before: plan.before,
+    after: plan.after,
+    historyEventId: plan.historyEventId,
+    mode: ack.mode,
+  };
+}
+
+/**
+ * Pure/planner: Admin pack remove + history.
+ */
+export function buildAdminPackRemovePlan(username, packId, quantity, actorMeta = {}) {
+  const key = String(username || '').trim();
+  const id = String(packId || '').trim();
+  if (!key) return { ok: false, error: 'Player identity missing.' };
+  if (!id) return { ok: false, error: 'Select a pack type.' };
+  const qtyPlan = computePackQuantityAfterRemove(
+    db.get(`players/${key}/packs/${id}`),
+    quantity,
+  );
+  if (!qtyPlan.ok) {
+    return {
+      ok: false,
+      error: qtyPlan.error || 'Could not remove packs.',
+      current: qtyPlan.current,
+    };
+  }
+
+  const history = buildPlayerHistoryLeafUpdate(key, {
+    type: HISTORY_EVENT_TYPES.PACK_REMOVED,
+    actorType: HISTORY_ACTOR_TYPES.ADMIN,
+    source: HISTORY_SOURCES.ADMIN_REMOVE_PACKS,
+    actorUid: actorMeta.actorUid || null,
+    actorUsername: actorMeta.actorUsername || null,
+    payload: {
+      packId: id,
+      quantity: qtyPlan.quantity,
+      before: qtyPlan.current,
+      after: qtyPlan.next,
+    },
+  });
+
+  return {
+    ok: true,
+    username: key,
+    packId: id,
+    removed: qtyPlan.quantity,
+    remaining: qtyPlan.next,
+    before: qtyPlan.current,
+    after: qtyPlan.next,
+    historyEventId: history.eventId,
+    updates: {
+      [`players/${key}/packs/${id}`]: qtyPlan.removeLeaf ? null : qtyPlan.next,
+      ...history.updates,
+    },
+  };
+}
+
+/**
+ * Canonical Admin pack removal — atomic + history. Does not touch packsOpened.
+ */
+export async function adminRemovePacks(username, packId, quantityRaw) {
+  const qty = coercePositiveIntegerQuantity(quantityRaw);
+  if (!qty.ok) return { ok: false, error: qty.error };
+  const actorMeta = await _resolveAdminActorMeta();
+  const plan = buildAdminPackRemovePlan(username, packId, qty.quantity, actorMeta);
+  if (!plan.ok) return plan;
+  const ack = await db.updateAcknowledged(plan.updates);
+  if (!ack.ok) {
+    return { ok: false, error: ack.error || 'Could not remove packs.', mode: ack.mode };
+  }
+  return {
+    ok: true,
+    username: plan.username,
+    packId: plan.packId,
+    removed: plan.removed,
+    remaining: plan.remaining,
+    before: plan.before,
+    after: plan.after,
+    historyEventId: plan.historyEventId,
+    mode: ack.mode,
+  };
+}
+
+/**
+ * Pure/planner: Admin card grant + history (inventory + cardsCollected leaf).
+ * Derived unique/aura refreshed after ack via recordCardCollectionGain.
+ */
+export function buildAdminCardGrantPlan(username, cardId, quantity, actorMeta = {}) {
+  const key = String(username || '').trim();
+  const id = String(cardId || '').trim();
+  if (!key) return { ok: false, error: 'Player identity missing.' };
+  if (!id) return { ok: false, error: 'Select a card.' };
+  const qty = coercePositiveIntegerQuantity(quantity);
+  if (!qty.ok) return { ok: false, error: qty.error };
+
+  const before = readNonNegativeIntCount(db.get(`players/${key}/inventory/${id}`));
+  const after = before + qty.quantity;
+  const prevCollected = readNonNegativeIntCount(db.get(`players/${key}/stats/cardsCollected`));
+
+  const history = buildPlayerHistoryLeafUpdate(key, {
+    type: HISTORY_EVENT_TYPES.CARD_GRANTED,
+    actorType: HISTORY_ACTOR_TYPES.ADMIN,
+    source: HISTORY_SOURCES.ADMIN_GRANT_CARDS,
+    actorUid: actorMeta.actorUid || null,
+    actorUsername: actorMeta.actorUsername || null,
+    payload: {
+      cardId: id,
+      quantity: qty.quantity,
+      before,
+      after,
+    },
+  });
+
+  return {
+    ok: true,
+    username: key,
+    cardId: id,
+    quantity: qty.quantity,
+    before,
+    after,
+    historyEventId: history.eventId,
+    updates: {
+      [`players/${key}/inventory/${id}`]: after,
+      [`players/${key}/stats/cardsCollected`]: prevCollected + qty.quantity,
+      ...history.updates,
+    },
+  };
+}
+
+/**
+ * Canonical Admin card grant — atomic + history.
+ */
+export async function adminGrantCards(username, cardId, quantity = 1) {
+  const actorMeta = await _resolveAdminActorMeta();
+  const plan = buildAdminCardGrantPlan(username, cardId, quantity, actorMeta);
+  if (!plan.ok) return plan;
+  const ack = await db.updateAcknowledged(plan.updates);
+  if (!ack.ok) {
+    return { ok: false, error: ack.error || 'Could not grant cards.', mode: ack.mode };
+  }
+  recordCardCollectionGain(plan.username, plan.cardId, plan.before, plan.after);
+  return {
+    ok: true,
+    username: plan.username,
+    cardId: plan.cardId,
+    quantity: plan.quantity,
+    before: plan.before,
+    after: plan.after,
+    historyEventId: plan.historyEventId,
+    mode: ack.mode,
+  };
+}
+
+/**
+ * Pure/planner: Admin card remove + history. Does not touch cardsCollected/discovery.
+ */
+export function buildAdminCardRemovePlan(username, cardId, quantity, actorMeta = {}) {
+  const key = String(username || '').trim();
+  const id = String(cardId || '').trim();
+  if (!key) return { ok: false, error: 'Player identity missing.' };
+  if (!id) return { ok: false, error: 'Select a card.' };
+  const qty = coercePositiveIntegerQuantity(quantity);
+  if (!qty.ok) return { ok: false, error: qty.error };
+
+  const before = readNonNegativeIntCount(db.get(`players/${key}/inventory/${id}`));
+  if (before < qty.quantity) {
+    return { ok: false, error: 'Cannot remove more cards than owned.', current: before };
+  }
+  const after = before - qty.quantity;
+
+  const history = buildPlayerHistoryLeafUpdate(key, {
+    type: HISTORY_EVENT_TYPES.CARD_REMOVED,
+    actorType: HISTORY_ACTOR_TYPES.ADMIN,
+    source: HISTORY_SOURCES.ADMIN_REMOVE_CARDS,
+    actorUid: actorMeta.actorUid || null,
+    actorUsername: actorMeta.actorUsername || null,
+    payload: {
+      cardId: id,
+      quantity: qty.quantity,
+      before,
+      after,
+    },
+  });
+
+  return {
+    ok: true,
+    username: key,
+    cardId: id,
+    quantity: qty.quantity,
+    before,
+    after,
+    historyEventId: history.eventId,
+    updates: {
+      [`players/${key}/inventory/${id}`]: after <= 0 ? null : after,
+      ...history.updates,
+    },
+  };
+}
+
+/**
+ * Canonical Admin card remove — atomic + history.
+ */
+export async function adminRemoveCards(username, cardId, quantity = 1) {
+  const actorMeta = await _resolveAdminActorMeta();
+  const plan = buildAdminCardRemovePlan(username, cardId, quantity, actorMeta);
+  if (!plan.ok) return plan;
+  const ack = await db.updateAcknowledged(plan.updates);
+  if (!ack.ok) {
+    return { ok: false, error: ack.error || 'Could not remove cards.', mode: ack.mode };
+  }
+  notifyCardInventoryChanged(plan.username);
+  return {
+    ok: true,
+    username: plan.username,
+    cardId: plan.cardId,
+    quantity: plan.quantity,
+    before: plan.before,
+    after: plan.after,
+    historyEventId: plan.historyEventId,
+    mode: ack.mode,
+  };
 }
 
 /**
  * Remove unopened pack(s). Does not touch packsOpened.
- * @param {string} username
- * @param {string} packId
- * @param {unknown} [quantity=1]
- * @returns {{ ok: true, username: string, packId: string, removed: number, remaining: number } | { ok: false, error: string, current?: number }}
+ * System/gameplay helper (no Admin history). Prefer adminRemovePacks for Admin UI.
  */
 export function removePack(username, packId, quantity = 1) {
   const key = String(username || '').trim();
@@ -283,22 +567,6 @@ export function removePack(username, packId, quantity = 1) {
     removed: plan.quantity,
     remaining: plan.next,
   };
-}
-
-/**
- * Canonical Admin pack removal (Manage Player).
- * @param {string} username
- * @param {string} packId
- * @param {unknown} quantityRaw
- */
-export function adminRemovePacks(username, packId, quantityRaw) {
-  const key = String(username || '').trim();
-  const id = String(packId || '').trim();
-  if (!key) return { ok: false, error: 'Player identity missing.' };
-  if (!id) return { ok: false, error: 'Select a pack type.' };
-  const qty = coercePositiveIntegerQuantity(quantityRaw);
-  if (!qty.ok) return { ok: false, error: qty.error };
-  return removePack(key, id, qty.quantity);
 }
 
 /**
