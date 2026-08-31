@@ -13,6 +13,7 @@ import * as db from './database.js';
 import { STAT_KEYS, getPlayerStat } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { buildShopPurchaseHistoryUpdate } from './player-history.js';
+import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import { getAuth } from './firebase-config.js';
 
 /**
@@ -169,6 +170,8 @@ export async function commitShopPurchasePlan(username, plan) {
       };
     }
 
+    scheduleHistoryRetentionAfterWrite(plan.updates);
+
     return {
       success: true,
       notified: plan.notified || [],
@@ -203,6 +206,8 @@ export async function commitShopPurchaseWithRevalidation(username, validateAndBu
         error: ack.error || 'Could not save purchase. Check your connection and try again.',
       };
     }
+
+    scheduleHistoryRetentionAfterWrite(plan.updates);
 
     return {
       success: true,

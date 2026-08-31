@@ -1044,10 +1044,11 @@ async function _loadPathOnceWork(normalized, options = {}) {
  * @param {string} path
  * @param {{
  *   orderByKey?: boolean,
+ *   orderByChild?: string,
  *   limitToLast?: number,
  *   limitToFirst?: number,
- *   endAt?: string,
- *   startAt?: string,
+ *   endAt?: string|number,
+ *   startAt?: string|number,
  * }} [queryOpts]
  * @param {{ timeoutMs?: number, mergeCache?: boolean }} [options]
  * @returns {Promise<{
@@ -1069,15 +1070,20 @@ export async function loadPathQueryOnce(path, queryOpts = {}, options = {}) {
     return { ok: false, path: normalized, entries: [], value: null, mode: modeHint, error: 'Database not initialized' };
   }
 
-  const orderByKey = queryOpts.orderByKey !== false;
+  const orderByChild = queryOpts.orderByChild != null && String(queryOpts.orderByChild).trim()
+    ? String(queryOpts.orderByChild).trim()
+    : null;
+  const orderByKey = orderByChild ? false : (queryOpts.orderByKey !== false);
   const limitToLast = Number.isFinite(Number(queryOpts.limitToLast))
     ? Math.trunc(Number(queryOpts.limitToLast))
     : null;
   const limitToFirst = Number.isFinite(Number(queryOpts.limitToFirst))
     ? Math.trunc(Number(queryOpts.limitToFirst))
     : null;
-  const endAt = queryOpts.endAt != null ? String(queryOpts.endAt) : null;
-  const startAt = queryOpts.startAt != null ? String(queryOpts.startAt) : null;
+  const hasEndAt = Object.prototype.hasOwnProperty.call(queryOpts, 'endAt') && queryOpts.endAt != null;
+  const hasStartAt = Object.prototype.hasOwnProperty.call(queryOpts, 'startAt') && queryOpts.startAt != null;
+  const endAt = hasEndAt ? queryOpts.endAt : null;
+  const startAt = hasStartAt ? queryOpts.startAt : null;
   const mergeCache = options.mergeCache === true;
   const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
 
@@ -1089,9 +1095,42 @@ export async function loadPathQueryOnce(path, queryOpts = {}, options = {}) {
 
   if (!_useFirebase || !_fbDb) {
     let entries = toEntries(get(normalized));
-    entries.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
-    if (startAt != null) entries = entries.filter((e) => e.key >= startAt);
-    if (endAt != null) entries = entries.filter((e) => e.key <= endAt);
+    if (orderByChild) {
+      entries.sort((a, b) => {
+        const av = Number(a.value && a.value[orderByChild]);
+        const bv = Number(b.value && b.value[orderByChild]);
+        const aOk = Number.isFinite(av);
+        const bOk = Number.isFinite(bv);
+        if (aOk && bOk) return av - bv;
+        if (aOk) return -1;
+        if (bOk) return 1;
+        return String(a.key).localeCompare(String(b.key));
+      });
+      if (hasStartAt) {
+        const s = Number(startAt);
+        entries = entries.filter((e) => {
+          const v = Number(e.value && e.value[orderByChild]);
+          return Number.isFinite(v) && Number.isFinite(s) && v >= s;
+        });
+      }
+      if (hasEndAt) {
+        const eAt = Number(endAt);
+        entries = entries.filter((e) => {
+          const v = Number(e.value && e.value[orderByChild]);
+          return Number.isFinite(v) && Number.isFinite(eAt) && v <= eAt;
+        });
+      }
+    } else {
+      entries.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+      if (hasStartAt) {
+        const s = String(startAt);
+        entries = entries.filter((e) => String(e.key) >= s);
+      }
+      if (hasEndAt) {
+        const eAt = String(endAt);
+        entries = entries.filter((e) => String(e.key) <= eAt);
+      }
+    }
     if (limitToLast != null && limitToLast >= 0) {
       entries = entries.slice(Math.max(0, entries.length - limitToLast));
     }
@@ -1111,9 +1150,10 @@ export async function loadPathQueryOnce(path, queryOpts = {}, options = {}) {
 
   try {
     let q = _fbDb.ref(normalized);
-    if (orderByKey) q = q.orderByKey();
-    if (startAt != null) q = q.startAt(startAt);
-    if (endAt != null) q = q.endAt(endAt);
+    if (orderByChild) q = q.orderByChild(orderByChild);
+    else if (orderByKey) q = q.orderByKey();
+    if (hasStartAt) q = q.startAt(startAt);
+    if (hasEndAt) q = q.endAt(endAt);
     if (limitToLast != null && limitToLast >= 0) q = q.limitToLast(limitToLast);
     if (limitToFirst != null && limitToFirst >= 0) q = q.limitToFirst(limitToFirst);
 

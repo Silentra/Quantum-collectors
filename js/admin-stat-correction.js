@@ -27,6 +27,7 @@ import {
   HISTORY_ACTOR_TYPES,
   HISTORY_SOURCES,
 } from './player-history.js';
+import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 
 export const MSG_LOCK_BEFORE_STAT_CORRECTION =
   'Lock this account before changing historical stats.';
@@ -403,6 +404,8 @@ export async function adminCorrectPlayerStat(username, fieldId, adjustmentRaw) {
       after: preview.after,
     };
   }
+
+  scheduleHistoryRetentionAfterWrite(updates);
 
   return {
     ok: true,

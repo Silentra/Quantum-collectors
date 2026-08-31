@@ -278,6 +278,11 @@ export async function openPack(username, packId) {
       };
     }
 
+    try {
+      const { scheduleHistoryRetentionAfterWrite } = await import('./player-history-retention.js');
+      scheduleHistoryRetentionAfterWrite(plan.updates);
+    } catch { /* retention never blocks pack open */ }
+
     return {
       success: true,
       cards: plan.rolledCards,

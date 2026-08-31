@@ -343,3 +343,4 @@ export function deleteArchivedSeason(seasonId) {
   console.log(`[LeaderboardSeasons] Permanently deleted archived season: ${seasonId}`);
   return true;
 }
+

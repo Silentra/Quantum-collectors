@@ -33,6 +33,7 @@ import {
 } from './research.js';
 import { buildWeeklyPackRpGrantUpdates } from './weekly-research-pack.js';
 import { buildProjectClaimedHistoryUpdate } from './player-history.js';
+import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import { getAuth } from './firebase-config.js';
 import {
   STAT_KEYS,
@@ -408,6 +409,8 @@ export async function commitProjectClaim(username, projectId, options = {}) {
         error: ack.error || 'Could not save claim. Check your connection and try again.',
       };
     }
+
+    scheduleHistoryRetentionAfterWrite(plan.updates);
 
     return {
       success: true,

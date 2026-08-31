@@ -30,6 +30,10 @@ import {
   HISTORY_ACTOR_TYPES,
   HISTORY_SOURCES,
 } from './player-history.js';
+import {
+  buildPlayerHistoryTreeDeleteUpdate,
+  scheduleHistoryRetentionAfterWrite,
+} from './player-history-retention.js';
 
 /**
  * Create a new player profile
@@ -304,6 +308,7 @@ export async function adminGrantPacks(username, packId, quantityRaw) {
   if (!ack.ok) {
     return { ok: false, error: ack.error || 'Could not grant packs.', mode: ack.mode };
   }
+  scheduleHistoryRetentionAfterWrite(plan.updates);
   return {
     ok: true,
     username: plan.username,
@@ -379,6 +384,7 @@ export async function adminRemovePacks(username, packId, quantityRaw) {
   if (!ack.ok) {
     return { ok: false, error: ack.error || 'Could not remove packs.', mode: ack.mode };
   }
+  scheduleHistoryRetentionAfterWrite(plan.updates);
   return {
     ok: true,
     username: plan.username,
@@ -450,6 +456,7 @@ export async function adminGrantCards(username, cardId, quantity = 1) {
     return { ok: false, error: ack.error || 'Could not grant cards.', mode: ack.mode };
   }
   recordCardCollectionGain(plan.username, plan.cardId, plan.before, plan.after);
+  scheduleHistoryRetentionAfterWrite(plan.updates);
   return {
     ok: true,
     username: plan.username,
@@ -520,6 +527,7 @@ export async function adminRemoveCards(username, cardId, quantity = 1) {
     return { ok: false, error: ack.error || 'Could not remove cards.', mode: ack.mode };
   }
   notifyCardInventoryChanged(plan.username);
+  scheduleHistoryRetentionAfterWrite(plan.updates);
   return {
     ok: true,
     username: plan.username,
@@ -674,6 +682,8 @@ export async function deletePlayer(username) {
     // S8c-1: drop any grants targeting this player
     [`${TRADE_GRANTS_ROOT}/${playerKey}`]: null,
     ...buildLeaderboardSummaryDeletePaths(playerKey),
+    // Pass 3: wipe observational history tree with the account (not retention)
+    ...buildPlayerHistoryTreeDeleteUpdate(playerKey),
     // Option C-b: unbind login directory (Auth user may remain orphaned)
     ...buildAuthLifecycleDeleteUpdates({
       username: playerKey,
