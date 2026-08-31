@@ -894,6 +894,8 @@ async function main() {
     pass('unauthenticated config/gameOpen read allowed');
     await assertSucceeds(get(ref(anon.database(), 'config/registrationOpen')));
     pass('unauthenticated config/registrationOpen read allowed');
+    await assertSucceeds(get(ref(anon.database(), 'config/registrationInstructions')));
+    pass('unauthenticated config/registrationInstructions read allowed');
     await assertFails(get(ref(anon.database(), 'config')));
     pass('unauthenticated full /config read denied');
     await assertFails(get(ref(anon.database(), 'cards')));

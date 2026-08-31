@@ -187,6 +187,9 @@
       },
       "registrationOpen": {
         ".read": true
+      },
+      "registrationInstructions": {
+        ".read": true
       }
     },
     "cards": {

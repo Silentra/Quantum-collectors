@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await db.initDB();
     console.log('[SciCards] Database initialized');
 
-    // 1b. S8c: public classroom gates only (gameOpen / registrationOpen).
+    // 1b. S8c: public classroom gates only (gameOpen / registrationOpen / registrationInstructions).
     // Full sharedDefs (config/cards/packs/groups) require Auth — deferred below.
     metrics.mark('shared-hydrate-start');
     const gateHydration = await hydratePublicGateConfig();

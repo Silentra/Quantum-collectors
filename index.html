@@ -204,7 +204,9 @@
           </div>
 
           <div id="register-form" class="hidden">
-            <h2 class="text-lg font-semibold mb-4">Register</h2>
+            <h2 id="register-heading" class="text-lg font-semibold mb-4">Register</h2>
+            <p id="register-instructions"
+              class="hidden mb-4 text-sm text-surface-300 bg-surface-800/70 border border-surface-600 rounded-lg px-3 py-2.5 leading-relaxed whitespace-pre-wrap"></p>
             <input id="register-username" type="text" placeholder="Choose a username"
               maxlength="20" minlength="3" autocomplete="username"
               class="w-full bg-surface-800 border border-surface-600 rounded-lg px-4 py-3 mb-3 focus:outline-none focus:border-primary-500 text-white">
@@ -481,6 +483,20 @@
                   <button id="btn-toggle-game" class="px-4 py-2 rounded-lg font-medium text-sm transition"></button>
                   <button id="btn-toggle-registration" class="px-4 py-2 rounded-lg font-medium text-sm transition"></button>
                 </div>
+              </div>
+              <div class="bg-surface-900 rounded-xl p-6 border border-surface-700 mt-4">
+                <h3 class="font-semibold mb-1">Student Registration Instructions</h3>
+                <p class="text-xs text-surface-400 mb-3">
+                  Optional message shown to students before they create an account.
+                  Useful for username/display-name rules.
+                </p>
+                <textarea id="admin-registration-instructions" rows="3" maxlength="800"
+                  placeholder="e.g. Use your first name and last initial. Do not use your full last name."
+                  class="w-full bg-surface-800 border border-surface-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary-500 resize-y min-h-[4.5rem]"></textarea>
+                <button type="button" id="btn-save-registration-instructions"
+                  class="mt-3 bg-primary-600 hover:bg-primary-500 px-4 py-2 rounded-lg text-sm font-medium">
+                  Save Instructions
+                </button>
               </div>
             </div>
 
