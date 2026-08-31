@@ -115,6 +115,7 @@ function getDefaultDB() {
     config: {
       gameOpen: true,
       registrationOpen: true,
+      registrationInstructions: '',
       adminPassword: 'admin123',
       packOdds: { common: 50, uncommon: 25, rare: 15, epic: 8, legendary: 2 },
       economy: {

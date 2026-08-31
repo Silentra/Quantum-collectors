@@ -53,6 +53,7 @@ export const SCOPE_SHARED_DEFS = 'sharedDefs';
 export const PUBLIC_GATE_PATHS = Object.freeze([
   'config/gameOpen',
   'config/registrationOpen',
+  'config/registrationInstructions',
 ]);
 export const SCOPE_PUBLIC_GATE = 'publicGate';
 

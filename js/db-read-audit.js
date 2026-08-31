@@ -2026,7 +2026,7 @@ Live-blocker fix (post first Console publish):
   - playerDirectory parent .read auth!=null (safe social projection)
   - tradeIndexMeta .read auth!=null (schemaVersion/rebuiltAt only; write still admin)
   - accessCodes parent .read admin-only; student boot no longer enumerates/seeds
-  - Registration/pre-auth: public only config/gameOpen + config/registrationOpen;
+  - Registration/pre-auth: public only config/gameOpen + config/registrationOpen + config/registrationInstructions;
     Auth-first register/login; sharedDefs deferred until authenticated
   - Registration multipath: inventory validate allows same-write authUid parent;
     access-code consume is single-path merge (not leaf multipath)

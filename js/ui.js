@@ -219,6 +219,32 @@ function setupTabs() {
 
 // ===================== LOGIN SCREEN =====================
 
+/**
+ * Show/hide registration instruction text from config (plain text only).
+ * Hidden entirely when blank so login/register layout matches prior behavior.
+ */
+function syncRegistrationInstructionsUi() {
+  const el = document.getElementById('register-instructions');
+  const heading = document.getElementById('register-heading');
+  if (!el) return;
+  const text = config.getRegistrationInstructions();
+  if (!text) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    if (heading) {
+      heading.classList.add('mb-4');
+      heading.classList.remove('mb-2');
+    }
+    return;
+  }
+  el.textContent = text;
+  el.classList.remove('hidden');
+  if (heading) {
+    heading.classList.remove('mb-4');
+    heading.classList.add('mb-2');
+  }
+}
+
 export function setupLoginScreen() {
   const loginForm = document.getElementById('login-form');
   const registerForm = document.getElementById('register-form');
@@ -229,6 +255,7 @@ export function setupLoginScreen() {
     registerForm.classList.remove('hidden');
     adminLoginForm.classList.add('hidden');
     clearLoginMessage();
+    syncRegistrationInstructionsUi();
   });
   document.getElementById('btn-show-login').addEventListener('click', () => {
     loginForm.classList.remove('hidden');
@@ -891,6 +918,21 @@ function renderAdminOverview() {
     toast.info(`Registration ${!regOpen ? 'opened' : 'closed'}`);
     renderAdminOverview();
   };
+
+  const instructionsInput = document.getElementById('admin-registration-instructions');
+  const saveInstructionsBtn = document.getElementById('btn-save-registration-instructions');
+  if (instructionsInput) {
+    instructionsInput.value = config.getRegistrationInstructions();
+  }
+  if (saveInstructionsBtn && instructionsInput) {
+    saveInstructionsBtn.onclick = () => {
+      const normalized = config.normalizeRegistrationInstructions(instructionsInput.value);
+      config.setValue('registrationInstructions', normalized);
+      instructionsInput.value = normalized;
+      toast.info(normalized ? 'Registration instructions saved' : 'Registration instructions cleared');
+      syncRegistrationInstructionsUi();
+    };
+  }
 }
 
 // ===================== ADMIN PLAYERS =====================

@@ -66,6 +66,32 @@ export function isRegistrationOpen() {
   return getValue('registrationOpen') !== false;
 }
 
+/** Max length for teacher-authored registration instruction text. */
+export const REGISTRATION_INSTRUCTIONS_MAX_LENGTH = 800;
+
+/**
+ * Optional plain-text instructions shown on the Register form only.
+ * Blank / missing → empty string (UI must hide the element).
+ * @returns {string}
+ */
+export function getRegistrationInstructions() {
+  const raw = getValue('registrationInstructions');
+  if (raw == null) return '';
+  return String(raw).trim();
+}
+
+/**
+ * Normalize + clamp registration instruction text for save.
+ * @param {unknown} value
+ * @returns {string}
+ */
+export function normalizeRegistrationInstructions(value) {
+  const text = value == null ? '' : String(value).trim();
+  if (!text) return '';
+  if (text.length <= REGISTRATION_INSTRUCTIONS_MAX_LENGTH) return text;
+  return text.slice(0, REGISTRATION_INSTRUCTIONS_MAX_LENGTH);
+}
+
 /**
  * Get pack odds config.
  * @deprecated config.packOdds is unused by live pack generation — each pack type stores its own
