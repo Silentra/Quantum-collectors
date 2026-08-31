@@ -54,8 +54,9 @@ assert(ui.includes('_aqgpUsername = username'), 'stores stable username on open'
 assert(!ui.includes('firebase-hosting-prod'), 'no hosting-prod coupling in ui');
 
 const playerSrc = fs.readFileSync(path.join(root, 'js', 'player.js'), 'utf8');
-assert(playerSrc.includes('export function adminGrantPacks'), 'adminGrantPacks exported');
-assert(playerSrc.includes('addPack(key, id, quantity)'), 'adminGrantPacks delegates to addPack');
+assert(playerSrc.includes('export async function adminGrantPacks'), 'adminGrantPacks exported async');
+assert(playerSrc.includes('buildAdminPackGrantPlan'), 'adminGrantPacks uses plan builder');
+assert(playerSrc.includes('updateAcknowledged'), 'admin pack grant uses updateAcknowledged');
 
 const prodUi = path.join(root, 'firebase-hosting-prod', 'js', 'ui.js');
 if (fs.existsSync(prodUi)) {

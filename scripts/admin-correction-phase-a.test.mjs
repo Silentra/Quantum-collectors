@@ -68,12 +68,12 @@ assert(
   && !/export function removeCard[\s\S]*?uniqueCardsDiscovered/.test(playerSrc),
   'removeCard does not mutate uniqueCardsDiscovered',
 );
-assert(playerSrc.includes('export function adminRemovePacks'), 'adminRemovePacks exported');
+assert(playerSrc.includes('export async function adminRemovePacks'), 'adminRemovePacks exported');
 {
   const m = playerSrc.match(
-    /export function removePack\([\s\S]*?\nexport function adminRemovePacks/,
+    /export function removePack\([\s\S]*?\nexport function getPlayerPacks/,
   );
-  assert(!!m, 'removePack precedes adminRemovePacks');
+  assert(!!m, 'removePack precedes getPlayerPacks');
   assert(m && !m[0].includes('packsOpened'), 'removePack does not touch packsOpened');
 }
 
@@ -133,8 +133,13 @@ assert((ui.match(/confirmAdminPackGrantIfNeeded/g) || []).length >= 2, 'both Adm
 assert(ui.includes('Unopened Packs'), 'Manage shows Unopened Packs');
 assert(ui.includes('No unopened packs.'), 'empty pack state');
 assert(ui.includes('pd-remove-card-qty'), 'bulk card qty input');
-assert(ui.includes('player.removeCard(username, cardId, qty)'), 'removeCard called with quantity');
+assert(
+  ui.includes('adminRemoveCards') || ui.includes('player.removeCard(username, cardId, qty)'),
+  'card remove uses quantity-aware Admin path',
+);
 assert(ui.includes('player.adminRemovePacks'), 'Manage uses adminRemovePacks');
+assert(ui.includes('player.adminGrantCards') || ui.includes('adminGrantCards'), 'Manage uses adminGrantCards');
+assert(ui.includes('player.adminRemoveCards') || ui.includes('adminRemoveCards'), 'Manage uses adminRemoveCards');
 assert(ui.includes('getPlayerPacks(username)'), 'pack display from loaded packs');
 assert(!ui.includes('firebase-hosting-prod'), 'no hosting-prod coupling');
 

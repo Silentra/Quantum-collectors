@@ -204,7 +204,7 @@ assert(
 // ——— Source / UI ———
 const modSrc = fs.readFileSync(path.join(root, 'js', 'admin-stat-correction.js'), 'utf8');
 assert(modSrc.includes('achievementsTouched: false'), 'achievements intentionally untouched');
-assert(modSrc.includes('Phase C: attach history leaf'), 'Phase C hook comment present');
+assert(modSrc.includes('buildPlayerHistoryLeafUpdate') || modSrc.includes('admin_stat_correct'), 'stat correction attaches history');
 assert(modSrc.includes('updateAcknowledged'), 'uses acknowledged multipath');
 assert(modSrc.includes('isConsistentlyAdminLockedForCorrection'), 'lock gate exported');
 
