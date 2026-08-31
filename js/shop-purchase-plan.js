@@ -12,6 +12,8 @@
 import * as db from './database.js';
 import { STAT_KEYS, getPlayerStat } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
+import { buildShopPurchaseHistoryUpdate } from './player-history.js';
+import { getAuth } from './firebase-config.js';
 
 /**
  * RTDB multi-path updates cannot include both an ancestor and a descendant.
@@ -83,6 +85,35 @@ export function buildShopPurchasePlan({
   });
   Object.assign(updates, achPlan.updates);
 
+  /** @type {{ packId?: string, cardId?: string, consumableId?: string, cosmeticId?: string, quantity?: number }|null} */
+  let grantSummary = null;
+  const grantPath = String(grantWrite.path || '');
+  const grantQty = Math.max(0, Math.floor(Number(grantWrite.quantity) || 0));
+  if (grantPath.startsWith('packs/')) {
+    grantSummary = { packId: grantPath.slice('packs/'.length), quantity: grantQty };
+  } else if (grantPath.startsWith('inventory/')) {
+    grantSummary = { cardId: grantPath.slice('inventory/'.length), quantity: grantQty };
+  } else if (grantPath.startsWith('items/')) {
+    grantSummary = { consumableId: grantPath.slice('items/'.length), quantity: grantQty };
+  } else if (grantPath.startsWith('cosmetics/owned/')) {
+    grantSummary = { cosmeticId: grantPath.slice('cosmetics/owned/'.length), quantity: 1 };
+  }
+
+  let actorUid = null;
+  try {
+    actorUid = getAuth().currentUser?.uid || null;
+  } catch { /* Auth not ready */ }
+
+  const history = buildShopPurchaseHistoryUpdate(username, {
+    itemId: validation.itemDefinition.id,
+    itemType: validation.itemDefinition.type,
+    pricePaid: validation.price,
+    currency: validation.currency,
+    grant: grantSummary,
+    actorUid,
+  });
+  Object.assign(updates, history.updates);
+
   assertNoOverlappingUpdatePaths(updates);
 
   return {
@@ -90,6 +121,7 @@ export function buildShopPurchasePlan({
     updates,
     notified: achPlan.notified || [],
     unlocked: achPlan.unlocked || [],
+    historyEventId: history.eventId,
     writeCount: 1,
     resultMeta: {
       itemId: validation.itemDefinition.id,

@@ -6,7 +6,7 @@
  * This module ONLY adds:
  *   - weekly RP tracking toward a reward pack
  *   - weekly refresh check / reset
- *   - pack grant via existing player.addPack()
+ *   - atomic pack grant via updateAcknowledged (+ playerHistory leaf)
  *
  * It does NOT:
  *   - touch lifetime RP
@@ -29,9 +29,13 @@
  */
 
 import * as db from './database.js';
-import * as player from './player.js';
+import { computePackQuantityAfterAdd } from './player.js';
 import { getProjectConfig } from './project-config.js';
 import { getUnlockedProjectRarities } from './project-generator.js';
+import {
+  buildWeeklyPackGrantedHistoryUpdate,
+} from './player-history.js';
+import { getAuth } from './firebase-config.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants / defaults
@@ -349,42 +353,93 @@ export function getWeeklyRPRequired(username) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Attempt to claim the weekly reward pack for a player.
- * Uses existing player.addPack() — no new inventory/pack logic.
+ * Pure planner: weekly pack claim + claim flag (+ optional cycle reset) + history.
+ * Does not write. Prefer this over sequential addPack + set.
  *
  * @param {string} username
- * @returns {{ success: boolean, error?: string, packId?: string }}
+ * @param {number} [now]
+ * @returns {{ ok: boolean, error?: string, packId?: string, updates?: Object, before?: number, after?: number }}
  */
-export function claimWeeklyPack(username) {
-  if (!username) return { success: false, error: 'No user.' };
+export function buildWeeklyPackClaimPlan(username, now = Date.now()) {
+  if (!username) return { ok: false, error: 'No user.' };
 
-  // Ensure cycle is current
-  checkAndResetWeeklyCycle(username);
-
-  // Already claimed this cycle?
-  if (hasClaimedWeeklyPack(username)) {
-    return { success: false, error: 'Already claimed this week.' };
+  const resetPlan = buildWeeklyCycleResetUpdates(username, now);
+  const alreadyClaimed = resetPlan.reset ? false : hasClaimedWeeklyPack(username);
+  if (alreadyClaimed) {
+    return { ok: false, error: 'Already claimed this week.' };
   }
 
-  // Threshold met?
-  const progress  = getWeeklyRPProgress(username);
-  const required  = getWeeklyRPRequired(username);
+  const progress = resetPlan.reset ? 0 : getWeeklyRPProgress(username);
+  const required = getWeeklyRPRequired(username);
   if (progress < required) {
-    return { success: false, error: `Need ${required - progress} more RP.` };
+    return { ok: false, error: `Need ${required - progress} more RP.` };
   }
 
-  // Pack configured?
   const packId = getWeeklyRewardPackId();
   if (!packId) {
-    return { success: false, error: 'No weekly reward pack configured.' };
+    return { ok: false, error: 'No weekly reward pack configured.' };
   }
 
-  // Grant pack via existing infrastructure
-  player.addPack(username, packId, 1);
+  const qtyPlan = computePackQuantityAfterAdd(
+    db.get(`players/${username}/packs/${packId}`),
+    1,
+  );
+  if (!qtyPlan.ok) {
+    return { ok: false, error: qtyPlan.error || 'Invalid pack quantity.' };
+  }
 
-  // Mark claimed
-  db.set(`players/${username}/weeklyPackClaimed`, true);
+  let actorUid = null;
+  try {
+    actorUid = getAuth().currentUser?.uid || null;
+  } catch { /* ignore */ }
 
-  console.log(`[WeeklyPack] Granted pack "${packId}" to ${username}`);
-  return { success: true, packId };
+  const history = buildWeeklyPackGrantedHistoryUpdate(username, {
+    packId,
+    quantity: qtyPlan.quantity,
+    before: qtyPlan.current,
+    after: qtyPlan.next,
+    actorUid,
+  });
+
+  const updates = {
+    ...resetPlan.updates,
+    [`players/${username}/packs/${packId}`]: qtyPlan.next,
+    [`players/${username}/weeklyPackClaimed`]: true,
+    ...history.updates,
+  };
+
+  return {
+    ok: true,
+    packId,
+    before: qtyPlan.current,
+    after: qtyPlan.next,
+    quantity: qtyPlan.quantity,
+    historyEventId: history.eventId,
+    updates,
+  };
+}
+
+/**
+ * Attempt to claim the weekly reward pack for a player.
+ * Atomic: pack grant + claimed flag (+ cycle reset if due) + history.
+ *
+ * @param {string} username
+ * @returns {Promise<{ success: boolean, error?: string, packId?: string }>}
+ */
+export async function claimWeeklyPack(username) {
+  const plan = buildWeeklyPackClaimPlan(username);
+  if (!plan.ok || !plan.updates) {
+    return { success: false, error: plan.error || 'Could not claim pack.' };
+  }
+
+  const ack = await db.updateAcknowledged(plan.updates);
+  if (!ack.ok) {
+    return {
+      success: false,
+      error: ack.error || 'Could not save weekly pack claim. Check your connection and try again.',
+    };
+  }
+
+  console.log(`[WeeklyPack] Granted pack "${plan.packId}" to ${username}`);
+  return { success: true, packId: plan.packId };
 }

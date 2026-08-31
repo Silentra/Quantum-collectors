@@ -32,6 +32,8 @@ import {
   computeUniqueCardsOwnedFromInventory,
 } from './research.js';
 import { buildWeeklyPackRpGrantUpdates } from './weekly-research-pack.js';
+import { buildProjectClaimedHistoryUpdate } from './player-history.js';
+import { getAuth } from './firebase-config.js';
 import {
   STAT_KEYS,
   getPlayerStat,
@@ -333,6 +335,21 @@ export function buildProjectClaimPlan(username, projectId, options = {}) {
     );
   }
 
+  let actorUid = null;
+  try {
+    actorUid = getAuth().currentUser?.uid || null;
+  } catch { /* Auth not ready */ }
+
+  const history = buildProjectClaimedHistoryUpdate(username, {
+    projectId: claimedProject.id || projectId,
+    rpDelta: success ? rpEarned : 0,
+    breakthrough: isBreakthrough,
+    cardsGranted: gainsByCardId,
+    success,
+    actorUid,
+  });
+  Object.assign(updates, history.updates);
+
   assertNoOverlappingUpdatePaths(updates);
 
   return {
@@ -344,6 +361,7 @@ export function buildProjectClaimPlan(username, projectId, options = {}) {
     revealCard,
     unlocked: achPlan.unlocked,
     notified: achPlan.notified,
+    historyEventId: history.eventId,
     writeCount: 1,
   };
 }

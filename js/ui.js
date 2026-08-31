@@ -119,6 +119,12 @@ import {
   readPlayerRelativeNumber,
   isConsistentlyAdminLockedForCorrection,
 } from './admin-stat-correction.js';
+import {
+  createPlayerHistoryUiState,
+  refreshNewestHistory,
+  renderHistoryListHtml,
+  bindPlayerHistoryUi,
+} from './admin-player-history.js';
 
 // Project UI subsystem (extracted — Phase 1 refactor)
 import {
@@ -1831,6 +1837,19 @@ async function showPlayerDetail(username) {
         </div>
       </div>
 
+      <!-- Player History (lazy — no reads until View History) -->
+      <div class="bg-surface-800 rounded-lg p-4 border border-surface-700">
+        <h4 class="font-semibold text-sm mb-1">Player History</h4>
+        <p class="text-xs text-surface-400 mb-3">
+          Observational provenance only. Not loaded until you open it.
+        </p>
+        <button type="button" id="pd-view-history"
+          class="bg-surface-600 hover:bg-surface-500 px-3 py-1.5 rounded text-xs font-medium">
+          View History
+        </button>
+        <div id="pd-history-panel" class="hidden mt-3"></div>
+      </div>
+
       <!-- Admin Status -->
       <div class="bg-surface-800 rounded-lg p-4">
         <h4 class="font-semibold text-sm mb-2">Admin Status</h4>
@@ -2349,6 +2368,34 @@ async function showPlayerDetail(username) {
         `Corrected ${result.fieldLabel}: ${result.before} → ${result.after}`,
       );
       void showPlayerDetail(username);
+    });
+  }
+
+  // Player History (D1) — lazy once-query only after View History
+  {
+    const historyState = createPlayerHistoryUiState(username);
+    const panel = content.querySelector('#pd-history-panel');
+    const viewBtn = content.querySelector('#pd-view-history');
+
+    const renderHistoryPanel = () => {
+      if (!panel) return;
+      panel.innerHTML = renderHistoryListHtml(historyState.entries, {
+        hasMore: historyState.hasMore,
+        loading: historyState.loading,
+        error: historyState.error,
+      });
+      bindPlayerHistoryUi(panel, historyState, renderHistoryPanel);
+    };
+
+    viewBtn?.addEventListener('click', async () => {
+      if (!panel) return;
+      panel.classList.remove('hidden');
+      viewBtn.disabled = true;
+      viewBtn.textContent = 'Loading…';
+      await refreshNewestHistory(historyState);
+      viewBtn.textContent = 'Refresh History';
+      viewBtn.disabled = false;
+      renderHistoryPanel();
     });
   }
 

@@ -372,13 +372,21 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
     const claimBtn = bar.querySelector('#btn-claim-weekly-pack');
     if (claimBtn) {
       claimBtn.addEventListener('click', () => {
-        const result = claimWeeklyPack(username);
-        if (result.success) {
-          toast.success('Weekly reward pack claimed! Check your inventory.');
-          renderResearchProjects(); // re-render so widget updates to "Claimed ✓"
-        } else {
-          toast.error(result.error ?? 'Could not claim pack.');
-        }
+        claimBtn.disabled = true;
+        Promise.resolve(claimWeeklyPack(username))
+          .then((result) => {
+            if (result.success) {
+              toast.success('Weekly reward pack claimed! Check your inventory.');
+              renderResearchProjects(); // re-render so widget updates to "Claimed ✓"
+            } else {
+              toast.error(result.error ?? 'Could not claim pack.');
+              claimBtn.disabled = false;
+            }
+          })
+          .catch(() => {
+            toast.error('Could not claim pack.');
+            claimBtn.disabled = false;
+          });
       });
     }
   }

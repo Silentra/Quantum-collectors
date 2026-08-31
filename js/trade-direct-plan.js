@@ -34,6 +34,7 @@ import {
   buildTradesCompletedLeaderboardIncrementPaths,
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
+import { buildTradeCompletedHistoryUpdate } from './player-history.js';
 import {
   clearTradeGrant,
   mergeTradeGrantClear,
@@ -576,6 +577,26 @@ export function buildDirectTradeAcceptPlan({
     buildTradesCompletedLeaderboardIncrementPaths(offeringPlayerId, offererLike, now),
     buildTradesCompletedLeaderboardIncrementPaths(targetPlayerId, targetLike, now),
   );
+
+  // Observational history: one leaf per player, same settlement multipath.
+  const claimerUid = resolveClaimerAuthUid();
+  const offererHistory = buildTradeCompletedHistoryUpdate(offeringPlayerId, {
+    tradeKind: 'direct',
+    tradeId,
+    counterpartyUsername: targetPlayerId,
+    gave: { [offeredCardId]: 1 },
+    received: { [requestedCardId]: 1 },
+    actorUid: claimerUid,
+  });
+  const targetHistory = buildTradeCompletedHistoryUpdate(targetPlayerId, {
+    tradeKind: 'direct',
+    tradeId,
+    counterpartyUsername: offeringPlayerId,
+    gave: { [requestedCardId]: 1 },
+    received: { [offeredCardId]: 1 },
+    actorUid: claimerUid,
+  });
+  Object.assign(updates, offererHistory.updates, targetHistory.updates);
 
   assertNoOverlappingUpdatePaths(updates);
 

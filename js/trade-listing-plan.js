@@ -26,6 +26,7 @@ import {
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
 import { listingIndexRemovalsForListing } from './trade-index.js';
+import { buildTradeCompletedHistoryUpdate } from './player-history.js';
 import {
   mergeTradeGrantClear,
   resolveClaimerAuthUid,
@@ -452,6 +453,28 @@ export function buildListingFulfillPlan({
     buildTradesCompletedLeaderboardIncrementPaths(ownerId, ownerLike, now),
     buildTradesCompletedLeaderboardIncrementPaths(accepterId, accepterLike, now),
   );
+
+  // Observational history: one leaf per player, same settlement multipath.
+  const claimerUid = resolveClaimerAuthUid();
+  const ownerHistory = buildTradeCompletedHistoryUpdate(ownerId, {
+    tradeKind: 'listing',
+    tradeId: listingId,
+    listingId,
+    counterpartyUsername: accepterId,
+    gave: { [offeredCardId]: 1 },
+    received: { [chosenCardId]: 1 },
+    actorUid: claimerUid,
+  });
+  const accepterHistory = buildTradeCompletedHistoryUpdate(accepterId, {
+    tradeKind: 'listing',
+    tradeId: listingId,
+    listingId,
+    counterpartyUsername: ownerId,
+    gave: { [chosenCardId]: 1 },
+    received: { [offeredCardId]: 1 },
+    actorUid: claimerUid,
+  });
+  Object.assign(updates, ownerHistory.updates, accepterHistory.updates);
 
   assertNoOverlappingUpdatePaths(updates);
 
