@@ -35,6 +35,7 @@ import { getUnlockedProjectRarities } from './project-generator.js';
 import {
   buildWeeklyPackGrantedHistoryUpdate,
 } from './player-history.js';
+import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import { getAuth } from './firebase-config.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -439,6 +440,8 @@ export async function claimWeeklyPack(username) {
       error: ack.error || 'Could not save weekly pack claim. Check your connection and try again.',
     };
   }
+
+  scheduleHistoryRetentionAfterWrite(plan.updates);
 
   console.log(`[WeeklyPack] Granted pack "${plan.packId}" to ${username}`);
   return { success: true, packId: plan.packId };

@@ -27,6 +27,7 @@ import { planAchievementUpdatesForStats } from './achievement-mutations.js';
 import { computeUniqueCardsOwnedFromInventory } from './research.js';
 import { listingIndexRemovalsForListing } from './trade-index.js';
 import { buildTradeCompletedHistoryUpdate } from './player-history.js';
+import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import {
   mergeTradeGrantClear,
   resolveClaimerAuthUid,
@@ -711,6 +712,7 @@ export async function commitListingFulfillPlan(listingId, claimId, plan, options
         ops: 1,
         ok: true,
       });
+      scheduleHistoryRetentionAfterWrite(plan.updates);
       return {
         success: true,
         notifiedAccepter: plan.notifiedAccepter || [],
@@ -751,6 +753,7 @@ export async function commitListingFulfillPlan(listingId, claimId, plan, options
 
     if (recovery.outcome === 'success') {
       applyLiteralPlanPathsLocally(plan.updates);
+      scheduleHistoryRetentionAfterWrite(plan.updates);
       return {
         success: true,
         notifiedAccepter: plan.notifiedAccepter || [],

@@ -35,6 +35,7 @@ import {
   playerLikeWithStatOverlay,
 } from './leaderboard-summaries.js';
 import { buildTradeCompletedHistoryUpdate } from './player-history.js';
+import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import {
   clearTradeGrant,
   mergeTradeGrantClear,
@@ -1000,6 +1001,7 @@ export async function commitDirectTradeAcceptPlan(tradeId, claimId, plan, option
         ops: 1,
         ok: true,
       });
+      scheduleHistoryRetentionAfterWrite(plan.updates);
       return {
         success: true,
         notifiedOfferer: plan.notifiedOfferer || [],
@@ -1040,6 +1042,7 @@ export async function commitDirectTradeAcceptPlan(tradeId, claimId, plan, option
 
     if (recovery.outcome === 'success') {
       applyLiteralPlanPathsLocally(plan.updates);
+      scheduleHistoryRetentionAfterWrite(plan.updates);
       return {
         success: true,
         notifiedOfferer: plan.notifiedOfferer || [],

@@ -125,6 +125,7 @@ import {
   renderHistoryListHtml,
   bindPlayerHistoryUi,
 } from './admin-player-history.js';
+import { scheduleHistoryRetentionOnAdminView } from './player-history-retention.js';
 
 // Project UI subsystem (extracted — Phase 1 refactor)
 import {
@@ -2392,6 +2393,8 @@ async function showPlayerDetail(username) {
       panel.classList.remove('hidden');
       viewBtn.disabled = true;
       viewBtn.textContent = 'Loading…';
+      // Best-effort retention; must not block history display
+      scheduleHistoryRetentionOnAdminView(username);
       await refreshNewestHistory(historyState);
       viewBtn.textContent = 'Refresh History';
       viewBtn.disabled = false;
