@@ -1,20 +1,21 @@
-21:50:00.267 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
-21:50:00.368 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000
-21:50:00.605 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - quantum-collectors-v2-default-rtdb successfully activated FBKV (SurveyIdle(0)) wait: 90ms, init: 0ms
-21:50:00.955 [NamespaceSystem-blocking-namespace-operation-dispatcher-7] INFO com.firebase.core.namespace.StateManager - Namespace quantum-collectors-v2-default-rtdb status Active to Active
-21:50:01.302 [FirebaseWorkerPool-1-3] WARN com.firebase.core.persistence.backend.dummy.EmulatorMetadataPersistence - Multiple projectIds are not recommended in single project mode. Requested 
+21:14:47.566 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO akka.event.slf4j.Slf4jLogger - Slf4jLogger started
+21:14:47.670 [main] INFO com.firebase.server.forge.App$ - Listening at 127.0.0.1:9000
+21:14:47.916 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - quantum-collectors-v2-default-rtdb successfully activated FBKV (SurveyIdle(0)) wait: 95ms, init: 0ms
+21:14:48.278 [NamespaceSystem-blocking-namespace-operation-dispatcher-7] INFO com.firebase.core.namespace.StateManager - Namespace quantum-collectors-v2-default-rtdb status Active to Active
+21:14:48.629 [FirebaseWorkerPool-1-3] WARN com.firebase.core.persistence.backend.dummy.EmulatorMetadataPersistence - Multiple projectIds are not recommended in single project mode. Requested 
 namespace qc-research-project-integrity, but the emulator is configured for quantum-collectors-v2-default-rtdb. To 
 opt-out of single project mode add/set the singleProjectMode: false property in 
 the firebase.json emulators config. 
-21:50:01.305 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - qc-research-project-integrity successfully activated FBKV (SurveyIdle(0)) wait: 1ms, init: 0ms
-21:50:01.342 [NamespaceSystem-blocking-namespace-operation-dispatcher-7] INFO com.firebase.core.namespace.StateManager - Namespace qc-research-project-integrity status Active to Active
-21:50:01.791 [FirebaseWorkerPool-1-2] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
-21:50:02.057 [FirebaseWorkerPool-1-4] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
-21:50:02.103 [FirebaseWorkerPool-1-1] WARN com.firebase.server.forge.App$ - Received service account token eyJh...9fQ., assuming ownership.
-21:50:02.211 [FirebaseWorkerPool-1-3] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
-21:50:02.367 [FirebaseWorkerPool-1-2] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
-21:50:02.476 [FirebaseWorkerPool-1-4] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
-21:50:02.570 [FirebaseWorkerPool-1-2] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
-21:50:02.678 [FirebaseWorkerPool-1-4] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
-21:50:02.790 [FirebaseWorkerPool-1-2] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
-21:50:02.913 [FirebaseWorkerPool-1-4] WARN com.firebase.server.forge.App$ - Received service account token eyJh...9fQ., assuming ownership.
+21:14:48.632 [NamespaceSystem-akka.actor.default-dispatcher-5] INFO com.firebase.core.namespace.NamespaceActor - qc-research-project-integrity successfully activated FBKV (SurveyIdle(0)) wait: 1ms, init: 0ms
+21:14:48.690 [NamespaceSystem-blocking-namespace-operation-dispatcher-7] INFO com.firebase.core.namespace.StateManager - Namespace qc-research-project-integrity status Active to Active
+21:14:49.077 [FirebaseWorkerPool-1-2] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
+21:14:49.325 [FirebaseWorkerPool-1-4] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
+21:14:49.387 [FirebaseWorkerPool-1-1] WARN com.firebase.server.forge.App$ - Received service account token eyJh...9fQ., assuming ownership.
+21:14:49.497 [FirebaseWorkerPool-1-3] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
+21:14:49.622 [FirebaseWorkerPool-1-2] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
+21:14:49.745 [FirebaseWorkerPool-1-4] WARN com.firebase.server.forge.App$ - Received service account token eyJh...fX0., assuming ownership.
+21:14:49.948 [FirebaseWorkerPool-1-3] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
+21:14:50.042 [FirebaseWorkerPool-1-1] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
+21:14:50.120 [FirebaseWorkerPool-1-3] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
+21:14:50.230 [FirebaseWorkerPool-1-1] WARN com.firebase.server.forge.App$ - Received service account token eyJh...X19., assuming ownership.
+21:14:50.337 [FirebaseWorkerPool-1-3] WARN com.firebase.server.forge.App$ - Received service account token eyJh...9fQ., assuming ownership.
