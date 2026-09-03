@@ -1,26 +1,110 @@
 {
+
   "database": {
+
     "rules": "database.rules.json"
+
   },
+
   "emulators": {
+
     "database": {
+
       "port": 9000
+
     },
+
     "ui": {
+
       "enabled": false
+
     }
+
   },
+
   "functions": [
+
     {
+
       "source": "functions",
+
       "codebase": "default",
+
       "ignore": [
+
         "node_modules",
+
         ".git",
+
         "firebase-debug.log",
+
         "firebase-debug.*.log",
+
         "*.local"
+
       ]
+
     }
-  ]
+
+  ],
+
+  "hosting": {
+
+    "public": "firebase-hosting-prod",
+
+    "ignore": [
+
+      "firebase.json",
+
+      "**/.*",
+
+      "**/node_modules/**",
+
+      "README-GENERATED.txt"
+
+    ],
+
+    "headers": [
+
+      {
+
+        "source": "/",
+
+        "headers": [
+
+          {
+
+            "key": "Cache-Control",
+
+            "value": "no-cache"
+
+          }
+
+        ]
+
+      },
+
+      {
+
+        "source": "/index.html",
+
+        "headers": [
+
+          {
+
+            "key": "Cache-Control",
+
+            "value": "no-cache"
+
+          }
+
+        ]
+
+      }
+
+    ]
+
+  }
+
 }
+

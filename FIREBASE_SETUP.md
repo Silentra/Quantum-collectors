@@ -233,3 +233,22 @@ If `firebase-config.js` still has placeholder keys (`YOUR_API_KEY`), the system 
 3. If you see: `[DB] Using localStorage fallback` — check your config
 4. Open Firebase Console > Realtime Database to see data appearing in real time
 5. Security posture smoke: `qcPersonalAudit.workflowS8a()`
+
+## 10. Firebase Hosting (student production vs GitHub staging)
+
+| Environment | Location |
+|-------------|----------|
+| Development / staging | Root app files + **GitHub Pages** |
+| Student production snapshot | `firebase-hosting-prod/` (generated) |
+| Accessibility PoC (rollback) | `firebase-hosting-test/` |
+
+**Authoritative source:** root `index.html`, `main.js`, `style.css`, `js/`, `assets/`.  
+Do **not** hand-edit `firebase-hosting-prod/`.
+
+```text
+node scripts/sync-firebase-hosting-prod.mjs
+firebase serve --only hosting
+firebase deploy --only hosting
+```
+
+**Critical:** Never use bare `firebase deploy` for normal Hosting releases in this repo (it can also deploy database rules and/or Functions). Always use `--only hosting`.
