@@ -532,7 +532,19 @@ export function renderResearchProjects() {
       if (!confirmed) return;
       const result = await adminCompleteActiveProject(session.username, btn.dataset.projectId);
       if (!result.success) {
-        toast.error(`Could not complete project: ${result.reason || result.error || 'unknown error'}`);
+        if (result.phase === 2 && result.completed) {
+          if (result.reason === 'already_claimed') {
+            toast.error('This project has already been claimed.');
+          } else {
+            toast.error(
+              result.error
+                || 'Project was completed, but reward claim did not finish. You can claim from the report.',
+            );
+          }
+        } else {
+          toast.error(`Could not complete project: ${result.reason || result.error || 'unknown error'}`);
+        }
+        renderResearchProjects();
         return;
       }
       toastAchievementUnlocks(result.notified || []);
