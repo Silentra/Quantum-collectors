@@ -4,7 +4,14 @@
 
 import { getProjectConfig } from './project-config.js';
 
-const MAX_STORED_PROJECTS = 7;
+/**
+ * Canonical max stored projects array length.
+ *
+ * RTDB claim rules in database.rules.json inspect fixed indices 0..6 only
+ * (see PROJECT_RULES_ARRAY_INDEX_MAX in project-claims.js). Raising this
+ * without updating those rules would leave higher slots unenforced.
+ */
+export const MAX_STORED_PROJECTS = 7;
 
 /**
  * Returns the configured refresh interval in hours.

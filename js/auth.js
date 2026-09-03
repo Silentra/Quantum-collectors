@@ -48,6 +48,7 @@ import {
 } from './player-directory.js';
 import { emptyPlayerTradeIndexPaths } from './trade-index.js';
 import { syncProjects } from './project-sync.js';
+import { prepareProjectsForPersist } from './project-claims.js';
 import { getProjectConfig } from './project-config.js';
 import { buildLeaderboardSummaryPathsForPlayer } from './leaderboard-summaries.js';
 import * as cards from './cards.js';
@@ -716,8 +717,9 @@ async function applyPostLoginPlayerMaintenance(username) {
     syncResult.prunedCount > 0 ||
     syncResult.refreshAt !== prevRefreshAt
   ) {
+    const safeProjects = await prepareProjectsForPersist(playerKey, syncResult.projects);
     db.update(`players/${playerKey}`, {
-      projects:             syncResult.projects,
+      projects:             safeProjects,
       lastProjectRefreshAt: syncResult.refreshAt,
     });
   }

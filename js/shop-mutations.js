@@ -989,29 +989,43 @@ export function grantFreezeAllowance(username, options = {}) {
 // generateAdditionalProject
 // ---------------------------------------------------------------------------
 /**
- * Generates an additional project slot via consumable.
+ * Generates an additional project via Research Proposal.
+ * Prefer commitResearchProposalUse for atomic consume + history.
  *
- * Future flow:
- * 1. Validate consumable ownership and eligibility.
- * 2. Generate a new project using project generation rules.
- * 3. Add to player's active project list.
- * 4. Persist to Firebase.
- * 5. Consume the consumable only after persistence succeeds.
- * 6. Trigger rerender.
- *
- * @returns {Object} Placeholder — returns { success: false, reason: 'not_implemented' }.
+ * @returns {Object}
+ */
+/**
+ * Legacy sync append of one AVAILABLE project (no consume / no history).
+ * Prefer commitResearchProposalUse for the Research Proposal consumable path.
  */
 export function generateAdditionalProject(username, options = {}) {
+  const plan = buildResearchProposalProjectPlan(username, options);
+  if (!plan.ok) {
+    return { success: false, reason: plan.reason, validation: plan.validation };
+  }
+  db.set(`players/${username}/projects`, plan.projects);
+  return {
+    success: true,
+    project: plan.project,
+    projects: plan.projects,
+  };
+}
+
+/**
+ * Pure plan for one Proposal-generated AVAILABLE project.
+ * Does NOT advance lastProjectRefreshAt.
+ */
+export function buildResearchProposalProjectPlan(username, options = {}) {
   if (!username || typeof username !== 'string') {
-    return { success: false, reason: 'invalid_username' };
+    return { ok: false, reason: 'invalid_username' };
   }
 
   const player = getProjectPlayerSnapshot(username);
-  if (!player) return { success: false, reason: 'player_not_found' };
+  if (!player) return { ok: false, reason: 'player_not_found' };
 
   const validation = canGenerateAdditionalProject(player);
   if (!validation.allowed) {
-    return { success: false, reason: validation.reason, validation };
+    return { ok: false, reason: validation.reason, validation };
   }
 
   const createdAt = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
@@ -1022,16 +1036,87 @@ export function generateAdditionalProject(username, options = {}) {
   });
 
   if (!project) {
-    return { success: false, reason: 'project_generation_failed' };
+    return { ok: false, reason: 'project_generation_failed' };
   }
 
-  const projects = [...player.projects, project];
-  db.set(`players/${username}/projects`, projects);
+  const projects = [...(player.projects || []), project];
+  return {
+    ok: true,
+    project,
+    projects,
+    lastProjectRefreshAt: db.get(`players/${username}/lastProjectRefreshAt`) ?? 0,
+  };
+}
+
+/**
+ * Atomic Research Proposal use: projects + item consume + history.
+ * Preserves lastProjectRefreshAt (does not write that field).
+ */
+export async function commitResearchProposalUse(username, options = {}) {
+  if (!username || typeof username !== 'string') {
+    return { success: false, reason: 'invalid_username' };
+  }
+
+  const itemId = 'research_proposal';
+  const currentQty = Math.max(0, Math.floor(Number(db.get(`players/${username}/items/${itemId}`) || 0)));
+  if (currentQty < 1) {
+    return { success: false, reason: 'insufficient_item_quantity', currentQuantity: currentQty };
+  }
+
+  const plan = buildResearchProposalProjectPlan(username, options);
+  if (!plan.ok) {
+    return { success: false, reason: plan.reason, validation: plan.validation };
+  }
+
+  const { prepareProjectsForPersist } = await import('./project-claims.js');
+  const { buildResearchProposalUsedHistoryUpdate } = await import('./player-history.js');
+  let scheduleRetention = null;
+  try {
+    const ret = await import('./player-history-retention.js');
+    scheduleRetention = ret.scheduleHistoryRetentionAfterWrite;
+  } catch { /* optional */ }
+
+  const safeProjects = await prepareProjectsForPersist(username, plan.projects);
+
+  let actorUid = null;
+  try {
+    const { getAuth } = await import('./firebase-config.js');
+    actorUid = getAuth().currentUser?.uid || null;
+  } catch { /* Auth not ready */ }
+
+  const history = buildResearchProposalUsedHistoryUpdate(username, {
+    generatedProjectId: plan.project.id,
+    quantityConsumed: 1,
+    actorUid,
+  });
+
+  const updates = {
+    [`players/${username}/projects`]: safeProjects,
+    [`players/${username}/items/${itemId}`]: currentQty - 1,
+    ...history.updates,
+  };
+
+  const ack = await db.updateAcknowledged(updates);
+  if (!ack.ok) {
+    return {
+      success: false,
+      reason: 'write_failed',
+      error: ack.error || 'Could not use Research Proposal.',
+    };
+  }
+
+  if (typeof scheduleRetention === 'function') {
+    scheduleRetention(updates);
+  }
 
   return {
     success: true,
-    project,
-    projects,
+    project: plan.project,
+    projects: safeProjects,
+    remainingQuantity: currentQty - 1,
+    historyEventId: history.eventId,
+    lastProjectRefreshAt: plan.lastProjectRefreshAt,
+    consumed: true,
   };
 }
 

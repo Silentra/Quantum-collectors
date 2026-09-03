@@ -23,6 +23,7 @@ export const HISTORY_EVENT_TYPES = Object.freeze({
   TRADE_COMPLETED: 'trade_completed',
   PROJECT_CLAIMED: 'project_claimed',
   SHOP_PURCHASE: 'shop_purchase',
+  RESEARCH_PROPOSAL_USED: 'research_proposal_used',
 });
 
 export const HISTORY_ACTOR_TYPES = Object.freeze({
@@ -43,6 +44,7 @@ export const HISTORY_SOURCES = Object.freeze({
   PROJECT_CLAIM: 'project_claim',
   SHOP_PURCHASE: 'shop_purchase',
   WEEKLY_RESEARCH_PACK: 'weekly_research_pack',
+  RESEARCH_PROPOSAL: 'research_proposal',
 });
 
 /** Types allowed for student (self) create under own username. */
@@ -52,6 +54,7 @@ export const HISTORY_SELF_CREATE_TYPES = Object.freeze([
   HISTORY_EVENT_TYPES.PROJECT_CLAIMED,
   HISTORY_EVENT_TYPES.SHOP_PURCHASE,
   HISTORY_EVENT_TYPES.PACK_GRANTED, // weekly/system only (rules constrain source/actor)
+  HISTORY_EVENT_TYPES.RESEARCH_PROPOSAL_USED,
 ]);
 
 /** Types allowed for Admin create. */
@@ -65,6 +68,7 @@ export const HISTORY_ADMIN_CREATE_TYPES = Object.freeze([
   HISTORY_EVENT_TYPES.TRADE_COMPLETED,
   HISTORY_EVENT_TYPES.PROJECT_CLAIMED,
   HISTORY_EVENT_TYPES.SHOP_PURCHASE,
+  HISTORY_EVENT_TYPES.RESEARCH_PROPOSAL_USED,
 ]);
 
 /**
@@ -323,6 +327,29 @@ export function buildShopPurchaseHistoryUpdate(username, {
 /**
  * Weekly Research Pack system grant (pack_granted + reason weekly).
  */
+
+/**
+ * Research Proposal consumable used — provenance only (does not advance refresh clock).
+ */
+export function buildResearchProposalUsedHistoryUpdate(username, {
+  generatedProjectId,
+  quantityConsumed = 1,
+  actorUid = null,
+}) {
+  return buildPlayerHistoryLeafUpdate(username, {
+    type: HISTORY_EVENT_TYPES.RESEARCH_PROPOSAL_USED,
+    actorType: HISTORY_ACTOR_TYPES.SELF,
+    source: HISTORY_SOURCES.RESEARCH_PROPOSAL,
+    actorUid,
+    actorUsername: username,
+    payload: {
+      projectId: String(generatedProjectId || ''),
+      consumableId: 'research_proposal',
+      quantity: Math.max(1, Math.floor(Number(quantityConsumed) || 1)),
+    },
+  });
+}
+
 export function buildWeeklyPackGrantedHistoryUpdate(username, {
   packId,
   quantity,

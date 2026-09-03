@@ -36,6 +36,12 @@ import { buildProjectClaimedHistoryUpdate } from './player-history.js';
 import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import { getAuth } from './firebase-config.js';
 import {
+  buildProjectClaimMarkerUpdate,
+  loadProjectClaimMarkerExists,
+  prepareProjectsForPersist,
+  reconcileAlreadyClaimedProject,
+} from './project-claims.js';
+import {
   STAT_KEYS,
   getPlayerStat,
   computeCardsAtMaxAuraFromInventory,
@@ -193,6 +199,12 @@ export function buildProjectClaimPlan(username, projectId, options = {}) {
   const updates = {
     [`players/${username}/projects`]: updatedProjects,
   };
+
+  // Immutable claim-once ledger leaf (same multipath as rewards).
+  Object.assign(
+    updates,
+    buildProjectClaimMarkerUpdate(username, claimedProject.id || projectId, now).updates,
+  );
 
   const plannedStatValues = {};
   const achStatKeys = [];
@@ -392,17 +404,58 @@ async function withProjectClaimLock(username, projectId, fn) {
  */
 export async function commitProjectClaim(username, projectId, options = {}) {
   return withProjectClaimLock(username, projectId, async () => {
-    // Revalidate from cache after lock (Option B: not server-fresh).
+    // Fast local gate; server ledger is the real idempotency authority.
+    if (await loadProjectClaimMarkerExists(username, projectId)) {
+      await reconcileAlreadyClaimedProject(username, projectId);
+      return {
+        success: false,
+        reason: 'already_claimed',
+      };
+    }
+
+    // Revalidate from cache after lock (Option B for project array; ledger is create-once).
     const plan = buildProjectClaimPlan(username, projectId, options);
     if (!plan.ok) {
+      if (plan.reason === 'already_claimed') {
+        await reconcileAlreadyClaimedProject(username, projectId);
+      }
       return {
         success: false,
         reason: plan.reason || 'claim_failed',
       };
     }
 
+    const projectsPath = `players/${username}/projects`;
+    if (plan.updates[projectsPath]) {
+      plan.updates[projectsPath] = await prepareProjectsForPersist(
+        username,
+        plan.updates[projectsPath],
+      );
+    }
+
     const ack = await db.updateAcknowledged(plan.updates);
     if (!ack.ok) {
+      // Classify duplicate claim vs generic write failure via ledger / project state.
+      if (await loadProjectClaimMarkerExists(username, projectId)) {
+        await reconcileAlreadyClaimedProject(username, projectId);
+        return {
+          success: false,
+          reason: 'already_claimed',
+        };
+      }
+      try {
+        await db.loadPathOnce(`players/${username}/projects`, { force: true });
+      } catch { /* best-effort */ }
+      const projects = db.get(`players/${username}/projects`) || [];
+      const live = Array.isArray(projects)
+        ? projects.find((p) => p && String(p.id) === String(projectId))
+        : null;
+      if (live && live.state === PROJECT_STATES.CLAIMED) {
+        return {
+          success: false,
+          reason: 'already_claimed',
+        };
+      }
       return {
         success: false,
         reason: 'write_failed',

@@ -243,6 +243,19 @@ export function describeHistoryEvent(event) {
         known: true,
       };
     }
+    case HISTORY_EVENT_TYPES.RESEARCH_PROPOSAL_USED: {
+      const projectId = String(event.projectId || '');
+      details.push(`Generated Project: ${projectId || '—'}`);
+      if (event.consumableId) details.push(`Consumable: ${event.consumableId}`);
+      if (event.quantity) details.push(`Quantity: ${event.quantity}`);
+      return {
+        summary: 'Used Research Proposal',
+        details,
+        actorLabel,
+        known: true,
+      };
+    }
+
     default:
       return {
         summary: 'Unknown history event',

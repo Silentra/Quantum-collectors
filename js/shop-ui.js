@@ -659,7 +659,7 @@ async function handleShopAction(username, action, { slotIndex, itemId }) {
 
     if (action === 'target-slot') {
       if (!targetMode) return;
-      const result = useConsumable(username, targetMode.itemId, { slotIndex });
+      const result = await useConsumable(username, targetMode.itemId, { slotIndex });
       showResult(result, `${targetMode.label} used.`);
       if (result.success) targetMode = null;
       renderShop();
@@ -679,7 +679,7 @@ async function handleShopAction(username, action, { slotIndex, itemId }) {
   }
 }
 
-function handleConsumableSelection(username, itemId) {
+async function handleConsumableSelection(username, itemId) {
   const definition = getItemDefinition(itemId);
   if (!definition) {
     toast.error('Unknown consumable.');
@@ -696,7 +696,7 @@ function handleConsumableSelection(username, itemId) {
     return;
   }
 
-  const result = useConsumable(username, itemId, {});
+  const result = await useConsumable(username, itemId, {});
   showResult(result, `${definition.name || 'Consumable'} used.`);
   if (result.success) targetMode = null;
   renderShop();

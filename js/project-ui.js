@@ -14,6 +14,7 @@ import * as cards from './cards.js';
 import * as packs from './packs.js';
 import * as toast from './toast.js';
 import * as db from './database.js';
+import { prepareProjectsForPersist } from './project-claims.js';
 import { getLockedCardIds, PROJECT_STATES } from './project-state.js';
 import { activateProject } from './project-assignment.js';
 import {
@@ -133,9 +134,11 @@ export function startProjectHeartbeat() {
     });
     // Only write + re-render if something actually changed
     if (syncResult.generatedCount > 0 || syncResult.resolvedCount > 0 || syncResult.prunedCount > 0) {
-      db.update(`players/${session.username}`, {
-        projects:             syncResult.projects,
-        lastProjectRefreshAt: syncResult.refreshAt,
+      prepareProjectsForPersist(session.username, syncResult.projects).then((safeProjects) => {
+        db.update(`players/${session.username}`, {
+          projects:             safeProjects,
+          lastProjectRefreshAt: syncResult.refreshAt,
+        });
       });
       // Do not interrupt the player while they are in an interactive sub-mode
       // (assigning scientists/cards or viewing a completed-project report).
@@ -350,20 +353,25 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
 
     const proposalBtn = bar.querySelector('#btn-use-research-proposal');
     if (proposalBtn) {
-      proposalBtn.addEventListener('click', () => {
-        const result = useConsumable(username, 'research_proposal', {});
-        if (result.success) {
-          toast.success('Research Proposal used.');
-          renderResearchProjects();
-          return;
-        }
-        const reason = result.reason || result.validation?.reason || 'unknown_error';
-        if (reason === 'project_cap_reached') {
-          toast.error('No available project slots for a new proposal.');
-        } else if (reason === 'insufficient_item_quantity') {
-          toast.error('You do not have a Research Proposal.');
-        } else {
-          toast.error('Could not use Research Proposal.');
+      proposalBtn.addEventListener('click', async () => {
+        proposalBtn.disabled = true;
+        try {
+          const result = await useConsumable(username, 'research_proposal', {});
+          if (result.success) {
+            toast.success('Research Proposal used.');
+            renderResearchProjects();
+            return;
+          }
+          const reason = result.reason || result.validation?.reason || 'unknown_error';
+          if (reason === 'project_cap_reached') {
+            toast.error('No available project slots for a new proposal.');
+          } else if (reason === 'insufficient_item_quantity') {
+            toast.error('You do not have a Research Proposal.');
+          } else {
+            toast.error(result.error || 'Could not use Research Proposal.');
+          }
+        } finally {
+          proposalBtn.disabled = false;
         }
       });
     }
@@ -895,10 +903,13 @@ function renderProjectReportPanel(container, project, username) {
         const result = await commitProjectClaim(username, project.id);
         if (!result.success) {
           const msg = result.error
-            || (result.reason === 'already_claimed' ? 'Rewards already claimed.' : null)
+            || (result.reason === 'already_claimed' ? 'This project has already been claimed.' : null)
             || (result.reason === 'invalid_project_state' ? 'Project is not ready to claim.' : null)
             || `Could not claim rewards: ${result.reason ?? 'unknown error'}`;
           toast.error(msg);
+          if (result.reason === 'already_claimed') {
+            renderResearchProjects();
+          }
           return;
         }
 
@@ -1381,7 +1392,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
   });
 
   // --- Submit / Activate ---
-  panel.querySelector('#rp-btn-activate').addEventListener('click', () => {
+  panel.querySelector('#rp-btn-activate').addEventListener('click', async () => {
     const errEl = panel.querySelector('#rp-assign-error');
 
     // Re-read fresh player state for activation
@@ -1444,7 +1455,8 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
     const updatedProjects = allProjects.map(pr =>
       pr.id === result.project.id ? result.project : pr
     );
-    player.updatePlayer(username, { projects: updatedProjects });
+    const safeProjects = await prepareProjectsForPersist(username, updatedProjects);
+    player.updatePlayer(username, { projects: safeProjects });
 
     toast.success(`"${result.project.title}" is now Active!`);
 

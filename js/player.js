@@ -34,6 +34,7 @@ import {
   buildPlayerHistoryTreeDeleteUpdate,
   scheduleHistoryRetentionAfterWrite,
 } from './player-history-retention.js';
+import { buildProjectClaimsTreeDeleteUpdate } from './project-claims.js';
 
 /**
  * Create a new player profile
@@ -684,6 +685,7 @@ export async function deletePlayer(username) {
     ...buildLeaderboardSummaryDeletePaths(playerKey),
     // Pass 3: wipe observational history tree with the account (not retention)
     ...buildPlayerHistoryTreeDeleteUpdate(playerKey),
+    ...buildProjectClaimsTreeDeleteUpdate(playerKey),
     // Option C-b: unbind login directory (Auth user may remain orphaned)
     ...buildAuthLifecycleDeleteUpdates({
       username: playerKey,

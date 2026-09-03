@@ -34,8 +34,8 @@ import * as db from './database.js';
 import { getItemDefinition } from './cosmetic-definitions.js';
 import {
   applyDiscountToSlot,
+  commitResearchProposalUse,
   consumeItem,
-  generateAdditionalProject,
   grantFreezeAllowance,
   rerollShopSlotWithToken,
 } from './shop-mutations.js';
@@ -73,7 +73,7 @@ function getConsumableQuantity(username, itemId) {
  * @returns {Object}
  *
  */
-export function useConsumable(username, consumableItemId, context = {}, options = {}) {
+export async function useConsumable(username, consumableItemId, context = {}, options = {}) {
   if (!username || typeof username !== 'string') {
     return { success: false, reason: 'invalid_username' };
   }
@@ -83,6 +83,23 @@ export function useConsumable(username, consumableItemId, context = {}, options 
   const validation = canUseConsumable(player, definition, context);
   if (!validation.allowed) {
     return { success: false, reason: validation.reason, validation };
+  }
+
+  // Atomic Research Proposal: projects + item consume + history (no separate consume).
+  if (definition.behaviorType === 'grant_research') {
+    const result = await commitResearchProposalUse(username, {
+      ...options,
+      ...(definition.behaviorConfig || {}),
+    });
+    if (!result.success) return result;
+    return {
+      ...result,
+      consumableItemId: definition.id,
+      behaviorType: definition.behaviorType,
+      consumed: true,
+      remainingQuantity: result.remainingQuantity
+        ?? getConsumableQuantity(username, definition.id),
+    };
   }
 
   const mutationResult = executeBehavior(username, definition, context, options);
@@ -119,7 +136,7 @@ export function useConsumable(username, consumableItemId, context = {}, options 
  *   'reroll_shop'    → shop-mutations.rerollShopSlotWithToken
  *   'apply_discount' → shop-mutations.applyDiscountToSlot
  *   'freeze_slot'    → shop-mutations.grantFreezeAllowance
- *   'grant_research' → shop-mutations.generateAdditionalProject
+ *   'grant_research' → useConsumable → commitResearchProposalUse (atomic)
  *
  * This function does NOT contain any core logic itself.
  * It is purely a dispatch/routing layer.
@@ -154,10 +171,13 @@ export function executeBehavior(username, itemDefinition, context = {}, options 
       });
 
     case 'grant_research':
-      return generateAdditionalProject(username, {
-        ...options,
-        ...behaviorConfig,
-      });
+      // Atomic path lives in useConsumable → commitResearchProposalUse.
+      // Do not generate without consume/history from this router.
+      return {
+        success: false,
+        reason: 'use_consumable_required',
+        error: 'Research Proposal must be used via useConsumable (atomic commit).',
+      };
 
     default:
       return { success: false, reason: 'unsupported_behavior' };
