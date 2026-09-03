@@ -37,8 +37,8 @@ import {
   getWeeklyRefreshLabel,
   getWeeklyRewardPackId,
 } from './weekly-research-pack.js';
-import { getProjectRefreshHours, getProjectRefreshIntervalMs, getMaxStoredProjects } from './project-refresh.js';
-import { syncProjects } from './project-sync.js';
+import { getProjectRefreshIntervalMs, getMaxStoredProjects, PROJECT_REFRESH_INTERVAL_HOURS } from './project-refresh.js';
+import { runScheduledProjectMaintenance } from './project-refresh-commit.js';
 import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
 import { toastAchievementUnlocks } from './achievements.js';
@@ -123,30 +123,21 @@ export function startProjectHeartbeat() {
       stopProjectHeartbeat();
       return;
     }
-    // Run the sync pipeline to transition project states, then re-render
-    const p = player.getPlayer(session.username);
-    if (!p) return;
-    const syncResult = syncProjects({
-      projects:      p.projects      ?? [],
-      totalRP:       p.totalResearchPoints ?? 0,
-      lastRefreshAt: p.lastProjectRefreshAt ?? 0,
-      now:           Date.now(),
-    });
-    // Only write + re-render if something actually changed
-    if (syncResult.generatedCount > 0 || syncResult.resolvedCount > 0 || syncResult.prunedCount > 0) {
-      prepareProjectsForPersist(session.username, syncResult.projects).then((safeProjects) => {
-        db.update(`players/${session.username}`, {
-          projects:             safeProjects,
-          lastProjectRefreshAt: syncResult.refreshAt,
-        });
-      });
-      // Do not interrupt the player while they are in an interactive sub-mode
-      // (assigning scientists/cards or viewing a completed-project report).
-      if (_assigningProjectId !== null || _viewingReportProjectId !== null) {
-        return;
+    // Canonical one-cycle CAS catch-up + resolve/prune (same as login).
+    runScheduledProjectMaintenance(session.username).then((maintenance) => {
+      if (!maintenance.ok) return;
+      if (
+        (maintenance.generatedCount || 0) > 0
+        || (maintenance.resolvedCount || 0) > 0
+        || (maintenance.prunedCount || 0) > 0
+        || (maintenance.refresh?.stepCount || 0) > 0
+      ) {
+        if (_assigningProjectId !== null || _viewingReportProjectId !== null) {
+          return;
+        }
+        renderResearchProjects();
       }
-      renderResearchProjects();
-    }
+    });
   }, PROJECT_HEARTBEAT_INTERVAL_MS);
 }
 
@@ -340,7 +331,7 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
 
   function render() {
     const adminExtra = isAdmin
-      ? `<span class="rp-status-admin">Refresh interval: ${getProjectRefreshHours()}h</span>`
+      ? `<span class="rp-status-admin">Refresh interval: ${PROJECT_REFRESH_INTERVAL_HOURS}h</span>`
       : '';
     bar.innerHTML = `
       <span class="rp-status-item">Projects: <strong>${capCount}</strong> / ${maxProjects} Active</span>

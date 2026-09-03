@@ -14,22 +14,42 @@ import { getProjectConfig } from './project-config.js';
 export const MAX_STORED_PROJECTS = 7;
 
 /**
- * Returns the configured refresh interval in hours.
- * Reads from the DB-backed project config (projectRefreshHours).
+ * Canonical scheduled refresh interval (production CAS + RTDB rules).
+ *
+ * COUPLING: database.rules.json `lastProjectRefreshAt` validate uses this
+ * exact millisecond literal (12h). Keep in sync via
+ * scripts/gen-claim-rules-snippets.mjs + inject-claim-rules.mjs and the
+ * integrity regression that asserts equality.
+ *
+ * Live admin `projectRefreshHours` does NOT change the CAS step size; a
+ * non-12h config would desync client intent from rules. Scheduling always
+ * uses this constant.
+ */
+export const PROJECT_REFRESH_INTERVAL_HOURS = 12;
+export const PROJECT_REFRESH_INTERVAL_MS =
+  PROJECT_REFRESH_INTERVAL_HOURS * 60 * 60 * 1000;
+
+/** Max one-cycle CAS catch-up iterations per login/heartbeat invocation. */
+export const PROJECT_REFRESH_CATCHUP_MAX_STEPS = MAX_STORED_PROJECTS;
+
+/**
+ * Returns the configured refresh interval in hours (UI/config display).
+ * Scheduling / CAS uses {@link PROJECT_REFRESH_INTERVAL_HOURS} exclusively.
  * @returns {number}
  */
 export function getProjectRefreshHours() {
   const cfg = getProjectConfig();
   const h = cfg.projectRefreshHours;
-  return (typeof h === 'number' && h > 0) ? h : 12;
+  return (typeof h === 'number' && h > 0) ? h : PROJECT_REFRESH_INTERVAL_HOURS;
 }
 
 /**
- * Returns the refresh interval in milliseconds.
+ * Returns the refresh interval in milliseconds used for scheduled generation CAS.
+ * Always the canonical 12h constant (must match RTDB rules).
  * @returns {number}
  */
 export function getProjectRefreshIntervalMs() {
-  return getProjectRefreshHours() * 60 * 60 * 1000;
+  return PROJECT_REFRESH_INTERVAL_MS;
 }
 
 /**

@@ -18,7 +18,11 @@
  */
 
 import { generateProjectTemplate, getUnlockedProjectRarities } from './project-generator.js';
-import { getAvailableProjectSlots, getProjectRefreshIntervalMs } from './project-refresh.js';
+import {
+  getAvailableProjectSlots,
+  getProjectRefreshIntervalMs,
+  PROJECT_REFRESH_INTERVAL_MS,
+} from './project-refresh.js';
 import { createAvailableProject, PROJECT_STATES } from './project-state.js';
 import { getProjectConfig } from './project-config.js';
 
@@ -137,8 +141,124 @@ export function generateAvailableProjects({
 }
 
 /**
+ * Pure: plan exactly ONE scheduled refresh cycle (CAS step).
+ *
+ * - lastRefreshAt > 0: if due, advance by exactly one PROJECT_REFRESH_INTERVAL_MS;
+ *   generate at most one project when a slot is open; otherwise burn (0 gens).
+ * - lastRefreshAt === 0: bootstrap — initial fill (up to config initialProjects)
+ *   when projects empty; set refreshAt to the greatest interval boundary ≤ now.
+ *
+ * @param {object} [options]
+ * @returns {{
+ *   due: boolean,
+ *   bootstrap: boolean,
+ *   burned: boolean,
+ *   projects: object[],
+ *   refreshAt: number,
+ *   generated: object[],
+ *   generatedCount: number,
+ *   previousRefreshAt: number,
+ * }}
+ */
+export function planOneCycleRefresh({
+  projects = [],
+  totalRP = 0,
+  lastRefreshAt = 0,
+  now = Date.now(),
+} = {}) {
+  const list = Array.isArray(projects) ? projects : [];
+  const interval = PROJECT_REFRESH_INTERVAL_MS;
+  const prev = Number(lastRefreshAt) || 0;
+
+  // Bootstrap / uninitialized clock
+  if (prev <= 0) {
+    const activeCount = countCapProjects(list);
+    const openSlots = getAvailableProjectSlots(activeCount);
+    let generated = [];
+    if (list.length === 0 && openSlots > 0) {
+      const cfg = getProjectConfig();
+      const rawInit = typeof cfg.initialProjects === 'number' ? cfg.initialProjects
+        : typeof cfg.initialProjectSlots === 'number' ? cfg.initialProjectSlots
+        : 2;
+      const initCount = rawInit > 0 ? Math.min(rawInit, openSlots) : Math.min(2, openSlots);
+      generated = generateAvailableProjects({ totalRP, slots: initCount, createdAt: now });
+    }
+    const refreshAt = Math.floor(now / interval) * interval;
+    return {
+      due: true,
+      bootstrap: true,
+      burned: generated.length === 0,
+      projects: [...list, ...generated],
+      refreshAt: refreshAt > 0 ? refreshAt : interval,
+      generated,
+      generatedCount: generated.length,
+      previousRefreshAt: 0,
+    };
+  }
+
+  if (now - prev < interval) {
+    return {
+      due: false,
+      bootstrap: false,
+      burned: false,
+      projects: list,
+      refreshAt: prev,
+      generated: [],
+      generatedCount: 0,
+      previousRefreshAt: prev,
+    };
+  }
+
+  const newRefreshAt = prev + interval;
+  // Do not advance past server-ish now (client clock); caller/rules also guard.
+  if (newRefreshAt > now) {
+    return {
+      due: false,
+      bootstrap: false,
+      burned: false,
+      projects: list,
+      refreshAt: prev,
+      generated: [],
+      generatedCount: 0,
+      previousRefreshAt: prev,
+    };
+  }
+
+  const activeCount = countCapProjects(list);
+  const openSlots = getAvailableProjectSlots(activeCount);
+  if (openSlots <= 0) {
+    return {
+      due: true,
+      bootstrap: false,
+      burned: true,
+      projects: list,
+      refreshAt: newRefreshAt,
+      generated: [],
+      generatedCount: 0,
+      previousRefreshAt: prev,
+    };
+  }
+
+  const generated = generateAvailableProjects({ totalRP, slots: 1, createdAt: now });
+  return {
+    due: true,
+    bootstrap: false,
+    burned: false,
+    projects: [...list, ...generated],
+    refreshAt: newRefreshAt,
+    generated,
+    generatedCount: generated.length,
+    previousRefreshAt: prev,
+  };
+}
+
+/**
  * Determines whether the project pool needs refreshing and, if so, appends
  * newly generated AVAILABLE projects up to the 7-project cap.
+ *
+ * NOTE: Multi-cycle absolute jumps are NOT used for production persist anymore.
+ * Prefer {@link planOneCycleRefresh} + commitScheduledRefreshCatchUp.
+ * Kept for registration bootstrap embedding and unit tests of pool math.
  *
  * Cap counting uses ONLY AVAILABLE + ACTIVE projects.
  * COMPLETE and CLAIMED projects do NOT count toward the cap.

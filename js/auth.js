@@ -48,7 +48,7 @@ import {
 } from './player-directory.js';
 import { emptyPlayerTradeIndexPaths } from './trade-index.js';
 import { syncProjects } from './project-sync.js';
-import { prepareProjectsForPersist } from './project-claims.js';
+import { runScheduledProjectMaintenance } from './project-refresh-commit.js';
 import { getProjectConfig } from './project-config.js';
 import { buildLeaderboardSummaryPathsForPlayer } from './leaderboard-summaries.js';
 import * as cards from './cards.js';
@@ -701,29 +701,11 @@ async function applyPostLoginPlayerMaintenance(username) {
   normalizePlayerSchema(playerKey);
   runLoginAchievementEvaluation(playerKey);
 
-  const freshPlayer = db.get(`players/${playerKey}`);
-  const prevRefreshAt = freshPlayer.lastProjectRefreshAt ?? 0;
-  const syncResult = syncProjects({
-    projects:      freshPlayer.projects      ?? [],
-    totalRP:       freshPlayer.totalResearchPoints ?? 0,
-    lastRefreshAt: prevRefreshAt,
-    now:           Date.now(),
-  });
-  // Match project-ui heartbeat: persist only when sync changed something
-  // (including refreshAt advances when the pool is full).
-  if (
-    syncResult.generatedCount > 0 ||
-    syncResult.resolvedCount > 0 ||
-    syncResult.prunedCount > 0 ||
-    syncResult.refreshAt !== prevRefreshAt
-  ) {
-    const safeProjects = await prepareProjectsForPersist(playerKey, syncResult.projects);
-    db.update(`players/${playerKey}`, {
-      projects:             safeProjects,
-      lastProjectRefreshAt: syncResult.refreshAt,
-    });
-  }
-  console.log(`[ResearchProjects] Sync complete — generated:${syncResult.generatedCount} resolved:${syncResult.resolvedCount} pruned:${syncResult.prunedCount}`);
+  const maintenance = await runScheduledProjectMaintenance(playerKey);
+  console.log(
+    `[ResearchProjects] Sync complete — generated:${maintenance.generatedCount}`
+    + ` resolved:${maintenance.resolvedCount} pruned:${maintenance.prunedCount}`,
+  );
 }
 
 // ---------- Auth init (session restore) ----------
