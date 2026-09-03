@@ -131,7 +131,12 @@ function assertCapCoupling() {
     fail("rules projects.validate unexpectedly references child('7')");
     return;
   }
+  if (validate.startsWith("root.child('admins')")) {
+    fail('projects.validate must not short-circuit true for admins');
+    return;
+  }
   pass('array-cap coupling: app MAX=7 ↔ rules indices 0..6');
+  pass('projects.validate has no admin claim bypass prefix');
 }
 
 async function seedAlice(testEnv) {
@@ -205,8 +210,8 @@ async function main() {
     });
 
     const alice = testEnv.authenticatedContext('aliceUid').database();
-    await expectPass('1) FIRST CLAIM SUCCESS', update(ref(alice), clientA));
-    await expectFail('2/3) DUPLICATE / concurrent stale B DENIED', update(ref(alice), clientB));
+    await expectPass('1) NON-ADMIN NORMAL CLAIM SUCCESS', update(ref(alice), clientA));
+    await expectFail('1b) DUPLICATE / concurrent stale B DENIED', update(ref(alice), clientB));
 
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       const db = ctx.database();
@@ -286,7 +291,7 @@ async function main() {
     const t0 = 1700000100000;
 
     await expectFail(
-      '4) OLD-CLIENT marker-less claim DENIED',
+      '2) NON-ADMIN OLD-CLIENT marker-less claim DENIED',
       update(ref(carol), oldClientClaim({
         username: 'carol',
         projectId: 'project_old',
@@ -301,7 +306,166 @@ async function main() {
     );
 
     // ------------------------------------------------------------------
-    // 5) CRITICAL: COMPLETE + preexisting marker → CLAIMED DENIED
+    // 3–7) Admin bypass closed + Admin Complete two-phase shapes
+    // ------------------------------------------------------------------
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      // Player whose authUid is also an admin — previously could bypass validate.
+      await set(ref(ctx.database(), 'players/teach'), {
+        authUid: 'adminUid',
+        totalResearchPoints: 20,
+        seasonalResearchPoints: 0,
+        currencies: { currentResearchPoints: 20 },
+        projectsCompleted: 0,
+        stats: { projectSuccessStreak: 0 },
+        projects: [
+          { id: 'project_admin_claim', state: 'complete', title: 'Admin Claim Target' },
+          { id: 'project_admin_active', state: 'active', title: 'Admin Active', startedAt: 1, completesAt: 9 },
+        ],
+      });
+      await set(ref(ctx.database(), 'leaderboards/totalResearchPoints/teach'), lb('teach', 20, 1));
+      await set(ref(ctx.database(), 'leaderboards/projectsCompleted/teach'), lb('teach', 0, 1));
+    });
+
+    const teachAdmin = testEnv.authenticatedContext('adminUid').database();
+    const tAdmin = 1700000150000;
+
+    await expectFail(
+      '3) ADMIN OLD CLIENT marker-less COMPLETE→CLAIMED DENIED',
+      update(ref(teachAdmin), oldClientClaim({
+        username: 'teach',
+        projectId: 'project_admin_claim',
+        claimedAt: tAdmin,
+        histId: 'hist_admin_old',
+        fromRp: 20,
+        toRp: 60,
+        toCompleted: 1,
+        toStreak: 1,
+        projectsAfter: [
+          { id: 'project_admin_claim', state: 'claimed', title: 'Admin Claim Target', claimedAt: tAdmin },
+          { id: 'project_admin_active', state: 'active', title: 'Admin Active', startedAt: 1, completesAt: 9 },
+        ],
+      })),
+    );
+
+    await expectPass(
+      '4) ADMIN LEGITIMATE COMPLETE→CLAIMED WITH MARKER PASS',
+      update(ref(teachAdmin), newClientClaim({
+        username: 'teach',
+        projectId: 'project_admin_claim',
+        claimedAt: tAdmin + 1,
+        histId: 'hist_admin_ok',
+        fromRp: 20,
+        toRp: 60,
+        toCompleted: 1,
+        toStreak: 1,
+        projectsAfter: [
+          { id: 'project_admin_claim', state: 'claimed', title: 'Admin Claim Target', claimedAt: tAdmin + 1 },
+          { id: 'project_admin_active', state: 'active', title: 'Admin Active', startedAt: 1, completesAt: 9 },
+        ],
+      })),
+    );
+
+    await expectPass(
+      '5) ADMIN FORCE COMPLETE Phase1 ACTIVE→COMPLETE only PASS',
+      update(ref(teachAdmin), {
+        'players/teach/projects': [
+          { id: 'project_admin_claim', state: 'claimed', title: 'Admin Claim Target', claimedAt: tAdmin + 1 },
+          {
+            id: 'project_admin_active',
+            state: 'complete',
+            title: 'Admin Active',
+            startedAt: 1,
+            completesAt: 9,
+            completedAt: tAdmin + 2,
+            outcome: { success: true },
+            rewards: { success: true, rpEarned: 15 },
+          },
+        ],
+      }),
+    );
+
+    await expectPass(
+      '6) ADMIN COMPLETE Phase2 canonical claim PASS',
+      update(ref(teachAdmin), newClientClaim({
+        username: 'teach',
+        projectId: 'project_admin_active',
+        claimedAt: tAdmin + 3,
+        histId: 'hist_admin_phase2',
+        fromRp: 60,
+        toRp: 75,
+        toCompleted: 2,
+        toStreak: 2,
+        projectsAfter: [
+          { id: 'project_admin_claim', state: 'claimed', title: 'Admin Claim Target', claimedAt: tAdmin + 1 },
+          {
+            id: 'project_admin_active',
+            state: 'claimed',
+            title: 'Admin Active',
+            claimedAt: tAdmin + 3,
+            outcome: { success: true },
+            rewards: { success: true, rpEarned: 15 },
+          },
+        ],
+      })),
+    );
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await set(ref(ctx.database(), 'players/teach2'), {
+        authUid: 'adminUid',
+        totalResearchPoints: 0,
+        currencies: { currentResearchPoints: 0 },
+        projectsCompleted: 0,
+        stats: { projectSuccessStreak: 0 },
+        projects: [{
+          id: 'project_one_step',
+          state: 'active',
+          title: 'Broken One Step',
+          startedAt: 1,
+          completesAt: 2,
+        }],
+      });
+      await set(ref(ctx.database(), 'leaderboards/totalResearchPoints/teach2'), lb('teach2', 0, 1));
+      await set(ref(ctx.database(), 'leaderboards/projectsCompleted/teach2'), lb('teach2', 0, 1));
+    });
+
+    await expectFail(
+      '7) OLD BROKEN one-step ACTIVE→CLAIMED+marker DENIED',
+      update(ref(teachAdmin), newClientClaim({
+        username: 'teach2',
+        projectId: 'project_one_step',
+        claimedAt: tAdmin + 9,
+        histId: 'hist_one_step',
+        fromRp: 0,
+        toRp: 10,
+        toCompleted: 1,
+        toStreak: 1,
+        projectsAfter: [{
+          id: 'project_one_step',
+          state: 'claimed',
+          title: 'Broken One Step',
+          claimedAt: tAdmin + 9,
+        }],
+      })),
+    );
+
+    // Admin cannot resurrect CLAIMED either
+    await expectFail(
+      '9b) ADMIN CLAIMED→COMPLETE resurrection DENIED',
+      update(ref(teachAdmin), {
+        'players/teach/projects': [
+          { id: 'project_admin_claim', state: 'complete', title: 'Admin Claim Target' },
+          {
+            id: 'project_admin_active',
+            state: 'claimed',
+            title: 'Admin Active',
+            claimedAt: tAdmin + 3,
+          },
+        ],
+      }),
+    );
+
+    // ------------------------------------------------------------------
+    // 8) CRITICAL: COMPLETE + preexisting marker → CLAIMED DENIED
     // ------------------------------------------------------------------
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await set(ref(ctx.database(), 'players/erin'), {
@@ -320,7 +484,7 @@ async function main() {
     const erin = testEnv.authenticatedContext('erinUid').database();
     const tErin = 1700000200000;
     await expectFail(
-      '5) COMPLETE + preexisting marker + rewards DENIED',
+      '8) COMPLETE + preexisting marker + rewards DENIED',
       update(ref(erin), {
         'players/erin/projects': [{ id: 'project_p', state: 'claimed', title: 'Inconsistent', claimedAt: tErin }],
         'players/erin/totalResearchPoints': 50,
@@ -333,14 +497,14 @@ async function main() {
       }),
     );
     await expectFail(
-      '5b) COMPLETE + preexisting marker projects-only heal DENIED',
+      '8b) COMPLETE + preexisting marker projects-only heal DENIED',
       update(ref(erin), {
         'players/erin/projects': [{ id: 'project_p', state: 'claimed', title: 'Inconsistent', claimedAt: tErin }],
       }),
     );
 
     // ------------------------------------------------------------------
-    // 6) Existing CLAIMED persistence
+    // 6 persistence / 9 resurrection (fran)
     // ------------------------------------------------------------------
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await set(ref(ctx.database(), 'players/fran'), {
@@ -354,7 +518,7 @@ async function main() {
     });
     const fran = testEnv.authenticatedContext('franUid').database();
     await expectPass(
-      '6) EXISTING CLAIMED persistence SUCCESS',
+      '10) EXISTING CLAIMED persistence SUCCESS',
       update(ref(fran), {
         'players/fran/projects': [
           { id: 'project_c', state: 'claimed', title: 'Done', claimedAt: 1, reportViewed: true },
@@ -364,10 +528,10 @@ async function main() {
     );
 
     // ------------------------------------------------------------------
-    // 7) Resurrection
+    // 9) Resurrection
     // ------------------------------------------------------------------
     await expectFail(
-      '7) CLAIMED → COMPLETE resurrection DENIED',
+      '9) CLAIMED → COMPLETE resurrection DENIED',
       update(ref(fran), {
         'players/fran/projects': [
           { id: 'project_c', state: 'complete', title: 'Done' },

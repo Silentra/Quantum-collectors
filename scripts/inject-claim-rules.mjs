@@ -1,5 +1,6 @@
 /**
- * Regenerate + inject A+B claim coupling rules into database.rules.json.
+ * Regenerate + inject A+B claim coupling rules and lastProjectRefreshAt CAS
+ * into database.rules.json.
  *
  * Usage: node scripts/inject-claim-rules.mjs
  *
@@ -8,6 +9,7 @@
  * - Rules inspect projects array indices 0..6 only (PROJECT_RULES_ARRAY_INDEX_MAX = 6)
  * - Newly CLAIMED by projectId requires a FRESH projectClaims marker in the SAME write
  * - Preexisting marker does NOT authorize COMPLETE → CLAIMED
+ * - lastProjectRefreshAt step === PROJECT_REFRESH_INTERVAL_MS (12h) in js/project-refresh.js
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -39,18 +41,27 @@ const projectsRule = {
   '.validate': snippets.projectsValidate,
 };
 
-const nextUser = {};
+const refreshAtRule = {
+  '.write': snippets.refreshAtWrite,
+  '.validate': snippets.refreshAtValidate,
+};
+
+const ordered = {};
 for (const [key, value] of Object.entries(userNode)) {
+  if (key === 'projects' || key === 'lastProjectRefreshAt') continue;
   if (key === '$other') {
-    nextUser.projects = projectsRule;
+    ordered.projects = projectsRule;
+    ordered.lastProjectRefreshAt = refreshAtRule;
+    ordered.$other = value;
+    continue;
   }
-  if (key === 'projects') continue;
-  nextUser[key] = value;
+  ordered[key] = value;
 }
-if (!nextUser.projects) {
-  nextUser.projects = projectsRule;
-}
-rules.rules.players.$username = nextUser;
+if (!ordered.projects) ordered.projects = projectsRule;
+if (!ordered.lastProjectRefreshAt) ordered.lastProjectRefreshAt = refreshAtRule;
+if (!ordered.$other) ordered.$other = userNode.$other;
+
+rules.rules.players.$username = ordered;
 
 const claimLeaf = rules.rules.projectClaims.$username.$projectId;
 if (!claimLeaf) {
@@ -60,4 +71,6 @@ claimLeaf['.write'] = snippets.markerWrite;
 
 writeFileSync(rulesPath, `${JSON.stringify(rules, null, 2)}\n`);
 console.log('Updated', rulesPath);
-console.log('Has projects before $other:', Object.keys(nextUser).indexOf('projects') < Object.keys(nextUser).indexOf('$other'));
+const keys = Object.keys(ordered);
+console.log('projects idx', keys.indexOf('projects'), 'refreshAt idx', keys.indexOf('lastProjectRefreshAt'), '$other idx', keys.indexOf('$other'));
+console.log('interval ms', snippets.PROJECT_REFRESH_INTERVAL_MS);

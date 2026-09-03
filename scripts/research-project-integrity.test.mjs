@@ -186,6 +186,11 @@ assert(typeof buildResearchProposalProjectPlan === 'function', 'proposal plan he
   const validate = rulesJson.rules.players.$username.projects?.['.validate'] || '';
   assert(validate.includes(".child('6')"), "database.rules.json projects.validate inspects child('6')");
   assert(!validate.includes(".child('7')"), "database.rules.json projects.validate must not assume child('7')");
+  const refreshValidate = rulesJson.rules.players.$username.lastProjectRefreshAt?.['.validate'] || '';
+  assert(
+    refreshValidate.includes(String(getProjectRefreshIntervalMs())),
+    'lastProjectRefreshAt rules interval coupled to JS constant',
+  );
 }
 
 if (failed) {
