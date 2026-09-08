@@ -29,6 +29,7 @@ import {
   getItemDefinition as getRegistryItemDefinition,
 } from './cosmetic-definitions.js';
 import { renderShopCardPreviewSlot, renderShopCosmeticPreview } from './cosmetic-preview.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import { shouldDisplayConsumable } from './player-facing-display.js';
 import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
@@ -730,6 +731,7 @@ export function renderShop() {
 
   const snapshot = getPlayerSnapshot(session.username);
   root.innerHTML = renderShopHtml(snapshot);
+  observeCardArtShrinkwrap(root);
   wireShopEvents(root, session.username);
   startCountdown(getRotation(snapshot)?.refreshAt);
 }

@@ -26,6 +26,7 @@ import {
 } from './card-art.js';
 import { resolvePackArt, renderPackTileArtHtml } from './pack-art.js';
 import { buildCardRenderModel, renderPackCardWrapper, renderSciCard } from './card-render.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import * as packs from './packs.js';
@@ -631,6 +632,7 @@ function renderCollection() {
         openCardDetailModal(cardId, qty);
       });
     });
+    observeCardArtShrinkwrap(grid);
   }
 
   // Stats: owned unique vs total enabled canonical cards
@@ -757,6 +759,8 @@ async function openPackUI(packId) {
     cardsContainer.innerHTML = result.cards
       .map((card, i) => renderPackCardWrapper(card, i, { borderRenderEffectId, pack: packType }))
       .join('');
+
+    observeCardArtShrinkwrap(cardsContainer);
 
     // Show overlay only after acknowledged commit
     document.getElementById('pack-opening-overlay').classList.remove('hidden');
