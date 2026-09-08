@@ -8655,8 +8655,8 @@ body.app-mode-game #screen-game.screen.active {
  */
 .sci-card.card--physical-front,
 .card-detail-frame.card--physical-front {
-  /* ~5px at detail (~240px); smaller on collection (~172px); never >~10px */
-  --card-outer-gutter: clamp(2px, 2.4cqw, 6px);
+  /* Frame at card edge; ≤~2px technical room only (no designed outer starfield gutter) */
+  --card-outer-gutter: clamp(0px, 0.4cqw, 2px);
   --card-rarity-accent: #9ca3af;
   /* Tall-frame opening map (asset 816×1152 → % of frame box) */
   --pf-upper-l: 4.902%;
@@ -8754,7 +8754,7 @@ body.app-mode-game #screen-game.screen.active {
   margin: 0;
   height: auto;
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
   background: transparent;
   display: grid;
   /* Title ~ title-block/upper; art fills; metal gap; text panel */
@@ -8859,7 +8859,7 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(clamp(0.5px, 0.28cqw, 0.9px) clamp(0.5px, 0.28cqw, 0.9px) at 88% 22%, rgba(255, 220, 170, 0.35) 0%, transparent 100%),
     linear-gradient(165deg, rgba(10, 16, 28, 0.55) 0%, rgba(12, 18, 32, 0.35) 50%, rgba(10, 14, 24, 0.5) 100%);
   border-radius: 1px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .card--physical-front .card-detail-field {
@@ -8881,7 +8881,9 @@ body.app-mode-game #screen-game.screen.active {
   aspect-ratio: 538 / 532;
   object-fit: contain;
   pointer-events: none;
-  z-index: 2;
+  /* Overlap text-panel/frame BR: +0.75×radius right, +1.0×radius down (radius = 50% of box) */
+  transform: translate(37.5%, 50%);
+  z-index: 5;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
