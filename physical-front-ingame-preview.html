@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Physical front in-game preview (local QA)</title>
+  <base href="/" />
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    body { margin: 0; background: #0b1220; color: #e2e8f0; font-family: system-ui, sans-serif; padding: 1.5rem; }
+    h1 { font-size: 1.1rem; margin: 0 0 0.5rem; }
+    p { font-size: 0.85rem; color: #94a3b8; margin: 0 0 1.25rem; }
+    .row { display: flex; flex-wrap: wrap; gap: 1.25rem; align-items: flex-end; margin-bottom: 2rem; }
+    .slot { display: flex; flex-direction: column; align-items: center; gap: 0.4rem; }
+    .slot span { font-size: 0.7rem; color: #64748b; }
+    .slot--grid .sci-card { width: 172px; }
+    .slot--pack .sci-card { width: 200px; }
+    .slot--modal .card-detail-frame { width: 240px; max-width: 240px; }
+    .note { font-size: 0.75rem; color: #64748b; max-width: 52rem; }
+  </style>
+</head>
+<body>
+  <h1>In-game physical-front first pass</h1>
+  <p>Compare against <code>print-export/out/batch-fronts-final-shrinkwrap/</code>. Browser gutter is small (not print bleed).</p>
+  <div id="root">Loading…</div>
+  <p class="note">Serve repo root (e.g. <code>npx serve .</code>) and open this file via the local server.</p>
+  <script type="module">
+    import { buildCardRenderModel, renderSciCard, renderDetailFrame } from '/js/card-render.js';
+    import { observeCardArtShrinkwrap } from '/js/card-art-layout.js';
+    import { getEnabledCards } from '/js/cards.js';
+
+    const cards = getEnabledCards();
+    const pick = (pred) => cards.find(pred);
+    const samples = [
+      pick((c) => c.rarity === 'common'),
+      pick((c) => c.rarity === 'uncommon'),
+      pick((c) => c.rarity === 'rare'),
+      pick((c) => c.rarity === 'epic'),
+      pick((c) => c.rarity === 'legendary'),
+      pick((c) => /caltech/i.test(c.name)),
+      pick((c) => (c.name || '').length >= 22),
+      pick((c) => (c.keyFact || '').length >= 120),
+    ].filter(Boolean);
+
+    const uniq = [];
+    const seen = new Set();
+    for (const c of samples) {
+      if (seen.has(c.id)) continue;
+      seen.add(c.id);
+      uniq.push(c);
+    }
+
+    function block(title, sizeClass, renderFn) {
+      return `
+        <h2 style="font-size:0.95rem;margin:0 0 0.75rem;color:#cbd5e1">${title}</h2>
+        <div class="row">
+          ${uniq.map((c) => `
+            <div class="slot ${sizeClass}">
+              ${renderFn(c)}
+              <span>${c.rarity} · ${c.name}</span>
+            </div>
+          `).join('')}
+        </div>`;
+    }
+
+    const root = document.getElementById('root');
+    root.innerHTML =
+      block('Collection (~172px)', 'slot--grid', (c) =>
+        renderSciCard(buildCardRenderModel(c, { variant: 'collection', quantity: 2 }))) +
+      block('Pack-ish (~200px)', 'slot--pack', (c) =>
+        renderSciCard(buildCardRenderModel(c, { variant: 'pack-reveal' }))) +
+      block('Detail modal (240px)', 'slot--modal', (c) =>
+        renderDetailFrame(buildCardRenderModel(c, { variant: 'modal', quantity: 3 })));
+
+    observeCardArtShrinkwrap(root);
+  </script>
+</body>
+</html>
