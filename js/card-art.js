@@ -460,7 +460,7 @@ export function renderCardDetailArtHtml(card, resolved = resolveCardArt(card)) {
   const safeEmoji = escapeCardArtAttr(emoji);
   const safeName = escapeCardArtAttr(card.name || '');
 
-  return `<img src="${safeSrc}" alt="${safeAlt}" loading="lazy" decoding="async" data-card-art-fallback="1" data-fallback-emoji="${safeEmoji}" data-card-art-name="${safeName}">`;
+  return `<img class="card-detail-art-img" src="${safeSrc}" alt="${safeAlt}" loading="lazy" decoding="async" data-card-art-fallback="1" data-fallback-emoji="${safeEmoji}" data-card-art-name="${safeName}">`;
 }
 
 /**

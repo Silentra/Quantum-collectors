@@ -8,6 +8,7 @@ import * as player from './player.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { getEquippedAura, getEquippedShimmer } from './profile-ui.js';
 import { renderCardDetailView } from './card-render.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 
 /**
  * Open the global card detail modal (same content as Collection).
@@ -48,6 +49,7 @@ export function openCardDetailModal(cardId, quantity = 1) {
     equippedShimmerDefinition,
     equippedGlowDefinition,
   });
+  observeCardArtShrinkwrap(content);
   modal.classList.remove('hidden');
 }
 

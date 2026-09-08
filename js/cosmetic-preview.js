@@ -5,6 +5,7 @@
 
 import * as cards from './cards.js';
 import { renderCollectionCard } from './card-render.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { COSMETIC_GLOW_EFFECT_IDS } from './card-glow.js';
 import { COSMETIC_SHIMMER_EFFECT_IDS } from './card-shimmer.js';
 import { COSMETIC_BORDER_EFFECT_IDS, DEFAULT_BORDER_EFFECT_ID } from './card-border.js';
@@ -73,6 +74,11 @@ export function resolveCosmeticPreviewCard() {
  */
 export function renderShopCardPreviewSlot(card, options = {}) {
   return `<div class="shop-card-preview-slot">${renderCollectionCard(card, options)}</div>`;
+}
+
+/** After shop preview HTML is mounted, size shrinkwrap art. */
+export function refreshCosmeticCardArtLayout(root = document) {
+  observeCardArtShrinkwrap(root);
 }
 
 /**

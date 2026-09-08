@@ -960,9 +960,9 @@ export const BASE_CARD_DEFINITIONS = Object.freeze(
     "field": "Nuclear Physics",
     "effect": "",
     "image": "",
-    "flavor": "ach fission event releases neutrons that can split more atomic nuclei, creating a chain reaction.",
+    "flavor": "Each fission event releases neutrons that can split more atomic nuclei, creating a chain reaction.",
     "imageUrl": "",
-    "keyFact": "ach fission event releases neutrons that can split more atomic nuclei, creating a chain reaction.",
+    "keyFact": "Each fission event releases neutrons that can split more atomic nuclei, creating a chain reaction.",
     "enabled": true,
     "conceptType": "risk",
     "flavorText": "A greater reward comes with greater risk."

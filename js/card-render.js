@@ -39,8 +39,29 @@ import {
   resolveShimmerRenderEffectId,
 } from './card-shimmer.js';
 
+/** Physical tall rarity frames (shared asset path with print masters; browser uses responsively). */
+const PHYSICAL_FRAME_DIR = 'assets/card-frames-export-cards/physical-tall';
+const PHYSICAL_FRAME_BY_RARITY = Object.freeze({
+  common: `${PHYSICAL_FRAME_DIR}/frame-common-tall-1152.png`,
+  uncommon: `${PHYSICAL_FRAME_DIR}/frame-uncommon-tall-1152.png`,
+  rare: `${PHYSICAL_FRAME_DIR}/frame-rare-tall-1152.png`,
+  epic: `${PHYSICAL_FRAME_DIR}/frame-epic-tall-1152.png`,
+  legendary: `${PHYSICAL_FRAME_DIR}/frame-legendary-tall-1152.png`,
+});
+
+/** Quantum Collectors seal (physical-front medallion). */
+const CARD_MEDALLION_SRC = 'assets/logo/quantum-collectors-medallion-cropped.png';
+
 /** Border mount — equipped border paints on .card-cosmetic-effects::before (v1). */
 const CARD_COSMETIC_HOST_HTML = '<div class="card-cosmetic-effects" aria-hidden="true"></div>';
+
+/**
+ * @param {string} rarity
+ * @returns {string}
+ */
+function physicalFrameSrc(rarity) {
+  return PHYSICAL_FRAME_BY_RARITY[rarity] || PHYSICAL_FRAME_BY_RARITY.common;
+}
 
 /** Pip color for Mathematical Aura tier indicators (modal + collection dots). */
 const MATH_AURA_TIER_PIP_COLOR = '#e0e7ff';
@@ -59,6 +80,7 @@ const MATH_AURA_TIER_PIP_COLOR = '#e0e7ff';
  * @property {number|null} [auraTierOverride=null] - force Mathematical Aura tier (shimmer preview only)
  * @property {boolean} [clampKeyFact] - grid-clamp on keyFact; default false for modal, true for collection
  * @property {'collection'|'modal'|'pack-reveal'} [variant='collection'] - layout/context preset
+ * @property {boolean} [physicalFront=true] - tall PNG frame + shrinkwrap chrome (false for print-export)
  */
 
 /**
@@ -89,6 +111,8 @@ export function buildCardRenderModel(card, options = {}) {
   const isModal = variant === 'modal';
   const isPackReveal = variant === 'pack-reveal';
   const clampKeyFact = options.clampKeyFact ?? (isPackReveal || !isModal);
+  /** Player-facing physical tall-frame chrome (off for print-export capture). */
+  const physicalFront = options.physicalFront !== false && options.physicalFront !== 0;
 
   const art = resolveCardArt(card);
   const keyFact = card.keyFact || card.flavor || '';
@@ -159,6 +183,7 @@ export function buildCardRenderModel(card, options = {}) {
     showRarityDot: true,
     rarityDotClass: `rarity-dot-${card.rarity || 'common'}`,
     nameScaleClass,
+    physicalFront,
     borderRenderEffectId: resolvedBorderRenderEffectId,
     glowRenderEffectId,
     showGlowHalo: glowRenderEffectId != null,
@@ -193,7 +218,8 @@ export function renderCardContent(model) {
     ? renderShimmerFaceLayerHtml(model.shimmerRenderEffectId)
     : '';
 
-  return `
+  if (!model.physicalFront) {
+    return `
       <div class="card-detail-inner">
         <div class="card-detail-header">
           <div class="card-detail-header-row">
@@ -211,6 +237,38 @@ export function renderCardContent(model) {
         </div>
         ${shimmerFaceHtml}
         ${conceptOverlayHtml}
+      </div>`;
+  }
+
+  const frameSrc = physicalFrameSrc(model.rarity);
+  const medallionHtml = model.isUndiscovered
+    ? ''
+    : `<img class="card-medallion" src="${CARD_MEDALLION_SRC}" alt="" draggable="false" aria-hidden="true" />`;
+
+  return `
+      <div class="card-face-stage">
+        <img class="card-physical-frame" src="${frameSrc}" alt="" draggable="false" aria-hidden="true" />
+        <div class="card-detail-inner">
+          <div class="card-detail-header">
+            <div class="card-detail-header-row">
+              <span class="card-detail-name ${model.nameScaleClass}">${model.name}</span>
+            </div>
+          </div>
+          <div class="card-detail-art" data-art-shrink="0" style="--card-art-aspect:1.25">
+            <div class="card-art-shrink">
+              ${artHtml}
+            </div>
+          </div>
+          <div class="card-detail-divider" aria-hidden="true"></div>
+          <div class="card-detail-body">
+            ${medallionHtml}
+            <div class="card-detail-field">${model.field}</div>
+            ${keyFactHtml}
+            ${model.extraBodyHtml || ''}
+          </div>
+          ${shimmerFaceHtml}
+          ${conceptOverlayHtml}
+        </div>
       </div>`;
 }
 
@@ -320,7 +378,7 @@ export function renderDetailFrame(model) {
     ? renderFrostWispLayerHtml(model.glowRenderEffectId)
     : '';
   return `
-    <div class="card-detail-frame rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
+    <div class="card-detail-frame${model.physicalFront ? ' card--physical-front' : ''} rarity-${model.rarity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
       ${glowHaloHtml}
       ${CARD_COSMETIC_HOST_HTML}
       ${moltenEmberHtml}
@@ -432,7 +490,7 @@ export function renderSciCard(model) {
     : '';
 
   return `
-    <div class="sci-card rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
+    <div class="sci-card${model.physicalFront ? ' card--physical-front' : ''} rarity-${model.rarity} ${model.lockedClass} ${model.undiscoveredClass}" data-card-id="${model.cardId}" data-qty="${model.quantity}" data-aura-tier="${model.auraTier}" data-card-border="${borderEffect}"${glowAttr}${shimmerAttr}>
       ${qtyBadge}
       ${lockedBadge}
       ${undiscoveredBadge}

@@ -46,6 +46,7 @@ import { commitProjectClaim } from './project-claim-plan.js';
 
 import { renderMiniCardArtHtml } from './card-art.js';
 import { renderPackCardWrapper } from './card-render.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { spawnRevealParticles } from './pack-reveal-effects.js';
 import { confirmAction } from './ui.js';
@@ -179,6 +180,8 @@ function showBreakthroughCardReveal(card) {
     borderRenderEffectId,
     packArtKey: 'standard',
   });
+
+  observeCardArtShrinkwrap(cardsContainer);
 
   overlay.classList.remove('hidden');
 

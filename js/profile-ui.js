@@ -35,6 +35,7 @@ import {
 } from './shop-mutations.js';
 import { renderProfileAchievements } from './achievements-ui.js';
 import { buildCardRenderModel, renderDetailFrame } from './card-render.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { resolveBorderRenderEffectIdFromPlayer } from './card-border.js';
 import { renderMiniCardArtHtml } from './card-art.js';
 import { getPlayerDisplayName } from './player-display-name.js';
@@ -499,6 +500,7 @@ function renderFeaturedShowcase(p, username) {
   }
 
   container.innerHTML = slots.join('');
+  observeCardArtShrinkwrap(container);
 }
 
 function renderProfileSummary(p) {

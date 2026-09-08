@@ -3,6 +3,7 @@
  */
 
 import { renderExpandedCosmeticPreview } from './cosmetic-preview.js';
+import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 
 let escapeHandlerBound = false;
@@ -59,6 +60,7 @@ export function openCosmeticPreviewModal(item, options = {}) {
   metaEl.textContent = `${formatLabel(item.rarity)} · ${getCategoryLabel(item.category)}`;
   descriptionEl.textContent = item.description || '';
   stageEl.innerHTML = previewHtml;
+  observeCardArtShrinkwrap(stageEl);
 
   modal.classList.remove('hidden');
 }
