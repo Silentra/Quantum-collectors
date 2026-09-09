@@ -7109,18 +7109,15 @@ body.app-mode-game #screen-game.screen.active {
 .rarity-label-uncommon  { color: #22c55e; }
 .rarity-label-common    { color: #9ca3af; }
 
-/* Card grid within each rarity row — max 5 per row, cards capped at ~172px */
+/* Card grid within each rarity row — 3 cols below desktop; 4 cols @1024+, max 220px */
 .collection-rarity-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 172px));
+  grid-template-columns: repeat(3, minmax(0, 220px));
   gap: 1.25rem;
   justify-content: center;
 }
-@media (min-width: 640px) {
-  .collection-rarity-row { grid-template-columns: repeat(4, minmax(0, 172px)); }
-}
-@media (min-width: 768px) {
-  .collection-rarity-row { grid-template-columns: repeat(5, minmax(0, 172px)); }
+@media (min-width: 1024px) {
+  .collection-rarity-row { grid-template-columns: repeat(4, minmax(0, 220px)); }
 }
 
 /* Layout overrides for card-detail-* inside .sci-card (typography: Phase B cq rules below) */
