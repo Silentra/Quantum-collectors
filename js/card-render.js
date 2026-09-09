@@ -261,7 +261,6 @@ export function renderCardContent(model) {
           </div>
           <div class="card-detail-divider" aria-hidden="true"></div>
           <div class="card-detail-body">
-            ${medallionHtml}
             <div class="card-detail-field">${model.field}</div>
             ${keyFactHtml}
             ${model.extraBodyHtml || ''}
@@ -269,6 +268,7 @@ export function renderCardContent(model) {
           ${shimmerFaceHtml}
           ${conceptOverlayHtml}
         </div>
+        ${medallionHtml}
       </div>`;
 }
 
