@@ -8851,7 +8851,14 @@ body.app-mode-game #screen-game.screen.active {
     radial-gradient(clamp(0.46px, 0.34cqw, 0.84px) clamp(0.46px, 0.34cqw, 0.84px) at 92.4% 54.6%, rgba(135, 185, 255, 0.7) 0%, transparent 100%),
     /* Below-art / above-text — two tiny fills (left/center sparse only) */
     radial-gradient(clamp(0.4px, 0.28cqw, 0.66px) clamp(0.4px, 0.28cqw, 0.66px) at 24.8% 64.9%, rgba(226, 236, 248, 0.7) 0%, transparent 100%),
-    radial-gradient(clamp(0.4px, 0.27cqw, 0.64px) clamp(0.4px, 0.27cqw, 0.64px) at 39.4% 62.6%, rgba(255, 224, 185, 0.62) 0%, transparent 100%);
+    radial-gradient(clamp(0.4px, 0.27cqw, 0.64px) clamp(0.4px, 0.27cqw, 0.64px) at 39.4% 62.6%, rgba(255, 224, 185, 0.62) 0%, transparent 100%),
+    /* Pass 4 polish — upper header only (above / above-right of title); prior loci unchanged */
+    radial-gradient(clamp(0.4px, 0.26cqw, 0.6px) clamp(0.4px, 0.26cqw, 0.6px) at 22.5% 8.2%, rgba(248, 252, 255, 0.88) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.27cqw, 0.64px) clamp(0.4px, 0.27cqw, 0.64px) at 33.1% 7.4%, rgba(255, 255, 255, 0.9) 0%, transparent 100%),
+    radial-gradient(clamp(0.42px, 0.3cqw, 0.72px) clamp(0.42px, 0.3cqw, 0.72px) at 41.8% 8.9%, rgba(250, 252, 255, 0.86) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.26cqw, 0.62px) clamp(0.4px, 0.26cqw, 0.62px) at 54.8% 7.6%, rgba(230, 238, 250, 0.78) 0%, transparent 100%),
+    radial-gradient(clamp(0.48px, 0.35cqw, 0.85px) clamp(0.48px, 0.35cqw, 0.85px) at 50.2% 9.8%, rgba(255, 255, 255, 0.92) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.27cqw, 0.64px) clamp(0.4px, 0.27cqw, 0.64px) at 59.6% 8.4%, rgba(130, 185, 255, 0.58) 0%, transparent 100%);
 
   --card-rarity-accent: #9ca3af;
   /* Tall-frame opening map (asset 816×1152 → % of frame box) */
