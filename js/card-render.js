@@ -251,13 +251,9 @@ export function renderCardContent(model) {
   }
 
   const frameSrc = physicalFrameSrc(model.rarity);
-  const medallionHtml = model.isUndiscovered
-    ? ''
-    : `<img class="card-medallion" src="${CARD_MEDALLION_SRC}" alt="" draggable="false" aria-hidden="true" />`;
-
+  // PF: shimmer mounts on shell (above PNG); medallion mounts on shell (above accents)
   return `
       <div class="card-face-stage">
-        <img class="card-physical-frame" src="${frameSrc}" alt="" draggable="false" aria-hidden="true" />
         <div class="card-detail-inner">
           <div class="card-detail-header">
             <div class="card-detail-header-row">
@@ -275,11 +271,30 @@ export function renderCardContent(model) {
             ${keyFactHtml}
             ${model.extraBodyHtml || ''}
           </div>
-          ${shimmerFaceHtml}
           ${conceptOverlayHtml}
         </div>
-        ${medallionHtml}
+        <img class="card-physical-frame" src="${frameSrc}" alt="" draggable="false" aria-hidden="true" />
       </div>`;
+}
+
+/**
+ * Physical-front full-face shimmer — shell sibling above PNG frame, below medallion/badges.
+ * @param {ReturnType<typeof buildCardRenderModel>} model
+ * @returns {string}
+ */
+function renderPhysicalFrontShimmer(model) {
+  if (!model.physicalFront || !model.showShimmerFace) return '';
+  return renderShimmerFaceLayerHtml(model.shimmerRenderEffectId);
+}
+
+/**
+ * Physical-front medallion slot — shell sibling above border accents / shimmer.
+ * @param {ReturnType<typeof buildCardRenderModel>} model
+ * @returns {string}
+ */
+function renderPhysicalFrontMedallion(model) {
+  if (!model.physicalFront || model.isUndiscovered) return '';
+  return `<div class="card-medallion-slot" aria-hidden="true"><img class="card-medallion" src="${CARD_MEDALLION_SRC}" alt="" draggable="false" /></div>`;
 }
 
 /**
@@ -393,8 +408,10 @@ export function renderDetailFrame(model) {
       ${CARD_COSMETIC_HOST_HTML}
       ${moltenEmberHtml}
       ${renderCardContent(model)}
+      ${renderPhysicalFrontShimmer(model)}
       ${moltenDriftHtml}
       ${frostWispHtml}
+      ${renderPhysicalFrontMedallion(model)}
     </div>
   `;
 }
@@ -508,8 +525,10 @@ export function renderSciCard(model) {
       ${CARD_COSMETIC_HOST_HTML}
       ${moltenEmberHtml}
       ${renderCardContent(model)}
+      ${renderPhysicalFrontShimmer(model)}
       ${moltenDriftHtml}
       ${frostWispHtml}
+      ${renderPhysicalFrontMedallion(model)}
       ${auraDots}
     </div>
   `;

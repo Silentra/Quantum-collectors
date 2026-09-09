@@ -4,7 +4,7 @@
  * Tier 1+ cards receive face shimmer. Default = prismatic (not a shop item).
  * Equipped premium shimmer overrides default when owned.
  *
- * @see card-render.js — inner mount inside .card-detail-inner (full card interior)
+ * @see card-render.js — non-PF: inner mount; physical-front: shell sibling above PNG frame
  */
 
 import { getEquippedShimmer } from './profile-ui.js';
