@@ -8663,6 +8663,12 @@ body.app-mode-game #screen-game.screen.active {
   /* Halo host expands by glow-bleed; paint inset equals bleed → paint aligns to shell border-box */
   --card-glow-paint-inset: var(--card-effect-glow-bleed);
   --frost-ring-pad: clamp(1.5px, 1cqw, 3px);
+  /* Outer border trim — ~3px out + ~3px in ≈ 6px @220px (binding around PNG edge) */
+  --card-trim-outward: clamp(2px, 1.4cqw, 3.5px);
+  --card-trim-inward: clamp(2px, 1.4cqw, 3.5px);
+  --card-trim-width: calc(var(--card-trim-outward) + var(--card-trim-inward));
+  --card-trim-rim: 1px;
+  --card-trim-highlight: 1px;
   --card-rarity-accent: #9ca3af;
   /* Tall-frame opening map (asset 816×1152 → % of frame box) */
   --pf-upper-l: 4.902%;
@@ -8895,8 +8901,8 @@ body.app-mode-game #screen-game.screen.active {
 
 /* ===== PF cosmetic geometry contract (perimeter + face coating + seal) =====
  * Layer order (outside → top):
- *   glow halo z0 → face-stage z2 → cosmetics accent z4 → shimmer z5 →
- *   perimeter particles z5 → medallion z6 → badges z10
+ *   glow z0 → face-stage/PNG z2–3 → shimmer/particles z5 →
+ *   border trim z6 → medallion z7 → badges z8+
  */
 .card--physical-front .card-glow--halo {
   inset: calc(-1 * var(--card-effect-glow-bleed));
@@ -8910,10 +8916,11 @@ body.app-mode-game #screen-game.screen.active {
   border-radius: inherit;
 }
 
+/* Border host: expand outward so trim straddles shell edge (3px out + 3px in) */
 .card--physical-front .card-cosmetic-effects {
-  inset: calc(-1 * var(--card-effect-outer));
-  z-index: 4;
-  border-radius: inherit;
+  inset: calc(-1 * var(--card-trim-outward));
+  z-index: 6;
+  border-radius: calc(clamp(0.35rem, 2.5cqw, 0.55rem) + var(--card-trim-outward));
 }
 
 .card--physical-front[data-card-border="graphite"] .card-cosmetic-effects::before {
@@ -8922,14 +8929,19 @@ body.app-mode-game #screen-game.screen.active {
   opacity: 0;
 }
 
-/* Equipped borders: thin outer accent ring over physical frame (not legacy full CSS frame) */
+/*
+ * Equipped border trim — ornamental binding around physical PNG edge.
+ * Outer dark rim + ~6px color body + 1px inner highlight. Not a full replacement frame.
+ */
 .card--physical-front:not([data-card-border="graphite"]) .card-cosmetic-effects::before {
   background: transparent !important;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) color-mix(in srgb, currentColor 55%, rgba(180, 190, 210, 0.5)),
-    0 0 0 1px rgba(0, 0, 0, 0.35) !important;
-  opacity: 0.92;
+    0 0 0 var(--card-trim-rim) rgba(0, 0, 0, 0.48),
+    inset 0 0 0 calc(var(--card-trim-width) - var(--card-trim-highlight))
+      color-mix(in srgb, currentColor 72%, rgba(18, 22, 30, 0.5)),
+    inset 0 0 0 var(--card-trim-width)
+      color-mix(in srgb, currentColor 42%, rgba(255, 255, 255, 0.42)) !important;
+  opacity: 0.96;
   color: #c4cad4;
 }
 
@@ -8940,60 +8952,42 @@ body.app-mode-game #screen-game.screen.active {
 .card--physical-front[data-card-border="spectrum"] .card-cosmetic-effects::before {
   color: #fbbf24;
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
-    inset 0 0 0 clamp(2px, 1.5cqw, 3.5px) rgba(251, 191, 36, 0.55),
-    0 0 10px 1px rgba(168, 85, 247, 0.25) !important;
+    0 0 0 var(--card-trim-rim) rgba(0, 0, 0, 0.42),
+    0 0 10px 1px rgba(168, 85, 247, 0.28),
+    inset 0 0 0 calc(var(--card-trim-width) - var(--card-trim-highlight))
+      color-mix(in srgb, #fbbf24 75%, rgba(120, 50, 20, 0.35)),
+    inset 0 0 0 var(--card-trim-width)
+      color-mix(in srgb, #fde68a 55%, rgba(255, 255, 255, 0.35)) !important;
 }
-.card--physical-front[data-card-border="diamond_etched"] .card-cosmetic-effects::before {
-  color: #e2e8f0;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(203, 213, 225, 0.65),
-    0 0 0 1px rgba(15, 23, 42, 0.4) !important;
-}
-.card--physical-front[data-card-border="brushed_aluminum"] .card-cosmetic-effects::before {
-  color: #94a3b8;
-  box-shadow:
-    inset 0 0 0 1px rgba(226, 232, 240, 0.2),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(148, 163, 184, 0.7),
-    0 0 0 1px rgba(15, 23, 42, 0.35) !important;
-}
-.card--physical-front[data-card-border="leather_stitch"] .card-cosmetic-effects::before {
-  color: #a16207;
-  box-shadow:
-    inset 0 0 0 1px rgba(253, 230, 138, 0.15),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(180, 120, 60, 0.7),
-    0 0 0 1px rgba(28, 16, 8, 0.4) !important;
-}
-.card--physical-front[data-card-border="carbon_weave"] .card-cosmetic-effects::before {
-  color: #64748b;
-  box-shadow:
-    inset 0 0 0 1px rgba(148, 163, 184, 0.18),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(71, 85, 105, 0.85),
-    0 0 0 1px rgba(2, 6, 23, 0.45) !important;
-}
-.card--physical-front[data-card-border="stone_slate"] .card-cosmetic-effects::before {
-  color: #78716c;
-  box-shadow:
-    inset 0 0 0 1px rgba(214, 211, 209, 0.16),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(120, 113, 108, 0.75),
-    0 0 0 1px rgba(28, 25, 23, 0.4) !important;
-}
-.card--physical-front[data-card-border="marble_inlay"] .card-cosmetic-effects::before {
-  color: #f5f5f4;
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
-    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(214, 211, 209, 0.7),
-    0 0 0 1px rgba(41, 37, 36, 0.35) !important;
+.card--physical-front[data-card-border="diamond_etched"] .card-cosmetic-effects::before { color: #cbd5e1; }
+.card--physical-front[data-card-border="brushed_aluminum"] .card-cosmetic-effects::before { color: #94a3b8; }
+.card--physical-front[data-card-border="leather_stitch"] .card-cosmetic-effects::before { color: #a16207; }
+.card--physical-front[data-card-border="carbon_weave"] .card-cosmetic-effects::before { color: #64748b; }
+.card--physical-front[data-card-border="stone_slate"] .card-cosmetic-effects::before { color: #78716c; }
+.card--physical-front[data-card-border="marble_inlay"] .card-cosmetic-effects::before { color: #f5f5f4; }
+
+/*
+ * Material textures — PF only, confined to trim annulus (~6px).
+ * Keeps legacy ::after pattern recipes; remasks to trim width (not old body-edge).
+ */
+.card--physical-front[data-card-border="diamond_etched"] .card-cosmetic-effects::after,
+.card--physical-front[data-card-border="brushed_aluminum"] .card-cosmetic-effects::after,
+.card--physical-front[data-card-border="leather_stitch"] .card-cosmetic-effects::after,
+.card--physical-front[data-card-border="carbon_weave"] .card-cosmetic-effects::after,
+.card--physical-front[data-card-border="stone_slate"] .card-cosmetic-effects::after,
+.card--physical-front[data-card-border="marble_inlay"] .card-cosmetic-effects::after {
+  content: '' !important;
+  display: block !important;
+  padding: var(--card-trim-width);
+  opacity: 0.92;
 }
 
-/* Collapse obsolete legacy material texture rings (body-edge ≈ 0 on PF) */
-.card--physical-front .card-cosmetic-effects::after {
-  content: none !important;
-  display: none !important;
+/* Marble crack strokes size to trim band (legacy used --card-frame-body-edge ≈ 0 on PF) */
+.card--physical-front[data-card-border="marble_inlay"] .card-cosmetic-effects::after {
+  --f-tex-band: var(--card-trim-width);
 }
 
-/* Full-face shimmer coating — spans stage/frame continuously under medallion */
+/* Full-face shimmer coating — under border trim, over PNG */
 .card--physical-front > .card-shimmer.card-shimmer--face {
   position: absolute;
   inset: var(--card-effect-outer);
@@ -9047,7 +9041,7 @@ body.app-mode-game #screen-game.screen.active {
 .card--physical-front > .card-medallion-slot {
   position: absolute;
   inset: var(--card-effect-outer);
-  z-index: 6;
+  z-index: 7;
   pointer-events: none;
   border-radius: var(--card-effect-radius);
   overflow: visible;
@@ -9055,7 +9049,7 @@ body.app-mode-game #screen-game.screen.active {
 
 .card--physical-front .sci-card-qty,
 .card--physical-front .sci-card-aura-dots {
-  z-index: 7;
+  z-index: 8;
 }
 
 .card--physical-front.sci-card--undiscovered .card-physical-frame {
