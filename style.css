@@ -8850,8 +8850,8 @@ body.app-mode-game #screen-game.screen.active {
   /* Text opening is inset vs upper (~86 vs 40 asset px → ~6% of inner width) */
   margin-left: 6.2%;
   margin-right: 6.2%;
+  /* Symmetric horizontal padding — medallion is a sibling layer on chrome, not a text reserve */
   padding: clamp(0.18rem, 1.8cqw, 0.4rem) clamp(0.28rem, 2.4cqw, 0.55rem) clamp(0.12rem, 1.2cqw, 0.28rem);
-  padding-right: clamp(1.6rem, 16cqw, 2.6rem);
   background:
     radial-gradient(clamp(0.7px, 0.4cqw, 1.2px) clamp(0.7px, 0.4cqw, 1.2px) at 18% 30%, rgba(255, 255, 255, 0.55) 0%, transparent 100%),
     radial-gradient(clamp(0.55px, 0.32cqw, 1px) clamp(0.55px, 0.32cqw, 1px) at 72% 55%, rgba(200, 220, 255, 0.45) 0%, transparent 100%),
@@ -8965,10 +8965,28 @@ body.app-mode-game #screen-game.screen.active {
     font-size: clamp(0.36rem, 4.1cqw, 0.62rem);
     margin-bottom: clamp(0.04rem, 0.6cqw, 0.22rem);
   }
-  .card--physical-front .card-detail-keyfact {
-    font-size: clamp(0.4rem, 5cqw, 0.74rem);
+  /* Fact tiers: 6.0 / 6.75 / 7.75px at ~172px collection card (cqw calibrated to live container) */
+  .card--physical-front .card-detail-keyfact,
+  .card--physical-front .card-detail-keyfact--tier-small {
+    font-size: clamp(0.29rem, 3.57cqw, 0.53rem);
     line-height: 1.28;
   }
+  .card--physical-front .card-detail-keyfact--tier-medium {
+    font-size: clamp(0.32rem, 4.02cqw, 0.60rem);
+    line-height: 1.28;
+  }
+  .card--physical-front .card-detail-keyfact--tier-large {
+    font-size: clamp(0.37rem, 4.62cqw, 0.68rem);
+    line-height: 1.28;
+  }
+}
+
+/* Physical fronts never ellipsis-clamp facts — tiers guarantee full fit */
+.card--physical-front .card-detail-keyfact.grid-clamp {
+  display: block;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: unset;
+  overflow: hidden;
 }
 
 /* Tiny cards: drop expensive outer halos (cores remain) */
