@@ -8660,15 +8660,19 @@ body.app-mode-game #screen-game.screen.active {
   --card-effect-glow-bleed: clamp(5px, 3.2cqw, 10px);
   --card-effect-particle-outset: clamp(3px, 2cqw, 7px);
   --card-glow-bleed: var(--card-effect-glow-bleed);
-  /* Halo host expands by glow-bleed; paint inset equals bleed → paint aligns to shell border-box */
-  --card-glow-paint-inset: var(--card-effect-glow-bleed);
-  --frost-ring-pad: clamp(1.5px, 1cqw, 3px);
   /* Outer border trim — ~3px out + ~3px in ≈ 6px @220px (binding around PNG edge) */
   --card-trim-outward: clamp(2px, 1.4cqw, 3.5px);
   --card-trim-inward: clamp(2px, 1.4cqw, 3.5px);
   --card-trim-width: calc(var(--card-trim-outward) + var(--card-trim-inward));
   --card-trim-rim: 1px;
   --card-trim-highlight: 1px;
+  /*
+   * Glow perimeter tracks trim outer edge (not shell):
+   * host expands by bleed + trim-outward; paint inset = bleed → paint sits on trim rim.
+   */
+  --card-effect-glow-outset: calc(var(--card-effect-glow-bleed) + var(--card-trim-outward));
+  --card-glow-paint-inset: var(--card-effect-glow-bleed);
+  --frost-ring-pad: clamp(1.5px, 1cqw, 3px);
   --card-rarity-accent: #9ca3af;
   /* Tall-frame opening map (asset 816×1152 → % of frame box) */
   --pf-upper-l: 4.902%;
@@ -8905,7 +8909,7 @@ body.app-mode-game #screen-game.screen.active {
  *   border trim z6 → medallion z7 → badges z8+
  */
 .card--physical-front .card-glow--halo {
-  inset: calc(-1 * var(--card-effect-glow-bleed));
+  inset: calc(-1 * var(--card-effect-glow-outset));
   z-index: 0;
   border-radius: inherit;
 }
@@ -8923,17 +8927,11 @@ body.app-mode-game #screen-game.screen.active {
   border-radius: calc(clamp(0.35rem, 2.5cqw, 0.55rem) + var(--card-trim-outward));
 }
 
-.card--physical-front[data-card-border="graphite"] .card-cosmetic-effects::before {
-  background: transparent;
-  box-shadow: none;
-  opacity: 0;
-}
-
 /*
- * Equipped border trim — ornamental binding around physical PNG edge.
- * Outer dark rim + ~6px color body + 1px inner highlight. Not a full replacement frame.
+ * Default Graphite + equipped borders share the same PF trim geometry.
+ * Graphite is subtle/neutral binding; equipped colors replace appearance only.
  */
-.card--physical-front:not([data-card-border="graphite"]) .card-cosmetic-effects::before {
+.card--physical-front .card-cosmetic-effects::before {
   background: transparent !important;
   box-shadow:
     0 0 0 var(--card-trim-rim) rgba(0, 0, 0, 0.48),
@@ -8943,6 +8941,17 @@ body.app-mode-game #screen-game.screen.active {
       color-mix(in srgb, currentColor 42%, rgba(255, 255, 255, 0.42)) !important;
   opacity: 0.96;
   color: #c4cad4;
+}
+
+.card--physical-front[data-card-border="graphite"] .card-cosmetic-effects::before {
+  color: #6b7280;
+  opacity: 0.88;
+  box-shadow:
+    0 0 0 var(--card-trim-rim) rgba(0, 0, 0, 0.55),
+    inset 0 0 0 calc(var(--card-trim-width) - var(--card-trim-highlight))
+      color-mix(in srgb, currentColor 68%, rgba(12, 16, 24, 0.62)),
+    inset 0 0 0 var(--card-trim-width)
+      color-mix(in srgb, currentColor 38%, rgba(200, 210, 220, 0.28)) !important;
 }
 
 .card--physical-front[data-card-border="silver"] .card-cosmetic-effects::before { color: #c8d0dc; }
@@ -8997,10 +9006,10 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: none;
 }
 
-/* Perimeter particle hosts — shared outset (replaces bleed + 6px) */
+/* Perimeter particle hosts — glow-outset (+ particle outset); anchors move with trim, size unchanged */
 .sci-card.card--physical-front .card-glow--molten-embers,
 .card-detail-frame.card--physical-front .card-glow--molten-embers {
-  inset: calc(-1 * var(--card-effect-glow-bleed));
+  inset: calc(-1 * var(--card-effect-glow-outset));
   z-index: 3;
   border-radius: inherit;
 }
@@ -9008,7 +9017,7 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame.card--physical-front .card-glow--molten-drift,
 .sci-card.card--physical-front .card-glow--frost-wisps,
 .card-detail-frame.card--physical-front .card-glow--frost-wisps {
-  inset: calc(-1 * (var(--card-effect-glow-bleed) + var(--card-effect-particle-outset)));
+  inset: calc(-1 * (var(--card-effect-glow-outset) + var(--card-effect-particle-outset)));
   z-index: 5;
   border-radius: inherit;
 }
