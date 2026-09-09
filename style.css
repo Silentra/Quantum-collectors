@@ -8654,6 +8654,15 @@ body.app-mode-game #screen-game.screen.active {
 .card-detail-frame.card--physical-front {
   /* Frame at card edge; ≤~2px technical room only (no designed outer starfield gutter) */
   --card-outer-gutter: clamp(0px, 0.4cqw, 2px);
+  /* Shared PF cosmetic geometry — perimeter FX track shell/metallic outer edge (not legacy bleed/lip) */
+  --card-effect-outer: var(--card-outer-gutter);
+  --card-effect-radius: clamp(0.2rem, 1.5cqw, 0.35rem);
+  --card-effect-glow-bleed: clamp(5px, 3.2cqw, 10px);
+  --card-effect-particle-outset: clamp(3px, 2cqw, 7px);
+  --card-glow-bleed: var(--card-effect-glow-bleed);
+  /* Halo host expands by glow-bleed; paint inset equals bleed → paint aligns to shell border-box */
+  --card-glow-paint-inset: var(--card-effect-glow-bleed);
+  --frost-ring-pad: clamp(1.5px, 1cqw, 3px);
   --card-rarity-accent: #9ca3af;
   /* Tall-frame opening map (asset 816×1152 → % of frame box) */
   --pf-upper-l: 4.902%;
@@ -8881,15 +8890,30 @@ body.app-mode-game #screen-game.screen.active {
   pointer-events: none;
   /* +1.25×radius right (0.75 prior + 0.5), +1.0×radius down; % is of medallion box */
   transform: translate(62.5%, 50%);
-  /* Sibling of .card-physical-frame — must paint above metallic chrome */
-  z-index: 6;
   filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.55));
 }
 
-/* Cosmetics: keep host, mute full graphite body so PNG frame remains primary chrome */
+/* ===== PF cosmetic geometry contract (perimeter + face coating + seal) =====
+ * Layer order (outside → top):
+ *   glow halo z0 → face-stage z2 → cosmetics accent z4 → shimmer z5 →
+ *   perimeter particles z5 → medallion z6 → badges z10
+ */
+.card--physical-front .card-glow--halo {
+  inset: calc(-1 * var(--card-effect-glow-bleed));
+  z-index: 0;
+  border-radius: inherit;
+}
+
+.card--physical-front .card-glow--halo::before,
+.card--physical-front .card-glow--halo::after {
+  inset: var(--card-glow-paint-inset);
+  border-radius: inherit;
+}
+
 .card--physical-front .card-cosmetic-effects {
-  inset: calc(-1 * var(--card-outer-gutter));
+  inset: calc(-1 * var(--card-effect-outer));
   z-index: 4;
+  border-radius: inherit;
 }
 
 .card--physical-front[data-card-border="graphite"] .card-cosmetic-effects::before {
@@ -8898,7 +8922,7 @@ body.app-mode-game #screen-game.screen.active {
   opacity: 0;
 }
 
-/* Equipped borders: thin outer accent ring over physical frame (first-pass) */
+/* Equipped borders: thin outer accent ring over physical frame (not legacy full CSS frame) */
 .card--physical-front:not([data-card-border="graphite"]) .card-cosmetic-effects::before {
   background: transparent !important;
   box-shadow:
@@ -8920,13 +8944,118 @@ body.app-mode-game #screen-game.screen.active {
     inset 0 0 0 clamp(2px, 1.5cqw, 3.5px) rgba(251, 191, 36, 0.55),
     0 0 10px 1px rgba(168, 85, 247, 0.25) !important;
 }
-
-.card--physical-front .card-glow--halo {
-  z-index: 0;
+.card--physical-front[data-card-border="diamond_etched"] .card-cosmetic-effects::before {
+  color: #e2e8f0;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(203, 213, 225, 0.65),
+    0 0 0 1px rgba(15, 23, 42, 0.4) !important;
+}
+.card--physical-front[data-card-border="brushed_aluminum"] .card-cosmetic-effects::before {
+  color: #94a3b8;
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 232, 240, 0.2),
+    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(148, 163, 184, 0.7),
+    0 0 0 1px rgba(15, 23, 42, 0.35) !important;
+}
+.card--physical-front[data-card-border="leather_stitch"] .card-cosmetic-effects::before {
+  color: #a16207;
+  box-shadow:
+    inset 0 0 0 1px rgba(253, 230, 138, 0.15),
+    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(180, 120, 60, 0.7),
+    0 0 0 1px rgba(28, 16, 8, 0.4) !important;
+}
+.card--physical-front[data-card-border="carbon_weave"] .card-cosmetic-effects::before {
+  color: #64748b;
+  box-shadow:
+    inset 0 0 0 1px rgba(148, 163, 184, 0.18),
+    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(71, 85, 105, 0.85),
+    0 0 0 1px rgba(2, 6, 23, 0.45) !important;
+}
+.card--physical-front[data-card-border="stone_slate"] .card-cosmetic-effects::before {
+  color: #78716c;
+  box-shadow:
+    inset 0 0 0 1px rgba(214, 211, 209, 0.16),
+    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(120, 113, 108, 0.75),
+    0 0 0 1px rgba(28, 25, 23, 0.4) !important;
+}
+.card--physical-front[data-card-border="marble_inlay"] .card-cosmetic-effects::before {
+  color: #f5f5f4;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.28),
+    inset 0 0 0 clamp(2px, 1.4cqw, 3px) rgba(214, 211, 209, 0.7),
+    0 0 0 1px rgba(41, 37, 36, 0.35) !important;
 }
 
-.card--physical-front .card-shimmer.card-shimmer--face {
+/* Collapse obsolete legacy material texture rings (body-edge ≈ 0 on PF) */
+.card--physical-front .card-cosmetic-effects::after {
+  content: none !important;
+  display: none !important;
+}
+
+/* Full-face shimmer coating — spans stage/frame continuously under medallion */
+.card--physical-front > .card-shimmer.card-shimmer--face {
+  position: absolute;
+  inset: var(--card-effect-outer);
   z-index: 5;
+  border-radius: var(--card-effect-radius);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Perimeter particle hosts — shared outset (replaces bleed + 6px) */
+.sci-card.card--physical-front .card-glow--molten-embers,
+.card-detail-frame.card--physical-front .card-glow--molten-embers {
+  inset: calc(-1 * var(--card-effect-glow-bleed));
+  z-index: 3;
+  border-radius: inherit;
+}
+.sci-card.card--physical-front .card-glow--molten-drift,
+.card-detail-frame.card--physical-front .card-glow--molten-drift,
+.sci-card.card--physical-front .card-glow--frost-wisps,
+.card-detail-frame.card--physical-front .card-glow--frost-wisps {
+  inset: calc(-1 * (var(--card-effect-glow-bleed) + var(--card-effect-particle-outset)));
+  z-index: 5;
+  border-radius: inherit;
+}
+
+.card--physical-front .synchrotron-track {
+  inset: var(--card-glow-paint-inset);
+  border-radius: inherit;
+}
+
+/* Edge anchors: replace fixed ±3–5px with shared particle outset */
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--2 { left: calc(0% - var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--3 { left: calc(100% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--4 { top: calc(0% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--5 { top: calc(100% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--6 { left: calc(100% - var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--7 { left: var(--card-effect-particle-outset); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--9 { left: calc(100% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="winterfrost"] .frost-wisp--10 { top: calc(0% - var(--card-effect-particle-outset)); }
+
+.card--physical-front[data-card-glow="molten"] .molten-drift--1 { top: calc(100% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--5 { top: calc(100% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--8 { left: var(--card-effect-particle-outset); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--9 { left: calc(0% - var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--11 { left: calc(100% - var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--12 { left: calc(100% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--13 { top: calc(0% + var(--card-effect-particle-outset)); }
+.card--physical-front[data-card-glow="molten"] .molten-drift--15 { top: calc(0% - var(--card-effect-particle-outset)); }
+
+/* Medallion slot mirrors face-stage box so % anchors match frame openings */
+.card--physical-front > .card-medallion-slot {
+  position: absolute;
+  inset: var(--card-effect-outer);
+  z-index: 6;
+  pointer-events: none;
+  border-radius: var(--card-effect-radius);
+  overflow: visible;
+}
+
+.card--physical-front .sci-card-qty,
+.card--physical-front .sci-card-aura-dots {
+  z-index: 7;
 }
 
 .card--physical-front.sci-card--undiscovered .card-physical-frame {
