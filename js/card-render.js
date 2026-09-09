@@ -38,6 +38,7 @@ import {
   renderShimmerFaceLayerHtml,
   resolveShimmerRenderEffectId,
 } from './card-shimmer.js';
+import { getCardFactFontTierClass } from './card-fact-tiers.js';
 
 /** Physical tall rarity frames (shared asset path with print masters; browser uses responsively). */
 const PHYSICAL_FRAME_DIR = 'assets/card-frames-export-cards/physical-tall';
@@ -110,9 +111,12 @@ export function buildCardRenderModel(card, options = {}) {
 
   const isModal = variant === 'modal';
   const isPackReveal = variant === 'pack-reveal';
-  const clampKeyFact = options.clampKeyFact ?? (isPackReveal || !isModal);
   /** Player-facing physical tall-frame chrome (off for print-export capture). */
   const physicalFront = options.physicalFront !== false && options.physicalFront !== 0;
+  // Physical fronts use measured fact tiers (no ellipsis). Legacy shells still grid-clamp.
+  const clampKeyFact = options.clampKeyFact ?? (
+    physicalFront ? false : (isPackReveal || !isModal)
+  );
 
   const art = resolveCardArt(card);
   const keyFact = card.keyFact || card.flavor || '';
@@ -133,6 +137,7 @@ export function buildCardRenderModel(card, options = {}) {
     : nameLength >= 22
       ? 'card-detail-name--long'
       : '';
+  const factTierClass = physicalFront ? getCardFactFontTierClass(card.id) : '';
 
   const hasConceptType = !isUndiscovered && card.type === 'concept' && card.conceptType;
   const conceptEffectLabel = hasConceptType
@@ -183,6 +188,7 @@ export function buildCardRenderModel(card, options = {}) {
     showRarityDot: true,
     rarityDotClass: `rarity-dot-${card.rarity || 'common'}`,
     nameScaleClass,
+    factTierClass,
     physicalFront,
     borderRenderEffectId: resolvedBorderRenderEffectId,
     glowRenderEffectId,
@@ -209,7 +215,11 @@ export function renderCardContent(model) {
       )
     : `<span class="card-detail-art-emoji" aria-hidden="true">${model.emoji}</span>`;
 
-  const keyFactClass = model.clampKeyFact ? 'card-detail-keyfact grid-clamp' : 'card-detail-keyfact';
+  const keyFactClass = [
+    'card-detail-keyfact',
+    model.clampKeyFact ? 'grid-clamp' : '',
+    model.factTierClass || '',
+  ].filter(Boolean).join(' ');
   const keyFactHtml = model.keyFact
     ? `<div class="${keyFactClass}">${model.keyFact}</div>`
     : '';
