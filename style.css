@@ -8686,14 +8686,44 @@ body.app-mode-game #screen-game.screen.active {
 
   /*
    * Targeted fill: 0–4px band above luminous art border (anchored to .card-art-shrink).
-   * Painted in a 4px-tall strip above the rim. Y%: 0 = 4px above, 100 = at rim.
+   * Y% in the shared 15px ::before strip: dist = 15*(1 - y/100). Same rendered loci as before.
    */
   --pf-art-edge-stars:
-    radial-gradient(clamp(0.4px, 0.149cqw, 0.89px) clamp(0.4px, 0.149cqw, 0.89px) at 12% 22%, rgba(250, 252, 255, 0.86) 0%, transparent 100%),
-    radial-gradient(clamp(0.4px, 0.163cqw, 0.98px) clamp(0.4px, 0.163cqw, 0.98px) at 31% 58%, rgba(226, 236, 248, 0.74) 0%, transparent 100%),
-    radial-gradient(clamp(0.4px, 0.12cqw, 0.72px) clamp(0.4px, 0.12cqw, 0.72px) at 48% 78%, rgba(208, 220, 238, 0.55) 0%, transparent 100%),
-    radial-gradient(clamp(0.55px, 0.226cqw, 1.36px) clamp(0.55px, 0.226cqw, 1.36px) at 67% 35%, rgba(255, 255, 255, 0.90) 0%, transparent 100%),
-    radial-gradient(clamp(0.4px, 0.15cqw, 0.9px) clamp(0.4px, 0.15cqw, 0.9px) at 86% 88%, rgba(130, 185, 255, 0.68) 0%, transparent 100%);
+    radial-gradient(clamp(0.4px, 0.149cqw, 0.89px) clamp(0.4px, 0.149cqw, 0.89px) at 12% 79.2%, rgba(250, 252, 255, 0.86) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.163cqw, 0.98px) clamp(0.4px, 0.163cqw, 0.98px) at 31% 88.8%, rgba(226, 236, 248, 0.74) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.12cqw, 0.72px) clamp(0.4px, 0.12cqw, 0.72px) at 48% 94.13%, rgba(208, 220, 238, 0.55) 0%, transparent 100%),
+    radial-gradient(clamp(0.55px, 0.226cqw, 1.36px) clamp(0.55px, 0.226cqw, 1.36px) at 67% 82.67%, rgba(255, 255, 255, 0.90) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.15cqw, 0.9px) clamp(0.4px, 0.15cqw, 0.9px) at 86% 96.8%, rgba(130, 185, 255, 0.68) 0%, transparent 100%);
+
+  /*
+   * Transition band: 5–15px above art border (same ::before, full 15px box).
+   * Y% in 15px strip: dist_above = 15*(1 - y/100). Target y ∈ [0%, ~66.7%] for 15→5px.
+   * 15 sites: 2 feature + 4 medium + 9 tiny. Additive only.
+   */
+  --pf-art-transition-stars:
+    /* Feature A — leftish, ~13.2px above */
+    radial-gradient(clamp(0.77px, 0.34cqw, 2.04px) clamp(0.77px, 0.34cqw, 2.04px) at 19% 12%, rgba(255, 255, 255, 1) 0%, rgba(235, 245, 255, 0.95) 38%, transparent 72%),
+    radial-gradient(clamp(3.08px, 1.981cqw, 10.5px) clamp(3.08px, 1.981cqw, 10.5px) at 19% 12%, rgba(200, 220, 255, 0.48) 0%, transparent 68%),
+    /* Feature B — rightish, ~7.8px above (separated from A) */
+    radial-gradient(clamp(0.74px, 0.325cqw, 1.95px) clamp(0.74px, 0.325cqw, 1.95px) at 78% 48%, rgba(255, 253, 248, 1) 0%, rgba(255, 240, 215, 0.92) 38%, transparent 72%),
+    radial-gradient(clamp(2.86px, 1.84cqw, 9.75px) clamp(2.86px, 1.84cqw, 9.75px) at 78% 48%, rgba(235, 175, 105, 0.42) 0%, transparent 70%),
+    /* Medium — irregular X/Y */
+    radial-gradient(clamp(0.59px, 0.262cqw, 1.57px) clamp(0.59px, 0.262cqw, 1.57px) at 7% 28%, rgba(255, 255, 255, 0.96) 0%, transparent 100%),
+    radial-gradient(clamp(2.2px, 1.415cqw, 7.5px) clamp(2.2px, 1.415cqw, 7.5px) at 7% 28%, rgba(100, 175, 255, 0.42) 0%, transparent 72%),
+    radial-gradient(clamp(0.56px, 0.248cqw, 1.49px) clamp(0.56px, 0.248cqw, 1.49px) at 36% 58%, rgba(252, 254, 255, 0.94) 0%, transparent 100%),
+    radial-gradient(clamp(0.59px, 0.262cqw, 1.57px) clamp(0.59px, 0.262cqw, 1.57px) at 54% 8%, rgba(255, 252, 255, 0.97) 0%, transparent 100%),
+    radial-gradient(clamp(2.2px, 1.415cqw, 7.5px) clamp(2.2px, 1.415cqw, 7.5px) at 54% 8%, rgba(155, 130, 235, 0.40) 0%, transparent 72%),
+    radial-gradient(clamp(0.55px, 0.241cqw, 1.44px) clamp(0.55px, 0.241cqw, 1.44px) at 93% 38%, rgba(250, 252, 255, 0.93) 0%, transparent 100%),
+    /* Tiny / small — fill between */
+    radial-gradient(clamp(0.4px, 0.149cqw, 0.89px) clamp(0.4px, 0.149cqw, 0.89px) at 3% 52%, rgba(226, 236, 248, 0.72) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.163cqw, 0.98px) clamp(0.4px, 0.163cqw, 0.98px) at 14% 64%, rgba(250, 252, 255, 0.80) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.12cqw, 0.72px) clamp(0.4px, 0.12cqw, 0.72px) at 27% 22%, rgba(208, 220, 238, 0.58) 0%, transparent 100%),
+    radial-gradient(clamp(0.44px, 0.177cqw, 1.06px) clamp(0.44px, 0.177cqw, 1.06px) at 42% 42%, rgba(130, 185, 255, 0.72) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.15cqw, 0.9px) clamp(0.4px, 0.15cqw, 0.9px) at 61% 62%, rgba(218, 228, 244, 0.70) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.163cqw, 0.98px) clamp(0.4px, 0.163cqw, 0.98px) at 69% 18%, rgba(255, 215, 165, 0.62) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.149cqw, 0.89px) clamp(0.4px, 0.149cqw, 0.89px) at 84% 55%, rgba(180, 155, 245, 0.66) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.12cqw, 0.72px) clamp(0.4px, 0.12cqw, 0.72px) at 97% 30%, rgba(222, 232, 246, 0.60) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.163cqw, 0.98px) clamp(0.4px, 0.163cqw, 0.98px) at 47% 33%, rgba(244, 250, 255, 0.76) 0%, transparent 100%);
 
   /* Near-exact print face recipe (local % loci; cqw sizes). Applied on header + body. */
   --pf-face-starfield:
@@ -9189,12 +9219,12 @@ body.app-mode-game #screen-game.screen.active {
   position: absolute;
   left: 0;
   right: 0;
-  /* Exact 0–4px band above luminous rim (rendered px) */
-  top: -4px;
-  height: 4px;
+  /* Shared 0–15px strip above rim (transition 5–15px + edge 0–4px) */
+  top: -15px;
+  height: 15px;
   z-index: 2;
   pointer-events: none;
-  background-image: var(--pf-art-edge-stars);
+  background-image: var(--pf-art-transition-stars), var(--pf-art-edge-stars);
 }
 
 .card--physical-front .card-art-shrink::after {
