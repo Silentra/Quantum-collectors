@@ -8673,6 +8673,16 @@ body.app-mode-game #screen-game.screen.active {
   --card-effect-glow-outset: calc(var(--card-effect-glow-bleed) + var(--card-trim-outward));
   --card-glow-paint-inset: var(--card-effect-glow-bleed);
   --frost-ring-pad: clamp(1.5px, 1cqw, 3px);
+  /*
+   * Micro-polish: ~5 cores only in lower-header / above-art band (header box %).
+   * Does not alter mapped --pf-face-starfield / stage / supplemental loci.
+   */
+  --pf-header-bridge-stars:
+    radial-gradient(clamp(0.4px, 0.149cqw, 0.89px) clamp(0.4px, 0.149cqw, 0.89px) at 14% 84%, rgba(250, 252, 255, 0.88) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.163cqw, 0.98px) clamp(0.4px, 0.163cqw, 0.98px) at 29% 76%, rgba(226, 236, 248, 0.72) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.12cqw, 0.72px) clamp(0.4px, 0.12cqw, 0.72px) at 41% 93%, rgba(208, 220, 238, 0.52) 0%, transparent 100%),
+    radial-gradient(clamp(0.55px, 0.241cqw, 1.44px) clamp(0.55px, 0.241cqw, 1.44px) at 57% 81%, rgba(255, 255, 255, 0.94) 0%, transparent 100%),
+    radial-gradient(clamp(0.4px, 0.15cqw, 0.9px) clamp(0.4px, 0.15cqw, 0.9px) at 88% 89%, rgba(130, 185, 255, 0.70) 0%, transparent 100%);
   /* Near-exact print face recipe (local % loci; cqw sizes). Applied on header + body. */
   --pf-face-starfield:
     radial-gradient(clamp(0.77px, 0.34cqw, 2.04px) clamp(0.77px, 0.34cqw, 2.04px) at 8% 16%, rgba(255, 255, 255, 1) 0%, rgba(235, 245, 255, 0.95) 38%, transparent 72%),
@@ -9101,7 +9111,9 @@ body.app-mode-game #screen-game.screen.active {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  background-image: var(--pf-face-starfield);
+  background-image:
+    var(--pf-header-bridge-stars),
+    var(--pf-face-starfield);
 }
 
 .card--physical-front .card-detail-header > * {
