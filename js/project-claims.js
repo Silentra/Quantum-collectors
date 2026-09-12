@@ -1,5 +1,5 @@
 /**
- * project-claims.js — Canonical claim-once ledger + CLAIMED-preserving project merges.
+ * project-claims.js — Canonical claim-once ledger + lifecycle-safe project merges.
  *
  * Ledger path: projectClaims/{username}/{projectId}
  * - Create-once on successful claim (same multipath as rewards)
@@ -11,11 +11,17 @@
  * - A preexisting marker does NOT authorize COMPLETE → CLAIMED (already consumed)
  * - Rules inspect projects array indices 0..PROJECT_RULES_ARRAY_INDEX_MAX only
  *   (must stay aligned with MAX_STORED_PROJECTS in project-refresh.js)
+ *
+ * Persist merge (prepareProjectsForPersist):
+ * - Same lifecycle rank as refresh: claimed > complete > active > available
+ * - Equal rank prefers authoritative/server
+ * - Local CLAIMED intent only upgrades authoritative COMPLETE (or keeps CLAIMED)
  */
 
 import * as db from './database.js';
 import { PROJECT_STATES } from './project-state.js'; // AVAILABLE | ACTIVE | COMPLETE | CLAIMED
 import { MAX_STORED_PROJECTS } from './project-refresh.js';
+import { preferProjectForRefreshMerge } from './project-refresh-merge.js';
 
 export const PROJECT_CLAIMS_ROOT = 'projectClaims';
 
@@ -78,8 +84,28 @@ export function buildProjectClaimMarkerUpdate(username, projectId, claimedAt = D
 }
 
 /**
- * Never downgrade CLAIMED → COMPLETE (or other non-CLAIMED) when both sides share an id.
- * Intentional omission of a CLAIMED id from incoming (prune) is allowed.
+ * Whether local CLAIMED intent may replace the authoritative row for the same id.
+ * Only COMPLETE → CLAIMED (or already CLAIMED) is allowed; never AVAILABLE/ACTIVE → CLAIMED.
+ *
+ * @param {object|null|undefined} authoritative
+ * @returns {boolean}
+ */
+export function canApplyClaimedIntent(authoritative) {
+  if (!authoritative || typeof authoritative !== 'object') return false;
+  return (
+    authoritative.state === PROJECT_STATES.COMPLETE
+    || authoritative.state === PROJECT_STATES.CLAIMED
+  );
+}
+
+/**
+ * Merge local intended projects onto an authoritative (server-fresh) list for persist.
+ *
+ * - Lifecycle rank: claimed > complete > active > available (via preferProjectForRefreshMerge)
+ * - Equal rank prefers authoritative
+ * - COMPLETE/CLAIMED outcome/rewards preserved by preferProjectForRefreshMerge
+ * - Local CLAIMED does not override authoritative AVAILABLE/ACTIVE/missing
+ * - Intentional omission of a CLAIMED id from incoming (prune) is allowed (no re-union)
  *
  * @param {object[]} incoming
  * @param {object[]} authoritative
@@ -99,14 +125,18 @@ export function mergeProjectsPreservingClaimed(incoming, authoritative) {
     if (!p || p.id == null) return p;
     const id = String(p.id);
     const prior = authById.get(id);
-    if (
-      prior
-      && prior.state === PROJECT_STATES.CLAIMED
-      && p.state !== PROJECT_STATES.CLAIMED
-    ) {
-      return prior;
+    if (!prior) {
+      // New id only (e.g. Proposal AVAILABLE append). Claim guard rejects CLAIMED
+      // when the target id is missing on the server.
+      return p;
     }
-    return p;
+
+    // Block illegal CLAIMED upgrades (ACTIVE/AVAILABLE → CLAIMED).
+    if (p.state === PROJECT_STATES.CLAIMED && !canApplyClaimedIntent(prior)) {
+      return preferProjectForRefreshMerge(prior, { ...p, state: prior.state });
+    }
+
+    return preferProjectForRefreshMerge(prior, p);
   });
 }
 

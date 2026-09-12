@@ -41,6 +41,7 @@ import {
   prepareProjectsForPersist,
   reconcileAlreadyClaimedProject,
 } from './project-claims.js';
+import { commitProjectLifecycleMaintenance } from './project-refresh-commit.js';
 import {
   STAT_KEYS,
   getPlayerStat,
@@ -396,16 +397,52 @@ async function withProjectClaimLock(username, projectId, fn) {
 }
 
 /**
+ * Force-read server projects and locate one id.
+ * @param {string} username
+ * @param {string} projectId
+ * @returns {Promise<{ projects: object[], project: object|null }>}
+ */
+export async function loadAuthoritativeProject(username, projectId) {
+  const key = String(username || '').trim();
+  const id = String(projectId || '').trim();
+  try {
+    await db.loadPathOnce(`players/${key}/projects`, { force: true });
+  } catch { /* best-effort */ }
+  const projects = Array.isArray(db.get(`players/${key}/projects`))
+    ? db.get(`players/${key}/projects`)
+    : [];
+  const project = id
+    ? (projects.find((p) => p && String(p.id) === id) || null)
+    : null;
+  return { projects, project };
+}
+
+/**
  * Build plan + acknowledged commit. Reveal only after ok.
  * @param {string} username
  * @param {string} projectId
  * @param {Object} [options]
+ * @param {{
+ *   loadMarkerExists?: typeof loadProjectClaimMarkerExists,
+ *   loadAuthoritative?: typeof loadAuthoritativeProject,
+ *   runLifecycle?: typeof commitProjectLifecycleMaintenance,
+ *   prepareProjects?: typeof prepareProjectsForPersist,
+ *   writeUpdate?: (updates: object) => Promise<{ ok: boolean, error?: string }>,
+ *   buildPlan?: typeof buildProjectClaimPlan,
+ * }} [deps] - injectable for unit tests
  * @returns {Promise<object>}
  */
-export async function commitProjectClaim(username, projectId, options = {}) {
+export async function commitProjectClaim(username, projectId, options = {}, deps = {}) {
   return withProjectClaimLock(username, projectId, async () => {
+    const loadMarkerExists = deps.loadMarkerExists || loadProjectClaimMarkerExists;
+    const loadAuthoritative = deps.loadAuthoritative || loadAuthoritativeProject;
+    const runLifecycle = deps.runLifecycle || commitProjectLifecycleMaintenance;
+    const prepareProjects = deps.prepareProjects || prepareProjectsForPersist;
+    const writeUpdate = deps.writeUpdate || ((updates) => db.updateAcknowledged(updates));
+    const buildPlan = deps.buildPlan || buildProjectClaimPlan;
+
     // Fast local gate; server ledger is the real idempotency authority.
-    if (await loadProjectClaimMarkerExists(username, projectId)) {
+    if (await loadMarkerExists(username, projectId)) {
       await reconcileAlreadyClaimedProject(username, projectId);
       return {
         success: false,
@@ -413,8 +450,28 @@ export async function commitProjectClaim(username, projectId, options = {}) {
       };
     }
 
-    // Revalidate from cache after lock (Option B for project array; ledger is create-once).
-    const plan = buildProjectClaimPlan(username, projectId, options);
+    // Authoritative server guard: never send ACTIVE→CLAIMED (or other illegal shapes).
+    const { project: serverProject } = await loadAuthoritative(username, projectId);
+    if (serverProject && serverProject.state === PROJECT_STATES.CLAIMED) {
+      await reconcileAlreadyClaimedProject(username, projectId);
+      return {
+        success: false,
+        reason: 'already_claimed',
+      };
+    }
+    if (!serverProject || serverProject.state !== PROJECT_STATES.COMPLETE) {
+      try {
+        await runLifecycle(username, { now: options.now });
+      } catch { /* best-effort reconcile */ }
+      return {
+        success: false,
+        reason: 'server_not_complete',
+        serverState: serverProject?.state ?? null,
+      };
+    }
+
+    // Revalidate from cache after lock (cache now matches force-read above).
+    const plan = buildPlan(username, projectId, options);
     if (!plan.ok) {
       if (plan.reason === 'already_claimed') {
         await reconcileAlreadyClaimedProject(username, projectId);
@@ -427,16 +484,28 @@ export async function commitProjectClaim(username, projectId, options = {}) {
 
     const projectsPath = `players/${username}/projects`;
     if (plan.updates[projectsPath]) {
-      plan.updates[projectsPath] = await prepareProjectsForPersist(
-        username,
-        plan.updates[projectsPath],
-      );
+      plan.updates[projectsPath] = await prepareProjects(username, plan.updates[projectsPath]);
+      // After lifecycle-safe merge, target must still be CLAIMED intent on a prior COMPLETE.
+      const merged = plan.updates[projectsPath];
+      const mergedRow = Array.isArray(merged)
+        ? merged.find((p) => p && String(p.id) === String(projectId))
+        : null;
+      if (!mergedRow || mergedRow.state !== PROJECT_STATES.CLAIMED) {
+        try {
+          await runLifecycle(username, { now: options.now });
+        } catch { /* best-effort */ }
+        return {
+          success: false,
+          reason: 'server_not_complete',
+          serverState: mergedRow?.state ?? null,
+        };
+      }
     }
 
-    const ack = await db.updateAcknowledged(plan.updates);
+    const ack = await writeUpdate(plan.updates);
     if (!ack.ok) {
       // Classify duplicate claim vs generic write failure via ledger / project state.
-      if (await loadProjectClaimMarkerExists(username, projectId)) {
+      if (await loadMarkerExists(username, projectId)) {
         await reconcileAlreadyClaimedProject(username, projectId);
         return {
           success: false,

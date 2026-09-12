@@ -908,6 +908,16 @@ function renderProjectReportPanel(container, project, username) {
       try {
         const result = await commitProjectClaim(username, project.id);
         if (!result.success) {
+          if (result.reason === 'server_not_complete') {
+            toast.error('Project is still finishing. Please try claiming again in a moment.');
+            _viewingReportProjectId = null;
+            panel.remove();
+            try {
+              await runScheduledProjectMaintenance(username);
+            } catch { /* best-effort */ }
+            renderResearchProjects();
+            return;
+          }
           const msg = result.error
             || (result.reason === 'already_claimed' ? 'This project has already been claimed.' : null)
             || (result.reason === 'invalid_project_state' ? 'Project is not ready to claim.' : null)
@@ -1457,12 +1467,20 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
       return;
     }
 
-    // Replace ONLY the updated project in player.projects
+    // Replace ONLY the updated project in player.projects (lifecycle-safe merge + ack write)
     const updatedProjects = allProjects.map(pr =>
       pr.id === result.project.id ? result.project : pr
     );
     const safeProjects = await prepareProjectsForPersist(username, updatedProjects);
-    player.updatePlayer(username, { projects: safeProjects });
+    const ack = await db.updateAcknowledged({
+      [`players/${username}/projects`]: safeProjects,
+    });
+    if (!ack.ok) {
+      errEl.textContent = ack.error
+        || 'Could not start project. Check your connection and try again.';
+      errEl.classList.add('visible');
+      return;
+    }
 
     toast.success(`"${result.project.title}" is now Active!`);
 
