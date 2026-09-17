@@ -20,8 +20,22 @@ import * as player from './player.js';
 import * as groups from './groups.js';
 import * as db from './database.js';
 import {
+  ensureLeaderboardsScope,
+  releaseLeaderboardsScope,
+  hydrateLeaderboardArchivesOnce,
+  ensureClassPeriodScope,
+} from './db-hydration.js';
+import { DIRECTORY_ROOT } from './player-directory.js';
+import { getDirectoryDisplayName } from './player-display-name.js';
+import {
+  CLASS_PERIOD_ACTIVE_PATH,
+  getActiveClassPeriod,
+  isClassPeriodStatKey,
+} from './leaderboard-class-period.js';
+import {
   STAT_TYPES,
   getLeaderboardByStat,
+  getClassPeriodLeaderboardByStat,
   getSeasonLeaderboard,
   getSeasonSummaries,
   getVisibleArchivedSeasons,
@@ -31,13 +45,6 @@ import {
 } from './leaderboard-queries.js';
 import { getActiveSeason } from './leaderboard-seasons.js';
 import { areLeaderboardSummariesReady, resolveLeaderboardGroupFields } from './leaderboard-summaries.js';
-import {
-  ensureLeaderboardsScope,
-  releaseLeaderboardsScope,
-  hydrateLeaderboardArchivesOnce,
-} from './db-hydration.js';
-import { DIRECTORY_ROOT } from './player-directory.js';
-import { getDirectoryDisplayName } from './player-display-name.js';
 
 // ─── Category config ───────────────────────────────────────────────────────
 
@@ -58,6 +65,9 @@ let _activeSeasonId   = null; // null = live/current season for seasonal-rp
 let _activeSnapshotId = null; // null = live/current data for non-seasonal cats
 /** S7c: last archives once-load succeeded (null = not yet attempted this enter). */
 let _archivesHydrationOk = null;
+/** @type {(() => void)|null} */
+let _classPeriodUnsub = null;
+let _leaderboardTabActive = false;
 
 // ─── Public init ──────────────────────────────────────────────────────────
 
@@ -128,6 +138,7 @@ export function renderLeaderboard(options = {}) {
  * @returns {Promise<void>}
  */
 export async function enterLeaderboardTab() {
+  _leaderboardTabActive = true;
   // Once-load current-player directory so live boards can drop deleted orphans.
   // Prefer once-load (no Trading-owned subscribe ownership).
   try {
@@ -138,6 +149,12 @@ export async function enterLeaderboardTab() {
     console.warn('[Leaderboard] playerDirectory once-load failed:', e?.message || e);
   }
   await ensureLeaderboardsScope();
+  await ensureClassPeriodScope();
+  if (!_classPeriodUnsub && typeof db.onValue === 'function') {
+    _classPeriodUnsub = db.onValue(CLASS_PERIOD_ACTIVE_PATH, () => {
+      if (_leaderboardTabActive) renderLeaderboard();
+    });
+  }
   const archives = await hydrateLeaderboardArchivesOnce({ force: true });
   if (!archives.ok) {
     console.warn(
@@ -152,6 +169,11 @@ export async function enterLeaderboardTab() {
  * Leave Leaderboard tab: release summary subscription (cache retained).
  */
 export function cleanupLeaderboard() {
+  _leaderboardTabActive = false;
+  if (_classPeriodUnsub) {
+    try { _classPeriodUnsub(); } catch { /* ignore */ }
+    _classPeriodUnsub = null;
+  }
   releaseLeaderboardsScope();
 }
 
@@ -307,7 +329,7 @@ function _renderTable(currentUsername, groupId) {
   let subtitleText = '';
 
   if (cat.seasonal) {
-    // ── Seasonal RP (seasonal system — untouched by LB-5) ──
+    // ── Seasonal RP (seasonal system — untouched by class period) ──
     if (_activeSeasonId) {
       rows = getSeasonLeaderboard({ seasonId: _activeSeasonId, groupId, limit: 100 });
       const summaries = getSeasonSummaries();
@@ -333,7 +355,7 @@ function _renderTable(currentUsername, groupId) {
     const meta = getSnapshotMeta(_activeSnapshotId);
     subtitleText = meta ? meta.title : _activeSnapshotId;
   } else {
-    // ── Live non-seasonal / live seasonal current data (summaries) ──
+    // ── Live non-seasonal data (summaries); class-period stats use baseline deltas ──
     if (!areLeaderboardSummariesReady()) {
       tableEl.innerHTML = '';
       if (emptyEl) {
@@ -343,7 +365,20 @@ function _renderTable(currentUsername, groupId) {
       if (titleEl) titleEl.textContent = cat.label;
       return;
     }
-    rows = getLeaderboardByStat({ statType: cat.statType, groupId, limit: 100 });
+    const liveStatKey = cat.statType;
+    if (isClassPeriodStatKey(liveStatKey)) {
+      rows = getClassPeriodLeaderboardByStat({
+        statType: liveStatKey,
+        groupId,
+        limit: 100,
+      });
+      const period = getActiveClassPeriod();
+      subtitleText = period?.startedAt
+        ? `${cat.label} · since ${new Date(period.startedAt).toLocaleDateString()}`
+        : '';
+    } else {
+      rows = getLeaderboardByStat({ statType: liveStatKey, groupId, limit: 100 });
+    }
   }
 
   // Title

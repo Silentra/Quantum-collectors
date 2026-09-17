@@ -2584,6 +2584,7 @@ export function releaseLeaderboardsScope() {
   _leaderboardsSubId = null;
   _leaderboardsStartedAt = null;
   _leaderboardsPromise = null;
+  releaseClassPeriodScope();
   return { released: true, path: LEADERBOARDS_PATH };
 }
 
@@ -2749,6 +2750,98 @@ export function getLeaderboardsHydrationReport() {
   };
 }
 
+// ---------- Class leaderboard period (Leaderboard-tab-owned) ----------
+
+export const CLASS_PERIOD_ROOT = 'leaderboardClassPeriod';
+export const SCOPE_CLASS_PERIOD = 'classPeriod';
+
+/** @type {(() => void)|null} */
+let _classPeriodUnsub = null;
+/** @type {string|null} */
+let _classPeriodSubId = null;
+/** @type {Promise<object>|null} */
+let _classPeriodPromise = null;
+
+export function isClassPeriodScopeReady() {
+  return db.isPathReady(CLASS_PERIOD_ROOT);
+}
+
+export function releaseClassPeriodScope() {
+  if (_classPeriodUnsub) {
+    try { _classPeriodUnsub(); } catch { /* ignore */ }
+  }
+  _classPeriodUnsub = null;
+  _classPeriodSubId = null;
+  _classPeriodPromise = null;
+  return { released: true, path: CLASS_PERIOD_ROOT };
+}
+
+/**
+ * Ensure Leaderboard-tab subscription to leaderboardClassPeriod/.
+ * @param {{ timeoutMs?: number, force?: boolean }} [options]
+ * @returns {Promise<object>}
+ */
+export function ensureClassPeriodScope(options = {}) {
+  const force = options.force === true;
+  const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : 12000;
+
+  if (!force && _classPeriodUnsub && isClassPeriodScopeReady()) {
+    return Promise.resolve({
+      ok: true,
+      scope: SCOPE_CLASS_PERIOD,
+      path: CLASS_PERIOD_ROOT,
+      reused: true,
+      subscriptionActive: true,
+      ready: true,
+    });
+  }
+
+  if (_classPeriodPromise && !force) {
+    return _classPeriodPromise.then((r) => ({ ...r, reused: true }));
+  }
+
+  _classPeriodPromise = (async () => {
+    if (force && _classPeriodUnsub) {
+      try { _classPeriodUnsub(); } catch { /* ignore */ }
+      _classPeriodUnsub = null;
+      _classPeriodSubId = null;
+    }
+
+    try {
+      const once = await db.loadPathOnce(CLASS_PERIOD_ROOT, { force: true, timeoutMs });
+      if (once?.ok !== true && once?.mode !== 'local') {
+        // Missing root is OK (no active period yet) — mark ready via empty once if needed
+      }
+      const sub = db.subscribePath(CLASS_PERIOD_ROOT);
+      _classPeriodUnsub = () => {
+        try { sub?.unsubscribe?.(); } catch { /* ignore */ }
+      };
+      _classPeriodSubId = sub?.id ?? null;
+      return {
+        ok: true,
+        scope: SCOPE_CLASS_PERIOD,
+        path: CLASS_PERIOD_ROOT,
+        subscriptionActive: true,
+        ready: isClassPeriodScopeReady(),
+        subscriptionId: _classPeriodSubId,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        scope: SCOPE_CLASS_PERIOD,
+        path: CLASS_PERIOD_ROOT,
+        error: err?.message || String(err),
+      };
+    }
+  })();
+
+  const run = _classPeriodPromise;
+  run.finally(() => {
+    if (_classPeriodPromise === run) _classPeriodPromise = null;
+  });
+  return run;
+}
+
 /**
  * Named-scope status snapshot (S2–S5d).
  * @returns {object}
@@ -2787,6 +2880,11 @@ export function getHydrationStatus() {
       [SCOPE_TRADE_DIRECTORY]: getTradeDirectoryHydrationReport(),
       [SCOPE_GROUP_LISTINGS]: getGroupListingsHydrationReport(),
       [SCOPE_LEADERBOARDS]: getLeaderboardsHydrationReport(),
+      [SCOPE_CLASS_PERIOD]: {
+        ready: isClassPeriodScopeReady(),
+        active: _classPeriodUnsub != null,
+        path: CLASS_PERIOD_ROOT,
+      },
       [SCOPE_ACCESS_CODES]: getAccessCodesLoadReport(),
       [SCOPE_LEADERBOARD_ARCHIVES]: getLeaderboardArchivesHydrationReport(),
     },
@@ -2860,6 +2958,9 @@ function _installWindowApi() {
     waitForGroupListings,
     getGroupListingsHydrationReport,
     ensureLeaderboardsScope,
+    releaseLeaderboardsScope,
+    ensureClassPeriodScope,
+    releaseClassPeriodScope,
     isLeaderboardsScopeReady,
     getLeaderboardsHydrationReport,
     // release* retained for auth/Admin/Trading UI only — not exposed here

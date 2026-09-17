@@ -38,6 +38,11 @@ import {
   resolveLeaderboardStatValue,
 } from './leaderboard-summaries.js';
 import { DIRECTORY_ROOT } from './player-directory.js';
+import {
+  applyClassPeriodBaseline,
+  getActiveClassPeriod,
+  isClassPeriodStatKey,
+} from './leaderboard-class-period.js';
 
 /**
  * Live summaries should only show current players. playerDirectory is the safe
@@ -140,6 +145,40 @@ export function getLeaderboardByStat({
   const entries = _buildSummaryEntries(statType);
   const filtered = _filterByGroup(entries, groupId, subgroupId);
   const sorted   = _sortEntries(filtered).slice(0, limit);
+  return sorted.map((e, i) => ({ rank: i + 1, ...e }));
+}
+
+/**
+ * Live student boards for class-period stats only: apply baseline subtraction,
+ * then sort/rank. Absolute getLeaderboardByStat remains unchanged for other callers.
+ * Seasonal RP and non-period keys fall through to absolute values.
+ *
+ * @param {object} options
+ * @param {string}      options.statType
+ * @param {string|null} [options.groupId]
+ * @param {string|null} [options.subgroupId]
+ * @param {number}      [options.limit]
+ * @param {object|null} [options.activePeriod] - active class period (or omit to read from cache)
+ * @returns {Array<{ rank, username, value, groupId, subgroupId }>}
+ */
+export function getClassPeriodLeaderboardByStat({
+  statType   = STAT_TYPES.LIFETIME_RP,
+  groupId    = null,
+  subgroupId = null,
+  limit      = 50,
+  activePeriod = undefined,
+} = {}) {
+  const statKey = normalizeLeaderboardStatKey(statType) || String(statType || '');
+  const period = activePeriod === undefined ? getActiveClassPeriod() : activePeriod;
+  const entries = _buildSummaryEntries(statType).map((e) => {
+    if (!isClassPeriodStatKey(statKey)) return e;
+    return {
+      ...e,
+      value: applyClassPeriodBaseline(statKey, e.username, e.value, period),
+    };
+  });
+  const filtered = _filterByGroup(entries, groupId, subgroupId);
+  const sorted = _sortEntries(filtered).slice(0, limit);
   return sorted.map((e, i) => ({ rank: i + 1, ...e }));
 }
 

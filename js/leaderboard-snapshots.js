@@ -171,6 +171,13 @@ export function buildLifetimeSnapshotPlan(input) {
   if (statType === 'seasonalResearchPoints') {
     throw new Error('[LB-5] Seasonal RP cannot be reset through Lifetime Snapshot');
   }
+  if (resetAfter) {
+    throw new Error(
+      '[LB-5] Destructive resetAfter is disabled. '
+      + 'Create a Lifetime Snapshot without reset to archive standings. '
+      + 'Use Start Class Leaderboard Period to restart competition without zeroing player stats.',
+    );
+  }
 
   const playerEntries = canonicalChildEntries(input.playersSnapshot, {
     exclude: [...EXCLUDED_PLAYER_KEYS],
@@ -436,10 +443,18 @@ export async function commitLifetimeSnapshotFresh(options = {}) {
  * @returns {Promise<{ snapshotId: string, resetDone: boolean }>}
  */
 export async function createSnapshot({ title, statType, resetAfter = false } = {}) {
+  if (resetAfter === true) {
+    return {
+      ok: false,
+      phase: 'RESET_DISABLED',
+      error: 'Destructive resetAfter is disabled. Archive with resetAfter:false, or use Start Class Leaderboard Period.',
+      written: 0,
+    };
+  }
   const result = await commitLifetimeSnapshotFresh({
     title,
     category: statType,
-    resetAfter,
+    resetAfter: false,
   });
   if (!result.ok) {
     throw new Error(result.error || result.phase || 'Snapshot failed');

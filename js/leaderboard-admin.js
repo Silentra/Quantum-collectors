@@ -32,6 +32,13 @@ import {
   prepareStartNewSeason,
   commitStartNewSeasonFresh,
 } from './season-class-ops.js';
+import {
+  prepareClassLeaderboardPeriod,
+  commitClassLeaderboardPeriodFresh,
+  commitDisableClassLeaderboardPeriodFresh,
+  getActiveClassPeriod,
+  getClassPeriodReport,
+} from './leaderboard-class-period.js';
 import { prepareUniqueCardsRepair, commitUniqueCardsRepairPlan } from './research.js';
 import {
   prepareLeaderboardRebuild,
@@ -52,6 +59,7 @@ import {
 /** In-memory duplicate-submit guards (S8d-5b). */
 let _seasonInFlight = false;
 let _snapshotInFlight = false;
+let _classPeriodInFlight = false;
 // ─── Public entry point ────────────────────────────────────────────────────
 
 /**
@@ -145,6 +153,48 @@ function _buildPanelHTML(activeSeason, archived) {
           class="bg-primary-600 hover:bg-primary-500 text-white font-semibold px-5 py-2 rounded-lg text-sm transition whitespace-nowrap"
         >
           🚀 Start New Season
+        </button>
+      </div>
+    </div>
+
+    <!-- Class Leaderboard Period (baseline competition; never zeros player stats) -->
+    <div class="bg-surface-900 rounded-xl border border-emerald-800/60 p-6 mb-4">
+      <h3 class="font-semibold mb-1">Start Class Leaderboard Period</h3>
+      <p class="text-surface-400 text-xs mb-2">
+        Restarts live competition for <strong class="text-surface-300">Overall RP, Projects, Breakthroughs, and Trades</strong>
+        without changing any player lifetime statistics. Seasonal RP is not affected.
+      </p>
+      <p class="text-emerald-300/90 text-xs mb-4 font-medium">
+        Player lifetime stats will NOT be reset.
+      </p>
+      ${(() => {
+        const active = getActiveClassPeriod();
+        if (!active) {
+          return `<p class="text-surface-500 text-xs mb-3">No active class period — live boards show absolute lifetime values.</p>`;
+        }
+        const started = active.startedAt
+          ? new Date(active.startedAt).toLocaleString()
+          : '—';
+        return `<p class="text-amber-300/90 text-xs mb-3">
+          Active period <code class="text-surface-300">${_esc(active.id)}</code> started ${ _esc(started) }.
+          Starting again will replace it (previous period saved to history).
+        </p>`;
+      })()}
+      <div class="flex flex-wrap gap-3">
+        <button
+          id="btn-start-class-period"
+          type="button"
+          class="bg-emerald-700 hover:bg-emerald-600 text-white font-semibold px-5 py-2 rounded-lg text-sm transition"
+        >
+          Start Class Leaderboard Period
+        </button>
+        <button
+          id="btn-end-class-period"
+          type="button"
+          class="bg-surface-700 hover:bg-surface-600 text-white font-semibold px-5 py-2 rounded-lg text-sm transition"
+          ${getActiveClassPeriod() ? '' : 'disabled'}
+        >
+          End Class Period (restore absolute boards)
         </button>
       </div>
     </div>
@@ -379,6 +429,89 @@ function _wireEvents(panel) {
       } finally {
         _seasonInFlight = false;
         btn.disabled = false;
+      }
+    });
+  }
+
+  const classBtn = panel.querySelector('#btn-start-class-period');
+  if (classBtn && !classBtn.dataset.wired) {
+    classBtn.dataset.wired = '1';
+    classBtn.addEventListener('click', async () => {
+      if (_classPeriodInFlight) return;
+      _classPeriodInFlight = true;
+      classBtn.disabled = true;
+      try {
+        const prepared = await prepareClassLeaderboardPeriod();
+        if (!prepared.ok) {
+          toast.error(prepared.error === 'EMPTY_CLASS'
+            ? 'No players found. Class period refused (empty class).'
+            : (prepared.error || 'Could not prepare class period'));
+          return;
+        }
+        const confirmed = await _confirmClassPeriodPreview(prepared);
+        if (!confirmed) return;
+
+        const result = await commitClassLeaderboardPeriodFresh({
+          expectedPreviousPeriodId: prepared.previousPeriodId ?? null,
+        });
+        if (!result.ok) {
+          toast.error(`${result.phase || 'FAILED'}: ${result.error || 'Class period failed'}`);
+          return;
+        }
+        toast.success(
+          `Class period started (${result.playersBaselined} players). Lifetime stats unchanged.`,
+        );
+        console.log('[LeaderboardAdmin] Class period', getClassPeriodReport());
+        renderAdminSeasons();
+      } catch (err) {
+        console.error('[LeaderboardAdmin] Class period failed:', err);
+        toast.error(err?.message || 'Class period failed');
+      } finally {
+        _classPeriodInFlight = false;
+        classBtn.disabled = false;
+      }
+    });
+  }
+
+  const endClassBtn = panel.querySelector('#btn-end-class-period');
+  if (endClassBtn && !endClassBtn.dataset.wired) {
+    endClassBtn.dataset.wired = '1';
+    endClassBtn.addEventListener('click', async () => {
+      const active = getActiveClassPeriod();
+      if (!active) {
+        toast.error('No active class period to end.');
+        return;
+      }
+      const ok = await confirmAction({
+        title: 'End Class Leaderboard Period?',
+        message: [
+          `Period: ${active.id}`,
+          `Started: ${active.startedAt ? new Date(active.startedAt).toLocaleString() : '—'}`,
+          '',
+          'Live Overall RP / Projects / Breakthroughs / Trades will return to absolute lifetime values.',
+          'Player lifetime stats will NOT be changed.',
+          'This period will be saved to history.',
+        ].join('\n'),
+        confirmText: 'End Period',
+        destructive: false,
+      });
+      if (!ok) return;
+      if (_classPeriodInFlight) return;
+      _classPeriodInFlight = true;
+      endClassBtn.disabled = true;
+      try {
+        const result = await commitDisableClassLeaderboardPeriodFresh();
+        if (!result.ok) {
+          toast.error(`${result.phase || 'FAILED'}: ${result.error || 'End period failed'}`);
+          return;
+        }
+        toast.success('Class period ended. Live boards show absolute lifetime values again.');
+        renderAdminSeasons();
+      } catch (err) {
+        toast.error(err?.message || 'End period failed');
+      } finally {
+        _classPeriodInFlight = false;
+        endClassBtn.disabled = false;
       }
     });
   }
@@ -733,13 +866,11 @@ function _buildSnapshotsPanelHTML(allSnapshots) {
         </button>
       </div>
 
-      <!-- Optional reset checkbox -->
-      <label class="flex items-center gap-2 text-sm text-surface-300 cursor-pointer select-none mb-2">
-        <input type="checkbox" id="snap-reset-after" class="rounded">
-        Reset this leaderboard category to 0 after snapshot
-      </label>
-      <p class="text-xs text-surface-500 ml-6 mb-1">
-        Only the selected category resets. All other leaderboards and Seasonal RP remain untouched.
+      <!-- Archive only — never zeros player stats -->
+      <p class="text-xs text-surface-500 mb-1">
+        Creates a permanent historical archive of absolute standings for year-over-year comparison.
+        Does not reset player statistics. To restart live competition without erasing lifetime stats,
+        use <strong class="text-surface-400">Start Class Leaderboard Period</strong> above.
       </p>
     </div>
 
@@ -864,7 +995,7 @@ function _wireSnapshotEvents(panel) {
     createBtn.addEventListener('click', async () => {
       const title = (panel.querySelector('#snap-title-input')?.value ?? '').trim();
       const statType = panel.querySelector('#snap-stat-select')?.value ?? '';
-      const resetAfter = panel.querySelector('#snap-reset-after')?.checked === true;
+      const resetAfter = false;
 
       if (!title) {
         toast.error('Please enter a snapshot name.');
@@ -900,7 +1031,7 @@ function _wireSnapshotEvents(panel) {
         const result = await commitLifetimeSnapshotFresh({
           title,
           category: statType,
-          resetAfter,
+          resetAfter: false,
         });
         if (!result.ok) {
           const phase = result.phase || 'FAILED';
@@ -909,10 +1040,7 @@ function _wireSnapshotEvents(panel) {
         }
 
         const catLabel = SNAPSHOT_STAT_LABELS[statType] ?? statType;
-        const msg = result.resetDone
-          ? `Snapshot "${title}" created and ${catLabel} reset to 0.`
-          : `Snapshot "${title}" created.`;
-        toast.success(msg);
+        toast.success(`Snapshot "${title}" created for ${catLabel}. Lifetime stats unchanged.`);
         console.log(`[LB-5] Snapshot created: ${result.snapshotId}`);
         renderAdminSeasons();
       } catch (err) {
@@ -962,38 +1090,52 @@ function _wireSnapshotEvents(panel) {
   });
 }
 
+function _confirmClassPeriodPreview(prepared) {
+  const lines = [
+    `Players baselined: ${prepared.playersBaselined}`,
+    'Player-stat writes: 0',
+    'Gameplay-state writes: 0',
+    'Seasonal RP writes: 0',
+    '',
+    'Player lifetime stats will NOT be reset.',
+    'Live Overall RP / Projects / Breakthroughs / Trades will restart from these baselines.',
+    'Seasonal RP is unchanged.',
+    '',
+    'Confirm re-gathers Firebase before writing leaderboardClassPeriod only.',
+  ];
+  if (prepared.replacing) {
+    lines.unshift(
+      'REPLACE existing class period?',
+      `Current period: ${prepared.previousPeriodId || '—'}`,
+      `Started: ${prepared.previousStartedAt ? new Date(prepared.previousStartedAt).toLocaleString() : '—'}`,
+      'Previous period will be saved to history.',
+      '',
+    );
+  }
+  return confirmAction({
+    title: prepared.replacing ? 'Replace Class Leaderboard Period?' : 'Start Class Leaderboard Period?',
+    message: lines.join('\n'),
+    confirmText: prepared.replacing ? 'Replace Period' : 'Start Period',
+    destructive: false,
+    okButtonClass: 'flex-1 bg-emerald-700 hover:bg-emerald-600 py-3 rounded-lg font-semibold transition text-sm',
+  });
+}
+
 /**
  * @returns {Promise<boolean>}
  */
 function _confirmCreateSnapshotPreview(prepared) {
   const catLabel = SNAPSHOT_STAT_LABELS[prepared.category] ?? prepared.category;
   const n = prepared.playersScanned;
-  const resetAfter = prepared.resetAfter === true;
-
-  if (resetAfter) {
-    return confirmAction({
-      title: 'Snapshot & Reset?',
-      message: [
-        `Category: ${catLabel}`,
-        `Players included: ${n}`,
-        'Reset afterward: YES',
-        '',
-        'Current values will be saved, then this stat will be reset for all players.',
-        '',
-        'Confirm refreshes Firebase first.',
-      ].join('\n'),
-      confirmText: 'Snapshot & Reset',
-      destructive: false,
-      okButtonClass: 'flex-1 bg-amber-600 hover:bg-amber-500 py-3 rounded-lg font-semibold transition text-sm',
-    });
-  }
 
   return confirmAction({
     title: 'Create Snapshot?',
     message: [
       `Category: ${catLabel}`,
       `Players included: ${n}`,
-      'Reset afterward: No',
+      'Reset afterward: No (disabled)',
+      '',
+      'Archives absolute standings only. Lifetime player stats are not changed.',
       '',
       'Confirm refreshes Firebase first.',
     ].join('\n'),
