@@ -32,7 +32,12 @@ import {
   computeUniqueCardsOwnedFromInventory,
 } from './research.js';
 import { buildWeeklyPackRpGrantUpdates } from './weekly-research-pack.js';
-import { buildProjectClaimedHistoryUpdate } from './player-history.js';
+import {
+  buildProjectClaimedHistoryUpdate,
+  buildProjectClaimFailedHistoryUpdate,
+  sanitizeProjectClaimFailureError,
+  PLAYER_HISTORY_ROOT,
+} from './player-history.js';
 import { scheduleHistoryRetentionAfterWrite } from './player-history-retention.js';
 import { getAuth } from './firebase-config.js';
 import {
@@ -48,6 +53,49 @@ import {
   computeCardsAtMaxAuraFromInventory,
 } from './achievement-stats.js';
 import { planAchievementUpdatesForStats } from './achievement-mutations.js';
+
+export { sanitizeProjectClaimFailureError };
+
+/**
+ * Best-effort observational history leaf after a genuine claim write_failed.
+ * Never mutates gameplay paths; never throws.
+ *
+ * @param {string} username
+ * @param {object} facts
+ * @param {{
+ *   writeUpdate?: (updates: object) => Promise<{ ok: boolean, error?: string }>,
+ * }} [deps]
+ * @returns {Promise<{ attempted: boolean, ok: boolean, error?: string, updates?: object }>}
+ */
+export async function persistProjectClaimFailedDiagnostic(username, facts, deps = {}) {
+  try {
+    const leaf = buildProjectClaimFailedHistoryUpdate(username, facts);
+    const updates = leaf.updates || {};
+    const paths = Object.keys(updates);
+    for (const p of paths) {
+      if (!p.startsWith(`${PLAYER_HISTORY_ROOT}/`)) {
+        console.warn('[ProjectClaim] diagnostic history refused illegal path', p);
+        return { attempted: false, ok: false, error: 'illegal_path' };
+      }
+    }
+    const writeUpdate = deps.writeUpdate || ((u) => db.updateAcknowledged(u));
+    const ack = await writeUpdate(updates);
+    if (!ack.ok) {
+      console.warn(
+        '[ProjectClaim] diagnostic history write failed',
+        { error: ack.error || 'unknown', projectId: facts?.projectId || null },
+      );
+      return { attempted: true, ok: false, error: ack.error || 'write_failed', updates };
+    }
+    return { attempted: true, ok: true, updates };
+  } catch (err) {
+    console.warn(
+      '[ProjectClaim] diagnostic history write failed',
+      { error: err?.message || String(err), projectId: facts?.projectId || null },
+    );
+    return { attempted: true, ok: false, error: err?.message || String(err) };
+  }
+}
 import {
   STAT_TYPES,
   buildLeaderboardSummaryPathsForChangedStats,
@@ -429,6 +477,7 @@ export async function loadAuthoritativeProject(username, projectId) {
  *   prepareProjects?: typeof prepareProjectsForPersist,
  *   writeUpdate?: (updates: object) => Promise<{ ok: boolean, error?: string }>,
  *   buildPlan?: typeof buildProjectClaimPlan,
+ *   persistFailureDiagnostic?: typeof persistProjectClaimFailedDiagnostic,
  * }} [deps] - injectable for unit tests
  * @returns {Promise<object>}
  */
@@ -440,6 +489,7 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
     const prepareProjects = deps.prepareProjects || prepareProjectsForPersist;
     const writeUpdate = deps.writeUpdate || ((updates) => db.updateAcknowledged(updates));
     const buildPlan = deps.buildPlan || buildProjectClaimPlan;
+    const persistFailureDiagnostic = deps.persistFailureDiagnostic || persistProjectClaimFailedDiagnostic;
 
     // Fast local gate; server ledger is the real idempotency authority.
     if (await loadMarkerExists(username, projectId)) {
@@ -469,6 +519,10 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
         serverState: serverProject?.state ?? null,
       };
     }
+
+    const serverStateBeforeWrite = serverProject.state ?? null;
+    const markerExistedBeforeWrite = false;
+    const projectTitleBefore = serverProject.title != null ? String(serverProject.title) : null;
 
     // Revalidate from cache after lock (cache now matches force-read above).
     const plan = buildPlan(username, projectId, options);
@@ -506,6 +560,15 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
     if (!ack.ok) {
       // Classify duplicate claim vs generic write failure via ledger / project state.
       if (await loadMarkerExists(username, projectId)) {
+        console.warn('[ProjectClaim] claim write failed', {
+          projectId: String(projectId || ''),
+          reason: 'already_claimed',
+          serverStateBeforeWrite,
+          markerExistedBeforeWrite,
+          serverStateAfterFailure: PROJECT_STATES.CLAIMED,
+          markerExistsAfterFailure: true,
+          ...sanitizeProjectClaimFailureError(ack.error),
+        });
         await reconcileAlreadyClaimedProject(username, projectId);
         return {
           success: false,
@@ -520,11 +583,54 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
         ? projects.find((p) => p && String(p.id) === String(projectId))
         : null;
       if (live && live.state === PROJECT_STATES.CLAIMED) {
+        console.warn('[ProjectClaim] claim write failed', {
+          projectId: String(projectId || ''),
+          reason: 'already_claimed',
+          serverStateBeforeWrite,
+          markerExistedBeforeWrite,
+          serverStateAfterFailure: PROJECT_STATES.CLAIMED,
+          markerExistsAfterFailure: false,
+          ...sanitizeProjectClaimFailureError(ack.error),
+        });
         return {
           success: false,
           reason: 'already_claimed',
         };
       }
+
+      const sanitized = sanitizeProjectClaimFailureError(ack.error);
+      const serverStateAfterFailure = live?.state ?? null;
+      const markerExistsAfterFailure = false;
+      const diagnostic = {
+        projectId: String(projectId || ''),
+        projectTitle: plan.claimedProject?.title || projectTitleBefore,
+        reason: 'write_failed',
+        serverStateBeforeWrite,
+        markerExistedBeforeWrite,
+        serverStateAfterFailure,
+        markerExistsAfterFailure,
+        errorCode: sanitized.errorCode,
+        errorMessage: sanitized.errorMessage,
+      };
+      console.warn('[ProjectClaim] claim write failed', diagnostic);
+
+      let actorUid = null;
+      try {
+        actorUid = getAuth()?.currentUser?.uid || null;
+      } catch { /* ignore */ }
+
+      try {
+        await persistFailureDiagnostic(username, {
+          ...diagnostic,
+          actorUid,
+        });
+      } catch (err) {
+        console.warn(
+          '[ProjectClaim] diagnostic history write failed',
+          { error: err?.message || String(err), projectId: String(projectId || '') },
+        );
+      }
+
       return {
         success: false,
         reason: 'write_failed',

@@ -22,6 +22,7 @@ export const HISTORY_EVENT_TYPES = Object.freeze({
   ADMIN_STAT_CORRECT: 'admin_stat_correct',
   TRADE_COMPLETED: 'trade_completed',
   PROJECT_CLAIMED: 'project_claimed',
+  PROJECT_CLAIM_FAILED: 'project_claim_failed',
   SHOP_PURCHASE: 'shop_purchase',
   RESEARCH_PROPOSAL_USED: 'research_proposal_used',
 });
@@ -42,6 +43,7 @@ export const HISTORY_SOURCES = Object.freeze({
   TRADE_DIRECT: 'trade_direct',
   TRADE_LISTING: 'trade_listing',
   PROJECT_CLAIM: 'project_claim',
+  PROJECT_CLAIM_FAIL: 'project_claim_fail',
   SHOP_PURCHASE: 'shop_purchase',
   WEEKLY_RESEARCH_PACK: 'weekly_research_pack',
   RESEARCH_PROPOSAL: 'research_proposal',
@@ -52,6 +54,7 @@ export const HISTORY_SELF_CREATE_TYPES = Object.freeze([
   HISTORY_EVENT_TYPES.PACK_OPENED,
   HISTORY_EVENT_TYPES.TRADE_COMPLETED,
   HISTORY_EVENT_TYPES.PROJECT_CLAIMED,
+  HISTORY_EVENT_TYPES.PROJECT_CLAIM_FAILED,
   HISTORY_EVENT_TYPES.SHOP_PURCHASE,
   HISTORY_EVENT_TYPES.PACK_GRANTED, // weekly/system only (rules constrain source/actor)
   HISTORY_EVENT_TYPES.RESEARCH_PROPOSAL_USED,
@@ -67,6 +70,7 @@ export const HISTORY_ADMIN_CREATE_TYPES = Object.freeze([
   HISTORY_EVENT_TYPES.ADMIN_STAT_CORRECT,
   HISTORY_EVENT_TYPES.TRADE_COMPLETED,
   HISTORY_EVENT_TYPES.PROJECT_CLAIMED,
+  HISTORY_EVENT_TYPES.PROJECT_CLAIM_FAILED,
   HISTORY_EVENT_TYPES.SHOP_PURCHASE,
   HISTORY_EVENT_TYPES.RESEARCH_PROPOSAL_USED,
 ]);
@@ -276,6 +280,86 @@ export function buildProjectClaimedHistoryUpdate(username, {
     actorType: HISTORY_ACTOR_TYPES.SELF,
     source: HISTORY_SOURCES.PROJECT_CLAIM,
     actorUid,
+    actorUsername: username,
+    payload,
+  });
+}
+
+const CLAIM_FAIL_ERROR_MSG_MAX = 180;
+
+/**
+ * Sanitize Firebase / claim error for history + console (no secrets, bounded length).
+ * @param {unknown} error
+ * @returns {{ errorCode: string|null, errorMessage: string|null }}
+ */
+export function sanitizeProjectClaimFailureError(error) {
+  const raw = error == null ? '' : String(error);
+  const truncated = raw.replace(/\s+/g, ' ').trim().slice(0, CLAIM_FAIL_ERROR_MSG_MAX);
+  let errorCode = null;
+  const codeMatch = truncated.match(
+    /\b(PERMISSION_DENIED|PERMISSION DENIED|UNAVAILABLE|NETWORK_ERROR|DEADLINE_EXCEEDED|UNAUTHENTICATED|FAILED_PRECONDITION)\b/i,
+  );
+  if (codeMatch) {
+    errorCode = String(codeMatch[1]).toUpperCase().replace(/\s+/g, '_');
+  } else if (/permission.?denied/i.test(truncated)) {
+    errorCode = 'PERMISSION_DENIED';
+  }
+  return {
+    errorCode,
+    errorMessage: truncated || null,
+  };
+}
+
+/**
+ * Observational diagnostic only — never mutates gameplay.
+ * Persist only for genuine write_failed after reconciliation (caller responsibility).
+ *
+ * @param {string} username
+ * @param {{
+ *   projectId: string,
+ *   projectTitle?: string|null,
+ *   reason?: string,
+ *   errorCode?: string|null,
+ *   errorMessage?: string|null,
+ *   serverStateBeforeWrite?: string|null,
+ *   markerExistedBeforeWrite?: boolean,
+ *   serverStateAfterFailure?: string|null,
+ *   markerExistsAfterFailure?: boolean,
+ *   actorUid?: string|null,
+ * }} facts
+ */
+export function buildProjectClaimFailedHistoryUpdate(username, facts = {}) {
+  const sanitized = sanitizeProjectClaimFailureError(facts.errorMessage ?? facts.errorCode);
+  const errorCode = facts.errorCode != null && String(facts.errorCode).trim()
+    ? String(facts.errorCode).trim().slice(0, 64)
+    : sanitized.errorCode;
+  const errorMessage = facts.errorMessage != null
+    ? String(facts.errorMessage).replace(/\s+/g, ' ').trim().slice(0, CLAIM_FAIL_ERROR_MSG_MAX) || null
+    : sanitized.errorMessage;
+
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    projectId: String(facts.projectId || ''),
+    reason: String(facts.reason || 'write_failed'),
+    serverStateBeforeWrite: facts.serverStateBeforeWrite != null
+      ? String(facts.serverStateBeforeWrite)
+      : null,
+    markerExistedBeforeWrite: facts.markerExistedBeforeWrite === true,
+    serverStateAfterFailure: facts.serverStateAfterFailure != null
+      ? String(facts.serverStateAfterFailure)
+      : null,
+    markerExistsAfterFailure: facts.markerExistsAfterFailure === true,
+  };
+  const title = facts.projectTitle != null ? String(facts.projectTitle).trim() : '';
+  if (title) payload.projectTitle = title.slice(0, 120);
+  if (errorCode) payload.errorCode = errorCode;
+  if (errorMessage) payload.errorMessage = errorMessage;
+
+  return buildPlayerHistoryLeafUpdate(username, {
+    type: HISTORY_EVENT_TYPES.PROJECT_CLAIM_FAILED,
+    actorType: HISTORY_ACTOR_TYPES.SELF,
+    source: HISTORY_SOURCES.PROJECT_CLAIM_FAIL,
+    actorUid: facts.actorUid,
     actorUsername: username,
     payload,
   });

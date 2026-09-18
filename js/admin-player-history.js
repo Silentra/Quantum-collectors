@@ -222,6 +222,36 @@ export function describeHistoryEvent(event) {
         known: true,
       };
     }
+    case HISTORY_EVENT_TYPES.PROJECT_CLAIM_FAILED: {
+      const title = String(event.projectTitle || '').trim();
+      const code = String(event.errorCode || '').trim();
+      const reason = String(event.reason || 'write_failed');
+      details.push(`Project ID: ${event.projectId || '—'}`);
+      if (title) details.push(`Title: ${title}`);
+      details.push(`Reason: ${reason}`);
+      if (code) details.push(`Error: ${code}`);
+      if (event.serverStateBeforeWrite != null) {
+        details.push(`State before write: ${event.serverStateBeforeWrite}`);
+      }
+      details.push(`Marker before write: ${event.markerExistedBeforeWrite === true ? 'yes' : 'no'}`);
+      if (event.serverStateAfterFailure != null) {
+        details.push(`State after failure: ${event.serverStateAfterFailure}`);
+      }
+      details.push(`Marker after failure: ${event.markerExistsAfterFailure === true ? 'yes' : 'no'}`);
+      if (event.errorMessage) {
+        details.push(`Message: ${String(event.errorMessage).slice(0, 180)}`);
+      }
+      const summaryBits = [];
+      if (title) summaryBits.push(title);
+      else if (event.projectId) summaryBits.push(String(event.projectId));
+      if (code) summaryBits.push(code);
+      return {
+        summary: `Project claim failed${summaryBits.length ? ` — ${summaryBits.join(' · ')}` : ''}`,
+        details,
+        actorLabel,
+        known: true,
+      };
+    }
     case HISTORY_EVENT_TYPES.SHOP_PURCHASE: {
       const itemId = String(event.itemId || '');
       const price = Number(event.pricePaid) || 0;
