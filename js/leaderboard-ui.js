@@ -36,6 +36,8 @@ import {
   STAT_TYPES,
   getLeaderboardByStat,
   getClassPeriodLeaderboardByStat,
+  getClassPeriodHistoryLeaderboard,
+  getClassPeriodHistoryList,
   getSeasonLeaderboard,
   getSeasonSummaries,
   getVisibleArchivedSeasons,
@@ -63,6 +65,7 @@ const CATEGORIES = [
 let _activeCategory = 'overall-rp';
 let _activeSeasonId   = null; // null = live/current season for seasonal-rp
 let _activeSnapshotId = null; // null = live/current data for non-seasonal cats
+let _activeClassPeriodId = null; // null = current class period / absolute live
 /** S7c: last archives once-load succeeded (null = not yet attempted this enter). */
 let _archivesHydrationOk = null;
 /** @type {(() => void)|null} */
@@ -84,6 +87,7 @@ export function initLeaderboardUI() {
       _activeCategory   = btn.dataset.lbCat;
       _activeSeasonId   = null; // reset to current season when switching
       _activeSnapshotId = null; // reset to live data when switching
+      _activeClassPeriodId = null;
       renderLeaderboard();
     });
   }
@@ -102,6 +106,17 @@ export function initLeaderboardUI() {
   if (snapSelect) {
     snapSelect.addEventListener('change', () => {
       _activeSnapshotId = snapSelect.value || null;
+      if (_activeSnapshotId) _activeClassPeriodId = null;
+      renderLeaderboard();
+    });
+  }
+
+  // Class Period history selector
+  const classPeriodSelect = document.getElementById('lb-class-period-select');
+  if (classPeriodSelect) {
+    classPeriodSelect.addEventListener('change', () => {
+      _activeClassPeriodId = classPeriodSelect.value || null;
+      if (_activeClassPeriodId) _activeSnapshotId = null;
       renderLeaderboard();
     });
   }
@@ -129,6 +144,7 @@ export function renderLeaderboard(options = {}) {
   _renderCategoryTabs();
   _renderSeasonSelector(groupId);
   _renderSnapshotSelector(groupId);
+  _renderClassPeriodSelector();
   _renderTable(session.username, groupId);
 }
 
@@ -307,6 +323,55 @@ function _renderSnapshotSelector(groupId) {
 
 // ─── Table render ──��───────────────────────────────────────────────────────
 
+/**
+ * Show/populate Class Leaderboard Period history for period-capable categories.
+ * Hidden when no archived periods exist or category is not a class-period stat.
+ */
+function _renderClassPeriodSelector() {
+  const wrapper = document.getElementById('lb-class-period-wrapper');
+  const select = document.getElementById('lb-class-period-select');
+  if (!wrapper || !select) return;
+
+  const cat = CATEGORIES.find(c => c.id === _activeCategory);
+  const showForCat = cat && !cat.seasonal && !cat.disabled && isClassPeriodStatKey(cat.statType);
+  if (!showForCat) {
+    wrapper.classList.add('hidden');
+    return;
+  }
+
+  const history = getClassPeriodHistoryList();
+  if (history.length === 0) {
+    wrapper.classList.add('hidden');
+    _activeClassPeriodId = null;
+    return;
+  }
+
+  wrapper.classList.remove('hidden');
+
+  const active = getActiveClassPeriod();
+  const currentLabel = active
+    ? 'Current Class Period'
+    : 'Current (Lifetime Absolute)';
+
+  const options = [`<option value="">${_escHtml(currentLabel)}</option>`];
+  options.push('<option disabled>── Previous Class Periods ──</option>');
+  for (const period of history) {
+    const label = period.label || period.id;
+    const date = period.endedAt ? new Date(period.endedAt).toLocaleDateString() : '';
+    options.push(
+      `<option value="${_escHtml(period.id)}">${_escHtml(label)}${date ? ' (' + date + ')' : ''}</option>`,
+    );
+  }
+
+  select.innerHTML = options.join('');
+
+  const validIds = new Set(history.map(p => p.id));
+  if (_activeClassPeriodId && !validIds.has(_activeClassPeriodId)) {
+    _activeClassPeriodId = null;
+  }
+  select.value = _activeClassPeriodId || '';
+}
+
 function _renderTable(currentUsername, groupId) {
   const tableEl = document.getElementById('lb-table-body');
   const emptyEl = document.getElementById('lb-empty');
@@ -349,6 +414,16 @@ function _renderTable(currentUsername, groupId) {
       const activeSeason = getActiveSeason();
       subtitleText = activeSeason ? activeSeason.name + ' (Current)' : 'Current Season';
     }
+  } else if (_activeClassPeriodId && isClassPeriodStatKey(cat.statType)) {
+    // ── Historical Class Leaderboard Period (frozen finalEntries) ──
+    rows = getClassPeriodHistoryLeaderboard({
+      periodId: _activeClassPeriodId,
+      statType: cat.statType,
+      groupId,
+      limit: 100,
+    });
+    const hist = getClassPeriodHistoryList().find(p => p.id === _activeClassPeriodId);
+    subtitleText = hist?.label || _activeClassPeriodId;
   } else if (_activeSnapshotId) {
     // ── LB-5: Viewing a historical snapshot ──
     rows = getSnapshotLeaderboard({ snapshotId: _activeSnapshotId, groupId, limit: 100 });

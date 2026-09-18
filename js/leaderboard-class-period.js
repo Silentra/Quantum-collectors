@@ -5,6 +5,7 @@
  * Live boards for Overall RP / Projects / Breakthroughs / Trades display:
  *   max(0, absoluteLifetimeValue - baselineValue)
  *
+ * Completed periods freeze period-earned finalEntries under history/{id}.
  * Writes ONLY under leaderboardClassPeriod/* (allowlisted).
  * Never writes players/*, leaderboards/*, leaderboardSeasons/*, leaderboardSnapshots/*.
  * Seasonal RP is untouched.
@@ -16,7 +17,11 @@ import {
   assertCanonicalComplete,
   canonicalChildEntries,
 } from './admin-maintenance.js';
-import { resolveLeaderboardStatValue, normalizeLeaderboardStatKey } from './leaderboard-summaries.js';
+import {
+  resolveLeaderboardStatValue,
+  normalizeLeaderboardStatKey,
+  resolveLeaderboardGroupFields,
+} from './leaderboard-summaries.js';
 
 export const CLASS_PERIOD_ROOT = 'leaderboardClassPeriod';
 export const CLASS_PERIOD_ACTIVE_PATH = `${CLASS_PERIOD_ROOT}/active`;
@@ -36,6 +41,8 @@ const EXCLUDED_PLAYER_KEYS = Object.freeze(['__admin__']);
 
 const ACTIVE_PATH_RE = /^leaderboardClassPeriod\/active(\/|$)/;
 const HISTORY_PATH_RE = /^leaderboardClassPeriod\/history\/[^/]+(\/|$)/;
+
+const DEFAULT_OPENING_LABEL = 'Opening Period';
 
 /**
  * @param {string} path
@@ -68,6 +75,30 @@ export function assertClassPeriodPathsAllowed(updates) {
  */
 export function coerceBaselineNumber(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+/**
+ * @param {unknown} historyMap
+ * @returns {boolean}
+ */
+export function isClassPeriodHistoryEmpty(historyMap) {
+  if (!historyMap || typeof historyMap !== 'object') return true;
+  return !Object.keys(historyMap).some((id) => {
+    const node = historyMap[id];
+    return node != null && typeof node === 'object';
+  });
+}
+
+/**
+ * @param {string} periodId
+ * @param {object|null|undefined} existingHistory
+ * @returns {boolean}
+ */
+export function historyPeriodIdExists(periodId, existingHistory) {
+  const id = String(periodId || '').trim();
+  if (!id || !existingHistory || typeof existingHistory !== 'object') return false;
+  const node = existingHistory[id];
+  return node != null && typeof node === 'object';
 }
 
 /**
@@ -104,12 +135,68 @@ export function getActiveClassPeriod() {
 }
 
 /**
+ * Cached history map (may be empty).
+ * @returns {Record<string, object>}
+ */
+export function getClassPeriodHistoryMap() {
+  const hist = db.get(CLASS_PERIOD_HISTORY_ROOT);
+  if (!hist || typeof hist !== 'object') return {};
+  return hist;
+}
+
+/**
+ * @param {string} periodId
+ * @returns {object|null}
+ */
+export function getClassPeriodHistoryPeriod(periodId) {
+  const id = String(periodId || '').trim();
+  if (!id) return null;
+  const node = db.get(`${CLASS_PERIOD_HISTORY_ROOT}/${id}`);
+  if (!node || typeof node !== 'object' || !node.id) return null;
+  return node;
+}
+
+/**
+ * Archived periods newest-first by endedAt / supersededAt.
+ * @returns {Array<object>}
+ */
+export function listClassPeriodHistory() {
+  const map = getClassPeriodHistoryMap();
+  return Object.keys(map)
+    .map((id) => {
+      const node = map[id];
+      if (!node || typeof node !== 'object') return null;
+      const resolvedId = node.id != null ? String(node.id) : String(id);
+      return { ...node, id: resolvedId };
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      const ta = coerceBaselineNumber(a.endedAt) || coerceBaselineNumber(a.supersededAt) || 0;
+      const tb = coerceBaselineNumber(b.endedAt) || coerceBaselineNumber(b.supersededAt) || 0;
+      return tb - ta;
+    });
+}
+
+/**
  * @param {string} statKeyOrPath
  * @returns {boolean}
  */
 export function isClassPeriodStatKey(statKeyOrPath) {
   const key = normalizeLeaderboardStatKey(statKeyOrPath) || String(statKeyOrPath || '');
   return CLASS_PERIOD_STAT_KEY_SET.has(key);
+}
+
+/**
+ * Empty baselines shell (Opening Period conceptual baseline = 0).
+ * @returns {Record<string, Record<string, number>>}
+ */
+export function emptyClassPeriodBaselines() {
+  /** @type {Record<string, Record<string, number>>} */
+  const baselines = {};
+  for (const statKey of CLASS_PERIOD_STAT_KEYS) {
+    baselines[statKey] = {};
+  }
+  return baselines;
 }
 
 /**
@@ -152,13 +239,114 @@ export function buildBaselinesFromPlayersSnapshot(playersSnapshot) {
 }
 
 /**
+ * Freeze period-earned standings from outgoing baselines + canonical gather.
+ * Missing baseline → 0. Below baseline → 0. Includes group/subgroup metadata.
+ *
+ * @param {object|null|undefined} outgoingBaselines
+ * @param {object|null|undefined} playersSnapshot
+ * @returns {Record<string, Record<string, { value: number, groupId: string|null, subgroupId: string|null }>>}
+ */
+export function computeFinalEntriesFromPlayersSnapshot(outgoingBaselines, playersSnapshot) {
+  const baselines =
+    outgoingBaselines && typeof outgoingBaselines === 'object' ? outgoingBaselines : {};
+  const playerEntries = canonicalChildEntries(playersSnapshot, {
+    exclude: [...EXCLUDED_PLAYER_KEYS],
+  });
+
+  /** @type {Record<string, Record<string, { value: number, groupId: string|null, subgroupId: string|null }>>} */
+  const finalEntries = {};
+  for (const statKey of CLASS_PERIOD_STAT_KEYS) {
+    finalEntries[statKey] = {};
+  }
+
+  for (const { key: username, value: player } of playerEntries) {
+    const p = player && typeof player === 'object' ? player : {};
+    const { groupId, subgroupId } = resolveLeaderboardGroupFields(p);
+    for (const statKey of CLASS_PERIOD_STAT_KEYS) {
+      const abs = coerceBaselineNumber(resolveLeaderboardStatValue(p, statKey));
+      const baseMap = baselines[statKey] && typeof baselines[statKey] === 'object'
+        ? baselines[statKey]
+        : {};
+      const baseline = Object.prototype.hasOwnProperty.call(baseMap, username)
+        ? coerceBaselineNumber(baseMap[username])
+        : 0;
+      finalEntries[statKey][username] = {
+        value: Math.max(0, abs - baseline),
+        groupId,
+        subgroupId,
+      };
+    }
+  }
+
+  return finalEntries;
+}
+
+/**
+ * Flatten frozen finalEntries[statKey] → rows (no ranking).
+ * @param {object|null|undefined} finalEntriesForStat
+ * @returns {Array<{ username: string, value: number, groupId: string|null, subgroupId: string|null }>}
+ */
+export function listFinalEntryRows(finalEntriesForStat) {
+  if (!finalEntriesForStat || typeof finalEntriesForStat !== 'object') return [];
+  return Object.keys(finalEntriesForStat)
+    .map((username) => {
+      const key = String(username || '').trim();
+      if (!key || key === '__admin__') return null;
+      const raw = finalEntriesForStat[username];
+      if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+        return {
+          username: key,
+          value: coerceBaselineNumber(raw.value),
+          groupId: raw.groupId != null && raw.groupId !== '' ? String(raw.groupId) : null,
+          subgroupId: raw.subgroupId != null && raw.subgroupId !== '' ? String(raw.subgroupId) : null,
+        };
+      }
+      // Legacy / numeric-only shape
+      return {
+        username: key,
+        value: coerceBaselineNumber(raw),
+        groupId: null,
+        subgroupId: null,
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * @param {string|null|undefined} label
+ * @param {string} fallback
+ * @returns {string}
+ */
+function resolveArchiveLabel(label, fallback) {
+  const trimmed = label != null ? String(label).trim() : '';
+  return trimmed || fallback;
+}
+
+/**
+ * Default label for a non-opening archive.
+ * @param {number} endedAt
+ * @returns {string}
+ */
+export function defaultEndedPeriodLabel(endedAt) {
+  const t = coerceBaselineNumber(endedAt) || Date.now();
+  try {
+    return `Period ended ${new Date(t).toLocaleDateString()}`;
+  } catch {
+    return 'Archived Period';
+  }
+}
+
+/**
  * Pure plan builder — never touches players/leaderboards.
  *
  * @param {{
  *   playersSnapshot?: object|null,
  *   previousActive?: object|null,
+ *   existingHistory?: object|null,
  *   now?: number,
  *   periodId?: string,
+ *   openingPeriodId?: string,
+ *   archiveLabel?: string|null,
  * }} input
  */
 export function buildClassPeriodPlan(input) {
@@ -167,6 +355,10 @@ export function buildClassPeriodPlan(input) {
     input.previousActive && typeof input.previousActive === 'object'
       ? input.previousActive
       : null;
+  const existingHistory =
+    input.existingHistory && typeof input.existingHistory === 'object'
+      ? input.existingHistory
+      : {};
 
   const built = buildBaselinesFromPlayersSnapshot(input.playersSnapshot);
   if (built.playersBaselined === 0) {
@@ -179,9 +371,103 @@ export function buildClassPeriodPlan(input) {
       gameplayStateWrites: 0,
       seasonalRpWrites: 0,
       replacing: false,
+      firstEver: false,
       periodId: null,
       startedAt: now,
       nonzeroByStat: built.nonzeroByStat,
+    };
+  }
+
+  const historyEmpty = isClassPeriodHistoryEmpty(existingHistory);
+  const replacing = !!(previousActive && previousActive.id);
+  const firstEver = !replacing && historyEmpty;
+
+  /** @type {Record<string, object|null>} */
+  const updates = {};
+
+  if (firstEver) {
+    const openingPeriodId = String(input.openingPeriodId || '').trim() || `clp_${now}`;
+    let periodId = String(input.periodId || '').trim() || `clp_${now + 1}`;
+    if (periodId === openingPeriodId) {
+      periodId = `clp_${now + 1}`;
+    }
+
+    if (historyPeriodIdExists(openingPeriodId, existingHistory)) {
+      return {
+        ok: false,
+        error: 'HISTORY_ID_EXISTS',
+        updates: {},
+        playersBaselined: built.playersBaselined,
+        playerStatWrites: 0,
+        gameplayStateWrites: 0,
+        seasonalRpWrites: 0,
+        replacing: false,
+        firstEver: true,
+        conflictPeriodId: openingPeriodId,
+        periodId: null,
+        startedAt: now,
+        nonzeroByStat: built.nonzeroByStat,
+      };
+    }
+    if (historyPeriodIdExists(periodId, existingHistory)) {
+      return {
+        ok: false,
+        error: 'HISTORY_ID_EXISTS',
+        updates: {},
+        playersBaselined: built.playersBaselined,
+        playerStatWrites: 0,
+        gameplayStateWrites: 0,
+        seasonalRpWrites: 0,
+        replacing: false,
+        firstEver: true,
+        conflictPeriodId: periodId,
+        periodId: null,
+        startedAt: now,
+        nonzeroByStat: built.nonzeroByStat,
+      };
+    }
+
+    const finalEntries = computeFinalEntriesFromPlayersSnapshot(
+      emptyClassPeriodBaselines(),
+      input.playersSnapshot,
+    );
+    const openingLabel = resolveArchiveLabel(input.archiveLabel, DEFAULT_OPENING_LABEL);
+
+    updates[`${CLASS_PERIOD_HISTORY_ROOT}/${openingPeriodId}`] = {
+      id: openingPeriodId,
+      label: openingLabel,
+      startedAt: null,
+      endedAt: now,
+      baselines: emptyClassPeriodBaselines(),
+      finalEntries,
+      supersededAt: now,
+    };
+
+    const active = {
+      id: periodId,
+      startedAt: now,
+      baselines: built.baselines,
+    };
+    updates[CLASS_PERIOD_ACTIVE_PATH] = active;
+    assertClassPeriodPathsAllowed(updates);
+
+    return {
+      ok: true,
+      updates,
+      playersBaselined: built.playersBaselined,
+      playerStatWrites: 0,
+      gameplayStateWrites: 0,
+      seasonalRpWrites: 0,
+      replacing: false,
+      firstEver: true,
+      openingPeriodId,
+      openingLabel,
+      previousPeriodId: null,
+      previousStartedAt: null,
+      periodId,
+      startedAt: now,
+      nonzeroByStat: built.nonzeroByStat,
+      active,
     };
   }
 
@@ -191,17 +477,46 @@ export function buildClassPeriodPlan(input) {
     startedAt: now,
     baselines: built.baselines,
   };
+  updates[CLASS_PERIOD_ACTIVE_PATH] = active;
 
-  /** @type {Record<string, object|null>} */
-  const updates = {
-    [CLASS_PERIOD_ACTIVE_PATH]: active,
-  };
-
-  const replacing = !!(previousActive && previousActive.id);
   if (replacing) {
     const histId = String(previousActive.id);
+    if (historyPeriodIdExists(histId, existingHistory)) {
+      return {
+        ok: false,
+        error: 'HISTORY_ID_EXISTS',
+        updates: {},
+        playersBaselined: built.playersBaselined,
+        playerStatWrites: 0,
+        gameplayStateWrites: 0,
+        seasonalRpWrites: 0,
+        replacing: true,
+        firstEver: false,
+        conflictPeriodId: histId,
+        periodId: null,
+        startedAt: now,
+        nonzeroByStat: built.nonzeroByStat,
+      };
+    }
+
+    const finalEntries = computeFinalEntriesFromPlayersSnapshot(
+      previousActive.baselines,
+      input.playersSnapshot,
+    );
+    const archiveLabel = resolveArchiveLabel(
+      input.archiveLabel,
+      defaultEndedPeriodLabel(now),
+    );
+
     updates[`${CLASS_PERIOD_HISTORY_ROOT}/${histId}`] = {
-      ...previousActive,
+      id: histId,
+      label: archiveLabel,
+      startedAt: previousActive.startedAt ?? null,
+      endedAt: now,
+      baselines: previousActive.baselines && typeof previousActive.baselines === 'object'
+        ? previousActive.baselines
+        : emptyClassPeriodBaselines(),
+      finalEntries,
       supersededAt: now,
     };
   }
@@ -216,6 +531,7 @@ export function buildClassPeriodPlan(input) {
     gameplayStateWrites: 0,
     seasonalRpWrites: 0,
     replacing,
+    firstEver: false,
     previousPeriodId: replacing ? String(previousActive.id) : null,
     previousStartedAt: replacing ? coerceBaselineNumber(previousActive.startedAt) || null : null,
     periodId,
@@ -226,8 +542,14 @@ export function buildClassPeriodPlan(input) {
 }
 
 /**
- * Pure disable/end plan — move active → history, clear active.
- * @param {{ previousActive?: object|null, now?: number }} input
+ * Pure disable/end plan — freeze finals, move active → history, clear active.
+ * @param {{
+ *   previousActive?: object|null,
+ *   playersSnapshot?: object|null,
+ *   existingHistory?: object|null,
+ *   now?: number,
+ *   archiveLabel?: string|null,
+ * }} input
  */
 export function buildDisableClassPeriodPlan(input) {
   const now = Number.isFinite(Number(input.now)) ? Number(input.now) : Date.now();
@@ -235,6 +557,10 @@ export function buildDisableClassPeriodPlan(input) {
     input.previousActive && typeof input.previousActive === 'object'
       ? input.previousActive
       : null;
+  const existingHistory =
+    input.existingHistory && typeof input.existingHistory === 'object'
+      ? input.existingHistory
+      : {};
 
   if (!previousActive || !previousActive.id) {
     return {
@@ -248,11 +574,53 @@ export function buildDisableClassPeriodPlan(input) {
   }
 
   const histId = String(previousActive.id);
+  if (historyPeriodIdExists(histId, existingHistory)) {
+    return {
+      ok: false,
+      error: 'HISTORY_ID_EXISTS',
+      updates: {},
+      playerStatWrites: 0,
+      gameplayStateWrites: 0,
+      seasonalRpWrites: 0,
+      conflictPeriodId: histId,
+    };
+  }
+
+  const playerEntries = canonicalChildEntries(input.playersSnapshot, {
+    exclude: [...EXCLUDED_PLAYER_KEYS],
+  });
+  if (playerEntries.length === 0) {
+    return {
+      ok: false,
+      error: 'EMPTY_CLASS',
+      updates: {},
+      playerStatWrites: 0,
+      gameplayStateWrites: 0,
+      seasonalRpWrites: 0,
+    };
+  }
+
+  const finalEntries = computeFinalEntriesFromPlayersSnapshot(
+    previousActive.baselines,
+    input.playersSnapshot,
+  );
+  const archiveLabel = resolveArchiveLabel(
+    input.archiveLabel,
+    defaultEndedPeriodLabel(now),
+  );
+
   /** @type {Record<string, object|null>} */
   const updates = {
     [CLASS_PERIOD_ACTIVE_PATH]: null,
     [`${CLASS_PERIOD_HISTORY_ROOT}/${histId}`]: {
-      ...previousActive,
+      id: histId,
+      label: archiveLabel,
+      startedAt: previousActive.startedAt ?? null,
+      endedAt: now,
+      baselines: previousActive.baselines && typeof previousActive.baselines === 'object'
+        ? previousActive.baselines
+        : emptyClassPeriodBaselines(),
+      finalEntries,
       supersededAt: now,
       endedWithoutReplace: true,
     },
@@ -268,6 +636,7 @@ export function buildDisableClassPeriodPlan(input) {
     seasonalRpWrites: 0,
     previousPeriodId: histId,
     previousStartedAt: coerceBaselineNumber(previousActive.startedAt) || null,
+    archiveLabel,
     now,
   };
 }
@@ -310,7 +679,7 @@ async function gatherClassPeriodPlayers(options = {}) {
 
 /**
  * Advisory dry-run — no writes.
- * @param {{ timeoutMs?: number, now?: number }} [options]
+ * @param {{ timeoutMs?: number, now?: number, archiveLabel?: string|null }} [options]
  */
 export async function prepareClassLeaderboardPeriod(options = {}) {
   const gathered = await gatherClassPeriodPlayers(options);
@@ -327,11 +696,14 @@ export async function prepareClassLeaderboardPeriod(options = {}) {
 
   await db.loadPathOnce(CLASS_PERIOD_ROOT, { force: true, timeoutMs: options.timeoutMs });
   const previousActive = getActiveClassPeriod();
+  const existingHistory = getClassPeriodHistoryMap();
 
   const plan = buildClassPeriodPlan({
     playersSnapshot: gathered.playersSnapshot,
     previousActive,
+    existingHistory,
     now: options.now,
+    archiveLabel: options.archiveLabel,
   });
 
   if (!plan.ok) {
@@ -342,6 +714,7 @@ export async function prepareClassLeaderboardPeriod(options = {}) {
       playerStatWrites: 0,
       gameplayStateWrites: 0,
       seasonalRpWrites: 0,
+      conflictPeriodId: plan.conflictPeriodId,
     };
   }
 
@@ -353,6 +726,9 @@ export async function prepareClassLeaderboardPeriod(options = {}) {
     gameplayStateWrites: 0,
     seasonalRpWrites: 0,
     replacing: plan.replacing,
+    firstEver: plan.firstEver === true,
+    openingPeriodId: plan.openingPeriodId || null,
+    openingLabel: plan.openingLabel || null,
     previousPeriodId: plan.previousPeriodId,
     previousStartedAt: plan.previousStartedAt,
     periodId: plan.periodId,
@@ -368,6 +744,7 @@ export async function prepareClassLeaderboardPeriod(options = {}) {
  *   expectedPreviousPeriodId?: string|null,
  *   timeoutMs?: number,
  *   now?: number,
+ *   archiveLabel?: string|null,
  * }} [options]
  */
 export async function commitClassLeaderboardPeriodFresh(options = {}) {
@@ -383,6 +760,7 @@ export async function commitClassLeaderboardPeriodFresh(options = {}) {
 
   await db.loadPathOnce(CLASS_PERIOD_ROOT, { force: true, timeoutMs: options.timeoutMs });
   const previousActive = getActiveClassPeriod();
+  const existingHistory = getClassPeriodHistoryMap();
 
   if (options.expectedPreviousPeriodId !== undefined) {
     const want = options.expectedPreviousPeriodId ?? null;
@@ -398,20 +776,32 @@ export async function commitClassLeaderboardPeriodFresh(options = {}) {
   }
 
   const now = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+  const historyEmpty = isClassPeriodHistoryEmpty(existingHistory);
+  const firstEver = !(previousActive && previousActive.id) && historyEmpty;
+
   let plan;
   try {
     plan = buildClassPeriodPlan({
       playersSnapshot: gathered.playersSnapshot,
       previousActive,
+      existingHistory,
       now,
-      periodId: `clp_${now}`,
+      openingPeriodId: firstEver ? `clp_${now}` : undefined,
+      periodId: firstEver ? `clp_${now + 1}` : `clp_${now}`,
+      archiveLabel: options.archiveLabel,
     });
   } catch (err) {
     return { ok: false, phase: 'PLAN_FAILED', error: err?.message || 'PLAN_FAILED', written: 0 };
   }
 
   if (!plan.ok) {
-    return { ok: false, phase: plan.error || 'PLAN_FAILED', error: plan.error, written: 0 };
+    return {
+      ok: false,
+      phase: plan.error || 'PLAN_FAILED',
+      error: plan.error,
+      written: 0,
+      conflictPeriodId: plan.conflictPeriodId,
+    };
   }
 
   try {
@@ -438,6 +828,8 @@ export async function commitClassLeaderboardPeriodFresh(options = {}) {
     startedAt: plan.startedAt,
     playersBaselined: plan.playersBaselined,
     replacing: plan.replacing,
+    firstEver: plan.firstEver === true,
+    openingPeriodId: plan.openingPeriodId || null,
     previousPeriodId: plan.previousPeriodId,
     playerStatWrites: 0,
     gameplayStateWrites: 0,
@@ -448,25 +840,45 @@ export async function commitClassLeaderboardPeriodFresh(options = {}) {
 }
 
 /**
- * End/disable active period → restore absolute live boards (no player writes).
- * @param {{ timeoutMs?: number, now?: number }} [options]
+ * End/disable active period → freeze finals, restore absolute live boards (no player writes).
+ * @param {{ timeoutMs?: number, now?: number, archiveLabel?: string|null }} [options]
  */
 export async function commitDisableClassLeaderboardPeriodFresh(options = {}) {
+  const gathered = await gatherClassPeriodPlayers(options);
+  if (!gathered.ok) {
+    return {
+      ok: false,
+      phase: gathered.error === 'EMPTY_CLASS' ? 'EMPTY_CLASS' : 'GATHER_FAILED',
+      error: gathered.error || 'Fresh gather failed',
+      written: 0,
+    };
+  }
+
   await db.loadPathOnce(CLASS_PERIOD_ROOT, { force: true, timeoutMs: options.timeoutMs });
   const previousActive = getActiveClassPeriod();
+  const existingHistory = getClassPeriodHistoryMap();
 
   let plan;
   try {
     plan = buildDisableClassPeriodPlan({
       previousActive,
+      playersSnapshot: gathered.playersSnapshot,
+      existingHistory,
       now: options.now,
+      archiveLabel: options.archiveLabel,
     });
   } catch (err) {
     return { ok: false, phase: 'PLAN_FAILED', error: err?.message || 'PLAN_FAILED', written: 0 };
   }
 
   if (!plan.ok) {
-    return { ok: false, phase: plan.error || 'PLAN_FAILED', error: plan.error, written: 0 };
+    return {
+      ok: false,
+      phase: plan.error || 'PLAN_FAILED',
+      error: plan.error,
+      written: 0,
+      conflictPeriodId: plan.conflictPeriodId,
+    };
   }
 
   try {
@@ -490,6 +902,7 @@ export async function commitDisableClassLeaderboardPeriodFresh(options = {}) {
     ok: true,
     phase: 'COMPLETE',
     previousPeriodId: plan.previousPeriodId,
+    archiveLabel: plan.archiveLabel,
     playerStatWrites: 0,
     gameplayStateWrites: 0,
     seasonalRpWrites: 0,
@@ -504,12 +917,14 @@ export async function commitDisableClassLeaderboardPeriodFresh(options = {}) {
  */
 export function getClassPeriodReport() {
   const active = getActiveClassPeriod();
+  const historyCount = listClassPeriodHistory().length;
   if (!active) {
     return {
       hasActive: false,
       periodId: null,
       startedAt: null,
       playersBaselined: 0,
+      historyCount,
       statKeys: [...CLASS_PERIOD_STAT_KEYS],
     };
   }
@@ -523,6 +938,7 @@ export function getClassPeriodReport() {
     periodId: active.id ?? null,
     startedAt: active.startedAt ?? null,
     playersBaselined: Object.keys(sampleMap).length,
+    historyCount,
     statKeys: [...CLASS_PERIOD_STAT_KEYS],
     nonzeroByStat: Object.fromEntries(
       CLASS_PERIOD_STAT_KEYS.map((k) => {

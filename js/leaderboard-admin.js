@@ -38,6 +38,7 @@ import {
   commitDisableClassLeaderboardPeriodFresh,
   getActiveClassPeriod,
   getClassPeriodReport,
+  defaultEndedPeriodLabel,
 } from './leaderboard-class-period.js';
 import { prepareUniqueCardsRepair, commitUniqueCardsRepairPlan } from './research.js';
 import {
@@ -451,15 +452,33 @@ function _wireEvents(panel) {
         const confirmed = await _confirmClassPeriodPreview(prepared);
         if (!confirmed) return;
 
+        let archiveLabel = null;
+        if (prepared.firstEver) {
+          const prompted = window.prompt(
+            'Label for the archived Opening Period (Period 1 standings):',
+            prepared.openingLabel || 'Opening Period',
+          );
+          if (prompted === null) return;
+          archiveLabel = prompted.trim() || 'Opening Period';
+        } else if (prepared.replacing) {
+          const def = defaultEndedPeriodLabel(Date.now());
+          const prompted = window.prompt('Optional label for the period being archived:', def);
+          if (prompted === null) return;
+          archiveLabel = prompted.trim() || def;
+        }
+
         const result = await commitClassLeaderboardPeriodFresh({
           expectedPreviousPeriodId: prepared.previousPeriodId ?? null,
+          archiveLabel,
         });
         if (!result.ok) {
           toast.error(`${result.phase || 'FAILED'}: ${result.error || 'Class period failed'}`);
           return;
         }
         toast.success(
-          `Class period started (${result.playersBaselined} players). Lifetime stats unchanged.`,
+          result.firstEver
+            ? `Opening Period archived; new class period started (${result.playersBaselined} players). Lifetime stats unchanged.`
+            : `Class period started (${result.playersBaselined} players). Lifetime stats unchanged.`,
         );
         console.log('[LeaderboardAdmin] Class period', getClassPeriodReport());
         renderAdminSeasons();
@@ -488,19 +507,25 @@ function _wireEvents(panel) {
           `Period: ${active.id}`,
           `Started: ${active.startedAt ? new Date(active.startedAt).toLocaleString() : '—'}`,
           '',
+          'Final standings for this period will be frozen to history.',
           'Live Overall RP / Projects / Breakthroughs / Trades will return to absolute lifetime values.',
           'Player lifetime stats will NOT be changed.',
-          'This period will be saved to history.',
         ].join('\n'),
         confirmText: 'End Period',
         destructive: false,
       });
       if (!ok) return;
+
+      const defLabel = defaultEndedPeriodLabel(Date.now());
+      const prompted = window.prompt('Optional label for the archived period:', defLabel);
+      if (prompted === null) return;
+      const archiveLabel = prompted.trim() || defLabel;
+
       if (_classPeriodInFlight) return;
       _classPeriodInFlight = true;
       endClassBtn.disabled = true;
       try {
-        const result = await commitDisableClassLeaderboardPeriodFresh();
+        const result = await commitDisableClassLeaderboardPeriodFresh({ archiveLabel });
         if (!result.ok) {
           toast.error(`${result.phase || 'FAILED'}: ${result.error || 'End period failed'}`);
           return;
@@ -1103,17 +1128,28 @@ function _confirmClassPeriodPreview(prepared) {
     '',
     'Confirm re-gathers Firebase before writing leaderboardClassPeriod only.',
   ];
-  if (prepared.replacing) {
+  if (prepared.firstEver) {
+    lines.unshift(
+      'FIRST Class Leaderboard Period start',
+      'Current lifetime standings will be archived as “Opening Period” (Period 1).',
+      'Those same values become the baseline for the new period (display starts at 0).',
+      '',
+    );
+  } else if (prepared.replacing) {
     lines.unshift(
       'REPLACE existing class period?',
       `Current period: ${prepared.previousPeriodId || '—'}`,
       `Started: ${prepared.previousStartedAt ? new Date(prepared.previousStartedAt).toLocaleString() : '—'}`,
-      'Previous period will be saved to history.',
+      'Outgoing period finals will be frozen to history.',
       '',
     );
   }
   return confirmAction({
-    title: prepared.replacing ? 'Replace Class Leaderboard Period?' : 'Start Class Leaderboard Period?',
+    title: prepared.replacing
+      ? 'Replace Class Leaderboard Period?'
+      : prepared.firstEver
+        ? 'Start Class Period (archive Opening Period)?'
+        : 'Start Class Leaderboard Period?',
     message: lines.join('\n'),
     confirmText: prepared.replacing ? 'Replace Period' : 'Start Period',
     destructive: false,

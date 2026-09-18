@@ -41,7 +41,10 @@ import { DIRECTORY_ROOT } from './player-directory.js';
 import {
   applyClassPeriodBaseline,
   getActiveClassPeriod,
+  getClassPeriodHistoryPeriod,
   isClassPeriodStatKey,
+  listClassPeriodHistory,
+  listFinalEntryRows,
 } from './leaderboard-class-period.js';
 
 /**
@@ -177,6 +180,47 @@ export function getClassPeriodLeaderboardByStat({
       value: applyClassPeriodBaseline(statKey, e.username, e.value, period),
     };
   });
+  const filtered = _filterByGroup(entries, groupId, subgroupId);
+  const sorted = _sortEntries(filtered).slice(0, limit);
+  return sorted.map((e, i) => ({ rank: i + 1, ...e }));
+}
+
+/**
+ * Archived Class Leaderboard Periods (newest first). Student-visible; no hide flags.
+ * @returns {Array<object>}
+ */
+export function getClassPeriodHistoryList() {
+  return listClassPeriodHistory();
+}
+
+/**
+ * Historical Class Period board from frozen finalEntries only (no players/* reads).
+ *
+ * @param {object} options
+ * @param {string}      options.periodId
+ * @param {string}      [options.statType]
+ * @param {string|null} [options.groupId]
+ * @param {string|null} [options.subgroupId]
+ * @param {number}      [options.limit]
+ * @returns {Array<{ rank, username, value, groupId, subgroupId }>}
+ */
+export function getClassPeriodHistoryLeaderboard({
+  periodId,
+  statType = STAT_TYPES.LIFETIME_RP,
+  groupId = null,
+  subgroupId = null,
+  limit = 50,
+} = {}) {
+  const id = String(periodId || '').trim();
+  if (!id) return [];
+  const period = getClassPeriodHistoryPeriod(id);
+  if (!period) return [];
+  const statKey = normalizeLeaderboardStatKey(statType) || String(statType || '');
+  if (!isClassPeriodStatKey(statKey)) return [];
+  const finalRoot = period.finalEntries && typeof period.finalEntries === 'object'
+    ? period.finalEntries
+    : {};
+  const entries = listFinalEntryRows(finalRoot[statKey]);
   const filtered = _filterByGroup(entries, groupId, subgroupId);
   const sorted = _sortEntries(filtered).slice(0, limit);
   return sorted.map((e, i) => ({ rank: i + 1, ...e }));
