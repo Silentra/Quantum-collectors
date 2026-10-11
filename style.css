@@ -9381,11 +9381,19 @@ body.app-mode-game #screen-game.screen.active {
   color: #fbbf24;
   box-shadow:
     0 0 0 var(--card-trim-rim) rgba(0, 0, 0, 0.42),
-    0 0 10px 1px rgba(168, 85, 247, 0.28),
+    0 0 10px 1px color-mix(in srgb, currentColor 28%, transparent),
     inset 0 0 0 calc(var(--card-trim-width) - var(--card-trim-highlight))
-      color-mix(in srgb, #fbbf24 75%, rgba(120, 50, 20, 0.35)),
+      color-mix(in srgb, currentColor 75%, rgba(120, 50, 20, 0.35)),
     inset 0 0 0 var(--card-trim-width)
-      color-mix(in srgb, #fde68a 55%, rgba(255, 255, 255, 0.35)) !important;
+      color-mix(in srgb, var(--pf-spectrum-highlight, currentColor) 55%, rgba(255, 255, 255, 0.35)) !important;
+}
+.card--physical-front[data-card-border="spectrum"].rarity-common .card-cosmetic-effects::before { color: #9ca3af; }
+.card--physical-front[data-card-border="spectrum"].rarity-uncommon .card-cosmetic-effects::before { color: #22c55e; }
+.card--physical-front[data-card-border="spectrum"].rarity-rare .card-cosmetic-effects::before { color: #3b82f6; }
+.card--physical-front[data-card-border="spectrum"].rarity-epic .card-cosmetic-effects::before { color: #a855f7; }
+.card--physical-front[data-card-border="spectrum"].rarity-legendary .card-cosmetic-effects::before {
+  color: #fbbf24;
+  --pf-spectrum-highlight: #fde68a;
 }
 .card--physical-front[data-card-border="diamond_etched"] .card-cosmetic-effects::before { color: #cbd5e1; }
 .card--physical-front[data-card-border="brushed_aluminum"] .card-cosmetic-effects::before { color: #94a3b8; }
