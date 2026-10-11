@@ -104,7 +104,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   reroll_token: {
     id: 'reroll_token',
     name: 'Reroll Token',
-    description: 'Reroll the entire shop rotation.',
+    description: 'Replace one shop slot of your choice with a new random item.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.COMMON,
@@ -119,7 +119,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   cosmetic_reroll_token: {
     id: 'cosmetic_reroll_token',
     name: 'Cosmetic Reroll Token',
-    description: 'Reroll only the cosmetic slots in the shop.',
+    description: 'Replace one shop slot of your choice with a random cosmetic.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -133,8 +133,8 @@ export const ITEM_DEFINITIONS = Object.freeze({
 
   aura_reroll_token: {
     id: 'aura_reroll_token',
-    name: 'Aura Reroll Token',
-    description: 'Reroll only the aura slots in the shop.',
+    name: 'Glow Reroll Token',
+    description: 'Replace one shop slot of your choice with a random Glow cosmetic.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -149,7 +149,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   border_reroll_token: {
     id: 'border_reroll_token',
     name: 'Border Reroll Token',
-    description: 'Reroll only the border slots in the shop.',
+    description: 'Replace one shop slot of your choice with a random Border cosmetic.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -164,7 +164,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   discount_chip: {
     id: 'discount_chip',
     name: 'Discount Chip',
-    description: 'Apply a percentage discount to a shop slot.',
+    description: 'Take 25% off one shop slot\'s price. Discount is lost if the slot is rerolled.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.RARE,
@@ -179,7 +179,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   freeze_token: {
     id: 'freeze_token',
     name: 'Freeze Token',
-    description: 'Freeze a shop slot so it persists through the next rotation.',
+    description: 'Gain one extra freeze this rotation. Freeze a slot to keep its item through the next weekly refresh.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -194,7 +194,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   research_proposal: {
     id: 'research_proposal',
     name: 'Research Proposal',
-    description: 'A consumable that grants bonus research progress.',
+    description: 'Add one new Research Project to your available projects. Use it from the Research Projects tab.',
     type: ITEM_TYPES.CONSUMABLE,
     category: ITEM_CATEGORIES.UTILITY,
     rarity: ITEM_RARITIES.RARE,
@@ -211,7 +211,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   aura_void: {
     id: 'aura_void',
     name: 'Void',
-    description: 'A dark, pulsing emptiness surrounds your profile card.',
+    description: 'A dark, slowly shifting emptiness surrounds your cards. Collect more copies to awaken and deepen the effect.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
     rarity: ITEM_RARITIES.EPIC,
@@ -224,7 +224,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   aura_rarity_glow: {
     id: 'aura_rarity_glow',
     name: 'Rarity Glow',
-    description: 'Each card radiates light in the color of its rarity — legendary gold, epic violet, and every tier between.',
+    description: 'Your cards shine in their rarity colors — legendary gold, epic violet, and every tier between. More copies awaken a stronger glow.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
     rarity: ITEM_RARITIES.RARE,
@@ -237,7 +237,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   aura_molten_glow: {
     id: 'aura_molten_glow',
     name: 'Molten Glow',
-    description: 'Restless furnace heat circulates around your cards — molten metal under pressure, not flame.',
+    description: 'Furnace heat smolders around your cards — molten metal under pressure, not flame. More copies awaken a stronger glow.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
     rarity: ITEM_RARITIES.EPIC,
@@ -250,7 +250,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   aura_winterfrost_glow: {
     id: 'aura_winterfrost_glow',
     name: 'Arctic Mist',
-    description: 'Your cards radiate a deep cold — pale frost at the rim and slow wisps of freezing air drifting into the silence.',
+    description: 'Your cards radiate a deep cold — pale frost at the rim and wisps of freezing air. Collect more copies to awaken a stronger chill.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
     rarity: ITEM_RARITIES.EPIC,
@@ -263,7 +263,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   aura_synchrotron_glow: {
     id: 'aura_synchrotron_glow',
     name: 'Synchrotron',
-    description: 'Particle bunches trace the card rim — electric cyan, emerald, gold, and magenta packets circulating a miniature accelerator ring.',
+    description: 'Particle bunches race around the card rim like a miniature accelerator ring. More copies unlock stronger effects and additional colors.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.AURA,
     rarity: ITEM_RARITIES.EPIC,
@@ -330,7 +330,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   border_spectrum: {
     id: 'border_spectrum',
     name: 'Spectrum Frame',
-    description: 'A rarity-reactive chromatic frame — the classic high-energy collector look.',
+    description: 'A frame that glows in each card\'s rarity color — gray, green, blue, purple, or gold.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.BORDER,
     rarity: ITEM_RARITIES.LEGENDARY,
@@ -423,7 +423,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shimmer_holographic: {
     id: 'shimmer_holographic',
     name: 'Iridescent',
-    description: 'A static iridescent foil finish across the card face — premium collector sheen.',
+    description: 'An iridescent foil finish across the card face — premium collector sheen. Collect more copies to reveal and intensify the effect.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
     rarity: ITEM_RARITIES.EPIC,
@@ -436,7 +436,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shimmer_voltaic: {
     id: 'shimmer_voltaic',
     name: 'Voltaic',
-    description: 'Periodic violet lightning discharges across the card face — charged collector energy.',
+    description: 'Violet lightning discharges across the card face — charged collector energy. Collect more copies to awaken stronger lightning.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
     rarity: ITEM_RARITIES.EPIC,
@@ -449,7 +449,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shimmer_emberglow: {
     id: 'shimmer_emberglow',
     name: 'Emberglow',
-    description: 'A slow-breathing ember hearth at the card base with glowing fragments lifting on thermal currents — stored heat, not flame.',
+    description: 'A slow-breathing ember hearth with glowing fragments rising from the card base. Collect more copies to awaken its warmth.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
     rarity: ITEM_RARITIES.EPIC,
@@ -462,7 +462,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shimmer_nebuladrift: {
     id: 'shimmer_nebuladrift',
     name: 'Nebula Drift',
-    description: 'Slow-drifting cosmic gas surrounds the card face — violet nebula depth with parallax atmosphere.',
+    description: 'Slow-drifting cosmic gas flows across the card face — violet nebula depth with parallax atmosphere. More copies deepen the effect.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
     rarity: ITEM_RARITIES.EPIC,
@@ -475,7 +475,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shimmer_winterfrost: {
     id: 'shimmer_winterfrost',
     name: 'Winter Frost',
-    description: 'The card face viewed through winter-frozen glass — rimed corners, perimeter frost, and crystalline glints preserve the scientist within.',
+    description: 'Winter-frozen glass, rimed corners, and crystalline glints frame the card. Collect more copies to reveal deeper frost.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHIMMER,
     rarity: ITEM_RARITIES.EPIC,
@@ -490,7 +490,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_deep_blue: {
     id: 'profile_banner_deep_blue',
     name: 'Deep Blue Banner',
-    description: 'A restrained deep blue chrome banner.',
+    description: 'A sleek deep blue banner for your profile.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.COMMON,
@@ -503,7 +503,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_crimson: {
     id: 'profile_banner_crimson',
     name: 'Crimson Banner',
-    description: 'A restrained crimson chrome banner.',
+    description: 'A sleek crimson banner for your profile.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.COMMON,
@@ -516,7 +516,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_emerald: {
     id: 'profile_banner_emerald',
     name: 'Emerald Banner',
-    description: 'A restrained emerald chrome banner.',
+    description: 'A sleek emerald banner for your profile.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.COMMON,
@@ -529,7 +529,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_purple: {
     id: 'profile_banner_purple',
     name: 'Purple Banner',
-    description: 'A restrained purple chrome banner.',
+    description: 'A sleek purple banner for your profile.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -542,7 +542,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_charcoal: {
     id: 'profile_banner_charcoal',
     name: 'Charcoal Banner',
-    description: 'A neutral charcoal chrome banner.',
+    description: 'A subtle charcoal banner for your profile.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.COMMON,
@@ -555,7 +555,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_slate: {
     id: 'profile_banner_slate',
     name: 'Slate Banner',
-    description: 'A cool slate chrome banner.',
+    description: 'A cool slate banner for your profile.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.COMMON,
@@ -658,7 +658,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   profile_banner_city: {
     id: 'profile_banner_city',
     name: 'City Banner',
-    description: 'An urban skyline panorama behind the header.',
+    description: 'A slowly drifting urban skyline behind your profile header.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.PROFILE_BANNER,
     rarity: ITEM_RARITIES.RARE,
@@ -780,7 +780,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_deep_blue: {
     id: 'shell_background_deep_blue',
     name: 'Deep Blue',
-    description: 'A deep blue gameplay shell background.',
+    description: 'A deep blue background for your game.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.COMMON,
@@ -793,7 +793,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_crimson: {
     id: 'shell_background_crimson',
     name: 'Crimson',
-    description: 'A deep crimson gameplay shell background.',
+    description: 'A deep crimson background for your game.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.COMMON,
@@ -806,7 +806,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_emerald: {
     id: 'shell_background_emerald',
     name: 'Emerald',
-    description: 'A deep emerald gameplay shell background.',
+    description: 'A deep emerald background for your game.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.COMMON,
@@ -819,7 +819,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_purple: {
     id: 'shell_background_purple',
     name: 'Purple',
-    description: 'A deep purple gameplay shell background.',
+    description: 'A deep purple background for your game.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -832,7 +832,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_charcoal: {
     id: 'shell_background_charcoal',
     name: 'Charcoal',
-    description: 'A neutral charcoal gameplay shell background.',
+    description: 'A neutral charcoal background for your game.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.COMMON,
@@ -845,7 +845,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_slate: {
     id: 'shell_background_slate',
     name: 'Slate',
-    description: 'A cool slate gameplay shell background.',
+    description: 'A cool slate background for your game.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.COMMON,
@@ -858,7 +858,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_crimson_fade: {
     id: 'shell_background_crimson_fade',
     name: 'Crimson Fade',
-    description: 'Crimson atmosphere fading into deep black — CSS gameplay shell backdrop.',
+    description: 'Crimson atmosphere fading into deep black.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -871,7 +871,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_arctic_depths: {
     id: 'shell_background_arctic_depths',
     name: 'Arctic Depths',
-    description: 'Arctic cyan fading into navy depth — CSS gameplay shell backdrop.',
+    description: 'Arctic cyan fading into navy depths.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -884,7 +884,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_teal_emerald: {
     id: 'shell_background_teal_emerald',
     name: 'Teal Emerald',
-    description: 'Teal highlights melting into emerald depth — CSS gameplay shell backdrop.',
+    description: 'Teal highlights melting into emerald depths.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -897,7 +897,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_deep_cosmos: {
     id: 'shell_background_deep_cosmos',
     name: 'Deep Cosmos',
-    description: 'Deep blue space fading into dark violet — CSS gameplay shell backdrop.',
+    description: 'Deep blue space fading into dark violet.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -910,7 +910,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_aurora: {
     id: 'shell_background_aurora',
     name: 'Aurora',
-    description: 'Layered auroral color fields — CSS atmospheric shell backdrop.',
+    description: 'Layered auroral colors sweeping across your background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -923,7 +923,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_nebula: {
     id: 'shell_background_nebula',
     name: 'Nebula',
-    description: 'Soft nebular color masses with depth — CSS atmospheric shell backdrop.',
+    description: 'Soft nebular clouds filling your background with cosmic depth.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -936,7 +936,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_starry_sky: {
     id: 'shell_background_starry_sky',
     name: 'Starry Sky',
-    description: 'A distant night sky with the Milky Way — repository-authored artwork.',
+    description: 'A distant night sky illuminated by the Milky Way.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -949,7 +949,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_blueprint_paper: {
     id: 'shell_background_blueprint_paper',
     name: 'Blueprint Paper',
-    description: 'Technical blueprint tones for the gameplay shell backdrop.',
+    description: 'Technical blueprint designs across your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -962,7 +962,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_football_field: {
     id: 'shell_background_football_field',
     name: 'Football Field',
-    description: 'Stadium turf atmosphere for the gameplay shell backdrop.',
+    description: 'A football stadium atmosphere for your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -975,7 +975,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_jungle: {
     id: 'shell_background_jungle',
     name: 'Jungle',
-    description: 'Lush rainforest canopy mood for the gameplay shell backdrop.',
+    description: 'A lush rainforest canopy for your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
@@ -988,7 +988,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_pyramids: {
     id: 'shell_background_pyramids',
     name: 'Pyramids',
-    description: 'Desert monument atmosphere for the gameplay shell backdrop.',
+    description: 'Desert pyramids and ancient monuments for your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -1001,7 +1001,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_saturn: {
     id: 'shell_background_saturn',
     name: 'Saturn',
-    description: 'Ringed planet vista for the gameplay shell backdrop.',
+    description: 'A majestic view of Saturn and its rings for your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -1014,7 +1014,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_spiral_galaxy: {
     id: 'shell_background_spiral_galaxy',
     name: 'Spiral Galaxy',
-    description: 'Deep-space spiral structure for the gameplay shell backdrop.',
+    description: 'A sweeping spiral galaxy across your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.RARE,
@@ -1027,7 +1027,7 @@ export const ITEM_DEFINITIONS = Object.freeze({
   shell_background_car: {
     id: 'shell_background_car',
     name: 'Car',
-    description: 'Automotive scene mood for the gameplay shell backdrop.',
+    description: 'An automotive scene for your game background.',
     type: ITEM_TYPES.COSMETIC,
     category: ITEM_CATEGORIES.SHELL_BACKGROUND,
     rarity: ITEM_RARITIES.UNCOMMON,
