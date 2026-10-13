@@ -6869,6 +6869,21 @@ body.app-mode-game #screen-game.screen.active {
 .rp-mini-rarity.rarity-epic     { color: #c084fc; }
 .rp-mini-rarity.rarity-legendary { color: #fbbf24; }
 
+.rp-mini-aura {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 1px 3px;
+  border-radius: 0.25rem;
+  color: #a5f3fc;
+  background: rgba(2, 6, 23, 0.78);
+  pointer-events: none;
+  z-index: 1;
+}
+
 .rp-mini-img {
   width: 40px;
   height: 40px;
