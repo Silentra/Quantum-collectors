@@ -765,6 +765,24 @@ function _renderAvailableListingsUnavailable(source) {
   </div>`;
 }
 
+/**
+ * "Not owned" pill for a card the student would receive. Ownership is total quantity
+ * (reserved copies count). Null/undefined inventory = not loaded → no badge.
+ * @param {Object<string, number>|null|undefined} inventory - { cardId: quantity }
+ * @param {string} cardId
+ * @returns {string}
+ */
+export function notOwnedBadgeHtml(inventory, cardId) {
+  if (!inventory || typeof inventory !== 'object') return '';
+  const qty = Number(inventory[cardId]);
+  return Number.isFinite(qty) && qty >= 1 ? '' : ' <span class="trade-not-owned-badge">Not owned</span>';
+}
+
+/** Snapshot inventories default to {} when the self player record is not cached yet. */
+function _loadedSelfInventory(username, inventory) {
+  return player.getPlayer(username) ? inventory : null;
+}
+
 function _renderMyListing(listing) {
   const offeredCard = cards.getCard(listing.offeredCardId);
   const offeredName = offeredCard ? offeredCard.name : listing.offeredCardId;
@@ -885,7 +903,7 @@ function _renderAvailableListing(listing, myUsername) {
       <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
         <div class="text-xs text-surface-500 mb-1">They offer</div>
         <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
-        <div class="text-xs text-surface-500 capitalize">${offeredRarity}</div>
+        <div class="text-xs text-surface-500 capitalize">${offeredRarity}${notOwnedBadgeHtml(_loadedSelfInventory(myUsername, mySnapshot.inventory), listing.offeredCardId)}</div>
       </div>
       <div class="text-surface-500 text-lg">⇄</div>
       <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
@@ -970,7 +988,7 @@ function _renderIncomingTrade(trade, myUsername) {
       <div class="mb-3 p-3 rounded bg-surface-900 border border-surface-600 text-center">
         <div class="text-xs text-surface-500 mb-1">${fromLabel} is offering</div>
         <div class="font-semibold text-sm rarity-text-${offeredRarity}">${offeredName}</div>
-        <div class="text-xs text-surface-500 capitalize">Rarity: ${offeredRarity}</div>
+        <div class="text-xs text-surface-500 capitalize">Rarity: ${offeredRarity}${notOwnedBadgeHtml(_loadedSelfInventory(myUsername, mySnapshot.inventory), trade.offeredCardId)}</div>
       </div>
       ${onCooldown
         ? `<p class="text-amber-300 text-xs mb-3 text-center">Trade unavailable: you are currently on trade cooldown.</p>`
@@ -1051,7 +1069,7 @@ function _renderOutgoingTrade(trade, myUsername) {
         <div class="flex-1 text-center p-2 rounded bg-surface-900 border border-surface-600">
           <div class="text-xs text-surface-500 mb-1">You receive</div>
           <div class="font-semibold text-sm rarity-text-${requestedRarity}">${requestedName}</div>
-          <div class="text-xs text-surface-500 capitalize">${requestedRarity}</div>
+          <div class="text-xs text-surface-500 capitalize">${requestedRarity}${notOwnedBadgeHtml(_loadedSelfInventory(myUsername, mySnapshot.inventory), trade.requestedCardId)}</div>
         </div>
       </div>
       ${isLast ? '<div class="mb-3 p-1.5 rounded bg-amber-900/40 border border-amber-700 text-amber-300 text-xs text-center">⚠️ This is your LAST COPY of the card you would give</div>' : ''}
@@ -1762,10 +1780,15 @@ function _updateListingRequestedSection(offeredCardId, username) {
     return;
   }
 
+  const myInvList = player.getPlayer(username) ? player.getInventory(username) : null;
+  const myInvMap = Array.isArray(myInvList)
+    ? Object.fromEntries(myInvList.map(({ cardId, quantity }) => [cardId, quantity]))
+    : null;
+
   checkboxArea.innerHTML = matchingCards.map(c =>
     `<label class="flex items-center gap-2 p-1 rounded hover:bg-surface-800 cursor-pointer text-sm">
       <input type="checkbox" class="listing-req-checkbox rounded" value="${c.id}" />
-      <span class="rarity-text-${c.rarity}">${c.name}</span>
+      <span class="rarity-text-${c.rarity}">${c.name}</span>${notOwnedBadgeHtml(myInvMap, c.id)}
     </label>`
   ).join('');
 
