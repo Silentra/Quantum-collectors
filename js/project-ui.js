@@ -609,6 +609,7 @@ function _renderCardsAvailabilityPanel(projects, username) {
 
     el.innerHTML = `
       ${imgHTML}
+      ${card.auraLevel > 0 ? `<span class="rp-mini-aura" title="Current aura bonus">+${card.auraLevel}</span>` : ''}
       <div class="rp-mini-name">${card.name}</div>
       <div class="rp-mini-rarity rarity-${card.rarity}">${card.rarity}</div>
       ${roleLabel}
@@ -1149,6 +1150,7 @@ function renderProjectAssignmentPanel(container, project, playerData, username) 
 
     el.innerHTML = `
       ${imgHTML}
+      ${card.auraLevel > 0 ? `<span class="rp-mini-aura" title="Current aura bonus">+${card.auraLevel}</span>` : ''}
       <div class="rp-mini-name">${card.name}</div>
       <div class="rp-mini-rarity rarity-${card.rarity}">${card.rarity}</div>
       ${roleLabel}
