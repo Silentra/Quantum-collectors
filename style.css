@@ -6593,6 +6593,27 @@ body.app-mode-game #screen-game.screen.active {
   font-size: 0.72rem;
   color: #94a3b8;
 }
+.rp-proposal-blocked-note {
+  font-size: 0.7rem;
+  color: #fca5a5;
+  line-height: 1.35;
+}
+.rp-storage-warning {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(120, 53, 15, 0.35);
+  color: #fde68a;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+.rp-storage-warning--full {
+  border-color: rgba(248, 113, 113, 0.6);
+  background: rgba(127, 29, 29, 0.4);
+  color: #fecaca;
+  font-weight: 600;
+}
 .rp-proposal-btn {
   flex-shrink: 0;
   padding: 0.35rem 0.75rem;
