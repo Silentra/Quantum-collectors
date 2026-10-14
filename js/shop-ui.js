@@ -33,6 +33,7 @@ import { observeCardArtShrinkwrap } from './card-art-layout.js';
 import { ITEM_TYPES, resolveItemDisplay } from './shop-definitions.js';
 import { shouldDisplayConsumable } from './player-facing-display.js';
 import { getWeeklyRefreshLabel } from './weekly-research-pack.js';
+import { RESEARCH_PROPOSAL_BLOCK_MESSAGES } from './project-storage-warning.js';
 import {
   ensureShopRotation,
   freezeShopSlot,
@@ -196,6 +197,9 @@ function getReasonMessage(reason) {
     slot_already_frozen: 'That slot is already frozen.',
     slot_not_frozen: 'That slot is not frozen.',
     max_frozen_slots_reached: 'No freeze uses remaining this rotation.',
+    completed_storage_full: RESEARCH_PROPOSAL_BLOCK_MESSAGES.completed_storage_full,
+    project_array_full: RESEARCH_PROPOSAL_BLOCK_MESSAGES.project_array_full,
+    project_cap_full: RESEARCH_PROPOSAL_BLOCK_MESSAGES.project_cap_full,
     unsupported_behavior: 'That item cannot be used here.',
     WRITE_FAILED: 'Could not save the purchase. Check your connection and try again.',
   };

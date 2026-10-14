@@ -1023,12 +1023,12 @@ export function buildResearchProposalProjectPlan(username, options = {}) {
   const player = getProjectPlayerSnapshot(username);
   if (!player) return { ok: false, reason: 'player_not_found' };
 
-  const validation = canGenerateAdditionalProject(player);
+  const createdAt = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
+  const validation = canGenerateAdditionalProject(player, createdAt);
   if (!validation.allowed) {
     return { ok: false, reason: validation.reason, validation };
   }
 
-  const createdAt = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
   const [project] = generateAvailableProjects({
     totalRP: player.totalResearchPoints,
     slots: 1,
@@ -1058,6 +1058,14 @@ export async function commitResearchProposalUse(username, options = {}) {
   }
 
   const itemId = 'research_proposal';
+  // Server-fresh projects + quantity: the storage cutoff must see the real
+  // completed count, and the append must not drop rows another tab just wrote.
+  try {
+    await Promise.all([
+      db.loadPathOnce(`players/${username}/projects`, { force: true }),
+      db.loadPathOnce(`players/${username}/items/${itemId}`, { force: true }),
+    ]);
+  } catch { /* best-effort: fall back to cache */ }
   const currentQty = Math.max(0, Math.floor(Number(db.get(`players/${username}/items/${itemId}`) || 0)));
   if (currentQty < 1) {
     return { success: false, reason: 'insufficient_item_quantity', currentQuantity: currentQty };

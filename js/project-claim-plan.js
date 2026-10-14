@@ -35,6 +35,7 @@ import { buildWeeklyPackRpGrantUpdates } from './weekly-research-pack.js';
 import {
   buildProjectClaimedHistoryUpdate,
   buildProjectClaimFailedHistoryUpdate,
+  buildProjectRefreshForfeitSkippedHistoryUpdate,
   sanitizeProjectClaimFailureError,
   PLAYER_HISTORY_ROOT,
 } from './player-history.js';
@@ -46,7 +47,16 @@ import {
   prepareProjectsForPersist,
   reconcileAlreadyClaimedProject,
 } from './project-claims.js';
-import { commitProjectLifecycleMaintenance } from './project-refresh-commit.js';
+import {
+  commitProjectLifecycleMaintenance,
+  commitScheduledRefreshCatchUp,
+} from './project-refresh-commit.js';
+import {
+  PROJECT_REFRESH_FORFEIT_THROUGH_FIELD,
+  PROJECT_REFRESH_INTERVAL_MS,
+  computeRefreshForfeitTarget,
+  getProjectGenerationBlock,
+} from './project-refresh.js';
 import {
   STAT_KEYS,
   getPlayerStat,
@@ -466,6 +476,68 @@ export async function loadAuthoritativeProject(username, projectId) {
 }
 
 /**
+ * Force-read the refresh clock + pending forfeit marker (claim-time forfeiture).
+ * @param {string} username
+ * @returns {Promise<{ lastProjectRefreshAt: number, forfeitThrough: number }>}
+ */
+export async function loadClaimRefreshState(username) {
+  const key = String(username || '').trim();
+  await Promise.all([
+    db.loadPathOnce(`players/${key}/lastProjectRefreshAt`, { force: true }).catch(() => {}),
+    db.loadPathOnce(`players/${key}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`, { force: true }).catch(() => {}),
+  ]);
+  return {
+    lastProjectRefreshAt: Number(db.get(`players/${key}/lastProjectRefreshAt`)) || 0,
+    forfeitThrough: Number(db.get(`players/${key}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`)) || 0,
+  };
+}
+
+/**
+ * Pure: refresh-forfeit paths for the claim multipath, or null.
+ *
+ * Only when the student is at/over the completed storage cutoff BEFORE this
+ * claim and at least one refresh cycle is due. Claiming is the only way to
+ * fall below the cutoff, so forfeiting here guarantees blocked cycles never
+ * become catch-up generation afterwards.
+ *
+ * @param {string} username
+ * @param {object[]} projectsBeforeClaim - server-fresh array
+ * @param {{ lastProjectRefreshAt: number, forfeitThrough?: number }|null} refreshState
+ * @param {number} now
+ * @returns {{
+ *   updates: Record<string, unknown>,
+ *   refreshAt: number,
+ *   cycles: number,
+ *   previousRefreshAt: number,
+ *   forfeitThrough: number,
+ *   completedCount: number,
+ * }|null}
+ */
+export function planClaimRefreshForfeit(username, projectsBeforeClaim, refreshState, now) {
+  const block = getProjectGenerationBlock(projectsBeforeClaim, now);
+  if (block.reason !== 'completed_storage_full') return null;
+  const last = Number(refreshState?.lastProjectRefreshAt) || 0;
+  const target = computeRefreshForfeitTarget(last, now);
+  if (!target) return null;
+  const forfeitThrough = Number(refreshState?.forfeitThrough) || 0;
+  /** @type {Record<string, unknown>} */
+  const updates = {
+    [`players/${username}/lastProjectRefreshAt`]: target.refreshAt,
+  };
+  if (forfeitThrough > 0 && target.refreshAt + PROJECT_REFRESH_INTERVAL_MS > forfeitThrough) {
+    updates[`players/${username}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`] = null;
+  }
+  return {
+    updates,
+    refreshAt: target.refreshAt,
+    cycles: target.cycles,
+    previousRefreshAt: last,
+    forfeitThrough,
+    completedCount: block.completedCount,
+  };
+}
+
+/**
  * Build plan + acknowledged commit. Reveal only after ok.
  * @param {string} username
  * @param {string} projectId
@@ -478,6 +550,9 @@ export async function loadAuthoritativeProject(username, projectId) {
  *   writeUpdate?: (updates: object) => Promise<{ ok: boolean, error?: string }>,
  *   buildPlan?: typeof buildProjectClaimPlan,
  *   persistFailureDiagnostic?: typeof persistProjectClaimFailedDiagnostic,
+ *   loadRefreshState?: typeof loadClaimRefreshState,
+ *   persistForfeitSkippedDiagnostic?: (username: string, facts: object) => Promise<unknown>,
+ *   runCatchUp?: (username: string) => Promise<unknown>,
  * }} [deps] - injectable for unit tests
  * @returns {Promise<object>}
  */
@@ -490,6 +565,11 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
     const writeUpdate = deps.writeUpdate || ((updates) => db.updateAcknowledged(updates));
     const buildPlan = deps.buildPlan || buildProjectClaimPlan;
     const persistFailureDiagnostic = deps.persistFailureDiagnostic || persistProjectClaimFailedDiagnostic;
+    const loadRefreshState = deps.loadRefreshState || loadClaimRefreshState;
+    const persistForfeitSkippedDiagnostic = deps.persistForfeitSkippedDiagnostic
+      || persistProjectRefreshForfeitSkippedDiagnostic;
+    const runCatchUp = deps.runCatchUp || ((u) => commitScheduledRefreshCatchUp(u));
+    const claimNow = Number.isFinite(Number(options.now)) ? Number(options.now) : Date.now();
 
     // Fast local gate; server ledger is the real idempotency authority.
     if (await loadMarkerExists(username, projectId)) {
@@ -501,7 +581,9 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
     }
 
     // Authoritative server guard: never send ACTIVE→CLAIMED (or other illegal shapes).
-    const { project: serverProject } = await loadAuthoritative(username, projectId);
+    const authoritative = await loadAuthoritative(username, projectId);
+    const serverProject = authoritative?.project ?? null;
+    const serverProjectsBeforeClaim = Array.isArray(authoritative?.projects) ? authoritative.projects : [];
     if (serverProject && serverProject.state === PROJECT_STATES.CLAIMED) {
       await reconcileAlreadyClaimedProject(username, projectId);
       return {
@@ -556,7 +638,65 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
       }
     }
 
-    const ack = await writeUpdate(plan.updates);
+    // Overdue refresh forfeit rides in the SAME atomic claim write when the
+    // student is at/over the storage cutoff before this claim.
+    let forfeit = null;
+    let refreshState = null;
+    if (getProjectGenerationBlock(serverProjectsBeforeClaim, claimNow).reason === 'completed_storage_full') {
+      try {
+        refreshState = await loadRefreshState(username);
+        forfeit = planClaimRefreshForfeit(username, serverProjectsBeforeClaim, refreshState, claimNow);
+      } catch { /* forfeit is best-effort; claim proceeds */ }
+    }
+
+    const baseUpdates = plan.updates;
+    /** @type {'none'|'atomic'|'atomic_retry'|'not_needed'|'skipped_marker_written'|'skipped_no_marker'} */
+    let forfeitOutcome = 'none';
+    let forfeitError = null;
+    let ack;
+    if (!forfeit) {
+      ack = await writeUpdate(baseUpdates);
+    } else {
+      ack = await writeUpdate({ ...baseUpdates, ...forfeit.updates });
+      if (ack.ok) {
+        forfeitOutcome = 'atomic';
+      } else {
+        forfeitError = ack.error;
+        if (!(await loadMarkerExists(username, projectId))) {
+          // Another tab may have moved the refresh clock: recompute once.
+          let freshRefresh = null;
+          try { freshRefresh = await loadRefreshState(username); } catch { /* ignore */ }
+          if (freshRefresh && freshRefresh.lastProjectRefreshAt !== forfeit.previousRefreshAt) {
+            const retryForfeit = planClaimRefreshForfeit(
+              username, serverProjectsBeforeClaim, freshRefresh, claimNow,
+            );
+            ack = await writeUpdate(retryForfeit ? { ...baseUpdates, ...retryForfeit.updates } : baseUpdates);
+            if (ack.ok) {
+              forfeitOutcome = retryForfeit ? 'atomic_retry' : 'not_needed';
+            } else if (retryForfeit) {
+              forfeit = retryForfeit;
+              refreshState = freshRefresh;
+            }
+          }
+          // Rewards first: commit the claim with a durable forfeit marker instead
+          // of the clock write, then (last resort) exactly today's claim write.
+          if (!ack.ok && !(await loadMarkerExists(username, projectId))) {
+            const markerValue = Math.max(forfeit.refreshAt, Number(refreshState?.forfeitThrough) || 0);
+            ack = await writeUpdate({
+              ...baseUpdates,
+              [`players/${username}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`]: markerValue,
+            });
+            if (ack.ok) {
+              forfeitOutcome = 'skipped_marker_written';
+            } else if (!(await loadMarkerExists(username, projectId))) {
+              ack = await writeUpdate(baseUpdates);
+              if (ack.ok) forfeitOutcome = 'skipped_no_marker';
+            }
+          }
+        }
+      }
+    }
+
     if (!ack.ok) {
       // Classify duplicate claim vs generic write failure via ledger / project state.
       if (await loadMarkerExists(username, projectId)) {
@@ -640,6 +780,16 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
 
     scheduleHistoryRetentionAfterWrite(plan.updates);
 
+    if (forfeitOutcome === 'skipped_marker_written' || forfeitOutcome === 'skipped_no_marker') {
+      await handleSkippedClaimRefreshForfeit(username, {
+        projectId,
+        projectTitle: plan.claimedProject?.title || projectTitleBefore,
+        forfeit,
+        markerWritten: forfeitOutcome === 'skipped_marker_written',
+        error: forfeitError,
+      }, { writeUpdate, persistForfeitSkippedDiagnostic, runCatchUp });
+    }
+
     return {
       success: true,
       project: plan.claimedProject,
@@ -649,6 +799,78 @@ export async function commitProjectClaim(username, projectId, options = {}, deps
       unlocked: plan.unlocked,
       notified: plan.notified,
       writeCount: 1,
+      refreshForfeit: forfeitOutcome,
     };
   });
+}
+
+/**
+ * Best-effort observational leaf for a claim that committed without its
+ * atomic refresh forfeit. Never mutates gameplay; never throws.
+ * @param {string} username
+ * @param {object} facts
+ * @param {{ writeUpdate?: (updates: object) => Promise<{ ok: boolean, error?: string }> }} [deps]
+ */
+export async function persistProjectRefreshForfeitSkippedDiagnostic(username, facts, deps = {}) {
+  try {
+    const leaf = buildProjectRefreshForfeitSkippedHistoryUpdate(username, facts);
+    const updates = leaf.updates || {};
+    for (const p of Object.keys(updates)) {
+      if (!p.startsWith(`${PLAYER_HISTORY_ROOT}/`)) {
+        return { attempted: false, ok: false, error: 'illegal_path' };
+      }
+    }
+    const writeUpdate = deps.writeUpdate || ((u) => db.updateAcknowledged(u));
+    const ack = await writeUpdate(updates);
+    return { attempted: true, ok: ack.ok === true, error: ack.ok ? undefined : ack.error, updates };
+  } catch (err) {
+    return { attempted: true, ok: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * After a claim committed without its refresh forfeit:
+ * 1. diagnostic history leaf (monitoring),
+ * 2. if the durable forfeit marker could not ride with the claim, write it alone,
+ * 3. kick a catch-up run, which burns (never generates) cycles up to the marker.
+ */
+async function handleSkippedClaimRefreshForfeit(username, info, deps) {
+  const markerPath = `players/${username}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`;
+  let markerWritten = info.markerWritten === true;
+  if (!markerWritten && info.forfeit) {
+    try {
+      const markerValue = Math.max(info.forfeit.refreshAt, Number(info.forfeit.forfeitThrough) || 0);
+      const ack = await deps.writeUpdate({ [markerPath]: markerValue });
+      markerWritten = ack.ok === true;
+    } catch { /* ignore */ }
+  }
+
+  const sanitized = sanitizeProjectClaimFailureError(info.error);
+  console.warn('[ProjectClaim] claim committed without refresh forfeit', {
+    projectId: String(info.projectId || ''),
+    forfeitCycles: info.forfeit?.cycles ?? 0,
+    forfeitThroughMarkerWritten: markerWritten,
+    ...sanitized,
+  });
+
+  let actorUid = null;
+  try {
+    actorUid = getAuth()?.currentUser?.uid || null;
+  } catch { /* ignore */ }
+  try {
+    await deps.persistForfeitSkippedDiagnostic(username, {
+      projectId: String(info.projectId || ''),
+      projectTitle: info.projectTitle || null,
+      errorCode: sanitized.errorCode,
+      errorMessage: sanitized.errorMessage,
+      forfeitCycles: info.forfeit?.cycles ?? 0,
+      forfeitThroughMarkerWritten: markerWritten,
+      completedCountBeforeClaim: info.forfeit?.completedCount ?? 0,
+      actorUid,
+    });
+  } catch { /* observational only */ }
+
+  try {
+    Promise.resolve(deps.runCatchUp(username)).catch(() => {});
+  } catch { /* ignore */ }
 }

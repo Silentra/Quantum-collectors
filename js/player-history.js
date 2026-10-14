@@ -365,6 +365,56 @@ export function buildProjectClaimFailedHistoryUpdate(username, facts = {}) {
   });
 }
 
+/** Diagnostic reason: claim committed but its atomic refresh forfeit had to be dropped. */
+export const PROJECT_CLAIM_REFRESH_FORFEIT_SKIPPED = 'refresh_forfeit_skipped';
+
+/**
+ * Observational diagnostic: the claim SUCCEEDED, but overdue refresh cycles
+ * could not be forfeited in the same atomic write. Reuses the existing
+ * project_claim_failed leaf shape (already allowed by rules) with a distinct
+ * reason and claimSucceeded: true.
+ *
+ * @param {string} username
+ * @param {{
+ *   projectId: string,
+ *   projectTitle?: string|null,
+ *   errorCode?: string|null,
+ *   errorMessage?: string|null,
+ *   forfeitCycles?: number,
+ *   forfeitThroughMarkerWritten?: boolean,
+ *   completedCountBeforeClaim?: number,
+ *   actorUid?: string|null,
+ * }} facts
+ */
+export function buildProjectRefreshForfeitSkippedHistoryUpdate(username, facts = {}) {
+  const sanitized = sanitizeProjectClaimFailureError(facts.errorMessage ?? facts.errorCode);
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    projectId: String(facts.projectId || ''),
+    reason: PROJECT_CLAIM_REFRESH_FORFEIT_SKIPPED,
+    claimSucceeded: true,
+    forfeitCycles: Math.max(0, Math.floor(Number(facts.forfeitCycles) || 0)),
+    forfeitThroughMarkerWritten: facts.forfeitThroughMarkerWritten === true,
+    completedCountBeforeClaim: Math.max(0, Math.floor(Number(facts.completedCountBeforeClaim) || 0)),
+  };
+  const title = facts.projectTitle != null ? String(facts.projectTitle).trim() : '';
+  if (title) payload.projectTitle = title.slice(0, 120);
+  const errorCode = facts.errorCode != null && String(facts.errorCode).trim()
+    ? String(facts.errorCode).trim().slice(0, 64)
+    : sanitized.errorCode;
+  if (errorCode) payload.errorCode = errorCode;
+  if (sanitized.errorMessage) payload.errorMessage = sanitized.errorMessage;
+
+  return buildPlayerHistoryLeafUpdate(username, {
+    type: HISTORY_EVENT_TYPES.PROJECT_CLAIM_FAILED,
+    actorType: HISTORY_ACTOR_TYPES.SELF,
+    source: HISTORY_SOURCES.PROJECT_CLAIM_FAIL,
+    actorUid: facts.actorUid,
+    actorUsername: username,
+    payload,
+  });
+}
+
 /**
  * Successful shop purchase (separate from players/.../purchaseHistory).
  */

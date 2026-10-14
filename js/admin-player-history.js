@@ -226,6 +226,24 @@ export function describeHistoryEvent(event) {
       const title = String(event.projectTitle || '').trim();
       const code = String(event.errorCode || '').trim();
       const reason = String(event.reason || 'write_failed');
+      if (reason === 'refresh_forfeit_skipped' && event.claimSucceeded === true) {
+        details.push(`Project ID: ${event.projectId || '—'}`);
+        if (title) details.push(`Title: ${title}`);
+        details.push('Claim: succeeded (rewards granted)');
+        details.push(`Overdue refresh cycles not forfeited atomically: ${Number(event.forfeitCycles) || 0}`);
+        details.push(`Forfeit marker saved: ${event.forfeitThroughMarkerWritten === true ? 'yes' : 'no'}`);
+        details.push(`Completed projects before claim: ${Number(event.completedCountBeforeClaim) || 0}`);
+        if (code) details.push(`Error: ${code}`);
+        if (event.errorMessage) {
+          details.push(`Message: ${String(event.errorMessage).slice(0, 180)}`);
+        }
+        return {
+          summary: `Project claimed — refresh forfeit skipped${title ? ` — ${title}` : ''}`,
+          details,
+          actorLabel,
+          known: true,
+        };
+      }
       details.push(`Project ID: ${event.projectId || '—'}`);
       if (title) details.push(`Title: ${title}`);
       details.push(`Reason: ${reason}`);

@@ -9,8 +9,8 @@
  * Server invariant (database.rules.json A+B coupling):
  * - COMPLETE → CLAIMED requires a FRESH marker create in the same atomic write
  * - A preexisting marker does NOT authorize COMPLETE → CLAIMED (already consumed)
- * - Rules inspect projects array indices 0..PROJECT_RULES_ARRAY_INDEX_MAX only
- *   (must stay aligned with MAX_STORED_PROJECTS in project-refresh.js)
+ * - Rules accept and scan projects array indices 0..PROJECT_RULES_ARRAY_INDEX_MAX only
+ *   (must stay aligned with PROJECT_ARRAY_CAPACITY in project-refresh.js)
  *
  * Persist merge (prepareProjectsForPersist):
  * - Same lifecycle rank as refresh: claimed > complete > active > available
@@ -20,17 +20,17 @@
 
 import * as db from './database.js';
 import { PROJECT_STATES } from './project-state.js'; // AVAILABLE | ACTIVE | COMPLETE | CLAIMED
-import { MAX_STORED_PROJECTS } from './project-refresh.js';
+import { PROJECT_ARRAY_CAPACITY } from './project-refresh.js';
 import { preferProjectForRefreshMerge } from './project-refresh-merge.js';
 
 export const PROJECT_CLAIMS_ROOT = 'projectClaims';
 
-/** Inclusive max array index inspected by RTDB claim rules (0..6 for cap 7). */
-export const PROJECT_RULES_ARRAY_INDEX_MAX = MAX_STORED_PROJECTS - 1;
+/** Inclusive max array index accepted/scanned by RTDB per-row project rules (0..39). */
+export const PROJECT_RULES_ARRAY_INDEX_MAX = PROJECT_ARRAY_CAPACITY - 1;
 
-if (PROJECT_RULES_ARRAY_INDEX_MAX !== 6) {
+if (PROJECT_RULES_ARRAY_INDEX_MAX !== 39) {
   throw new Error(
-    `[project-claims] PROJECT_RULES_ARRAY_INDEX_MAX=${PROJECT_RULES_ARRAY_INDEX_MAX} but database.rules.json claim coupling hardcodes indices 0..6`,
+    `[project-claims] PROJECT_RULES_ARRAY_INDEX_MAX=${PROJECT_RULES_ARRAY_INDEX_MAX} but database.rules.json per-row project rules hardcode indices 0..39`,
   );
 }
 

@@ -37,7 +37,16 @@ import {
   getWeeklyRefreshLabel,
   getWeeklyRewardPackId,
 } from './weekly-research-pack.js';
-import { getProjectRefreshIntervalMs, getMaxStoredProjects, PROJECT_REFRESH_INTERVAL_HOURS } from './project-refresh.js';
+import {
+  getProjectRefreshIntervalMs,
+  getMaxStoredProjects,
+  getProjectGenerationBlock,
+  PROJECT_REFRESH_INTERVAL_HOURS,
+} from './project-refresh.js';
+import {
+  getProjectStorageWarning,
+  getResearchProposalBlockMessage,
+} from './project-storage-warning.js';
 import { runScheduledProjectMaintenance } from './project-refresh-commit.js';
 import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
@@ -271,15 +280,21 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
     if (!username || username === '__admin__') return '';
 
     const quantity = Math.max(0, Math.floor(Number(db.get(`players/${username}/items/research_proposal`) || 0)));
-    const disabled = quantity <= 0;
+    const generationBlock = getProjectGenerationBlock(projects, Date.now());
+    const blockedNote = generationBlock.blocked
+      ? getResearchProposalBlockMessage(generationBlock.reason)
+      : null;
+    const disabled = quantity <= 0 || generationBlock.blocked;
 
     return `
       <div class="rp-proposal-widget">
         <div class="rp-proposal-copy">
           <span class="rp-proposal-title">Research Proposal</span>
           <span class="rp-proposal-qty">Owned: ${quantity}</span>
+          ${blockedNote ? `<span class="rp-proposal-blocked-note">${blockedNote}</span>` : ''}
         </div>
-        <button id="btn-use-research-proposal" class="rp-proposal-btn" ${disabled ? 'disabled' : ''}>
+        <button id="btn-use-research-proposal" class="rp-proposal-btn" ${disabled ? 'disabled' : ''}
+          ${blockedNote ? `title="${blockedNote}"` : ''}>
           Use Proposal
         </button>
       </div>
@@ -357,8 +372,10 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
             return;
           }
           const reason = result.reason || result.validation?.reason || 'unknown_error';
-          if (reason === 'project_cap_reached') {
-            toast.error('No available project slots for a new proposal.');
+          const blockMessage = getResearchProposalBlockMessage(reason);
+          if (blockMessage) {
+            toast.error(blockMessage);
+            renderResearchProjects();
           } else if (reason === 'insufficient_item_quantity') {
             toast.error('You do not have a Research Proposal.');
           } else {
@@ -407,6 +424,36 @@ function _renderProjectStatusBar(container, projects, playerData, session) {
   }, 30000);
 }
 
+/**
+ * Persistent storage warning above the project list (10+ completed, unclaimed).
+ * One element, updated in place on each list render; never blocks interaction.
+ */
+function _renderProjectStorageWarning(container, projects) {
+  let el = container.querySelector('.rp-storage-warning');
+  const warning = getProjectStorageWarning(projects, Date.now());
+  if (!warning) {
+    el?.classList.add('hidden');
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = 'rp-storage-warning';
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    const list = container.querySelector('#research-projects-list');
+    const empty = container.querySelector('#research-projects-empty');
+    const insertBefore = list || empty;
+    if (insertBefore) {
+      insertBefore.parentNode.insertBefore(el, insertBefore);
+    } else {
+      container.appendChild(el);
+    }
+  }
+  el.classList.remove('hidden');
+  el.classList.toggle('rp-storage-warning--full', warning.level === 'full');
+  el.textContent = warning.message;
+}
+
 // ===================== RESEARCH PROJECTS (main render) =====================
 
 export function renderResearchProjects() {
@@ -427,6 +474,7 @@ export function renderResearchProjects() {
       document.getElementById('rp-cards-panel')?.classList.add('hidden');
       // Stale list chrome: Proposal / Weekly / count live in .rp-status-bar — hide for focused assign UI
       container.querySelector('.rp-status-bar')?.classList.add('hidden');
+      container.querySelector('.rp-storage-warning')?.classList.add('hidden');
       renderProjectAssignmentPanel(container, project, p, session.username);
       return;
     }
@@ -443,6 +491,7 @@ export function renderResearchProjects() {
       empty.classList.add('hidden');
       document.getElementById('rp-cards-panel')?.classList.add('hidden');
       container.querySelector('.rp-status-bar')?.classList.add('hidden');
+      container.querySelector('.rp-storage-warning')?.classList.add('hidden');
       renderProjectReportPanel(container, project, session.username);
       return;
     }
@@ -461,6 +510,7 @@ export function renderResearchProjects() {
 
   // ── Compact status telemetry ─────────────────────────────────────────────
   _renderProjectStatusBar(container, projects, p, session);
+  _renderProjectStorageWarning(container, projects);
 
   if (projects.length === 0) {
     list.innerHTML = '';

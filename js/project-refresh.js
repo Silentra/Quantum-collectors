@@ -3,15 +3,36 @@
 // NO side effects, NO storage, NO timers, NO Firebase, NO DOM.
 
 import { getProjectConfig } from './project-config.js';
+import { PROJECT_STATES } from './project-state.js';
 
 /**
- * Canonical max stored projects array length.
- *
- * RTDB claim rules in database.rules.json inspect fixed indices 0..6 only
- * (see PROJECT_RULES_ARRAY_INDEX_MAX in project-claims.js). Raising this
- * without updating those rules would leave higher slots unenforced.
+ * Cap on AVAILABLE + ACTIVE projects (the "Projects: X / 7 Active" slots).
+ * COMPLETE and CLAIMED rows do not count toward this cap.
  */
 export const MAX_STORED_PROJECTS = 7;
+
+/**
+ * Technical capacity of the stored projects array (all states combined).
+ *
+ * COUPLING: database.rules.json per-row project rules accept indices
+ * 0..PROJECT_ARRAY_CAPACITY-1 only and scan that range for claim/transition
+ * history (scripts/gen-claim-rules-snippets.mjs). Generation must never grow
+ * the array past this length.
+ */
+export const PROJECT_ARRAY_CAPACITY = 40;
+
+/** Completed-but-unclaimed count at which the storage warning appears. */
+export const COMPLETED_STORAGE_WARNING_THRESHOLD = 10;
+
+/** Completed-but-unclaimed count at which all new project generation stops. */
+export const COMPLETED_GENERATION_CUTOFF = 14;
+
+/**
+ * players/{u}/<field>: refresh cycles at or before this timestamp are forfeited
+ * and must never generate. Written when a claim had to commit without its
+ * atomic refresh forfeit; cleared once lastProjectRefreshAt reaches it.
+ */
+export const PROJECT_REFRESH_FORFEIT_THROUGH_FIELD = 'projectRefreshForfeitThrough';
 
 /**
  * Canonical scheduled refresh interval (production CAS + RTDB rules).
@@ -97,4 +118,105 @@ export function shouldGenerateProjects({
 } = {}) {
   return getAvailableProjectSlots(currentActiveProjects) > 0
     && needsProjectRefresh({ lastRefreshAt, now });
+}
+
+/**
+ * Completed-but-unclaimed projects: COMPLETE rows plus ACTIVE rows whose
+ * completesAt has passed (finished but not yet resolved by maintenance).
+ *
+ * @param {object[]} projects
+ * @param {number} [now]
+ * @returns {number}
+ */
+export function countCompletedUnclaimedProjects(projects, now = Date.now()) {
+  const list = Array.isArray(projects) ? projects : [];
+  let count = 0;
+  for (const p of list) {
+    if (!p || typeof p !== 'object') continue;
+    if (p.state === PROJECT_STATES.COMPLETE) {
+      count++;
+    } else if (
+      p.state === PROJECT_STATES.ACTIVE
+      && p.completesAt != null
+      && Number(now) >= Number(p.completesAt)
+    ) {
+      count++;
+    }
+  }
+  return count;
+}
+
+/**
+ * @param {number} completedCount
+ * @returns {'none'|'warn'|'full'}
+ */
+export function getProjectStorageLevel(completedCount) {
+  const n = Number(completedCount) || 0;
+  if (n >= COMPLETED_GENERATION_CUTOFF) return 'full';
+  if (n >= COMPLETED_STORAGE_WARNING_THRESHOLD) return 'warn';
+  return 'none';
+}
+
+/**
+ * Remaining rows before the technical array capacity is reached.
+ * @param {object[]} projects
+ * @returns {number}
+ */
+export function getProjectArrayRoom(projects) {
+  const len = Array.isArray(projects) ? projects.length : 0;
+  return Math.max(0, PROJECT_ARRAY_CAPACITY - len);
+}
+
+/**
+ * Whether ANY new project may be generated (refresh, catch-up, bootstrap, Proposal).
+ * Existing projects stay fully usable regardless.
+ *
+ * @param {object[]} projects
+ * @param {number} [now]
+ * @returns {{
+ *   blocked: boolean,
+ *   reason: 'completed_storage_full'|'project_array_full'|null,
+ *   completedCount: number,
+ *   arrayLength: number,
+ * }}
+ */
+export function getProjectGenerationBlock(projects, now = Date.now()) {
+  const list = Array.isArray(projects) ? projects : [];
+  const completedCount = countCompletedUnclaimedProjects(list, now);
+  const arrayLength = list.length;
+  let reason = null;
+  if (completedCount >= COMPLETED_GENERATION_CUTOFF) {
+    reason = 'completed_storage_full';
+  } else if (arrayLength >= PROJECT_ARRAY_CAPACITY) {
+    reason = 'project_array_full';
+  }
+  return { blocked: reason !== null, reason, completedCount, arrayLength };
+}
+
+/**
+ * @param {object[]} projects
+ * @param {number} [now]
+ * @returns {boolean}
+ */
+export function isProjectGenerationBlocked(projects, now = Date.now()) {
+  return getProjectGenerationBlock(projects, now).blocked;
+}
+
+/**
+ * Forfeit every elapsed refresh cycle in one aligned jump.
+ *
+ * Returns the greatest `lastRefreshAt + k * interval` (k >= 1) that is <= now,
+ * or null when no cycle is due / the clock is uninitialized. Matches the
+ * rules' forward-only, 12h-aligned fast-forward validation.
+ *
+ * @param {number} lastRefreshAt
+ * @param {number} [now]
+ * @returns {{ refreshAt: number, cycles: number }|null}
+ */
+export function computeRefreshForfeitTarget(lastRefreshAt, now = Date.now()) {
+  const last = Number(lastRefreshAt) || 0;
+  if (last <= 0) return null;
+  const cycles = Math.floor((Number(now) - last) / PROJECT_REFRESH_INTERVAL_MS);
+  if (!Number.isFinite(cycles) || cycles < 1) return null;
+  return { refreshAt: last + cycles * PROJECT_REFRESH_INTERVAL_MS, cycles };
 }

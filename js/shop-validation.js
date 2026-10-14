@@ -40,7 +40,7 @@ import {
 } from './cosmetic-definitions.js';
 import { ITEM_CATEGORIES, ITEM_TYPES } from './shop-definitions.js';
 import { PROJECT_STATES } from './project-state.js';
-import { getAvailableProjectSlots } from './project-refresh.js';
+import { getAvailableProjectSlots, getProjectGenerationBlock } from './project-refresh.js';
 import { MAX_FEATURED_ACHIEVEMENTS, MAX_FEATURED_CARDS } from './player-schema.js';
 import {
   REROLL_SCOPES,
@@ -552,13 +552,25 @@ export function canApplyDiscount(player, slotIndex, discountConfig = {}) {
 // ---------------------------------------------------------------------------
 /**
  * Checks whether a research proposal can add one AVAILABLE project.
+ * Obeys the completed-storage cutoff and the technical array capacity.
  *
  * @param {Object} player
+ * @param {number} [now]
  * @returns {Object}
  */
-export function canGenerateAdditionalProject(player) {
+export function canGenerateAdditionalProject(player, now = Date.now()) {
   if (!isObject(player)) return { allowed: false, reason: 'invalid_player' };
   if (!Array.isArray(player.projects)) return { allowed: false, reason: 'invalid_projects' };
+
+  const block = getProjectGenerationBlock(player.projects, now);
+  if (block.blocked) {
+    return {
+      allowed: false,
+      reason: block.reason,
+      completedCount: block.completedCount,
+      arrayLength: block.arrayLength,
+    };
+  }
 
   const activeProjectCount = countCapProjects(player.projects);
   const openSlots = getAvailableProjectSlots(activeProjectCount);

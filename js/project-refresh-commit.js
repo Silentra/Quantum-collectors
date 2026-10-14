@@ -4,6 +4,9 @@
  *
  * Login + research heartbeat must call commitScheduledRefreshCatchUp (and
  * optionally commitProjectLifecycleMaintenance for resolve/prune).
+ *
+ * While generation is blocked (storage cutoff, array capacity, or a pending
+ * forfeit marker) due cycles are forfeited, never queued for later.
  */
 
 import * as db from './database.js';
@@ -13,7 +16,9 @@ import { resolveProjectPool } from './project-resolution.js';
 import { pruneProjects } from './project-claiming.js';
 import {
   PROJECT_REFRESH_CATCHUP_MAX_STEPS,
+  PROJECT_REFRESH_FORFEIT_THROUGH_FIELD,
   PROJECT_REFRESH_INTERVAL_MS,
+  computeRefreshForfeitTarget,
 } from './project-refresh.js';
 import {
   buildRefreshPersistProjects,
@@ -21,9 +26,14 @@ import {
 } from './project-refresh-merge.js';
 
 /**
- * Force-read server projects + lastProjectRefreshAt into cache.
+ * Force-read server projects + lastProjectRefreshAt (+ pending forfeit) into cache.
  * @param {string} username
- * @returns {Promise<{ projects: object[], lastProjectRefreshAt: number, totalRP: number }>}
+ * @returns {Promise<{
+ *   projects: object[],
+ *   lastProjectRefreshAt: number,
+ *   totalRP: number,
+ *   forfeitThrough: number,
+ * }>}
  */
 export async function loadServerRefreshState(username) {
   const key = String(username || '').trim();
@@ -31,14 +41,125 @@ export async function loadServerRefreshState(username) {
     db.loadPathOnce(`players/${key}/projects`, { force: true }).catch(() => {}),
     db.loadPathOnce(`players/${key}/lastProjectRefreshAt`, { force: true }).catch(() => {}),
     db.loadPathOnce(`players/${key}/totalResearchPoints`, { force: true }).catch(() => {}),
+    db.loadPathOnce(`players/${key}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`, { force: true }).catch(() => {}),
   ]);
   const projects = db.get(`players/${key}/projects`) || [];
   const lastProjectRefreshAt = Number(db.get(`players/${key}/lastProjectRefreshAt`)) || 0;
   const totalRP = Number(db.get(`players/${key}/totalResearchPoints`)) || 0;
+  const forfeitThrough = Number(db.get(`players/${key}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`)) || 0;
   return {
     projects: Array.isArray(projects) ? projects : [],
     lastProjectRefreshAt,
     totalRP,
+    forfeitThrough,
+  };
+}
+
+/**
+ * Timestamp-only updates that forfeit due cycles while generation is blocked.
+ *
+ * Storage/array block: jump to the latest aligned boundary <= now.
+ * Pending-forfeit only (student no longer blocked): jump no further than
+ * forfeitThrough so later, legitimately earned cycles are kept.
+ * Clears the pending marker once no remaining cycle falls at/before it.
+ *
+ * @param {string} key
+ * @param {{ lastProjectRefreshAt: number, forfeitThrough: number }} state
+ * @param {{ blockReason: string|null }} plan
+ * @param {number} now
+ * @returns {{ updates: Record<string, unknown>, refreshAt: number, cycles: number }|null}
+ */
+export function buildRefreshForfeitUpdates(key, state, plan, now) {
+  const last = Number(state.lastProjectRefreshAt) || 0;
+  const forfeitThrough = Number(state.forfeitThrough) || 0;
+  const horizon = plan.blockReason === 'forfeit_pending' ? Math.min(now, forfeitThrough) : now;
+  const target = computeRefreshForfeitTarget(last, horizon);
+  if (!target) return null;
+  /** @type {Record<string, unknown>} */
+  const updates = {
+    [`players/${key}/lastProjectRefreshAt`]: target.refreshAt,
+  };
+  if (forfeitThrough > 0 && target.refreshAt + PROJECT_REFRESH_INTERVAL_MS > forfeitThrough) {
+    updates[`players/${key}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`] = null;
+  }
+  return { updates, refreshAt: target.refreshAt, cycles: target.cycles };
+}
+
+/**
+ * Blocked due step: forfeit all due cycles in one aligned jump. If the jump is
+ * denied while the server clock is unchanged (e.g. rules without fast-forward),
+ * fall back to a single +interval burn so nothing is ever generated.
+ *
+ * @returns {Promise<object>}
+ */
+async function commitBlockedRefreshForfeit(key, state, plan, now, { loadState, writeUpdate }) {
+  const base = {
+    bootstrap: false,
+    burned: true,
+    blocked: true,
+    blockReason: plan.blockReason,
+    generated: [],
+    generatedCount: 0,
+    previousRefreshAt: state.lastProjectRefreshAt,
+  };
+  const forfeit = buildRefreshForfeitUpdates(key, state, plan, now);
+  if (forfeit && forfeit.cycles > 1) {
+    const ack = await writeUpdate(forfeit.updates);
+    if (ack.ok) {
+      return {
+        ...base,
+        ok: true,
+        wrote: true,
+        reason: 'forfeited',
+        forfeitedCycles: forfeit.cycles,
+        refreshAt: forfeit.refreshAt,
+      };
+    }
+    const after = await loadState(key);
+    if (after.lastProjectRefreshAt !== state.lastProjectRefreshAt) {
+      return {
+        ...base,
+        ok: false,
+        wrote: false,
+        reason: 'cas_rejected',
+        conflict: true,
+        error: ack.error,
+        refreshAt: state.lastProjectRefreshAt,
+      };
+    }
+  }
+
+  // One-step burn: exactly +interval (valid under both old and new rules).
+  /** @type {Record<string, unknown>} */
+  const updates = {
+    [`players/${key}/lastProjectRefreshAt`]: plan.refreshAt,
+  };
+  const forfeitThrough = Number(state.forfeitThrough) || 0;
+  if (forfeitThrough > 0 && plan.refreshAt + PROJECT_REFRESH_INTERVAL_MS > forfeitThrough) {
+    updates[`players/${key}/${PROJECT_REFRESH_FORFEIT_THROUGH_FIELD}`] = null;
+  }
+  const ack = await writeUpdate(updates);
+  if (!ack.ok) {
+    const errText = String(ack.error || '');
+    const conflict = /permission_denied|PERMISSION_DENIED|denied/i.test(errText);
+    return {
+      ...base,
+      ok: false,
+      wrote: false,
+      reason: conflict ? 'cas_rejected' : 'write_failed',
+      conflict,
+      error: ack.error,
+      refreshAt: state.lastProjectRefreshAt,
+    };
+  }
+  return {
+    ...base,
+    ok: true,
+    wrote: true,
+    reason: 'forfeited',
+    forfeitedCycles: 1,
+    forfeitFallback: Boolean(forfeit && forfeit.cycles > 1),
+    refreshAt: plan.refreshAt,
   };
 }
 
@@ -68,7 +189,12 @@ export async function commitScheduledRefreshStep(username, options = {}, deps = 
     totalRP: state.totalRP,
     lastRefreshAt: state.lastProjectRefreshAt,
     now,
+    forfeitThrough: state.forfeitThrough,
   });
+
+  if (plan.due && !plan.bootstrap && plan.blocked) {
+    return commitBlockedRefreshForfeit(key, state, plan, now, { loadState, writeUpdate });
+  }
 
   if (!plan.due) {
     return {
@@ -178,6 +304,7 @@ export async function commitScheduledRefreshCatchUp(username, options = {}, deps
           totalRP: after.totalRP,
           lastRefreshAt: after.lastProjectRefreshAt,
           now,
+          forfeitThrough: after.forfeitThrough,
         });
         if (!replan.due) {
           steps.push({ ...result, resolvedConflict: true, peerConsumed: true });
@@ -280,14 +407,15 @@ export async function commitProjectLifecycleMaintenance(username, options = {}, 
 }
 
 /**
- * Login / heartbeat entry: catch-up refresh then lifecycle maintenance.
+ * Login / heartbeat entry: lifecycle maintenance (resolve + prune) first so the
+ * storage cutoff and array capacity see finished and pruned rows, then catch-up.
  * @param {string} username
  * @param {object} [options]
  * @returns {Promise<object>}
  */
 export async function runScheduledProjectMaintenance(username, options = {}, deps = {}) {
-  const refresh = await commitScheduledRefreshCatchUp(username, options, deps);
   const lifecycle = await commitProjectLifecycleMaintenance(username, options, deps);
+  const refresh = await commitScheduledRefreshCatchUp(username, options, deps);
   return {
     ok: refresh.ok !== false && lifecycle.ok !== false,
     refresh,

@@ -20,6 +20,8 @@
 import { generateProjectTemplate, getUnlockedProjectRarities } from './project-generator.js';
 import {
   getAvailableProjectSlots,
+  getProjectArrayRoom,
+  getProjectGenerationBlock,
   getProjectRefreshIntervalMs,
   PROJECT_REFRESH_INTERVAL_MS,
 } from './project-refresh.js';
@@ -147,12 +149,17 @@ export function generateAvailableProjects({
  *   generate at most one project when a slot is open; otherwise burn (0 gens).
  * - lastRefreshAt === 0: bootstrap — initial fill (up to config initialProjects)
  *   when projects empty; set refreshAt to the greatest interval boundary ≤ now.
+ * - Storage cutoff (14+ completed-unclaimed), full array capacity, or a pending
+ *   forfeit (cycle at/before forfeitThrough): the due cycle is burned (blocked).
  *
  * @param {object} [options]
+ * @param {number} [options.forfeitThrough] - cycles ending at/before this are forfeited
  * @returns {{
  *   due: boolean,
  *   bootstrap: boolean,
  *   burned: boolean,
+ *   blocked: boolean,
+ *   blockReason: string|null,
  *   projects: object[],
  *   refreshAt: number,
  *   generated: object[],
@@ -165,17 +172,19 @@ export function planOneCycleRefresh({
   totalRP = 0,
   lastRefreshAt = 0,
   now = Date.now(),
+  forfeitThrough = 0,
 } = {}) {
   const list = Array.isArray(projects) ? projects : [];
   const interval = PROJECT_REFRESH_INTERVAL_MS;
   const prev = Number(lastRefreshAt) || 0;
+  const block = getProjectGenerationBlock(list, now);
 
   // Bootstrap / uninitialized clock
   if (prev <= 0) {
     const activeCount = countCapProjects(list);
-    const openSlots = getAvailableProjectSlots(activeCount);
+    const openSlots = Math.min(getAvailableProjectSlots(activeCount), getProjectArrayRoom(list));
     let generated = [];
-    if (list.length === 0 && openSlots > 0) {
+    if (list.length === 0 && openSlots > 0 && !block.blocked) {
       const cfg = getProjectConfig();
       const rawInit = typeof cfg.initialProjects === 'number' ? cfg.initialProjects
         : typeof cfg.initialProjectSlots === 'number' ? cfg.initialProjectSlots
@@ -188,6 +197,8 @@ export function planOneCycleRefresh({
       due: true,
       bootstrap: true,
       burned: generated.length === 0,
+      blocked: block.blocked,
+      blockReason: block.reason,
       projects: [...list, ...generated],
       refreshAt: refreshAt > 0 ? refreshAt : interval,
       generated,
@@ -201,6 +212,8 @@ export function planOneCycleRefresh({
       due: false,
       bootstrap: false,
       burned: false,
+      blocked: block.blocked,
+      blockReason: block.reason,
       projects: list,
       refreshAt: prev,
       generated: [],
@@ -216,6 +229,8 @@ export function planOneCycleRefresh({
       due: false,
       bootstrap: false,
       burned: false,
+      blocked: block.blocked,
+      blockReason: block.reason,
       projects: list,
       refreshAt: prev,
       generated: [],
@@ -224,13 +239,31 @@ export function planOneCycleRefresh({
     };
   }
 
+  const forfeitPending = Number(forfeitThrough) > 0 && newRefreshAt <= Number(forfeitThrough);
+  if (block.blocked || forfeitPending) {
+    return {
+      due: true,
+      bootstrap: false,
+      burned: true,
+      blocked: true,
+      blockReason: block.blocked ? block.reason : 'forfeit_pending',
+      projects: list,
+      refreshAt: newRefreshAt,
+      generated: [],
+      generatedCount: 0,
+      previousRefreshAt: prev,
+    };
+  }
+
   const activeCount = countCapProjects(list);
-  const openSlots = getAvailableProjectSlots(activeCount);
+  const openSlots = Math.min(getAvailableProjectSlots(activeCount), getProjectArrayRoom(list));
   if (openSlots <= 0) {
     return {
       due: true,
       bootstrap: false,
       burned: true,
+      blocked: false,
+      blockReason: null,
       projects: list,
       refreshAt: newRefreshAt,
       generated: [],
@@ -244,6 +277,8 @@ export function planOneCycleRefresh({
     due: true,
     bootstrap: false,
     burned: false,
+    blocked: false,
+    blockReason: null,
     projects: [...list, ...generated],
     refreshAt: newRefreshAt,
     generated,
@@ -262,6 +297,7 @@ export function planOneCycleRefresh({
  *
  * Cap counting uses ONLY AVAILABLE + ACTIVE projects.
  * COMPLETE and CLAIMED projects do NOT count toward the cap.
+ * Storage cutoff / array capacity block generation (cycles still advance).
  *
  * Existing projects are NEVER removed or mutated.
  * States other than AVAILABLE (ACTIVE, COMPLETE, CLAIMED) are never touched.
@@ -302,8 +338,11 @@ export function refreshProjectPool({
     };
   }
 
-  // Available capacity at this moment.
-  const openSlots = getAvailableProjectSlots(activeCount);
+  // Available capacity at this moment (cap slots, array capacity, storage cutoff).
+  const blocked = getProjectGenerationBlock(projects, now).blocked;
+  const openSlots = blocked
+    ? 0
+    : Math.min(getAvailableProjectSlots(activeCount), getProjectArrayRoom(projects));
 
   // No open slots — no projects can be added regardless of elapsed cycles.
   if (openSlots <= 0) {
