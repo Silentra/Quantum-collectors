@@ -10015,6 +10015,12 @@ body.app-mode-game #screen-game.screen.active {
   vertical-align: middle;
 }
 
+.trade-not-owned-badge.shop-card-owned-badge {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+}
+
 /* Stat Card */
 .stat-card {
   background: #1e293b;
