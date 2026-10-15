@@ -7036,6 +7036,15 @@ body.app-mode-game #screen-game.screen.active {
   display: inline-block;
 }
 
+.rp-report-rewards-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.rp-report-rewards-header .rp-report-section-label { margin-top: 0; }
 .rp-report-rewards {
   display: flex;
   flex-direction: column;
