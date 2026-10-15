@@ -110,8 +110,32 @@ function getSafeItem(slot) {
   };
 }
 
+/**
+ * Collection ownership pill for an individual-card Shop offer, styled like the
+ * Trading "Not owned" badge. Ownership is total quantity (reserved copies
+ * count). Null/undefined inventory = not loaded → no badge.
+ * @param {Object<string, number>|null|undefined} inventory - { cardId: quantity }
+ * @param {string} cardId
+ * @returns {string}
+ */
+export function shopCardOwnershipBadgeHtml(inventory, cardId) {
+  if (!inventory || typeof inventory !== 'object' || !cardId) return '';
+  const qty = Number(inventory[cardId]);
+  return Number.isFinite(qty) && qty >= 1
+    ? ' <span class="trade-not-owned-badge shop-card-owned-badge">Owned</span>'
+    : ' <span class="trade-not-owned-badge">Not owned</span>';
+}
+
+/** Inventory only once the self player record is cached (same gate as Trading). */
+function getLoadedInventory(username) {
+  if (!player.getPlayer(username)) return null;
+  const inventory = db.get(`players/${username}/inventory`);
+  return isObject(inventory) ? inventory : {};
+}
+
 function getPlayerSnapshot(username) {
   return {
+    inventory: getLoadedInventory(username),
     shop: isObject(db.get(`players/${username}/shop`)) ? db.get(`players/${username}/shop`) : {},
     currencies: isObject(db.get(`players/${username}/currencies`)) ? db.get(`players/${username}/currencies`) : {},
     items: isObject(db.get(`players/${username}/items`)) ? db.get(`players/${username}/items`) : {},
@@ -306,6 +330,10 @@ function renderSlot(slot, index, snapshot) {
   const discounted = Boolean(slot?.discountApplied);
   const ownedCosmetic = isOwnedCosmetic(snapshot, item.id, item);
   const previewHtml = renderSlotPreview(item);
+  const parsedCard = item.type === ITEM_TYPES.CARD ? parseShopItemId(item.id) : null;
+  const cardOwnershipHtml = parsedCard?.kind === 'card'
+    ? shopCardOwnershipBadgeHtml(snapshot?.inventory, parsedCard.sourceId)
+    : '';
   const isTargetable = targetMode && !purchased;
   const targetDisabled = !isTargetable || (targetMode?.behaviorType === 'reroll_shop' && frozen);
   const classes = [
@@ -327,7 +355,7 @@ function renderSlot(slot, index, snapshot) {
       <div class="shop-slot-header">
         <div>
           <h3 class="shop-slot-title">${escapeHtml(item.name)}</h3>
-          <div class="shop-slot-type">${escapeHtml(formatLabel(item.type))}</div>
+          <div class="shop-slot-type">${escapeHtml(formatLabel(item.type))}${cardOwnershipHtml}</div>
         </div>
         <div class="shop-slot-icon" aria-hidden="true">${escapeHtml(getItemIcon(item))}</div>
       </div>
