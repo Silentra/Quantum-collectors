@@ -133,6 +133,7 @@ import {
   renderResearchProjects,
   startProjectHeartbeat,
   stopProjectHeartbeat,
+  leaveResearchProjectsReport,
 } from './project-ui.js';
 
 // Profile & Shop UI subsystems (extracted — Phase 2 refactor)
@@ -185,7 +186,7 @@ function setupTabs() {
       if (tab === 'collection') renderCollection();
       if (tab === 'packs') renderPacks();
       if (tab === 'research-projects') { renderResearchProjects(); startProjectHeartbeat(); }
-      else { stopProjectHeartbeat(); }
+      else { stopProjectHeartbeat(); leaveResearchProjectsReport(); }
       // S5c-D1: release Admin directory before Trading acquires the same path
       if (tab === 'trading') {
         cleanupAdmin();
@@ -4063,27 +4064,20 @@ function renderAdminBalance() {
 
   // ─── 5. RP Rewards ───
   const rpRows = RARITIES.map(r => {
-    const rw = cfg.rpRewards?.[r] ?? { success: [0, 0], failure: [0, 0] };
+    const rw = cfg.rpRewards?.[r] ?? { success: [0, 0] };
     const sArr = rw.success ?? [0, 0];
-    const fArr = rw.failure ?? [0, 0];
     const sMin = Array.isArray(sArr) ? sArr[0] : (sArr[0] ?? sArr['0'] ?? 0);
     const sMax = Array.isArray(sArr) ? sArr[1] : (sArr[1] ?? sArr['1'] ?? 0);
-    const fMin = Array.isArray(fArr) ? fArr[0] : (fArr[0] ?? fArr['0'] ?? 0);
-    const fMax = Array.isArray(fArr) ? fArr[1] : (fArr[1] ?? fArr['1'] ?? 0);
     return rarityRow(r,
       `<td class="pr-2">${numInput('bal-rw-smin-' + r, sMin, '1')}</td>` +
-      `<td class="pr-2">${numInput('bal-rw-smax-' + r, sMax, '1')}</td>` +
-      `<td class="pr-2">${numInput('bal-rw-fmin-' + r, fMin, '1')}</td>` +
-      `<td>${numInput('bal-rw-fmax-' + r, fMax, '1')}</td>`
+      `<td>${numInput('bal-rw-smax-' + r, sMax, '1')}</td>`
     );
   }).join('');
   const rpHTML = section('RP Rewards',
     `<table><thead><tr>
       <th class="text-xs text-surface-500 text-left pr-3 pb-1">Rarity</th>
       <th class="text-xs text-surface-500 text-left pr-2 pb-1">Success Min</th>
-      <th class="text-xs text-surface-500 text-left pr-2 pb-1">Success Max</th>
-      <th class="text-xs text-surface-500 text-left pr-2 pb-1">Failure Min</th>
-      <th class="text-xs text-surface-500 text-left pb-1">Failure Max</th>
+      <th class="text-xs text-surface-500 text-left pb-1">Success Max</th>
     </tr></thead><tbody>${rpRows}</tbody></table>`
   );
 
@@ -4526,11 +4520,13 @@ function collectBalanceValues() {
   for (const r of RARITIES) cfg.projectDifficulty[r] = [val('bal-diff-min-' + r), val('bal-diff-max-' + r)];
 
   // RP Rewards
+  // Legacy `failure` ranges pass through unchanged; failed projects never grant RP.
+  const prevRpRewards = cfg.rpRewards && typeof cfg.rpRewards === 'object' ? cfg.rpRewards : {};
   cfg.rpRewards = {};
   for (const r of RARITIES) {
     cfg.rpRewards[r] = {
+      ...(prevRpRewards[r] && typeof prevRpRewards[r] === 'object' ? prevRpRewards[r] : {}),
       success: [val('bal-rw-smin-' + r), val('bal-rw-smax-' + r)],
-      failure: [val('bal-rw-fmin-' + r), val('bal-rw-fmax-' + r)],
     };
   }
 

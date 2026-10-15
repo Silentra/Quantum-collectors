@@ -52,6 +52,7 @@ import { adminCompleteActiveProject } from './admin-player-tools.js';
 import { useConsumable } from './shop-consumables.js';
 import { toastAchievementUnlocks } from './achievements.js';
 import { commitProjectClaim } from './project-claim-plan.js';
+import { finalizeFailedProject, isAutoFinalizableFailedProject } from './project-failed-finalize.js';
 
 import { renderMiniCardArtHtml } from './card-art.js';
 import { renderPackCardWrapper } from './card-render.js';
@@ -774,7 +775,7 @@ function renderProjectCard(project) {
       statusLine = `<div class="rp-timer">${timeText}</div>`;
     }
   } else if (state === PROJECT_STATES.COMPLETE) {
-    const outcomeText = outcome === 'success' ? '✅ Success' : outcome === 'failure' ? '❌ Failure' : '—';
+    const outcomeText = outcome?.success === true ? '✅ Success' : outcome?.success === false ? '❌ Failure' : '—';
     statusLine = `<div class="rp-timer rp-timer--done">${outcomeText}</div>`;
   } else if (state === PROJECT_STATES.CLAIMED) {
     statusLine = `<div class="rp-timer rp-timer--claimed">Claimed</div>`;
@@ -827,6 +828,32 @@ function renderProjectCard(project) {
 }
 
 // ===================== REPORT PANEL =====================
+
+function _isResearchTabActive() {
+  return document.getElementById('tab-research-projects')?.classList.contains('active') === true;
+}
+
+/** Fire-and-forget; failures are logged only and retried on the next close. */
+function _finalizeFailedReportInBackground(username, projectId) {
+  if (!username || !projectId) return;
+  void finalizeFailedProject(username, projectId, {
+    getProject: (u, id) => (player.getPlayer(u)?.projects ?? []).find(pr => pr?.id === id) ?? null,
+  }).then((result) => {
+    if (result.finalized && _isResearchTabActive()) renderResearchProjects();
+  });
+}
+
+/**
+ * Called when the student leaves the Research Projects tab. Closes an open
+ * report and finalizes it if it is a failed COMPLETE project.
+ */
+export function leaveResearchProjectsReport() {
+  const projectId = _viewingReportProjectId;
+  if (projectId === null) return;
+  _viewingReportProjectId = null;
+  const session = auth.getSession();
+  _finalizeFailedReportInBackground(session?.username, projectId);
+}
 
 /**
  * Render the project report panel for a COMPLETE or CLAIMED project.
@@ -887,9 +914,17 @@ function renderProjectReportPanel(container, project, username) {
     ? `<div class="rp-report-breakthrough">⭐ Breakthrough!</div>`
     : '';
 
-  const claimBtn = (!isClaimed)
+  const isFailedPending = isAutoFinalizableFailedProject(project);
+
+  const claimBtn = (!isClaimed && !isFailedPending)
     ? `<button class="rp-btn-claim" id="rp-btn-claim">🏆 Claim Rewards</button>`
     : '';
+
+  const headerHint = isClaimed
+    ? 'Claimed — read only'
+    : isFailedPending
+      ? 'Project failed — this report will be archived when you close it'
+      : 'Project complete — claim your rewards';
 
   const claimedNote = isClaimed
     ? `<div class="rp-report-claimed-note">Rewards already claimed.</div>`
@@ -902,7 +937,7 @@ function renderProjectReportPanel(container, project, username) {
     <!-- Back nav -->
     <div class="rp-assign-back">
       <button class="shop-btn rp-assign-back-btn" id="rp-report-btn-back">← Back to Projects</button>
-      <span class="text-xs text-surface-500">${isClaimed ? 'Claimed — read only' : 'Project complete — claim your rewards'}</span>
+      <span class="text-xs text-surface-500">${headerHint}</span>
     </div>
 
     <!-- Report card -->
@@ -916,7 +951,10 @@ function renderProjectReportPanel(container, project, username) {
       ${breakthroughHTML}
 
       <!-- Rewards -->
-      <div class="rp-report-section-label">Rewards Earned</div>
+      <div class="rp-report-rewards-header">
+        <div class="rp-report-section-label">Rewards Earned</div>
+        ${claimBtn}
+      </div>
       <div class="rp-report-rewards">
         ${success ? buildRewardRows(rewardList) : '<div class="rp-report-reward-row">No rewards — project failed.</div>'}
       </div>
@@ -929,11 +967,8 @@ function renderProjectReportPanel(container, project, username) {
       <div class="rp-report-section-label">Assigned Concepts</div>
       <div class="rp-report-cards">${cardNamesFromIds(project.assignedConcepts)}</div>
 
-      <!-- Claim / claimed note -->
-      <div class="rp-report-actions">
-        ${claimBtn}
-        ${claimedNote}
-      </div>
+      <!-- Claimed note -->
+      ${claimedNote ? `<div class="rp-report-actions">${claimedNote}</div>` : ''}
     </div>
   `;
 
@@ -942,6 +977,7 @@ function renderProjectReportPanel(container, project, username) {
   // Back button
   panel.querySelector('#rp-report-btn-back').addEventListener('click', () => {
     _viewingReportProjectId = null;
+    _finalizeFailedReportInBackground(username, project.id);
     panel.remove();
     const list = document.getElementById('research-projects-list');
     if (list) list.classList.remove('hidden');

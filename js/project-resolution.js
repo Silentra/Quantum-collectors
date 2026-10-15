@@ -75,7 +75,7 @@ export function resolveCompletedProject({
     breakthrough,
     rewardRP,
     failureRP:           project.failureRP         ?? 0,
-    allowFailureRewards: true,
+    allowFailureRewards: false,
     breakthroughCard:    project.breakthroughCard  ?? null,
   });
 
