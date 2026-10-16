@@ -9,14 +9,15 @@
  *   calculateSuccessChance(power, difficulty, config)        → chance object
  *   getSuccessLabel(chance)                                  → human-readable label
  *   applyConceptModifiers(baseState, concepts, config)       → modified state + audit log
+ *   computeSynergySituationalWeight(power, difficulty)       → A3h w_S
+ *   computeReducerSituationalWeight(power, difficulty)       → A3h w_R
  *   evaluateProject({ scientists, concepts, difficulty,
  *                     rewardRP, breakthroughChance })        → full deterministic evaluation
  *   rollProjectOutcome({ successChance, breakthroughChance }) → { success, breakthrough }
  *   buildProjectRewards({ success, breakthrough,
  *                         rewardRP, breakthroughCard })      → reward result object
  *
- * All balance values come from config (project-config.js).
- * Nothing is hardcoded.
+ * Percent bases come from config (project-config.js / Admin). A3h weights are formulaic.
  */
 
 import { PROJECT_CONFIG } from './project-config.js';
@@ -189,21 +190,36 @@ export function getSuccessLabel(chance) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * A3h situational weights from pre-concept power / difficulty.
+ * ratio = P0 / max(1, D0)
+ */
+export function computeSynergySituationalWeight(teamPower, difficulty) {
+  const ratio = (Number(teamPower) || 0) / Math.max(1, Number(difficulty) || 0);
+  return Math.min(1.55, Math.max(0.38, 0.42 + 0.55 * ratio));
+}
+
+export function computeReducerSituationalWeight(teamPower, difficulty) {
+  const ratio = (Number(teamPower) || 0) / Math.max(1, Number(difficulty) || 0);
+  return Math.min(1.45, Math.max(0.38, 1.50 - 0.50 * ratio));
+}
+
+/**
  * Apply concept card modifiers to a project base state.
  *
  * Each concept has a single, non-overlapping role:
  *   researchBoost       → % increase to rewardRP (aura-scaled)
- *   difficultyReduction → flat reduction to difficulty (NOT aura-scaled)
- *   synergyBoost        → % increase to teamPower (aura-scaled)
+ *   difficultyReduction → % reduction to difficulty (aura-scaled + A3h weight)
+ *   synergyBoost        → % increase to teamPower (aura-scaled + A3h weight)
  *   breakthrough        → flat addition to breakthroughChance (aura-scaled)
  *   risk                → % increase to rewardRP (aura-scaled)
- *                        + % increase to difficulty (NOT aura-scaled)
+ *                        + % increase to difficulty (NOT aura-scaled; intentional)
  *
  * Rules:
  *   - Only concept cards (type === 'concept') are processed.
  *   - Duplicate conceptTypes: first occurrence wins; rest are silently skipped.
  *   - Percentage modifiers apply proportionally against the base values
  *     passed in (single pass, no recursive scaling).
+ *   - Synergy / Reducer A3h weights use original pre-concept P0 and D0 only.
  *   - No errors are thrown; unknown types/rarities degrade gracefully to no-op.
  *
  * @param {{
@@ -246,6 +262,10 @@ export function applyConceptModifiers(baseState, concepts, config = PROJECT_CONF
   let rewardRP           = original.rewardRP;
   let breakthroughChance = original.breakthroughChance;
 
+  // A3h weights from pre-concept P0/D0 only (never from modified values).
+  const synergyWeight = computeSynergySituationalWeight(original.teamPower, original.difficulty);
+  const reducerWeight = computeReducerSituationalWeight(original.teamPower, original.difficulty);
+
   const appliedConcepts = [];
   const seenTypes       = new Set();   // deduplication guard
 
@@ -274,7 +294,7 @@ export function applyConceptModifiers(baseState, concepts, config = PROJECT_CONF
     // Unknown conceptType or rarity — no-op, no error
     if (!rarityEffect) continue;
 
-    // Aura multiplier — applied to positive reward-side effects only
+    // Aura multiplier from config.auraScaling (Admin-authoritative when present)
     const auraMultiplier = 1 + (config.auraScaling?.[auraLevel] ?? 0);
 
     // Snapshot what this card actually changed
@@ -293,23 +313,29 @@ export function applyConceptModifiers(baseState, concepts, config = PROJECT_CONF
       }
 
       case 'difficultyReduction': {
-        // Percentage reduction to difficulty — NOT aura-scaled
+        // % reduction to difficulty — aura-scaled + A3h situational weight
         // Applies against the ORIGINAL difficulty so multiple concepts don't compound
-        const pct        = rarityEffect.difficultyPercent ?? 0;
+        const basePct    = rarityEffect.difficultyPercent ?? 0;
+        const pct        = basePct * auraMultiplier * reducerWeight;
         const minFloor   = rarityEffect.minDifficulty ?? 0;
         const reduction  = original.difficulty * pct;
         difficulty       = Math.max(minFloor, difficulty - reduction);
         effectValue.difficultyPercent = pct;
+        effectValue.baseDifficultyPercent = basePct;
+        effectValue.situationalWeight = reducerWeight;
         effectValue.diffReduction     = reduction;
         break;
       }
 
       case 'synergyBoost': {
-        // % increase to team power ONLY — aura-scaled
-        const pct       = (rarityEffect.teamPowerPercent ?? 0) * auraMultiplier;
+        // % increase to team power — aura-scaled + A3h situational weight
+        const basePct   = rarityEffect.teamPowerPercent ?? 0;
+        const pct       = basePct * auraMultiplier * synergyWeight;
         const powerGain = original.teamPower * pct;
         teamPower      += powerGain;
         effectValue.teamPowerPercent = pct;
+        effectValue.baseTeamPowerPercent = basePct;
+        effectValue.situationalWeight = synergyWeight;
         effectValue.powerGain        = powerGain;
         break;
       }
@@ -330,7 +356,7 @@ export function applyConceptModifiers(baseState, concepts, config = PROJECT_CONF
         effectValue.rewardRPPercent = rpPct;
         effectValue.rpGain          = rpGain;
 
-        // % increase to difficulty — NOT aura-scaled
+        // % increase to difficulty — NOT aura-scaled (intentional Risk design)
         const diffPct  = rarityEffect.difficultyPercent ?? 0;
         const diffGain = original.difficulty * diffPct;
         difficulty    += diffGain;

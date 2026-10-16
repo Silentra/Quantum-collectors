@@ -273,12 +273,12 @@ const PROJECT_CONFIG_DEFAULTS = {
    * Concept card effect values, keyed by conceptType -> rarity.
    *
    * researchBoost:       rewardRPPercent     — % increase to reward RP (aura-scaled)
-   * difficultyReduction: difficultyPercent   — % reduction to difficulty (NOT aura-scaled)
+   * difficultyReduction: difficultyPercent   — % reduction to difficulty (aura-scaled + A3h weight)
    *                      minDifficulty       — floor; difficulty never goes below this
-   * synergyBoost:        teamPowerPercent    — % increase to team power (aura-scaled)
+   * synergyBoost:        teamPowerPercent    — % increase to team power (aura-scaled + A3h weight)
    * breakthrough:        breakthroughChance  — flat addition to breakthrough chance (aura-scaled)
    * risk:                rewardRPPercent     — % increase to reward RP (aura-scaled)
-   *                      difficultyPercent   — % increase to difficulty (NOT aura-scaled)
+   *                      difficultyPercent   — % increase to difficulty (NOT aura-scaled; intentional)
    */
   conceptEffects: {
     researchBoost: {
@@ -288,18 +288,20 @@ const PROJECT_CONFIG_DEFAULTS = {
       epic:      { rewardRPPercent: 0.40 },
       legendary: { rewardRPPercent: 0.60 },
     },
+    // A3h-calibrated defaults (Admin config/projectBalance overrides when present).
+    // Legendary rows are fallbacks only — no obtainable Legendary Synergy/Reducer cards.
     difficultyReduction: {
-      common:    { difficultyPercent: 0.06,  minDifficulty: 5 },
-      uncommon:  { difficultyPercent: 0.10,  minDifficulty: 5 },
-      rare:      { difficultyPercent: 0.16,  minDifficulty: 5 },
-      epic:      { difficultyPercent: 0.22,  minDifficulty: 5 },
+      common:    { difficultyPercent: 0.12,  minDifficulty: 5 },
+      uncommon:  { difficultyPercent: 0.145, minDifficulty: 5 },
+      rare:      { difficultyPercent: 0.17,  minDifficulty: 5 },
+      epic:      { difficultyPercent: 0.195, minDifficulty: 5 },
       legendary: { difficultyPercent: 0.30,  minDifficulty: 5 },
     },
     synergyBoost: {
-      common:    { teamPowerPercent: 0.10 },
-      uncommon:  { teamPowerPercent: 0.20 },
-      rare:      { teamPowerPercent: 0.35 },
-      epic:      { teamPowerPercent: 0.55 },
+      common:    { teamPowerPercent: 0.15 },
+      uncommon:  { teamPowerPercent: 0.18 },
+      rare:      { teamPowerPercent: 0.21 },
+      epic:      { teamPowerPercent: 0.24 },
       legendary: { teamPowerPercent: 0.80 },
     },
     breakthrough: {
