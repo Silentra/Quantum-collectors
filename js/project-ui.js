@@ -775,10 +775,11 @@ function renderProjectCard(project) {
       statusLine = `<div class="rp-timer">${timeText}</div>`;
     }
   } else if (state === PROJECT_STATES.COMPLETE) {
-    const outcomeText = outcome?.success === true ? '✅ Success' : outcome?.success === false ? '❌ Failure' : '—';
-    statusLine = `<div class="rp-timer rp-timer--done">${outcomeText}</div>`;
+    // Neutral until the report is opened — do not spoil Success/Failure in the list.
+    statusLine = `<div class="rp-timer rp-timer--done">Report Ready</div>`;
   } else if (state === PROJECT_STATES.CLAIMED) {
-    statusLine = `<div class="rp-timer rp-timer--claimed">Claimed</div>`;
+    const outcomeText = outcome?.success === true ? '✅ Success' : outcome?.success === false ? '❌ Failure' : 'Claimed';
+    statusLine = `<div class="rp-timer rp-timer--claimed">${outcomeText}</div>`;
   }
 
   // Admin telemetry: append raw percentage to the flavor label
